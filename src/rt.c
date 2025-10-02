@@ -1,11 +1,10 @@
-// rt.c   : Ray Tracer 
+// rt.c - Ray Tracer 
 
 // Coordinate system:
 // +x right, +y forwards, +z up
 
 // TODO:
 // Planes (finite)
-// Light sources
 // Optimize collision
 
 #if (CPU_ && TYP_)

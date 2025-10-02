@@ -21,7 +21,7 @@ Internal L1 arena_create(L1 max_size) {
   return L1_(arena);
 }
 
-Internal void arena_destroy(L1 arena_ptr) {
+Internal void arena_release(L1 arena_ptr) {
   os_release(arena_ptr, TR_(Arena, arena_ptr)->reserved);
 }
 

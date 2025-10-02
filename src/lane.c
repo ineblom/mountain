@@ -71,11 +71,11 @@ SI1 main(void) {
   }
 
   for EachIndex(i, thread_count) {
-    arena_destroy(TR_(LaneCtx, lane_contexts)[i].arena);
+    arena_release(TR_(LaneCtx, lane_contexts)[i].arena);
   }
 
   os_barrier_release(L1_(&barrier));
-  arena_destroy(threads_arena);
+  arena_release(threads_arena);
 
   return 0;
 }

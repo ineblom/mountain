@@ -13,7 +13,6 @@ struct Range {
   L1 min, max;
 };
 
-I1 get_nprocs(void);
 Internal void lane(L1);
 #endif
 
@@ -45,7 +44,7 @@ Internal L1 thread_entrypoint(L1 arg) {
 }
 
 SI1 main(void) {
-  I1 thread_count = get_nprocs();
+  I1 thread_count = os_num_cores();
 
   Barrier barrier = os_barrier_alloc(thread_count);
 

@@ -51,16 +51,14 @@ extern L1 stdin;
 extern L1 stdout; 
 extern L1 stderr;
 
+Internal L1 os_reserve(L1);
+Internal void os_commit(L1, L1);
+Internal void os_release(L1, L1);
+
 SI1 printf(CString, ...);
 SI1 fprintf(L1, CString, ...);
 
 L1 memset(L1, SI1, L1);
-
-Internal String8 os_read_entire_file(L1, CString);
-Internal L1 os_reserve(L1);
-Internal void os_commit(L1, L1);
-Internal void os_decommit(L1, L1);
-Internal void os_release(L1, L1);
 
 Internal L1 os_clock(void);
 
@@ -77,6 +75,7 @@ I1 close(I1);
 
 SI1 clock_gettime(I1, L1);
 
+I1 get_nprocs(void);
 I1 pthread_create(L1, L1, L1, L1);
 I1 pthread_join(pthread_t, L1);
 I1 pthread_barrier_init(L1, L1, I1);
@@ -143,6 +142,9 @@ Internal void os_release(L1 ptr, L1 size) {
   munmap(ptr, size);
 }
 
+Internal I1 os_num_cores(void) {
+  return get_nprocs();
+}
 
 Internal Thread os_thread_launch(ThreadFunc *func, L1 ptr) {
   Thread result = {0};

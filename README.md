@@ -12,7 +12,7 @@ A pile of C code. Used as a base environment for multiple projects.
   3.  runs externally defined lane function on each thread and passes in lane.
   4.  provides utility functions dividing work and synchronizing between lanes.
 - `build.c`
-  - unity build; I.e. Includes all other .c files (modules).
+  - unity build; I.e. includes all other .c files (modules).
   - includes itself multiple times, setting a different compile time constant each time.
   - DEF\_, TYP\_, RAM\_, ROM\_ define separate sections of included modules.
   - eliminates the need for .h files.

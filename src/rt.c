@@ -5,7 +5,7 @@
 
 // TODO:
 // Planes (finite)
-// Optimize collision
+// Optimize
 
 #if (CPU_ && TYP_)
 

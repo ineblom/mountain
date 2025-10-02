@@ -4,8 +4,8 @@ A pile of C code. Used as a base environment for multiple projects.
 
 ## Files
 
-- `base.c` typedefs and macros
-- `arena.c` allocator
+- `base.c` typedefs and macros.
+- `arena.c` allocator.
 - `lane.c` (has main function)
   1.  starts up a thread (lane) for each core.
   2.  allocates an arena for each lane.
@@ -14,7 +14,7 @@ A pile of C code. Used as a base environment for multiple projects.
 - `build.c`
   - unity build; I.e. Includes all other .c files (modules).
   - includes itself multiple times, setting a different compile time constant each time.
-  - DEF*, TYP*, RAM*, ROM* define separate sections of included modules.
+  - DEF\_, TYP\_, RAM\_, ROM\_ define separate sections of included modules.
   - eliminates the need for .h files.
 - `os.c` operating system abstraction.
 - `strings.c` custom string type and operations.

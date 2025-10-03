@@ -103,6 +103,7 @@ L1 memmove(L1, L1, L1);
 
 #if (CPU_ && RAM_)
 
+L1 complete_sections_count;
 L1 section_count;
 L1 current_section_idx;
 
@@ -205,10 +206,7 @@ struct Random_State {
 };
 
 // TODO: Take as parameter to rand_pcg
-ThreadLocal Random_State rng = {
-	.state = 0,
-	.inc = 109384234
-};
+ThreadLocal Random_State rng;
 
 Inline I1 rand_pcg() {
 	L1 oldstate = rng.state;
@@ -352,6 +350,11 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 	F3 result = {0};
 	F3 attenuation = {1, 1, 1};
 	for EachIndex(ray_index, max_num_bounces) {
+		// russian roulette
+		// F1 continue_probability = Min(0.95f, Max(attenuation.x, Max(attenuation.y, attenuation.z)));
+		// if (ray_index > 3 && random_unilateral() > continue_probability) break;
+		// attenuation /= continue_probability;
+
 		F1 hit_distance = F1_MAX;
 
 		I1 hit_material_idx = -1;
@@ -516,7 +519,7 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 					F1 inv_pdf = 1.0f / Max(pdf_total, 1e-6f);
 
 					attenuation *= (f_spec + f_diff) * (NoL * inv_pdf);
-					ray_direction = F3_normalize(l);
+					ray_direction = l;
 				} else {
 					break; // absorb
 				}
@@ -524,10 +527,9 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 
 			ray_origin = next_origin + next_normal * min_hit_distance;
 		} else {
-			F1 mult = 0.0f;
-			F1 height = (ray_direction.z + 1) * 0.5;
-			F3 sky_color = F3_lerp((F3){mult, mult, mult}, height, (F3){0.2f, 0.4f, 2.0f} * mult);
-			result += attenuation * sky_color; 
+			//F1 height = (ray_direction.z + 1) * 0.5;
+			//F3 sky_color = F3_lerp((F3){1.0f, 1.0f, 1.0f}, height, (F3){0.2f, 0.4f, 1.0f});
+			//result += attenuation * sky_color; 
 			break;	
 		}
 	}
@@ -547,10 +549,17 @@ Inline F1 linear_to_srgb(F1 l) {
 	return s;
 }
 
+Internal F1 reinhard_tonemap(F1 x) {
+	F1 exposure = 2.0f;
+	x *= exposure;
+	F1 result = x / (1.0f + x);
+	return result;
+}
+
 Internal void lane(L1 arena) {
-	I1 output_width = 640;
-	I1 output_height = 480;
-	L1 rays_per_pixel = 1024;
+	I1 output_width = 1920;
+	I1 output_height = 1080;
+	L1 rays_per_pixel = 2048;
 	L1 max_num_bounces = 8;
 
 	if (lane_idx() == 0) {
@@ -565,73 +574,59 @@ Internal void lane(L1 arena) {
 
 	Material materials[] = {
 		{ // ground
-			.base_color  = (F3){0.33f, 0.33f, 0.13f},
-			.metallic = 1.0f,
+			.base_color  = (F3){0.53f, 0.43f, 0.13f},
+			.metallic = 0.9f,
 			.roughness = 0.4f,
 		},
-		{ // light
+		{ // left
 			.base_color  = (F3){1.0f, 1.0f, 1.0f},
-			.emissive = (F3){1.0f, 1.0f, 1.0f},
 			.metallic = 1.0f,
-			.roughness = 0.8f,
-		},
-		{ // mirror
-			.base_color  = (F3){0.9f, 1.0f, 0.9f},
-			.metallic = 1.0f,
-			.roughness = 0.40f,
+			.roughness = 0.01f,
 		},
 		{ // right
-			.base_color  = (F3){0.1f, 1.0f, 0.9f},
+			.base_color  = (F3){0.1f, 1.0f, 1.0f},
 			.metallic = 0.0f,
-			.roughness = 0.01f,
+			.roughness = 0.10f,
 		},
 		{ // center
-			.base_color  = (F3){1.0f, 1.0f, 1.0f},
+			.base_color  = (F3){2.0f, 0.2f, 2.0f},
+			.emissive = (F3){2.0f, 0.2f, 2.0f},
 			.metallic = 0.1f,
-			.roughness = 0.01f,
+			.roughness = 1.00f,
 		},
 	};
 
 	Plane planes[] = {
 		{
 			.n = (F3){0, 0, 1},
+			.d = 1.0f,
 			.material_idx = 0
 		}
 	};
 
 	Sphere spheres[] = {
 		{
-			.p = (F3){-1.5f, 0.0f, 1.5f},
+			.p = (F3){-2.0f, 2.0f, 0.0f},
+			.r = 1.0f,
+			.material_idx = 1,
+		},
+		{
+			.p = (F3){2.0f, 0.0f, 0.0f},
 			.r = 1.0f,
 			.material_idx = 2,
 		},
 		{
-			.p = (F3){1.5f, 0.0f, 1.5f},
+			.p = (F3){0.0f, 0.0f, 3.5f},
 			.r = 1.0f,
 			.material_idx = 3,
 		},
-		/*{
-			.p = (F3){0.0f, 0.0f, 1.0f},
-			.r = 1.0f,
-			.material_idx = 4,
-		},*/
 	};
 
 	Box boxes[] = {
-		{
-			.min = {-3.0f, 1.8f, 5.7f},
-			.max = {3.0f, -1.8f, 5.8f},
-			.material_idx = 1,
-		},
-		{
-			.min = {-3.0f, -2.0f, 0.0f},
-			.max = {3.0f, 2.0f, 0.5f},
-			.material_idx = 4,
-		}
 	};
 
-	F3 camera_p = (F3){-4.0f, -7.0f, 3.5f};
-	F3 camera_z = F3_normalize(camera_p - (F3){0, 0, 1.0f});
+	F3 camera_p = (F3){0.0f, -5.0f, 0.5f};
+	F3 camera_z = F3_normalize(camera_p);
 	F3 camera_x = F3_normalize(F3_cross((F3){0, 0, 1}, camera_z));
 	F3 camera_y = F3_normalize(F3_cross(camera_z, camera_x));
 
@@ -657,19 +652,19 @@ Internal void lane(L1 arena) {
 
 	L1 lane_begin_time = os_clock();
 
-	L1 section_num_pixels = output_width*output_height/ramR->section_count;
-	L1 section_pixels = arena_push(arena, sizeof(I1)* section_num_pixels);
+	L1 section_pixel_count = output_width*output_height/ramR->section_count;
+	L1 final_pixels = arena_push(arena, sizeof(I1)* section_pixel_count);
 
 	while (ramR->current_section_idx < ramR->section_count) {
-		L1 my_section_idx = AtomicAddL1(&ramV->current_section_idx, 1);
-		if (my_section_idx >= ramR->section_count) break;
-		Range section_pixels_range = {
-			.min = section_num_pixels * my_section_idx,
-			.max = section_num_pixels * (my_section_idx + 1)
+		L1 section_idx = AtomicAddL1(&ramV->current_section_idx, 1);
+		if (section_idx >= ramR->section_count) break;
+		Range final_pixels_range = {
+			.min = section_pixel_count * section_idx,
+			.max = section_pixel_count * (section_idx + 1)
 		};
 
-		L1 out = section_pixels;
-		for EachInRange(pixel_index, section_pixels_range) {
+		L1 out = final_pixels;
+		for EachInRange(pixel_index, final_pixels_range) {
 			I1 x = pixel_index%output_width;
 			I1 y = pixel_index/output_width;
 			F1 film_y = -1 + 2 * F1_(y)/F1_(output_height);
@@ -684,16 +679,23 @@ Internal void lane(L1 arena) {
 										off_x*half_film_w*camera_x +
 										off_y*half_film_h*camera_y;
 
-				F3 ray_origin = camera_p;
-				F3 ray_direction = F3_normalize(film_p - camera_p);
+				F1 aperture_radius = 0.20f;
+				F1 r = aperture_radius * sqrtf(random_unilateral());
+				F1 theta = 2.0f * PI * random_unilateral();
+				F3 aperture_offset = r * cosf(theta) * camera_x + r * sinf(theta) * camera_y;
+				F3 ray_origin = camera_p + aperture_offset;
+
+				F1 focal_distance = 5.0f;
+				F3 focus_point = camera_p + focal_distance  * F3_normalize(film_p - camera_p);
+				F3 ray_direction = F3_normalize(focus_point - ray_origin);
 
 				color += ray_cast(world, ray_origin, ray_direction, max_num_bounces) * contrib;
 			}
 
 			F4 bmp_color = {
-				255.0f*linear_to_srgb(color.x),
-				255.0f*linear_to_srgb(color.y),
-				255.0f*linear_to_srgb(color.z),
+				255.0f*linear_to_srgb(reinhard_tonemap(color.x)),
+				255.0f*linear_to_srgb(reinhard_tonemap(color.y)),
+				255.0f*linear_to_srgb(reinhard_tonemap(color.z)),
 				255.0f
 			};
 
@@ -704,18 +706,25 @@ Internal void lane(L1 arena) {
 			out += sizeof(I1);
 		}
 
-		L1 dest = ramR->output_image.pixels + sizeof(I1)*section_pixels_range.min;
-		memmove(dest, section_pixels, sizeof(I1)*section_num_pixels);
-	}
+		L1 dest = ramR->output_image.pixels + sizeof(I1)*final_pixels_range.min;
+		memmove(dest, final_pixels, sizeof(I1)*section_pixel_count);
 
-	L1 lane_end_time    = os_clock();
-	L1 lane_duration_ms = (lane_end_time - lane_begin_time)/1000000;
-	F1 lane_duration_s  = F1_(lane_duration_ms)/1000.0f;
-	printf("Lane %llu - %.2fs\n", lane_idx(), lane_duration_s);
+		AtomicAddL1(&ramV->complete_sections_count, 1);
+
+		L1 now    = os_clock();
+		L1 duration_ms = (now - lane_begin_time)/1000000;
+		F1 duration_s  = F1_(duration_ms)/1000.0f;
+		F1 percent = F1_(ramR->complete_sections_count) / F1_(ramR->section_count) * 100.0f;
+		printf("\r[%.2fs]: %.2f%%", duration_s, percent);
+		fflush(stdout);
+	}
 
 	lane_sync();
 
 	if (lane_idx() == 0) {
+	 // progress report does not add newline, so do it here.
+		printf("\n");
+
 		image_write_to_file(ramR->output_image, "output.bmp");
 
 		L1 end_time    = os_clock();

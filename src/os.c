@@ -57,6 +57,7 @@ Internal void os_release(L1, L1);
 
 SI1 printf(CString, ...);
 SI1 fprintf(L1, CString, ...);
+SI1 fflush(L1);
 
 L1 memset(L1, SI1, L1);
 

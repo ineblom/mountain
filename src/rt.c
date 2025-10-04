@@ -129,6 +129,15 @@ Inline Image image_alloc(L1 arena, I1 width, I1 height, I1 bytes_per_pixel) {
 	return image;
 }
 
+Inline L1 image_xy_to_index(Image image, L1 x, L1 y) {
+	if (LtSL1(x, 0)) x = 0;
+	if (LtSL1(y, 0)) y = 0;
+	if (x > image.width-1) x = image.width-1;	
+	if (y > image.height-1) y = image.height-1;	
+	L1 result = x + y*image.width;
+	return result;
+}
+
 Internal void image_write_to_file(Image image, CString filename) {
 	Assert(image.bytes_per_pixel == 4);
 
@@ -567,10 +576,14 @@ Inline F1 reinhard_tonemap(F1 x) {
 }
 
 Internal void lane(L1 arena) {
-	I1 output_width = 1280;
+	I1 output_width  = 1280;
 	I1 output_height = 720;
-	L1 rays_per_pixel = 128;
+
+	L1 rays_per_pixel  = 512;
 	L1 max_num_bounces = 8;
+
+	F1 bloom_threshold = 0.5f;
+	F1 bloom_strength  = 0.1f;
 
 	if (lane_idx() == 0) {
 		ramR->ray_image = image_alloc(arena, output_width, output_height, sizeof(F3));
@@ -601,7 +614,7 @@ Internal void lane(L1 arena) {
 		},
 		{ // center
 			.base_color  = (F3){2.0f, 0.2f, 2.0f},
-			.emissive = (F3){2.0f, 1.0f, 2.0f},
+			.emissive = (F3){2.0f, 0.5f, 2.0f},
 			.metallic = 0.1f,
 			.roughness = 1.00f,
 		},
@@ -727,33 +740,42 @@ Internal void lane(L1 arena) {
 
 		// TODO: Multithread
 
-		L1 ray_img_w = ramR->ray_image.width;
-		L1 ray_img_h = ramR->ray_image.height;
-		Image bright_image = image_alloc(arena, ray_img_w, ray_img_h, sizeof(F3));
-
-		for EachIndex(pixel_index, ray_img_w*ray_img_h) {
-			F3 color = TR_(F3, ramR->ray_image.pixels)[pixel_index];
-			if (F3_luminance(color) < 1.0f) color = (F3){0};
-			TR_(F3, bright_image.pixels)[pixel_index] = color;
-		}
-
-		Image bloom_passes[1] = {0};
+		Image bloom_passes[5] = {0};
 		L1 bloom_pass_count = ArrayLength(bloom_passes);
 
-		L1 in = bright_image.pixels;
-		L1 in_width = bright_image.width;
-		L1 in_height = bright_image.height;
-		L1 out_width = ray_img_w/2;
-		L1 out_height = ray_img_h/2;
-		for EachIndex(pass_index, bloom_pass_count) {
-			Image pass = image_alloc(arena, out_width, out_height, sizeof(F3));
-			L1 out = pass.pixels;
+		L1 ray_img_w = ramR->ray_image.width;
+		L1 ray_img_h = ramR->ray_image.height;
+		bloom_passes[0] = image_alloc(arena, ray_img_w, ray_img_h, sizeof(F3));
 
-			for EachIndex(y, out_height) {
+		// Filter on bright pixels
+		L1 in = ramR->ray_image.pixels;
+		L1 out = bloom_passes[0].pixels;
+		for EachIndex(pixel_index, ray_img_w*ray_img_h) {
+			F3 color = TR_(F3, in)[0];
+
+			if (F3_luminance(color) < bloom_threshold) color = (F3){0};
+
+			TR_(F3, out)[0] = color;
+
+			in  += sizeof(F3);
+			out += sizeof(F3);
+		}
+
+		// Downsample
+		for EachIndex(pass_index, bloom_pass_count-1) {
+			Image in = bloom_passes[pass_index];
+			Image out = image_alloc(arena, in.width/2, in.height/2, sizeof(F3));
+
+			bloom_passes[pass_index+1] = out;
+
+			for EachIndex(y, out.height) {
 				L1 sy = y*2;
-				for EachIndex(x, out_width) {
+				for EachIndex(x, out.width) {
 					L1 sx = x*2;
 
+					// TODO: look into 13-tap bilinear tent filter. 
+
+					// 16-tap downsample
 					// (sx,sy)
 					//    1\2 2 1
 					//    2 4 4 2  
@@ -763,65 +785,96 @@ Internal void lane(L1 arena) {
 					F3 sum = {0};
 
 					// Center (4)
-					sum += TR_(F3, in)[sx+0 + (sy+0)*in_width] * 4.0f;
-					sum += TR_(F3, in)[sx+1 + (sy+0)*in_width] * 4.0f;
-					sum += TR_(F3, in)[sx+0 + (sy+1)*in_width] * 4.0f;
-					sum += TR_(F3, in)[sx+1 + (sy+1)*in_width] * 4.0f;
+					sum += TR_(F3, in.pixels)[sx+0 + (sy+0)*in.width] * 4.0f;
+					sum += TR_(F3, in.pixels)[sx+1 + (sy+0)*in.width] * 4.0f;
+					sum += TR_(F3, in.pixels)[sx+0 + (sy+1)*in.width] * 4.0f;
+					sum += TR_(F3, in.pixels)[sx+1 + (sy+1)*in.width] * 4.0f;
 
 					// Edges (2)
 					if (sx > 0) {
-						sum += TR_(F3, in)[sx-1 + (sy+0)*in_width] * 2.0f;
-						sum += TR_(F3, in)[sx-1 + (sy+1)*in_width] * 2.0f;
+						sum += TR_(F3, in.pixels)[sx-1 + (sy+0)*in.width] * 2.0f;
+						sum += TR_(F3, in.pixels)[sx-1 + (sy+1)*in.width] * 2.0f;
 					}
-					if (sx+2 < in_width) {
-						sum += TR_(F3, in)[sx+2 + (sy+0)*in_width] * 2.0f;
-						sum += TR_(F3, in)[sx+2 + (sy+1)*in_width] * 2.0f;
+					if (sx+2 < in.width) {
+						sum += TR_(F3, in.pixels)[sx+2 + (sy+0)*in.width] * 2.0f;
+						sum += TR_(F3, in.pixels)[sx+2 + (sy+1)*in.width] * 2.0f;
 					}
 					if (sy > 0) {
-						sum += TR_(F3, in)[sx+0 + (sy-1)*in_width] * 2.0f;
-						sum += TR_(F3, in)[sx+1 + (sy-1)*in_width] * 2.0f;
+						sum += TR_(F3, in.pixels)[sx+0 + (sy-1)*in.width] * 2.0f;
+						sum += TR_(F3, in.pixels)[sx+1 + (sy-1)*in.width] * 2.0f;
 					}
-					if (sy+2 < in_height) {
-						sum += TR_(F3, in)[sx+0 + (sy+2)*in_width] * 2.0f;
-						sum += TR_(F3, in)[sx+1 + (sy+2)*in_width] * 2.0f;
+					if (sy+2 < in.height) {
+						sum += TR_(F3, in.pixels)[sx+0 + (sy+2)*in.width] * 2.0f;
+						sum += TR_(F3, in.pixels)[sx+1 + (sy+2)*in.width] * 2.0f;
 					}
 
 					// Corners (1)
 					if (sx > 0 && sy > 0)  {
-						sum += TR_(F3, in)[sx-1 + (sy-1)*in_width] * 1.0f;
+						sum += TR_(F3, in.pixels)[sx-1 + (sy-1)*in.width] * 1.0f;
 					}
-					if (sx+2 < in_width && sy > 0) {
-						sum += TR_(F3, in)[sx+2 + (sy-1)*in_width] * 1.0f;
+					if (sx+2 < in.width && sy > 0) {
+						sum += TR_(F3, in.pixels)[sx+2 + (sy-1)*in.width] * 1.0f;
 					}
-					if (sx > 0 && sy+2 < in_height) {
-						sum += TR_(F3, in)[sx-1 + (sy+2)*in_width] * 1.0f;
+					if (sx > 0 && sy+2 < in.height) {
+						sum += TR_(F3, in.pixels)[sx-1 + (sy+2)*in.width] * 1.0f;
 					}
-					if (sx+2 < in_width && sy+2 < in_height) {
-						sum += TR_(F3, in)[sx+2 + (sy+2)*in_width] * 1.0f;
+					if (sx+2 < in.width && sy+2 < in.height) {
+						sum += TR_(F3, in.pixels)[sx+2 + (sy+2)*in.width] * 1.0f;
 					}
 
 					sum /= 36.0f;
 
-					TR_(F3, out)[x + y*out_width] = sum;
+					TR_(F3, out.pixels)[x + y*out.width] = sum;
 				}
 			}
-
-			bloom_passes[pass_index] = pass;
-			in = pass.pixels;
-			in_width = pass.width;
-			in_height = pass.height;
-			out_width = pass.width/2;
-			out_height = pass.height/2;
 		}
 
-		Image last_bloom = bloom_passes[bloom_pass_count-1];
-		ramR->final_image = image_alloc(arena, last_bloom.width, last_bloom.height, sizeof(I1));
+		// Upsample and add
+		for (L1 pass_index = bloom_pass_count-1; pass_index >= 1; pass_index -= 1) {
+			Image in = bloom_passes[pass_index];
+			Image out = bloom_passes[pass_index-1];
+
+			for EachIndex(y, out.height) {
+				L1 sy = y/2;
+				for EachIndex(x, out.width) {
+					L1 sx = x/2;
+
+					F3 sum = {0};
+
+					// center
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx,sy)]*4.0f;
+
+					// edges
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy)]*2.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy)]*2.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx,sy-1)]*2.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx,sy+1)]*2.0f;
+
+					// corners
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy-1)]*1.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy-1)]*1.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy+1)]*1.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy+1)]*1.0f;
+
+					sum /= 16.0f;
+
+					TR_(F3, out.pixels)[x + y*out.width] += sum;
+
+				}
+			}
+		}
+
+		ramR->final_image = image_alloc(arena, output_width, output_height, sizeof(I1));
 
 		// Tonemap
-		in     = last_bloom.pixels;
-		L1 out = ramR->final_image.pixels;
-		for EachIndex(pixel_index, ramR->final_image.width*ramR->final_image.height) {
-			F3 color = TR_(F3, in)[0];
+		L1 in_ray    = ramR->ray_image.pixels;
+		L1 in_bloom  = bloom_passes[0].pixels;
+		out          = ramR->final_image.pixels;
+		for EachIndex(pixel_index, output_width*output_height) {
+			F3 ray_color = TR_(F3, in_ray)[0];
+			F3 bloom_color = TR_(F3, in_bloom)[0];
+			// F3 color = F3_lerp(ray_color, 1-bloom_strength, bloom_color);
+			F3 color = ray_color + bloom_strength*bloom_color;
 
 			F4 bmp_color = {
 				255.0f*linear_to_srgb(reinhard_tonemap(color.x)),
@@ -835,8 +888,9 @@ Internal void lane(L1 arena) {
 												I1_(bmp_color.y) << 8 |
 												I1_(bmp_color.z) << 0;
 
-			in  += sizeof(F3);
-			out += sizeof(I1);
+			in_ray    += sizeof(F3);
+			in_bloom  += sizeof(F3);
+			out       += sizeof(I1);
 		}
 	}
 

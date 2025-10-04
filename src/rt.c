@@ -232,6 +232,15 @@ Inline F1 F3_luminance(F3 v) {
 	return result;
 }
 
+Inline F3 F3_pow(F3 v, F1 exp) {
+	F3 result = {
+		powf(v.x, exp),
+		powf(v.y, exp),
+		powf(v.z, exp)
+	};
+	return result;
+}
+
 typedef struct Random_State Random_State;
 struct Random_State {
 	L1 state;
@@ -526,9 +535,9 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 
 			ray_origin = next_origin + next_normal * min_hit_distance;
 		} else {
-			//F1 height = (ray_direction.z + 1) * 0.5;
-			//F3 sky_color = F3_lerp((F3){1.0f, 1.0f, 1.0f}, height, (F3){0.2f, 0.4f, 1.0f});
-			//result += attenuation * sky_color; 
+			// F1 height = (ray_direction.z + 1) * 0.5;
+			// F3 sky_color = F3_lerp((F3){1.0f, 1.0f, 1.0f}, height, (F3){0.2f, 0.4f, 1.0f});
+			// result += attenuation * sky_color; 
 			break;	
 		}
 	}
@@ -548,28 +557,47 @@ Inline F1 linear_to_srgb(F1 l) {
 	return s;
 }
 
-Inline F3 aces_tonemap(F3 v) {
+Inline F3 tonemap_aces(F3 v) {
 	const F1 a = 2.51f;
 	const F1 b = 0.03f;
 	const F1 c = 2.43f;
 	const F1 d = 0.59f;
 	const F1 e = 0.14f;
-	return F3_clamp01((v * (a * v + b)) / (v * (c * v + d) + e));
+	F3 result = F3_clamp01((v * (a * v + b)) / (v * (c * v + d) + e));
+	return result;
 } 
 
-Inline F3 reinhard_tonemap(F3 x) {
-	F1 exposure = 2.0f;
-	x *= exposure;
-	F3 result = x / (1.0f + x);
+Inline F3 tonemap_reinhard(F3 v) {
+	F3 result = v / (1.0f + v);
 	return result;
 }
 
-#define tonemap aces_tonemap
+F3 tonemap_lottes(F3 v) {
+  // Lottes 2016, "Advanced Techniques and Optimization of HDR Color Pipelines"
+  const F1 a = 1.6f;
+  const F1 d = 0.977f;
+  const F1 hdr_max = 8.0f;
+  const F1 mid_in = 0.18f;
+  const F1 mid_out = 0.267f;
+
+  // Can be precomputed
+  const F1 b =
+      (-powf(mid_in, a) + powf(hdr_max, a) * mid_out) /
+      ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
+  const float c =
+      (powf(hdr_max, a * d) * powf(mid_in, a) - powf(hdr_max, a) * powf(mid_in, a * d) * mid_out) /
+      ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
+
+  F3 result = F3_pow(v, a) / (F3_pow(v, a * d) * b + c);
+  return result;
+}
+
+#define tonemap tonemap_lottes
 
 #define output_width  1920
 #define output_height 1080
 
-#define rays_per_pixel  2048
+#define rays_per_pixel  512
 #define max_num_bounces 8
 
 #define aperture_radius 0.06f

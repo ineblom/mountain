@@ -135,3 +135,6 @@ Inline L1 AtomicSwapL1(L1V a, L1 v) {
 	} } while (0)
 
 #define Swap(a, b) do { typeof(a) temp = a; a = b; b = temp; } while(0)
+
+#define AlignOf(T) __alignof(T)
+#define AlignPow2(x,b) (((x) + (b) - 1)&(~((b) - 1)))

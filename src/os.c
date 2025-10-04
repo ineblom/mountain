@@ -97,7 +97,7 @@ Internal String8 os_read_entire_file(L1 arena, CString filename) {
   L1 size = lseek(file, 0, SEEK_END);
   lseek(file, 0, SEEK_SET);
 
-  L1 buffer = arena_push(arena, size);
+  L1 buffer = push_array(arena, B1, size);
   L1 bytes_read = read(file, buffer, size);
   Assert(size == bytes_read);
 

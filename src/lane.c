@@ -50,7 +50,7 @@ SI1 main(void) {
 
   L1 threads_arena = arena_create(MiB(1));
 
-  L1 lane_contexts = arena_push(threads_arena, sizeof(LaneCtx) * thread_count);
+  L1 lane_contexts = push_array(threads_arena, LaneCtx, thread_count);
   for EachIndex(i, thread_count) {
     TR_(LaneCtx, lane_contexts)[i] = (LaneCtx){
       .arena = arena_create(MiB(512)),
@@ -60,7 +60,7 @@ SI1 main(void) {
     };
   }
 
-  L1 threads = arena_push(threads_arena, sizeof(Thread) * thread_count);
+  L1 threads = push_array(threads_arena, Thread, thread_count);
   for EachIndex(i, thread_count) {
     L1 lane_ctx = lane_contexts + sizeof(LaneCtx) * i;
     TR_(Thread, threads)[i] = os_thread_launch(&thread_entrypoint, lane_ctx);

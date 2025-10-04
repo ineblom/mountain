@@ -4,8 +4,9 @@
 // +x right, +y forwards, +z up
 
 // TODO:
-// Planes (finite)
-// Optimize
+// Shadow rays, higher quality w. lower ray counts 
+// Quads
+// BVH (for larger scenes)
 
 #if (CPU_ && TYP_)
 
@@ -167,6 +168,10 @@ Internal void image_write_to_file(Image image, CString filename) {
 	}
 }
 
+Inline F1 F1_clamp01(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
+Inline F1 F1_saturate(F1 x) { return F1_clamp01(x); }
+
+
 Inline F1 F1_sign(F1 a) {
 	F1 result = -1.0f;
 	if (a > 0.0f) result = 1.0f;
@@ -213,6 +218,15 @@ Inline F3 F3_abs(F3 v) {
 	return result;
 }
 
+Inline F3 F3_clamp01(F3 v) {
+	F3 result= {
+		F1_clamp01(v.x),
+		F1_clamp01(v.y),
+		F1_clamp01(v.z) 
+	};
+	return result;
+}
+
 Inline F1 F3_luminance(F3 v) {
 	F1 result = 0.2126f*v.x + 0.7152f*v.y + 0.0722f*v.z;
 	return result;
@@ -251,19 +265,14 @@ Inline F3 F3_reflect(F3 v, F3 normal) {
 	return result;
 }
 
-Inline F1 clamp01(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
-Inline F1 saturate(F1 x) { return clamp01(x); }
-
-#if 1
-// optimized to not use trig functions
 Inline F3 sample_cosine_hemisphere(F3 n) {
   F1 x, y;
   do {
     x = 2.0f * random_unilateral() - 1.0f;
     y = 2.0f * random_unilateral() - 1.0f;
-  } while (x*x + y*y > 1.0f); // Reject if outside unit circle (accept ~78.5%)
+  } while (x*x + y*y > 1.0f);
 
-  F1 z = sqrtf(1.0f - x*x - y*y); // Only 1 sqrt, no trig
+  F1 z = sqrtf(1.0f - x*x - y*y);
 
   // build ONB around n
   F3 tangent = (fabsf(n.x) > 0.9f) ? (F3){0,1,0} : (F3){1,0,0};
@@ -277,30 +286,6 @@ Inline F3 sample_cosine_hemisphere(F3 n) {
     n * z
   );
 }
-#else
-Inline F3 sample_cosine_hemisphere(F3 n) {
-  F1 r1 = random_unilateral();
-  F1 r2 = random_unilateral();
-
-  F1 phi = 2.0f * PI * r1;
-  F1 r = sqrtf(r2);
-  F1 x = r * cosf(phi);
-  F1 y = r * sinf(phi);
-  F1 z = sqrtf(1.0f - r2);
-
-  // build an ONB around n
-  F3 tangent = (fabsf(n.x) > 0.9f) ? (F3){0,1,0} : (F3){1,0,0};
-  tangent = F3_normalize(F3_cross(tangent, n));
-  F3 bitangent = F3_cross(n, tangent);
-
-  // local -> world
-  return F3_normalize(
-    tangent * x +
-    bitangent * y +
-    n * z
-  );
-}
-#endif
 
 // Schlick Fresnel approximation
 Inline F3 fresnel_schlick(F1 cos_theta, F3 F0) {
@@ -316,7 +301,7 @@ Inline F1 D_GGX(F1 NoH, F1 alpha) {
 
 // Smith's GGX geometry term (separable)
 Inline F1 G1_GGX(F1 NoX, F1 alpha) {
-  NoX = saturate(NoX);
+  NoX = F1_saturate(NoX);
   F1 a2 = alpha * alpha;
   F1 denom = NoX + sqrtf(a2 + (1.0f - a2) * NoX * NoX);
   return (2.0f * NoX) / Max(denom, 1e-6f);
@@ -354,8 +339,8 @@ Inline F3 sample_GGX_half(F3 n, float alpha) {
 
 // PDF for GGX reflection sampling
 Inline F1 pdf_GGX(F3 n, F3 h, F3 v, F1 alpha) {
-  F1 NoH = saturate(F3_dot(n,h));
-  F1 VoH = saturate(F3_dot(v,h));
+  F1 NoH = F1_saturate(F3_dot(n,h));
+  F1 VoH = F1_saturate(F3_dot(v,h));
   F1 D = D_GGX(NoH, alpha);
   F1 result = D * NoH / (4.0f * VoH);
   return result;
@@ -369,11 +354,6 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 	F3 result = {0};
 	F3 attenuation = {1, 1, 1};
 	for EachIndex(ray_index, max_num_bounces) {
-		// russian roulette
-		// F1 continue_probability = Min(0.95f, Max(attenuation.x, Max(attenuation.y, attenuation.z)));
-		// if (ray_index > 3 && random_unilateral() > continue_probability) break;
-		// attenuation /= continue_probability;
-
 		F1 hit_distance = F1_MAX;
 
 		I1 hit_material_idx = -1;
@@ -473,9 +453,9 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 
 			result += attenuation * mat.emissive;
 
-			F1 roughness = Max(0.05f, clamp01(mat.roughness));
+			F1 roughness = Max(0.05f, F1_clamp01(mat.roughness));
 			F1 alpha = roughness * roughness;
-			F1 metallic = clamp01(mat.metallic);
+			F1 metallic = F1_clamp01(mat.metallic);
 
 			F3 f0 = F3_lerp((F3){0.04f,0.04f,0.04f}, metallic, mat.base_color);
 
@@ -485,10 +465,10 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 				F3 h = sample_GGX_half(next_normal, alpha);
 				F3 l = F3_reflect(-v, h);
 
-				F1 NoL = saturate(F3_dot(next_normal, l));
-				F1 NoV = saturate(F3_dot(next_normal, v));
-				F1 NoH = saturate(F3_dot(next_normal, h));
-				F1 VoH = saturate(F3_dot(v, h));
+				F1 NoL = F1_saturate(F3_dot(next_normal, l));
+				F1 NoV = F1_saturate(F3_dot(next_normal, v));
+				F1 NoH = F1_saturate(F3_dot(next_normal, h));
+				F1 VoH = F1_saturate(F3_dot(v, h));
 
 				if (NoL > 0.0f) {
 					F1 D = D_GGX(NoH, alpha);
@@ -515,12 +495,12 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 			} else {
 				F3 v = -ray_direction;
 				F3 l = sample_cosine_hemisphere(next_normal);
-				F1 NoL = saturate(F3_dot(next_normal, l));
+				F1 NoL = F1_saturate(F3_dot(next_normal, l));
 				if (NoL > 0.0f) {
 					F3 h = F3_normalize(v + l);
-					F1 NoV = saturate(F3_dot(next_normal, v));
-					F1 NoH = saturate(F3_dot(next_normal, h));
-					F1 VoH = saturate(F3_dot(v, h));
+					F1 NoV = F1_saturate(F3_dot(next_normal, v));
+					F1 NoH = F1_saturate(F3_dot(next_normal, h));
+					F1 VoH = F1_saturate(F3_dot(v, h));
 
 					F1 D = D_GGX(NoH, alpha);
 					F1 G = G_Smith(NoV, NoL, alpha);
@@ -568,23 +548,39 @@ Inline F1 linear_to_srgb(F1 l) {
 	return s;
 }
 
-Inline F1 reinhard_tonemap(F1 x) {
+Inline F3 aces_tonemap(F3 v) {
+	const F1 a = 2.51f;
+	const F1 b = 0.03f;
+	const F1 c = 2.43f;
+	const F1 d = 0.59f;
+	const F1 e = 0.14f;
+	return F3_clamp01((v * (a * v + b)) / (v * (c * v + d) + e));
+} 
+
+Inline F3 reinhard_tonemap(F3 x) {
 	F1 exposure = 2.0f;
 	x *= exposure;
-	F1 result = x / (1.0f + x);
+	F3 result = x / (1.0f + x);
 	return result;
 }
 
+#define tonemap aces_tonemap
+
+#define output_width  1920
+#define output_height 1080
+
+#define rays_per_pixel  2048
+#define max_num_bounces 8
+
+#define aperture_radius 0.06f
+#define focal_distance  5.0f
+
+#define bloom_pass_count 8
+#define bloom_threshold  0.5f
+#define bloom_strength   0.1f
+#define bloom_knee       0.3f
+
 Internal void lane(L1 arena) {
-	I1 output_width  = 640;
-	I1 output_height = 480;
-
-	L1 rays_per_pixel  = 2048;
-	L1 max_num_bounces = 8;
-
-	F1 bloom_threshold = 0.5f;
-	F1 bloom_strength  = 0.1f;
-	F1 bloom_knee = 0.3f;
 
 	if (lane_idx() == 0) {
 		ramR->ray_image = image_alloc(arena, output_width, output_height, sizeof(F3));
@@ -613,11 +609,15 @@ Internal void lane(L1 arena) {
 			.metallic = 0.0f,
 			.roughness = 0.10f,
 		},
-		{ // center
+		{ // pink glow
 			.base_color  = (F3){1.0f, 0.2f, 1.0f},
 			.emissive = (F3){2.0f, 0.6f, 2.0f},
 			.metallic = 0.1f,
 			.roughness = 1.00f,
+		},
+		{ // blue glow
+			.base_color  = (F3){1.0f, 1.0f, 1.0f},
+			.emissive = (F3){1.0f, 1.0f, 6.0f},
 		},
 	};
 
@@ -641,13 +641,19 @@ Internal void lane(L1 arena) {
 			.material_idx = 2,
 		},
 		{
-			.p = (F3){0.0f, 0.0f, 2.5f},
+			.p = (F3){0.0f, 20.0f, 0.0f},
 			.r = 1.0f,
 			.material_idx = 3,
 		},
 	};
 
-	Box boxes[] = {};
+	Box boxes[] = {
+		{
+			.min = {-2.6f, -2.0f,-1.0},
+			.max = {-2.5f,  0.7f,-0.5},
+			.material_idx = 4,
+	 	}
+	};
 
 	F3 camera_p = (F3){0.0f, -5.0f, 0.5f};
 	F3 camera_z = F3_normalize(camera_p);
@@ -703,13 +709,11 @@ Internal void lane(L1 arena) {
 										off_x*half_film_w*camera_x +
 										off_y*half_film_h*camera_y;
 
-				F1 aperture_radius = 0.20f;
 				F1 r = aperture_radius * sqrtf(random_unilateral());
 				F1 theta = 2.0f * PI * random_unilateral();
 				F3 aperture_offset = r * cosf(theta) * camera_x + r * sinf(theta) * camera_y;
 				F3 ray_origin = camera_p + aperture_offset;
 
-				F1 focal_distance = 5.0f;
 				F3 focus_point = camera_p + focal_distance  * F3_normalize(film_p - camera_p);
 				F3 ray_direction = F3_normalize(focus_point - ray_origin);
 
@@ -741,8 +745,7 @@ Internal void lane(L1 arena) {
 
 		// TODO: Multithread
 
-		Image bloom_passes[6] = {0};
-		L1 bloom_pass_count = ArrayLength(bloom_passes);
+		Image bloom_passes[bloom_pass_count] = {0};
 
 		L1 ray_img_w = ramR->ray_image.width;
 		L1 ray_img_h = ramR->ray_image.height;
@@ -885,10 +888,12 @@ Internal void lane(L1 arena) {
 			// F3 color = F3_lerp(ray_color, 1-bloom_strength, bloom_color);
 			// F3 color = ray_color + bloom_strength*bloom_color;
 
+			F3 tonemapped_color = tonemap(color);
+
 			F4 bmp_color = {
-				255.0f*linear_to_srgb(reinhard_tonemap(color.x)),
-				255.0f*linear_to_srgb(reinhard_tonemap(color.y)),
-				255.0f*linear_to_srgb(reinhard_tonemap(color.z)),
+				255.0f*linear_to_srgb(tonemapped_color.x),
+				255.0f*linear_to_srgb(tonemapped_color.y),
+				255.0f*linear_to_srgb(tonemapped_color.z),
 				255.0f
 			};
 

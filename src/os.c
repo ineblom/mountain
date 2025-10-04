@@ -60,6 +60,7 @@ SI1 fprintf(L1, CString, ...);
 SI1 fflush(L1);
 
 L1 memset(L1, SI1, L1);
+L1 memmove(L1, L1, L1);
 
 Internal L1 os_clock(void);
 

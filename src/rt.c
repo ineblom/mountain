@@ -34,6 +34,7 @@ typedef struct Image Image;
 struct Image {
 	I1 width;
 	I1 height;
+	I1 bytes_per_pixel;
 	L1 pixels;
 };
 
@@ -95,8 +96,6 @@ F1 cosf(F1);
 F1 fabsf(F1);
 F1 powf(F1, F1);
 
-L1 memmove(L1, L1, L1);
-
 #define PI 3.141592653598979f
 
 #endif
@@ -108,25 +107,31 @@ L1 section_count;
 L1 current_section_idx;
 
 L1 start_time;
-Image output_image;
+Image ray_image;
+Image final_image;
+
+L1 total_memory_usage;
 
 #endif
 
 #if (CPU_ && ROM_)
 
 Inline L1 image_pixels_size(Image image) {
-	return sizeof(I1) * image.width * image.height;
+	return image.bytes_per_pixel * image.width * image.height;
 }
 
-Inline Image image_alloc(L1 arena, I1 width, I1 height) {
+Inline Image image_alloc(L1 arena, I1 width, I1 height, I1 bytes_per_pixel) {
 	Image image  = {0};
 	image.width  = width;
 	image.height = height;
+	image.bytes_per_pixel = bytes_per_pixel;
 	image.pixels = arena_push(arena, image_pixels_size(image));
 	return image;
 }
 
 Internal void image_write_to_file(Image image, CString filename) {
+	Assert(image.bytes_per_pixel == 4);
+
 	L1 pixels_size = image_pixels_size(image);
 
 	Bitmap_Header header  = {0};
@@ -196,6 +201,11 @@ Inline F3 F3_lerp(F3 a, F1 t, F3 b) {
 
 Inline F3 F3_abs(F3 v) {
 	F3 result = { fabsf(v.x), fabsf(v.y), fabsf(v.z) };
+	return result;
+}
+
+Inline F1 F3_luminance(F3 v) {
+	F1 result = 0.2126f*v.x + 0.7152f*v.y + 0.0722f*v.z;
 	return result;
 }
 
@@ -549,7 +559,7 @@ Inline F1 linear_to_srgb(F1 l) {
 	return s;
 }
 
-Internal F1 reinhard_tonemap(F1 x) {
+Inline F1 reinhard_tonemap(F1 x) {
 	F1 exposure = 2.0f;
 	x *= exposure;
 	F1 result = x / (1.0f + x);
@@ -557,13 +567,14 @@ Internal F1 reinhard_tonemap(F1 x) {
 }
 
 Internal void lane(L1 arena) {
-	I1 output_width = 1920;
-	I1 output_height = 1080;
-	L1 rays_per_pixel = 2048;
+	I1 output_width = 1280;
+	I1 output_height = 720;
+	L1 rays_per_pixel = 128;
 	L1 max_num_bounces = 8;
 
 	if (lane_idx() == 0) {
-		ramR->output_image = image_alloc(arena, output_width, output_height);
+		ramR->ray_image = image_alloc(arena, output_width, output_height, sizeof(F3));
+
 		ramR->start_time = os_clock();
 
 		ramR->section_count = lane_count() * 8;
@@ -590,7 +601,7 @@ Internal void lane(L1 arena) {
 		},
 		{ // center
 			.base_color  = (F3){2.0f, 0.2f, 2.0f},
-			.emissive = (F3){2.0f, 0.2f, 2.0f},
+			.emissive = (F3){2.0f, 1.0f, 2.0f},
 			.metallic = 0.1f,
 			.roughness = 1.00f,
 		},
@@ -616,14 +627,13 @@ Internal void lane(L1 arena) {
 			.material_idx = 2,
 		},
 		{
-			.p = (F3){0.0f, 0.0f, 3.5f},
+			.p = (F3){0.0f, 0.0f, 2.5f},
 			.r = 1.0f,
 			.material_idx = 3,
 		},
 	};
 
-	Box boxes[] = {
-	};
+	Box boxes[] = {};
 
 	F3 camera_p = (F3){0.0f, -5.0f, 0.5f};
 	F3 camera_z = F3_normalize(camera_p);
@@ -653,18 +663,18 @@ Internal void lane(L1 arena) {
 	L1 lane_begin_time = os_clock();
 
 	L1 section_pixel_count = output_width*output_height/ramR->section_count;
-	L1 final_pixels = arena_push(arena, sizeof(I1)* section_pixel_count);
+	L1 ray_pixels = arena_push(arena, sizeof(F3)*section_pixel_count);
 
 	while (ramR->current_section_idx < ramR->section_count) {
 		L1 section_idx = AtomicAddL1(&ramV->current_section_idx, 1);
 		if (section_idx >= ramR->section_count) break;
-		Range final_pixels_range = {
+		Range pixels_range = {
 			.min = section_pixel_count * section_idx,
 			.max = section_pixel_count * (section_idx + 1)
 		};
 
-		L1 out = final_pixels;
-		for EachInRange(pixel_index, final_pixels_range) {
+		L1 out = ray_pixels;
+		for EachInRange(pixel_index, pixels_range) {
 			I1 x = pixel_index%output_width;
 			I1 y = pixel_index/output_width;
 			F1 film_y = -1 + 2 * F1_(y)/F1_(output_height);
@@ -692,6 +702,127 @@ Internal void lane(L1 arena) {
 				color += ray_cast(world, ray_origin, ray_direction, max_num_bounces) * contrib;
 			}
 
+			TR_(F3, out)[0] = color;
+			out += sizeof(F3);
+
+		}
+
+		L1 dest = ramR->ray_image.pixels + sizeof(F3)*pixels_range.min;
+		memmove(dest, ray_pixels, sizeof(F3)*section_pixel_count);
+
+		AtomicAddL1(&ramV->complete_sections_count, 1);
+
+		L1 now         = os_clock();
+		L1 duration_ms = (now - lane_begin_time)/1000000;
+		F1 duration_s  = F1_(duration_ms)/1000.0f;
+		F1 percent     = F1_(ramR->complete_sections_count) / F1_(ramR->section_count) * 100.0f;
+		printf("\r[%.2fs]: %.2f%%", duration_s, percent);
+		fflush(stdout);
+	}
+
+	lane_sync();
+
+	if (lane_idx() == 0) {
+		printf("\nRay tracing complete. Postprocessing...\n");
+
+		// TODO: Multithread
+
+		L1 ray_img_w = ramR->ray_image.width;
+		L1 ray_img_h = ramR->ray_image.height;
+		Image bright_image = image_alloc(arena, ray_img_w, ray_img_h, sizeof(F3));
+
+		for EachIndex(pixel_index, ray_img_w*ray_img_h) {
+			F3 color = TR_(F3, ramR->ray_image.pixels)[pixel_index];
+			if (F3_luminance(color) < 1.0f) color = (F3){0};
+			TR_(F3, bright_image.pixels)[pixel_index] = color;
+		}
+
+		Image bloom_passes[1] = {0};
+		L1 bloom_pass_count = ArrayLength(bloom_passes);
+
+		L1 in = bright_image.pixels;
+		L1 in_width = bright_image.width;
+		L1 in_height = bright_image.height;
+		L1 out_width = ray_img_w/2;
+		L1 out_height = ray_img_h/2;
+		for EachIndex(pass_index, bloom_pass_count) {
+			Image pass = image_alloc(arena, out_width, out_height, sizeof(F3));
+			L1 out = pass.pixels;
+
+			for EachIndex(y, out_height) {
+				L1 sy = y*2;
+				for EachIndex(x, out_width) {
+					L1 sx = x*2;
+
+					// (sx,sy)
+					//    1\2 2 1
+					//    2 4 4 2  
+					//    2 4 4 2  
+					//    1 2 2 1
+
+					F3 sum = {0};
+
+					// Center (4)
+					sum += TR_(F3, in)[sx+0 + (sy+0)*in_width] * 4.0f;
+					sum += TR_(F3, in)[sx+1 + (sy+0)*in_width] * 4.0f;
+					sum += TR_(F3, in)[sx+0 + (sy+1)*in_width] * 4.0f;
+					sum += TR_(F3, in)[sx+1 + (sy+1)*in_width] * 4.0f;
+
+					// Edges (2)
+					if (sx > 0) {
+						sum += TR_(F3, in)[sx-1 + (sy+0)*in_width] * 2.0f;
+						sum += TR_(F3, in)[sx-1 + (sy+1)*in_width] * 2.0f;
+					}
+					if (sx+2 < in_width) {
+						sum += TR_(F3, in)[sx+2 + (sy+0)*in_width] * 2.0f;
+						sum += TR_(F3, in)[sx+2 + (sy+1)*in_width] * 2.0f;
+					}
+					if (sy > 0) {
+						sum += TR_(F3, in)[sx+0 + (sy-1)*in_width] * 2.0f;
+						sum += TR_(F3, in)[sx+1 + (sy-1)*in_width] * 2.0f;
+					}
+					if (sy+2 < in_height) {
+						sum += TR_(F3, in)[sx+0 + (sy+2)*in_width] * 2.0f;
+						sum += TR_(F3, in)[sx+1 + (sy+2)*in_width] * 2.0f;
+					}
+
+					// Corners (1)
+					if (sx > 0 && sy > 0)  {
+						sum += TR_(F3, in)[sx-1 + (sy-1)*in_width] * 1.0f;
+					}
+					if (sx+2 < in_width && sy > 0) {
+						sum += TR_(F3, in)[sx+2 + (sy-1)*in_width] * 1.0f;
+					}
+					if (sx > 0 && sy+2 < in_height) {
+						sum += TR_(F3, in)[sx-1 + (sy+2)*in_width] * 1.0f;
+					}
+					if (sx+2 < in_width && sy+2 < in_height) {
+						sum += TR_(F3, in)[sx+2 + (sy+2)*in_width] * 1.0f;
+					}
+
+					sum /= 36.0f;
+
+					TR_(F3, out)[x + y*out_width] = sum;
+				}
+			}
+
+			bloom_passes[pass_index] = pass;
+			in = pass.pixels;
+			in_width = pass.width;
+			in_height = pass.height;
+			out_width = pass.width/2;
+			out_height = pass.height/2;
+		}
+
+		Image last_bloom = bloom_passes[bloom_pass_count-1];
+		ramR->final_image = image_alloc(arena, last_bloom.width, last_bloom.height, sizeof(I1));
+
+		// Tonemap
+		in     = last_bloom.pixels;
+		L1 out = ramR->final_image.pixels;
+		for EachIndex(pixel_index, ramR->final_image.width*ramR->final_image.height) {
+			F3 color = TR_(F3, in)[0];
+
 			F4 bmp_color = {
 				255.0f*linear_to_srgb(reinhard_tonemap(color.x)),
 				255.0f*linear_to_srgb(reinhard_tonemap(color.y)),
@@ -703,34 +834,26 @@ Internal void lane(L1 arena) {
 												I1_(bmp_color.x) << 16 |
 												I1_(bmp_color.y) << 8 |
 												I1_(bmp_color.z) << 0;
+
+			in  += sizeof(F3);
 			out += sizeof(I1);
 		}
-
-		L1 dest = ramR->output_image.pixels + sizeof(I1)*final_pixels_range.min;
-		memmove(dest, final_pixels, sizeof(I1)*section_pixel_count);
-
-		AtomicAddL1(&ramV->complete_sections_count, 1);
-
-		L1 now    = os_clock();
-		L1 duration_ms = (now - lane_begin_time)/1000000;
-		F1 duration_s  = F1_(duration_ms)/1000.0f;
-		F1 percent = F1_(ramR->complete_sections_count) / F1_(ramR->section_count) * 100.0f;
-		printf("\r[%.2fs]: %.2f%%", duration_s, percent);
-		fflush(stdout);
 	}
 
-	lane_sync();
+	L1 memory_usage = TR_(Arena, arena)->pos;
+	AtomicAddL1(&ramV->total_memory_usage, memory_usage);
 
 	if (lane_idx() == 0) {
-	 // progress report does not add newline, so do it here.
-		printf("\n");
-
-		image_write_to_file(ramR->output_image, "output.bmp");
+		image_write_to_file(ramR->final_image, "output.bmp");
 
 		L1 end_time    = os_clock();
 		L1 duration_ms = (end_time - ramR->start_time)/1000000;
 		F1 duration_s  = F1_(duration_ms)/1000.0f;
-		printf("Total time: %.2fs\n", duration_s);
+
+		L1 kib_used = ramR->total_memory_usage / KiB(1);
+		L1 mib_used = ramR->total_memory_usage / MiB(1);
+
+		printf("Took %.2fs, Used %lluKiB (%llu MiB)\n", duration_s, kib_used, mib_used);
 	}
 }
 

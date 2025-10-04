@@ -128,6 +128,10 @@ Inline L1 AtomicSwapL1(L1V a, L1 v) {
 #define Max(a, b) ((a) > (b) ? (a) : (b))
 
 #define Crash(x) __builtin_trap()
-#define Assert(x) do { if (!(x)) { Crash(-1); } } while (0)
+#define Assert(x) do { if (!(x)) {\
+	fprintf(stderr, "Assert Failed: %s:%d\n", __FILE__, __LINE__);\
+	fflush(stderr); \
+	Crash(-1); \
+	} } while (0)
 
 #define Swap(a, b) do { typeof(a) temp = a; a = b; b = temp; } while(0)

@@ -53,7 +53,7 @@ SI1 main(void) {
   L1 lane_contexts = arena_push(threads_arena, sizeof(LaneCtx) * thread_count);
   for EachIndex(i, thread_count) {
     TR_(LaneCtx, lane_contexts)[i] = (LaneCtx){
-      .arena = arena_create(MiB(32)),
+      .arena = arena_create(MiB(512)),
       .lane_idx = i,
       .lane_count = thread_count,
       .barrier = L1_(&barrier),

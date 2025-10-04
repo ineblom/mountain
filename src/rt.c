@@ -576,14 +576,15 @@ Inline F1 reinhard_tonemap(F1 x) {
 }
 
 Internal void lane(L1 arena) {
-	I1 output_width  = 1280;
-	I1 output_height = 720;
+	I1 output_width  = 640;
+	I1 output_height = 480;
 
-	L1 rays_per_pixel  = 512;
+	L1 rays_per_pixel  = 2048;
 	L1 max_num_bounces = 8;
 
 	F1 bloom_threshold = 0.5f;
 	F1 bloom_strength  = 0.1f;
+	F1 bloom_knee = 0.3f;
 
 	if (lane_idx() == 0) {
 		ramR->ray_image = image_alloc(arena, output_width, output_height, sizeof(F3));
@@ -605,7 +606,7 @@ Internal void lane(L1 arena) {
 		{ // left
 			.base_color  = (F3){1.0f, 1.0f, 1.0f},
 			.metallic = 1.0f,
-			.roughness = 0.01f,
+			.roughness = 0.40f,
 		},
 		{ // right
 			.base_color  = (F3){0.1f, 1.0f, 1.0f},
@@ -613,8 +614,8 @@ Internal void lane(L1 arena) {
 			.roughness = 0.10f,
 		},
 		{ // center
-			.base_color  = (F3){2.0f, 0.2f, 2.0f},
-			.emissive = (F3){2.0f, 0.5f, 2.0f},
+			.base_color  = (F3){1.0f, 0.2f, 1.0f},
+			.emissive = (F3){2.0f, 0.6f, 2.0f},
 			.metallic = 0.1f,
 			.roughness = 1.00f,
 		},
@@ -740,7 +741,7 @@ Internal void lane(L1 arena) {
 
 		// TODO: Multithread
 
-		Image bloom_passes[5] = {0};
+		Image bloom_passes[6] = {0};
 		L1 bloom_pass_count = ArrayLength(bloom_passes);
 
 		L1 ray_img_w = ramR->ray_image.width;
@@ -753,7 +754,26 @@ Internal void lane(L1 arena) {
 		for EachIndex(pixel_index, ray_img_w*ray_img_h) {
 			F3 color = TR_(F3, in)[0];
 
-			if (F3_luminance(color) < bloom_threshold) color = (F3){0};
+			F1 luminance = F3_luminance(color);
+
+			F1 soft_threshold = bloom_threshold - bloom_knee;
+			F1 knee_range = 2.0f*bloom_knee;
+			F1 contrib = 0.0f;
+
+			if (luminance > bloom_threshold + bloom_knee) {
+				contrib = 1.0f;
+			} else if (luminance > soft_threshold) {
+				F1 x = luminance - soft_threshold;
+				F1 knee_contrib = (x*x) / (4.0f*knee_range*knee_range);
+				contrib = knee_contrib;
+			}
+
+			if (contrib > 0.0f && luminance > 1e-6f) {
+				F1 excess_luminance = Max(0.0f, luminance - bloom_threshold);
+				color = color * (excess_luminance/luminance)*contrib;
+			} else {
+				color = (F3){0};
+			}
 
 			TR_(F3, out)[0] = color;
 
@@ -785,51 +805,39 @@ Internal void lane(L1 arena) {
 					F3 sum = {0};
 
 					// Center (4)
-					sum += TR_(F3, in.pixels)[sx+0 + (sy+0)*in.width] * 4.0f;
-					sum += TR_(F3, in.pixels)[sx+1 + (sy+0)*in.width] * 4.0f;
-					sum += TR_(F3, in.pixels)[sx+0 + (sy+1)*in.width] * 4.0f;
-					sum += TR_(F3, in.pixels)[sx+1 + (sy+1)*in.width] * 4.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+0,sy+0)] * 4.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy+0)] * 4.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy+1)] * 4.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+0,sy+1)] * 4.0f;
 
 					// Edges (2)
-					if (sx > 0) {
-						sum += TR_(F3, in.pixels)[sx-1 + (sy+0)*in.width] * 2.0f;
-						sum += TR_(F3, in.pixels)[sx-1 + (sy+1)*in.width] * 2.0f;
-					}
-					if (sx+2 < in.width) {
-						sum += TR_(F3, in.pixels)[sx+2 + (sy+0)*in.width] * 2.0f;
-						sum += TR_(F3, in.pixels)[sx+2 + (sy+1)*in.width] * 2.0f;
-					}
-					if (sy > 0) {
-						sum += TR_(F3, in.pixels)[sx+0 + (sy-1)*in.width] * 2.0f;
-						sum += TR_(F3, in.pixels)[sx+1 + (sy-1)*in.width] * 2.0f;
-					}
-					if (sy+2 < in.height) {
-						sum += TR_(F3, in.pixels)[sx+0 + (sy+2)*in.width] * 2.0f;
-						sum += TR_(F3, in.pixels)[sx+1 + (sy+2)*in.width] * 2.0f;
-					}
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy+0)] * 2.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy+1)] * 2.0f;
+
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+2,sy+0)] * 2.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+2,sy+1)] * 2.0f;
+
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+0,sy-1)] * 2.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy-1)] * 2.0f;
+
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+0,sy+2)] * 2.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy+2)] * 2.0f;
 
 					// Corners (1)
-					if (sx > 0 && sy > 0)  {
-						sum += TR_(F3, in.pixels)[sx-1 + (sy-1)*in.width] * 1.0f;
-					}
-					if (sx+2 < in.width && sy > 0) {
-						sum += TR_(F3, in.pixels)[sx+2 + (sy-1)*in.width] * 1.0f;
-					}
-					if (sx > 0 && sy+2 < in.height) {
-						sum += TR_(F3, in.pixels)[sx-1 + (sy+2)*in.width] * 1.0f;
-					}
-					if (sx+2 < in.width && sy+2 < in.height) {
-						sum += TR_(F3, in.pixels)[sx+2 + (sy+2)*in.width] * 1.0f;
-					}
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy-1)] * 1.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+2,sy-1)] * 1.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy+2)] * 1.0f;
+					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+2,sy+2)] * 1.0f;
 
 					sum /= 36.0f;
+					F3 karis_average = sum / (1.0f + F3_luminance(sum));
 
-					TR_(F3, out.pixels)[x + y*out.width] = sum;
+					TR_(F3, out.pixels)[x + y*out.width] = karis_average;
 				}
 			}
 		}
 
-		// Upsample and add
+		// Upsample and sum
 		for (L1 pass_index = bloom_pass_count-1; pass_index >= 1; pass_index -= 1) {
 			Image in = bloom_passes[pass_index];
 			Image out = bloom_passes[pass_index-1];
@@ -866,15 +874,16 @@ Internal void lane(L1 arena) {
 
 		ramR->final_image = image_alloc(arena, output_width, output_height, sizeof(I1));
 
-		// Tonemap
+		// Composit & Tonemap
 		L1 in_ray    = ramR->ray_image.pixels;
 		L1 in_bloom  = bloom_passes[0].pixels;
 		out          = ramR->final_image.pixels;
 		for EachIndex(pixel_index, output_width*output_height) {
 			F3 ray_color = TR_(F3, in_ray)[0];
 			F3 bloom_color = TR_(F3, in_bloom)[0];
+			F3 color = ray_color * (1.0f - 0.5f*bloom_strength) + bloom_strength*bloom_color;
 			// F3 color = F3_lerp(ray_color, 1-bloom_strength, bloom_color);
-			F3 color = ray_color + bloom_strength*bloom_color;
+			// F3 color = ray_color + bloom_strength*bloom_color;
 
 			F4 bmp_color = {
 				255.0f*linear_to_srgb(reinhard_tonemap(color.x)),
@@ -907,7 +916,7 @@ Internal void lane(L1 arena) {
 		L1 kib_used = ramR->total_memory_usage / KiB(1);
 		L1 mib_used = ramR->total_memory_usage / MiB(1);
 
-		printf("Took %.2fs, Used %lluKiB (%llu MiB)\n", duration_s, kib_used, mib_used);
+		printf("[%.2fs] Done, Used %llu KiB (%llu MiB)\n", duration_s, kib_used, mib_used);
 	}
 }
 

@@ -18,4 +18,6 @@ A pile of C code. Used as a base environment for multiple projects.
   - eliminates the need for .h files.
 - `os.c` operating system abstraction.
 - `strings.c` custom string type and operations.
+- `math.c` math operations.
+- `image.c` read/write, sample.
 - `rt.c` simple CPU ray tracer.

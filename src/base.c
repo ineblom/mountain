@@ -129,7 +129,7 @@ Inline L1 AtomicSwapL1(L1V a, L1 v) {
 
 #define Crash(x) __builtin_trap()
 #define Assert(x) do { if (!(x)) {\
-	fprintf(stderr, "Assert Failed: %s:%d\n", __FILE__, __LINE__);\
+	fprintf(stderr, "Assert Failed (%s:%d) %s\n", __FILE__, __LINE__, #x);\
 	fflush(stderr); \
 	Crash(-1); \
 	} } while (0)

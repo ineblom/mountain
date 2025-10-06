@@ -68,4 +68,6 @@ Inline void WrmEnd(void) { Crash(1); }
 #include "strings.c"
 #include "os.c"
 #include "lane.c"
+#include "math.c"
+#include "image.c"
 #include "rt.c" 

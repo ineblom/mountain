@@ -11,35 +11,6 @@
 
 #if (CPU_ && TYP_)
 
-#pragma pack(push, 1)
-typedef struct Bitmap_Header Bitmap_Header;
-struct Bitmap_Header {
-	W1 file_type;
-	I1 file_size;
-	W1 reserved1, reserved2;
-	I1 bitmap_offset;
-	I1 size;
-	SI1 width;
-	SI1 height;
-	W1 planes;
-	W1 bits_per_pixel;
-	I1 compression;
-	I1 size_of_bitmap;
-	SI1 horz_resolution;
-	SI1 vert_resolution;
-	I1 colors_used;
-	I1 colors_important;
-};
-#pragma pack(pop)
-
-typedef struct Image Image;
-struct Image {
-	I1 width;
-	I1 height;
-	I1 bytes_per_pixel;
-	L1 pixels;
-};
-
 typedef struct Material Material;
 struct Material {
 	F3 base_color;

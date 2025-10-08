@@ -12,13 +12,11 @@ F1 cam_rot_y;
 void lane(L1 arena) {
 	if (lane_idx() == 0) {
 		L1 window = os_window_open(arena, "Hello", 1280, 720);
-		os_window_get_context(window);
 
 		ramR->cam_dist = 3.0f;
 		ramR->cam_rot_x = 35.0f;
 		ramR->cam_rot_y = -45.0f;
 
-		glEnable(GL_DEPTH_TEST);
 		
 		while (TR_(OS_Window, window)->should_close == 0) {
 			F1 time = F1_(os_clock() / 1000000) / 1000.0f;
@@ -37,22 +35,29 @@ void lane(L1 arena) {
 			I1 key_w = os_key(17);
 			I1 key_s = os_key(31);
 			
-			if (key_esc) {
-				break;
+
+			if (ramR->focused_window == window) {
+				if (key_esc) {
+					break;
+				}
+				if (right_pressed) {
+					ramR->cam_rot_y += delta_mx * 0.2f;
+					ramR->cam_rot_x += delta_my * 0.2f;
+				}
+
+				ramR->cam_dist += ramR->scroll_y/20.0f;
+				if (key_w) {
+					ramR->cam_dist -= 0.1f;
+				}
+				if (key_s) {
+					ramR->cam_dist += 0.1f;
+				}
 			}
 
-			if (right_pressed) {
-				ramR->cam_rot_y += delta_mx * 0.2f;
-				ramR->cam_rot_x += delta_my * 0.2f;
-			}
+			os_window_get_context(window);
 
-			ramR->cam_dist += ramR->scroll_y/20.0f;
-			if (key_w) {
-				ramR->cam_dist -= 0.1f;
-			}
-			if (key_s) {
-				ramR->cam_dist += 0.1f;
-			}
+			glEnable(GL_DEPTH_TEST);
+      glViewport(0, 0, TR_(OS_Window, window)->width, TR_(OS_Window, window)->height);
 			
 			glClearColor(0, 0, 0, 1);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -119,9 +124,9 @@ void lane(L1 arena) {
 		  glFlush();
 			
 			os_window_swap_buffers(window);
+
 		}
 		
-		// Cleanup
 		os_window_close(window);
 	}
 }

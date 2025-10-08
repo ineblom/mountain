@@ -124,6 +124,7 @@ struct OS_Window {
 
 #if (CPU_ && RAM_)
 
+L1 focused_window;
 L1 first_window;
 
 struct wl_display *display;
@@ -339,14 +340,26 @@ Internal void pointer_enter_handler(
   struct wl_surface *surface,
   wl_fixed_t surface_x,
   wl_fixed_t surface_y)
-{}
+{
+  TR(OS_Window) window;
+  for (L1 it = ramR->first_window; it != 0; it = TR_(OS_Window, it)->next) {
+    window = TR_(OS_Window, it);
+    if (surface == window->surface) {
+      break;
+    }
+  }
+
+  ramR->focused_window = L1_(window);
+}
 
 Internal void pointer_leave_handler(
   void *data,
   struct wl_pointer *pointer,
   I1 serial,
   struct wl_surface *surface)
-{}
+{
+  ramR->focused_window = 0;
+}
 
 Internal void pointer_motion_handler(
   void *data,
@@ -411,7 +424,8 @@ Internal void pointer_axis_discrete_handler(
   struct wl_pointer *pointer,
   I1 axis,
   SI1 discrete)
-{}
+{
+}
 
 // Keyboard event handlers
 Internal void keyboard_keymap_handler(
@@ -634,7 +648,6 @@ Internal void os_poll_events(void) {
     if (window->resized) {
       window->resized = 0;
       wl_egl_window_resize(window->egl_window, window->width, window->height, 0, 0);
-      glViewport(0, 0, window->width, window->height);
     }
   }
 }

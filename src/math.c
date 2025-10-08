@@ -1,6 +1,14 @@
 
 #if (CPU_) && (TYP_)
 
+F1 sqrtf(F1);
+F1 sinf(F1);
+F1 cosf(F1);
+F1 fabsf(F1);
+F1 powf(F1, F1);
+
+#define PI 3.141592653598979f
+
 #endif
 
 #if (CPU_) && (ROM_)

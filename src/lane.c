@@ -22,17 +22,20 @@ Internal void lane(L1);
 #define lane_count() (TR_(LaneCtx, lane_ctx)->lane_count)
 #define lane_from_task_idx(idx) ((idx) % TR_(LaneCtx, lane_ctx)->lane_count)
 #define lane_sync() os_barrier_wait(TR_(LaneCtx, lane_ctx)->barrier)
-#define lane_range(count) lane_idx_range_from_count(count)
+#define lane_range(count) range_for_section(lane_idx(), lane_count(), count)
 
-Internal Range lane_idx_range_from_count(L1 count) {
-  L1 main_indexes_per_lane = count/lane_count();
-  L1 leftover_indexes_count = count - main_indexes_per_lane*lane_count();
-  L1 leftover_indexes_before_this_lane_count = Min(lane_idx(), leftover_indexes_count);
-  L1 lane_base_idx = lane_idx()*main_indexes_per_lane + leftover_indexes_before_this_lane_count;
-  L1 lane_base_idx__clamped = Min(lane_base_idx, count);
-  L1 lane_opl_index = lane_base_idx__clamped + main_indexes_per_lane + (lane_idx() < leftover_indexes_count ? 1 : 0);
-  L1 lane_opl_index__clamped = Min(lane_opl_index, count);
-  return (Range){lane_base_idx__clamped, lane_opl_index__clamped};
+Internal Range range_for_section(L1 section_idx, L1 section_count, L1 count) {
+  L1 main_quotient = count/section_count;
+  L1 leftover = count - main_quotient*section_count;
+
+  L1 leftovers_consumed_before_section = Min(section_idx, leftover);
+  L1 min = section_idx*main_quotient + leftovers_consumed_before_section;
+  L1 min__clamped = Min(min, count);
+
+  L1 max = min__clamped + main_quotient + (section_idx < leftover ? 1 : 0);
+  L1 max__clamped = Min(max, count);
+
+  return (Range){min__clamped, max__clamped};
 }
 
 Internal L1 thread_entrypoint(L1 arg) {

@@ -13,3 +13,18 @@ struct String8 {
 #define Str8_(x) (String8){ .str = L1_(x), .len = sizeof(x) - 1 }
 
 #endif
+
+#if (CPU_ && ROM_)
+
+Internal I1 cstr_compare(CString a, CString b) {
+  L1 result = 0;
+
+  while (*a && (*a == *b)) {
+    a += 1;
+    b += 1;
+  }
+
+  return *a == *b;
+}
+
+#endif

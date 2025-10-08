@@ -5,6 +5,7 @@
 
 // TODO:
 // Shadow rays (higher quality w/ lower ray counts)
+// SIMD
 // Textures
 // Quads
 // BVH (for larger scenes)
@@ -62,14 +63,6 @@ struct World {
 	L1 box_count;
 	L1 boxes;
 };
-
-F1 sqrtf(F1);
-F1 sinf(F1);
-F1 cosf(F1);
-F1 fabsf(F1);
-F1 powf(F1, F1);
-
-#define PI 3.141592653598979f
 
 #endif
 

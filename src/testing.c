@@ -17,6 +17,7 @@ void lane(L1 arena) {
 		ramR->cam_rot_x = 35.0f;
 		ramR->cam_rot_y = -45.0f;
 
+		F1 sidebar_w = 400.0f;
 		
 		while (TR_(OS_Window, window)->should_close == 0) {
 			F1 time = F1_(os_clock() / 1000000) / 1000.0f;
@@ -35,6 +36,8 @@ void lane(L1 arena) {
 			I1 key_w = os_key(17);
 			I1 key_s = os_key(31);
 			
+			F1 window_width = F1_(TR_(OS_Window, window)->width);
+			F1 window_height = F1_(TR_(OS_Window, window)->height);
 
 			if (ramR->focused_window == window) {
 				if (key_esc) {
@@ -57,12 +60,12 @@ void lane(L1 arena) {
 			os_window_get_context(window);
 
 			glEnable(GL_DEPTH_TEST);
-      glViewport(0, 0, TR_(OS_Window, window)->width, TR_(OS_Window, window)->height);
+      glViewport(sidebar_w, 0, window_width-sidebar_w, window_height);
+			F1 aspect = (window_width-sidebar_w)/window_height;
 			
 			glClearColor(0, 0, 0, 1);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-			F1 aspect = F1_(TR_(OS_Window, window)->width)/F1_(TR_(OS_Window, window)->height);
 			glMatrixMode(GL_PROJECTION);
 			glLoadIdentity();
 			F1 near = 0.1f;
@@ -121,10 +124,34 @@ void lane(L1 arena) {
 		  	glVertex3f(1.5f, 0.5f, 1.0f);
 		  glEnd();
 
+		  glViewport(0, 0, window_width, window_height);
+		  glDisable(GL_DEPTH_TEST);
+
+		  glMatrixMode(GL_PROJECTION);
+		  glLoadIdentity();
+		  glOrtho(0, window_width, window_height, 0.0f, -1.0f, 1.0f);
+
+			glMatrixMode(GL_MODELVIEW);
+			glLoadIdentity();
+
+			// glEnable(GL_BLEND);
+			// glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			// glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+
+		  glBegin(GL_TRIANGLE_STRIP);
+			  glColor3f(0.1f, 0.1f, 0.1f);
+			  glVertex2f(0, 0);
+			  glVertex2f(sidebar_w, 0);
+			  glVertex2f(0, window_height);
+			  glVertex2f(sidebar_w, window_height);
+		  glEnd();
+
+		  // glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		  // glDisable(GL_BLEND);
+
 		  glFlush();
 			
 			os_window_swap_buffers(window);
-
 		}
 		
 		os_window_close(window);

@@ -526,35 +526,7 @@ Internal L1 os_window_open(L1 arena, CString title, I1 width, I1 height) {
     ramR->keyboard_listener.repeat_info = keyboard_repeat_info_handler;
 
     wl_display_roundtrip(ramR->display);
-  }
 
-  TR(OS_Window) result = TR_(OS_Window, push_array(arena, OS_Window, 1));
-
-  result->surface = wl_compositor_create_surface(ramR->compositor);
-  Assert(result->surface != 0);
-
-  result->xdg_surface = xdg_wm_base_get_xdg_surface(ramR->xdg_wm_base, result->surface);
-  Assert(result->xdg_surface);
-
-  result->xdg_surface_listener.configure = xdg_surface_configure_handler;
-  xdg_surface_add_listener(result->xdg_surface, &result->xdg_surface_listener, (void *)result);
-
-  result->xdg_toplevel = xdg_surface_get_toplevel(result->xdg_surface);
-  Assert(result->xdg_toplevel);
-
-  result->xdg_toplevel_listener.configure = xdg_toplevel_configure_handler;
-  result->xdg_toplevel_listener.close = xdg_toplevel_close_handler;
-  xdg_toplevel_add_listener(result->xdg_toplevel, &result->xdg_toplevel_listener, (void *)result);
-
-  xdg_toplevel_set_title(result->xdg_toplevel, title);
-
-  wl_surface_commit(result->surface);
-
-  while (!result->configured) {
-    wl_display_dispatch(ramR->display);
-  }
-
-  if (ramR->first_window == 0) {
     ramR->egl_display = eglGetDisplay((EGLNativeDisplayType)ramR->display);
     Assert(ramR->egl_display != EGL_NO_DISPLAY);
 
@@ -587,6 +559,32 @@ Internal L1 os_window_open(L1 arena, CString title, I1 width, I1 height) {
     };
     ramR->egl_context = eglCreateContext(ramR->egl_display, ramR->egl_config, EGL_NO_CONTEXT, context_attribs);
     Assert(ramR->egl_context != EGL_NO_CONTEXT);
+  }
+
+  TR(OS_Window) result = TR_(OS_Window, push_array(arena, OS_Window, 1));
+
+  result->surface = wl_compositor_create_surface(ramR->compositor);
+  Assert(result->surface != 0);
+
+  result->xdg_surface = xdg_wm_base_get_xdg_surface(ramR->xdg_wm_base, result->surface);
+  Assert(result->xdg_surface);
+
+  result->xdg_surface_listener.configure = xdg_surface_configure_handler;
+  xdg_surface_add_listener(result->xdg_surface, &result->xdg_surface_listener, (void *)result);
+
+  result->xdg_toplevel = xdg_surface_get_toplevel(result->xdg_surface);
+  Assert(result->xdg_toplevel);
+
+  result->xdg_toplevel_listener.configure = xdg_toplevel_configure_handler;
+  result->xdg_toplevel_listener.close = xdg_toplevel_close_handler;
+  xdg_toplevel_add_listener(result->xdg_toplevel, &result->xdg_toplevel_listener, (void *)result);
+
+  xdg_toplevel_set_title(result->xdg_toplevel, title);
+
+  wl_surface_commit(result->surface);
+
+  while (!result->configured) {
+    wl_display_dispatch(ramR->display);
   }
 
   result->width = width;

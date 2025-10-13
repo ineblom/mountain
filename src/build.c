@@ -55,9 +55,9 @@ Global ThreadLocal L1 lane_ctx;
 
 #undef ROM_
 #define ROM_ 1
-Inline void WrmBas(void) { Crash(0); }
+NoInline void WrmBas(void) { Crash(0); }
 #include __FILE__
-Inline void WrmEnd(void) { Crash(1); }
+NoInline void WrmEnd(void) { Crash(1); }
 #undef ROM_
 #define ROM_ 0
 

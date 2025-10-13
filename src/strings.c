@@ -16,6 +16,17 @@ struct String8 {
 
 #if (CPU_ && ROM_)
 
+Internal L1 cstr_len(CString str) {
+  L1 result = 0; 
+
+  while (*str != 0) {
+    result += 1;    
+    str += 1;
+  }
+
+  return result;
+}
+
 Internal I1 cstr_compare(CString a, CString b) {
   L1 result = 0;
 

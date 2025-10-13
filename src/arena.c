@@ -12,8 +12,8 @@ Internal L1 arena_create(L1 max_size) {
   Assert(max_size > sizeof(Arena));
 
   L1 base = os_reserve(max_size);
-  os_commit(base, max_size);
   Assert(base != 0);
+  os_commit(base, max_size);
 
   TR(Arena) arena = TR_(Arena, base);
   arena->pos = sizeof(Arena);

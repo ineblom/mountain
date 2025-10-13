@@ -86,28 +86,28 @@ Inline L1 ClockL1(void) {
 }*/
 Inline void Pause(void) { asm volatile("pause":::"memory"); }
 
-Inline I1 AtomicAddI1(I1V a, I1 v) {
+Inline I1 atomic_add_I1(I1V a, I1 v) {
 	asm volatile("lock xaddl %0,%1"
 							 : "=r"(v),"=m"(*a)
 							 : "0"(v),"m"(*a)
 							 : "memory","cc");
 	return v;
 }
-Inline L1 AtomicAddL1(L1V a, L1 v) {
+Inline L1 atomic_add_L1(L1V a, L1 v) {
 	asm volatile("lock xaddq %0,%1"
 							 : "=r"(v),"=m"(*a)
 							 : "0"(v),"m"(*a)
 							 : "memory","cc");
 	return v;
 }
-Inline I1 AtomicSwapI1(I1V a, I1 v) {
+Inline I1 atomic_swap_I1(I1V a, I1 v) {
 	asm volatile("xchgl %0,%1"
 							 : "=r"(v),"=m"(*a)
 							 : "0"(v),"m"(*a)
 							 : "memory");
 	return v;
 }
-Inline L1 AtomicSwapL1(L1V a, L1 v) {
+Inline L1 atomic_swap_L1(L1V a, L1 v) {
 	asm volatile("xchgq %0,%1"
 							 : "=r"(v),"=m"(*a)
 							 : "0"(v),"m"(*a)
@@ -118,9 +118,9 @@ Inline L1 AtomicSwapL1(L1V a, L1 v) {
 #define EachIndex(it, count) (L1 it = 0; it < (count); it += 1)
 #define EachInRange(it, range) (L1 it = (range).min; it < (range).max; it += 1)
  
-#define KiB(x) (1024 * x)
-#define MiB(x) (1024 * 1024 * x)
-#define GiB(x) (1024 * 1024 * 1024 * x)
+#define KiB(x) (1024 * (x))
+#define MiB(x) (1024 * 1024 * (x))
+#define GiB(x) (1024 * 1024 * 1024 * (x))
 
 #define ArrayLength(arr) (sizeof(arr) / sizeof(arr[0]))
 

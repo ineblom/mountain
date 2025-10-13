@@ -24,6 +24,8 @@ Internal void lane(L1);
 #define lane_sync() os_barrier_wait(TR_(LaneCtx, lane_ctx)->barrier)
 #define lane_range(count) range_for_section(lane_idx(), lane_count(), count)
 
+// lane_sync_L1(&value, src_lane_idx)
+
 Internal Range range_for_section(L1 section_idx, L1 section_count, L1 count) {
   L1 main_quotient = count/section_count;
   L1 leftover = count - main_quotient*section_count;

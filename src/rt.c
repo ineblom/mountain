@@ -279,13 +279,13 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 				F3 local_hit = next_origin - center;
 				F3 box_size = box.max - box.min;
         
-        		F3 d = F3_abs(local_hit) / (box_size * 0.5f);
-        		if (d.x > d.y && d.x > d.z) next_normal = F1_sign(local_hit.x) * (F3){1,0,0};
-        		else if (d.y > d.z) next_normal = F1_sign(local_hit.y) * (F3){0,1,0};
-        		else next_normal = F1_sign(local_hit.z) * (F3){0,0,1};
+    		F3 d = F3_abs(local_hit) / (box_size * 0.5f);
+    		if (d.x > d.y && d.x > d.z) next_normal = F1_sign(local_hit.x) * (F3){1,0,0};
+    		else if (d.y > d.z) next_normal = F1_sign(local_hit.y) * (F3){0,1,0};
+    		else next_normal = F1_sign(local_hit.z) * (F3){0,0,1};
 
-        		hit_distance = t_min;
-        		hit_material_idx = box.material_idx;
+    		hit_distance = t_min;
+    		hit_material_idx = box.material_idx;
 			}
 
 		}
@@ -413,7 +413,7 @@ Inline F3 tonemap_lottes(F3 v) {
   const F1 mid_in = 0.18f;
   const F1 mid_out = 0.267f;
 
-  // Can be precomputed
+  // TODO: Precompute
   const F1 b =
       (-powf(mid_in, a) + powf(hdr_max, a) * mid_out) /
       ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);

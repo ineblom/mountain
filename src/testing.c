@@ -243,64 +243,6 @@ Internal void lane(L1 arena) {
 				ramR->cam_dist += 0.1f;
 			}
 
-			// ---- SELECTION ----
-			if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w) {
-				F1 viewport_mx = ramR->mouse_x - sidebar_w;
-				F1 viewport_my = ramR->mouse_y;
-
-				// Convert mouse position to normalized device coordinates (-1 to 1)
-				F1 ndc_x = (viewport_mx / viewport_width) * 2.0f - 1.0f;
-				F1 ndc_y = 1.0f - (viewport_my / viewport_height) * 2.0f;
-
-				// Compute camera basis vectors from rotation angles
-				F1 rot_x_rad = ramR->cam_rot_x * PI / 180.0f;
-				F1 rot_y_rad = ramR->cam_rot_y * PI / 180.0f;
-
-				// Camera rotations: first around Y, then around X
-				F1 cos_x = cosf(rot_x_rad);
-				F1 sin_x = sinf(rot_x_rad);
-				F1 cos_y = cosf(rot_y_rad);
-				F1 sin_y = sinf(rot_y_rad);
-
-			// Camera forward direction (pointing towards origin)
-			F3 cam_forward = {
-				sin_y * cos_x,
-				sin_x,
-				-cos_y * cos_x
-			};
-
-				// Camera position (looking at origin from distance)
-				F3 ray_origin = cam_forward * -ramR->cam_dist;
-
-				// Camera right and up vectors
-				F3 cam_right = F3_normalize(F3_cross((F3){0, 0, 1}, cam_forward));
-				F3 cam_up = F3_normalize(F3_cross(cam_forward, cam_right));
-
-				// Ray direction through the pixel (accounting for frustum)
-				F1 ray_dir_x = ndc_x * viewport_aspect * scale_factor;
-				F1 ray_dir_y = ndc_y * scale_factor;
-				F3 ray_direction = F3_normalize(
-					cam_forward * near +
-					cam_right * ray_dir_x +
-					cam_up * ray_dir_y
-				);
-
-				ramR->selected_entity_idx = L1_MAX;
-
-				F1 shortest_t = F1_MAX;
-				for EachIndex(entity_index, ramR->entity_count) {
-					Entity e = ramR->entities[entity_index];
-					F3 aabb_min = e.pos - e.size;
-					F3 aabb_max = e.pos + e.size;
-
-					F1 t = ray_aabb_intersect(ray_origin, ray_direction, aabb_min, aabb_max);
-					if (t > 0.0001f && t < shortest_t) {
-						ramR->selected_entity_idx = entity_index;
-						shortest_t = t;
-					}
-				}
-			}
-
 			// ---- RENDERING ----
 
 			glEnable(GL_DEPTH_TEST);
@@ -337,18 +279,6 @@ Internal void lane(L1 arena) {
 					glVertex3f(-half_grid_w, 0.0f, x);
 					glVertex3f(half_grid_w, 0.0f, x);
 				}
-			glEnd();
-
-			// ---- WORLD AXES ----
-			glBegin(GL_LINES);
-				glColor3f(0.0f, 0.0f, 1.0f);
-				glVertex3f(0, 0, 0); glVertex3f(1, 0, 0);
-
-				glColor3f(1.0f, 0.0f, 0.0f);
-				glVertex3f(0, 0, 0); glVertex3f(0, 1, 0);
-
-				glColor3f(0.0f, 1.0f, 0.0f);
-				glVertex3f(0, 0, 0); glVertex3f(0, 0, 1);
 			glEnd();
 
 			// ---- ENTITIES ----
@@ -391,6 +321,111 @@ Internal void lane(L1 arena) {
 
 				glEnd();
 			}
+
+			// ---- SELECTION (DEPTH BUFFER PICKING) ----
+			if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w) {
+				// Read depth value at mouse position
+				F1 depth;
+				glReadPixels(
+					I1_(ramR->mouse_x),
+					I1_(window_height - ramR->mouse_y), // OpenGL y is bottom-up
+					1, 1,
+					GL_DEPTH_COMPONENT,
+					GL_FLOAT,
+					&depth
+				);
+
+				ramR->selected_entity_idx = L1_MAX;
+
+				// Only proceed if we clicked on geometry (not the background)
+				if (depth < 1.0f) {
+					F1 viewport_mx = ramR->mouse_x - sidebar_w;
+					F1 viewport_my = ramR->mouse_y;
+
+					// Convert to normalized device coordinates
+					F1 ndc_x = (viewport_mx / viewport_width) * 2.0f - 1.0f;
+					F1 ndc_y = 1.0f - (viewport_my / viewport_height) * 2.0f;
+					F1 ndc_z = depth * 2.0f - 1.0f; // Convert [0,1] to [-1,1]
+
+					// Unproject to get world position
+					// We need to invert: clip = projection * view * world
+					// For our simple camera setup:
+
+					// First, get view space position (inverse projection)
+					F1 view_x = ndc_x * viewport_aspect * scale_factor / near * -1.0f; // perspective divide
+					F1 view_y = ndc_y * scale_factor / near * -1.0f;
+					// Linearize depth from perspective projection
+					F1 view_z = -(2.0f * far * near) / (far + near - ndc_z * (far - near));
+
+					// Scale by actual depth
+					view_x *= view_z;
+					view_y *= view_z;
+
+					// Now transform from view space to world space (inverse view transform)
+					F1 rot_x_rad = ramR->cam_rot_x * PI / 180.0f;
+					F1 rot_y_rad = ramR->cam_rot_y * PI / 180.0f;
+					F1 cos_x = cosf(rot_x_rad);
+					F1 sin_x = sinf(rot_x_rad);
+					F1 cos_y = cosf(rot_y_rad);
+					F1 sin_y = sinf(rot_y_rad);
+
+					// Inverse rotation: first inverse X rotation, then inverse Y rotation
+					F1 temp_y = view_y * cos_x + view_z * sin_x;
+					F1 temp_z = -view_y * sin_x + view_z * cos_x;
+
+					F3 world_pos;
+					world_pos.x = view_x * cos_y - temp_z * sin_y;
+					world_pos.y = temp_y;
+					world_pos.z = view_x * sin_y + temp_z * cos_y;
+
+					// Inverse translation
+					F3 cam_forward = {
+						sin_y * cos_x,
+						sin_x,
+						-cos_y * cos_x
+					};
+					F3 cam_pos = cam_forward * -ramR->cam_dist;
+					world_pos = world_pos + cam_pos;
+
+					// Find which AABB contains or is closest to this world position
+					F1 closest_dist = F1_MAX;
+					for EachIndex(entity_index, ramR->entity_count) {
+						Entity e = ramR->entities[entity_index];
+						F3 aabb_min = e.pos - e.size;
+						F3 aabb_max = e.pos + e.size;
+
+						// Otherwise find closest AABB
+						F3 closest_point;
+						closest_point.x = world_pos.x < aabb_min.x ? aabb_min.x : (world_pos.x > aabb_max.x ? aabb_max.x : world_pos.x);
+						closest_point.y = world_pos.y < aabb_min.y ? aabb_min.y : (world_pos.y > aabb_max.y ? aabb_max.y : world_pos.y);
+						closest_point.z = world_pos.z < aabb_min.z ? aabb_min.z : (world_pos.z > aabb_max.z ? aabb_max.z : world_pos.z);
+
+						F3 diff = world_pos - closest_point;
+						F1 dist = F3_length(diff);
+
+						if (dist < closest_dist) {
+							closest_dist = dist;
+							ramR->selected_entity_idx = entity_index;
+						}
+					}
+				}
+			}
+
+			// ---- WORLD AXES ----
+			glDisable(GL_DEPTH_TEST);
+			glLineWidth(3.0f);
+			glBegin(GL_LINES);
+				glColor3f(0.0f, 0.0f, 1.0f);
+				glVertex3f(0, 0, 0); glVertex3f(1, 0, 0);
+
+				glColor3f(1.0f, 0.0f, 0.0f);
+				glVertex3f(0, 0, 0); glVertex3f(0, 1, 0);
+
+				glColor3f(0.0f, 1.0f, 0.0f);
+				glVertex3f(0, 0, 0); glVertex3f(0, 0, 1);
+			glEnd();
+			glLineWidth(1.0f);
+			glEnable(GL_DEPTH_TEST);
 
 			// ---- SIDE PANEL UI ----
 

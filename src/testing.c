@@ -44,6 +44,119 @@ F1 panel_current_y;
 
 #define sidebar_w 400.0f
 
+// 4x4 matrix stored in column-major order
+typedef struct Mat4 Mat4;
+struct Mat4 {
+	F1 m[16];
+};
+
+Inline Mat4 mat4_identity(void) {
+	Mat4 result = {0};
+	result.m[0] = 1.0f;
+	result.m[5] = 1.0f;
+	result.m[10] = 1.0f;
+	result.m[15] = 1.0f;
+	return result;
+}
+
+Inline Mat4 mat4_frustum(F1 left, F1 right, F1 bottom, F1 top, F1 near, F1 far) {
+	Mat4 result = {0};
+	result.m[ 0] = (2.0f * near) / (right - left);
+	result.m[ 5] = (2.0f * near) / (top - bottom);
+	result.m[ 8] = (right + left) / (right - left);
+	result.m[ 9] = (top + bottom) / (top - bottom);
+	result.m[10] = -(far + near) / (far - near);
+	result.m[11] = -1.0f;
+	result.m[14] = -(2.0f * far * near) / (far - near);
+	return result;
+}
+
+Inline Mat4 mat4_translate(F1 x, F1 y, F1 z) {
+	Mat4 result = mat4_identity();
+	result.m[12] = x;
+	result.m[13] = y;
+	result.m[14] = z;
+	return result;
+}
+
+Inline Mat4 mat4_rotate_x(F1 angle_deg) {
+	F1 rad = angle_deg * PI / 180.0f;
+	F1 c = cosf(rad);
+	F1 s = sinf(rad);
+	Mat4 result = mat4_identity();
+	result.m[5] = c;
+	result.m[6] = s;
+	result.m[9] = -s;
+	result.m[10] = c;
+	return result;
+}
+
+Inline Mat4 mat4_rotate_y(F1 angle_deg) {
+	F1 rad = angle_deg * PI / 180.0f;
+	F1 c = cosf(rad);
+	F1 s = sinf(rad);
+	Mat4 result = mat4_identity();
+	result.m[0] = c;
+	result.m[2] = -s;
+	result.m[8] = s;
+	result.m[10] = c;
+	return result;
+}
+
+Inline Mat4 mat4_multiply(Mat4 a, Mat4 b) {
+	Mat4 result = {0};
+	for (I1 row = 0; row < 4; row++) {
+		for (I1 col = 0; col < 4; col++) {
+			F1 sum = 0.0f;
+			for (I1 i = 0; i < 4; i++) {
+				sum += a.m[row + i * 4] * b.m[i + col * 4];
+			}
+			result.m[row + col * 4] = sum;
+		}
+	}
+	return result;
+}
+
+Inline Mat4 mat4_invert(Mat4 m) {
+	Mat4 inv = {0};
+	F1R mm = m.m;
+	F1R dst = inv.m;
+
+	dst[ 0] =  mm[5]*mm[10]*mm[15] - mm[5]*mm[11]*mm[14] - mm[9]*mm[6]*mm[15] + mm[9]*mm[7]*mm[14] + mm[13]*mm[6]*mm[11] - mm[13]*mm[7]*mm[10];
+	dst[ 4] = -mm[4]*mm[10]*mm[15] + mm[4]*mm[11]*mm[14] + mm[8]*mm[6]*mm[15] - mm[8]*mm[7]*mm[14] - mm[12]*mm[6]*mm[11] + mm[12]*mm[7]*mm[10];
+	dst[ 8] =  mm[4]*mm[ 9]*mm[15] - mm[4]*mm[11]*mm[13] - mm[8]*mm[5]*mm[15] + mm[8]*mm[7]*mm[13] + mm[12]*mm[5]*mm[11] - mm[12]*mm[7]*mm[ 9];
+	dst[12] = -mm[4]*mm[ 9]*mm[14] + mm[4]*mm[10]*mm[13] + mm[8]*mm[5]*mm[14] - mm[8]*mm[6]*mm[13] - mm[12]*mm[5]*mm[10] + mm[12]*mm[6]*mm[ 9];
+	dst[ 1] = -mm[1]*mm[10]*mm[15] + mm[1]*mm[11]*mm[14] + mm[9]*mm[2]*mm[15] - mm[9]*mm[3]*mm[14] - mm[13]*mm[2]*mm[11] + mm[13]*mm[3]*mm[10];
+	dst[ 5] =  mm[0]*mm[10]*mm[15] - mm[0]*mm[11]*mm[14] - mm[8]*mm[2]*mm[15] + mm[8]*mm[3]*mm[14] + mm[12]*mm[2]*mm[11] - mm[12]*mm[3]*mm[10];
+	dst[ 9] = -mm[0]*mm[ 9]*mm[15] + mm[0]*mm[11]*mm[13] + mm[8]*mm[1]*mm[15] - mm[8]*mm[3]*mm[13] - mm[12]*mm[1]*mm[11] + mm[12]*mm[3]*mm[ 9];
+	dst[13] =  mm[0]*mm[ 9]*mm[14] - mm[0]*mm[10]*mm[13] - mm[8]*mm[1]*mm[14] + mm[8]*mm[2]*mm[13] + mm[12]*mm[1]*mm[10] - mm[12]*mm[2]*mm[ 9];
+	dst[ 2] =  mm[1]*mm[ 6]*mm[15] - mm[1]*mm[ 7]*mm[14] - mm[5]*mm[2]*mm[15] + mm[5]*mm[3]*mm[14] + mm[13]*mm[2]*mm[ 7] - mm[13]*mm[3]*mm[ 6];
+	dst[ 6] = -mm[0]*mm[ 6]*mm[15] + mm[0]*mm[ 7]*mm[14] + mm[4]*mm[2]*mm[15] - mm[4]*mm[3]*mm[14] - mm[12]*mm[2]*mm[ 7] + mm[12]*mm[3]*mm[ 6];
+	dst[10] =  mm[0]*mm[ 5]*mm[15] - mm[0]*mm[ 7]*mm[13] - mm[4]*mm[1]*mm[15] + mm[4]*mm[3]*mm[13] + mm[12]*mm[1]*mm[ 7] - mm[12]*mm[3]*mm[ 5];
+	dst[14] = -mm[0]*mm[ 5]*mm[14] + mm[0]*mm[ 6]*mm[13] + mm[4]*mm[1]*mm[14] - mm[4]*mm[2]*mm[13] - mm[12]*mm[1]*mm[ 6] + mm[12]*mm[2]*mm[ 5];
+	dst[ 3] = -mm[1]*mm[ 6]*mm[11] + mm[1]*mm[ 7]*mm[10] + mm[5]*mm[2]*mm[11] - mm[5]*mm[3]*mm[10] - mm[ 9]*mm[2]*mm[ 7] + mm[ 9]*mm[3]*mm[ 6];
+	dst[ 7] =  mm[0]*mm[ 6]*mm[11] - mm[0]*mm[ 7]*mm[10] - mm[4]*mm[2]*mm[11] + mm[4]*mm[3]*mm[10] + mm[ 8]*mm[2]*mm[ 7] - mm[ 8]*mm[3]*mm[ 6];
+	dst[11] = -mm[0]*mm[ 5]*mm[11] + mm[0]*mm[ 7]*mm[ 9] + mm[4]*mm[1]*mm[11] - mm[4]*mm[3]*mm[ 9] - mm[ 8]*mm[1]*mm[ 7] + mm[ 8]*mm[3]*mm[ 5];
+	dst[15] =  mm[0]*mm[ 5]*mm[10] - mm[0]*mm[ 6]*mm[ 9] - mm[4]*mm[1]*mm[10] + mm[4]*mm[2]*mm[ 9] + mm[ 8]*mm[1]*mm[ 6] - mm[ 8]*mm[2]*mm[ 5];
+
+	F1 det = mm[0]*dst[0] + mm[1]*dst[4] + mm[2]*dst[8] + mm[3]*dst[12];
+	det = 1.0f / det;
+	for (I1 i = 0; i < 16; i++) {
+		dst[i] *= det;
+	}
+
+	return inv;
+}
+
+Inline F3 mat4_transform_point(Mat4 m, F3 p) {
+	F3 result;
+	F1 w = m.m[3] * p.x + m.m[7] * p.y + m.m[11] * p.z + m.m[15];
+	result.x = (m.m[0] * p.x + m.m[4] * p.y + m.m[8] * p.z + m.m[12]) / w;
+	result.y = (m.m[1] * p.x + m.m[5] * p.y + m.m[9] * p.z + m.m[13]) / w;
+	result.z = (m.m[2] * p.x + m.m[6] * p.y + m.m[10] * p.z + m.m[14]) / w;
+	return result;
+}
+
 Internal F1 draw_text(String8 msg, F1 x, F1 y, F1 size, F3 color) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -146,6 +259,70 @@ Internal void ui_drag(L1 arena, String8 label, F1R value) {
 	ramR->panel_current_y += height;
 }
 
+Internal I1 ui_button(String8 label) {
+	I1 return_value = 0;
+
+	L1 hash = str8_hash(label);
+
+	F1 text_size = 16.0f;
+	F1 padding_x = 10.0f;
+	F1 padding_y = 5.0f;
+	F1 left = 10.0f;
+	F1 right = left + text_size*label.len + padding_x*2;
+	F1 top = ramR->panel_current_y+10.0f;
+	F1 bottom = top + text_size + padding_y*2;
+
+	if ((ramR->active_hash == 0 || ramR->active_hash == hash) &&
+			ramR->mouse_x > left && ramR->mouse_x < right &&
+			ramR->mouse_y > top && ramR->mouse_y < bottom) {
+		ramR->hot_hash = hash;
+	}
+
+	if (ramR->active_hash == hash) {
+		if (ramR->left_just_released) {
+			ramR->active_hash = 0;
+			if (ramR->hot_hash == hash) {
+				return_value = 1;
+			}
+		}
+	} else if (ramR->hot_hash == hash) {
+		if (ramR->left_just_pressed) {
+			ramR->active_hash = hash;
+		}
+	}
+
+	// cut label at the first instance of ##.
+	for EachIndex(i, label.len-1) {
+		if (B1R_(label.str)[i] == '#' && B1R_(label.str)[i+1] == '#') {
+			label.len = i;
+			break;
+		}
+	}
+
+	F3 back_color = (F3){0.5f, 0.0f, 0.0f};
+	F3 text_color = (F3){1.0f, 0.0f, 0.0f};
+	if (ramR->hot_hash == hash ) {
+		back_color *= 1.1f;
+	}
+	if (ramR->active_hash == hash) {
+		back_color *= 1.3f;
+	}
+
+	glBegin(GL_QUADS);
+	glColor3f(back_color.x, back_color.y, back_color.z);
+	glVertex2f(left, top);
+	glVertex2f(right, top);
+	glVertex2f(right, bottom);
+	glVertex2f(left, bottom);
+	glEnd();
+
+	ramR->panel_current_y = top;
+	draw_text(label, left+padding_x, top+padding_y, text_size, text_color);
+	ramR->panel_current_y = bottom;
+
+	return return_value;
+}
+
 Internal void lane(L1 arena) {
 	if (lane_idx() == 0) {
 		L1 window = os_window_open(arena, "Hello", 1280, 720);
@@ -172,12 +349,12 @@ Internal void lane(L1 arena) {
 		I1 font_tex_h = 8;
 		L1 tex_data[] = {
 			0x0000FFFFFFFF0000, 0x0000FFFFFFFFFF00, 0x00FFFFFFFFFF0000, 0x0000FFFFFFFFFF00, 0x00FFFFFFFFFFFF00, 0x00FFFFFFFFFFFF00, 0x00FFFFFFFFFF0000, 0x00FF00000000FF00, 0x00FFFFFFFFFF0000, 0xFFFFFF0000000000, 0x0000FF000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000FFFFFFFF0000, 0x0000FFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x0000FFFFFFFFFF00, 0x00FFFFFFFFFF0000, 0x00FFFFFFFFFF0000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0xFF0000000000FF00, 0x00FFFFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x000000FFFF000000, 0x0000FFFFFFFF0000, 0x0000FFFFFFFF0000, 0x0000FF0000000000, 0x00FFFFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x00FFFFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x0000FFFFFFFF0000, 0x0000000000000000, 0x0000000000000000,
-			0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000000000, 0x000000FF0000FF00, 0x000000000000FF00, 0x00FFFF0000FFFF00, 0x00FF000000FFFF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000FF00000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0xFF0000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000FFFF00000000, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF000000000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000000000000000, 0x0000000000000000,
-			0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000000000, 0x00000000FF00FF00, 0x000000000000FF00, 0x00FFFFFFFFFFFF00, 0x00FF0000FF00FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000FF00000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000FF0000FF0000, 0x00FF000000FF0000, 0x0000000000FF0000, 0x00FF000000FFFF00, 0x000000FF00000000, 0x00FF000000000000, 0x00FF000000000000, 0x0000FF00FF000000, 0x000000000000FF00, 0x000000000000FF00, 0x0000FF0000000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000000000000000, 0x0000000000000000,
-			0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x0000FFFFFFFFFF00, 0x000000000000FF00, 0x00FFFFFFFFFFFF00, 0x000000FF00000000, 0x00FF000000000000, 0x0000000000FFFF00, 0x000000000000FF00, 0x00FF00FFFF00FF00, 0x00FF00FF0000FF00, 0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x000000FF00000000, 0x00FF00000000FF00, 0x0000FF0000FF0000, 0x00FF00000000FF00, 0x000000FFFF000000, 0x0000FF00FF000000, 0x00000000FF000000, 0x00FF0000FF00FF00, 0x000000FF00000000, 0x0000FF0000000000, 0x0000FFFFFF000000, 0x0000FF0000FF0000, 0x0000FFFFFFFF0000, 0x0000FFFFFFFFFF00, 0x000000FF00000000, 0x0000FFFFFFFF0000, 0x00FFFFFFFFFF0000, 0x00FFFFFFFFFFFF00, 0x0000000000000000,
-			0x00FFFFFFFFFFFF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FFFFFF0000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000FF0000, 0x00000000FF00FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FFFF000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF000000000000, 0x000000FF00000000, 0x00FF00000000FF00, 0x0000FF0000FF0000, 0x00FF00FFFF00FF00, 0x0000FF0000FF0000, 0x000000FF00000000, 0x000000FF00000000, 0x00FF00FF0000FF00, 0x000000FF00000000, 0x000000FFFF000000, 0x00FF000000000000, 0x0000FF000000FF00, 0x00FF000000000000, 0x00FF00000000FF00, 0x00000000FF000000, 0x00FF00000000FF00, 0x00FF000000000000, 0x00FFFFFFFFFFFF00, 0x0000000000000000,
-			0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000FF0000, 0x000000FF0000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF000000000000, 0x000000FF00000000, 0x00FF00000000FF00, 0x0000FF0000FF0000, 0x00FFFFFFFFFFFF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x0000FF0000000000, 0x00FFFF000000FF00, 0x000000FF00000000, 0x0000000000FF0000, 0x00FF000000000000, 0x00FFFFFFFFFFFF00, 0x00FF000000000000, 0x00FF00000000FF00, 0x00000000FF000000, 0x00FF00000000FF00, 0x00FF000000000000, 0x0000000000000000, 0x0000000000000000,
-			0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000FF0000, 0x0000FF000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FFFF000000FF00, 0x00FF00000000FF00, 0x00FF000000000000, 0x000000FF00000000, 0x00FF00000000FF00, 0x000000FFFF000000, 0x00FFFF0000FFFF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000000000, 0x00FF00000000FF00, 0x000000FF00000000, 0x000000000000FF00, 0x00FF00000000FF00, 0x0000FF0000000000, 0x00FF000000000000, 0x00FF00000000FF00, 0x00000000FF000000, 0x00FF00000000FF00, 0x00FF000000000000, 0x0000000000000000, 0x000000FFFF000000,
+			0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000000000, 0x000000FF0000FF00, 0x000000000000FF00, 0x00FFFF0000FFFF00, 0x00FF000000FFFF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000FF00000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0xFF0000000000FF00, 0x00FF000000000000, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000FFFF00000000, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF000000000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000000000000000, 0x0000000000000000,
+			0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000000000, 0x00000000FF00FF00, 0x000000000000FF00, 0x00FFFFFFFFFFFF00, 0x00FF0000FF00FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000FF00000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000FF0000FF0000, 0x00FF000000FF0000, 0x0000FF0000000000, 0x00FF000000FFFF00, 0x000000FF00000000, 0x00FF000000000000, 0x00FF000000000000, 0x0000FF00FF000000, 0x000000000000FF00, 0x000000000000FF00, 0x0000FF0000000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000000000000000, 0x0000000000000000,
+			0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x0000FFFFFFFFFF00, 0x000000000000FF00, 0x00FFFFFFFFFFFF00, 0x000000FF00000000, 0x00FF000000000000, 0x0000000000FFFF00, 0x000000000000FF00, 0x00FF00FFFF00FF00, 0x00FF00FF0000FF00, 0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x000000FF00000000, 0x00FF00000000FF00, 0x0000FF0000FF0000, 0x00FF00000000FF00, 0x000000FFFF000000, 0x0000FF00FF000000, 0x000000FF00000000, 0x00FF0000FF00FF00, 0x000000FF00000000, 0x0000FF0000000000, 0x0000FFFFFF000000, 0x0000FF0000FF0000, 0x0000FFFFFFFF0000, 0x0000FFFFFFFFFF00, 0x000000FF00000000, 0x0000FFFFFFFF0000, 0x00FFFFFFFFFF0000, 0x00FFFFFFFFFFFF00, 0x0000000000000000,
+			0x00FFFFFFFFFFFF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FFFFFF0000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000FF0000, 0x00000000FF00FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FFFF000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF000000000000, 0x000000FF00000000, 0x00FF00000000FF00, 0x0000FF0000FF0000, 0x00FF00FFFF00FF00, 0x0000FF0000FF0000, 0x000000FF00000000, 0x00000000FF000000, 0x00FF00FF0000FF00, 0x000000FF00000000, 0x000000FFFF000000, 0x00FF000000000000, 0x0000FF000000FF00, 0x00FF000000000000, 0x00FF00000000FF00, 0x00000000FF000000, 0x00FF00000000FF00, 0x00FF000000000000, 0x00FFFFFFFFFFFF00, 0x0000000000000000,
+			0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000FF0000, 0x000000FF0000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF000000000000, 0x000000FF00000000, 0x00FF00000000FF00, 0x0000FF0000FF0000, 0x00FFFFFFFFFFFF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x0000000000FF0000, 0x00FFFF000000FF00, 0x000000FF00000000, 0x0000000000FF0000, 0x00FF000000000000, 0x00FFFFFFFFFFFF00, 0x00FF000000000000, 0x00FF00000000FF00, 0x00000000FF000000, 0x00FF00000000FF00, 0x00FF000000000000, 0x0000000000000000, 0x0000000000000000,
+			0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FF000000FF0000, 0x0000FF000000FF00, 0x000000000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000000000FF00, 0x00FFFF000000FF00, 0x00FF00000000FF00, 0x00FF000000000000, 0x000000FF00000000, 0x00FF00000000FF00, 0x000000FFFF000000, 0x00FFFF0000FFFF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x000000000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x000000000000FF00, 0x00FF00000000FF00, 0x0000FF0000000000, 0x00FF000000000000, 0x00FF00000000FF00, 0x00000000FF000000, 0x00FF00000000FF00, 0x00FF000000000000, 0x0000000000000000, 0x000000FFFF000000,
 			0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x00FFFFFFFFFF0000, 0x0000FFFFFFFFFF00, 0x00FFFFFFFFFFFF00, 0x000000000000FF00, 0x00FFFFFFFFFF0000, 0x00FF00000000FF00, 0x00FFFFFFFFFF0000, 0x0000FFFFFF000000, 0x00FF00000000FF00, 0x00FFFFFFFFFFFF00, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x0000FFFFFFFF0000, 0x000000000000FF00, 0xFFFFFFFFFFFF0000, 0x00FF00000000FF00, 0x0000FFFFFFFFFF00, 0x000000FF00000000, 0x0000FFFFFFFF0000, 0x000000FFFF000000, 0x00FF00000000FF00, 0x00FF00000000FF00, 0x000000FF00000000, 0x00FFFFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x0000FFFFFF000000, 0x00FFFFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x0000FF0000000000, 0x0000FFFFFFFFFF00, 0x0000FFFFFFFF0000, 0x00000000FF000000, 0x0000FFFFFFFF0000, 0x0000FFFFFFFF0000, 0x0000000000000000, 0x000000FFFF000000,
 		};
 
@@ -251,19 +428,20 @@ Internal void lane(L1 arena) {
 			glClearColor(0, 0, 0, 1);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-			glMatrixMode(GL_PROJECTION);
-			glLoadIdentity();
-			glFrustum(
+			Mat4 projection = mat4_frustum(
 				-viewport_aspect*scale_factor, viewport_aspect*scale_factor,
 				-1 * scale_factor, 1 * scale_factor,
 				near, far);
 
-			glMatrixMode(GL_MODELVIEW);
-			glLoadIdentity();
-			glTranslatef(0, 0, -ramR->cam_dist);
+			Mat4 view = mat4_translate(0, 0, -ramR->cam_dist);
+			view = mat4_multiply(view, mat4_rotate_x(ramR->cam_rot_x));
+			view = mat4_multiply(view, mat4_rotate_y(ramR->cam_rot_y));
 
-			glRotatef(ramR->cam_rot_x, 1, 0, 0);
-			glRotatef(ramR->cam_rot_y, 0, 1, 0);
+			glMatrixMode(GL_PROJECTION);
+			glLoadMatrixf(projection.m);
+
+			glMatrixMode(GL_MODELVIEW);
+			glLoadMatrixf(view.m);
 
 			// ---- GRID ----
 			glBegin(GL_LINES);
@@ -287,33 +465,50 @@ Internal void lane(L1 arena) {
 
 				glBegin(GL_QUADS);
 					F3 color = e.color;
+
+					// TOP
 					glColor3f(color.x, color.y, color.z);
+					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
+					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
+					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
+					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
 
+					// FRONT
+					color *= 0.9f;
+					glColor3f(color.x, color.y, color.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
 
+					// BACK
+					color *= 0.9f;
+					glColor3f(color.x, color.y, color.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
 
+					// LEFT
+					color *= 0.9f;
+					glColor3f(color.x, color.y, color.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
 
+					// RIGHT
+					color *= 0.9f;
+					glColor3f(color.x, color.y, color.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
 
-					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
 
+					// BOTTOM
+					color *= 0.9f;
+					glColor3f(color.x, color.y, color.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
 					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
@@ -322,8 +517,10 @@ Internal void lane(L1 arena) {
 				glEnd();
 			}
 
-			// ---- SELECTION (DEPTH BUFFER PICKING) ----
+			// ---- SELECTION (DEPTH BUFFER UNPROJECTION) ----
 			if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w) {
+				ramR->selected_entity_idx = L1_MAX;
+
 				// Read depth value at mouse position
 				F1 depth;
 				glReadPixels(
@@ -335,8 +532,6 @@ Internal void lane(L1 arena) {
 					&depth
 				);
 
-				ramR->selected_entity_idx = L1_MAX;
-
 				// Only proceed if we clicked on geometry (not the background)
 				if (depth < 1.0f) {
 					F1 viewport_mx = ramR->mouse_x - sidebar_w;
@@ -347,62 +542,28 @@ Internal void lane(L1 arena) {
 					F1 ndc_y = 1.0f - (viewport_my / viewport_height) * 2.0f;
 					F1 ndc_z = depth * 2.0f - 1.0f; // Convert [0,1] to [-1,1]
 
-					// Unproject to get world position
-					// We need to invert: clip = projection * view * world
-					// For our simple camera setup:
+					// Unproject: transform from NDC to world space
+					Mat4 view_projection = mat4_multiply(projection, view);
+					Mat4 inverse_vp = mat4_invert(view_projection);
 
-					// First, get view space position (inverse projection)
-					F1 view_x = ndc_x * viewport_aspect * scale_factor / near * -1.0f; // perspective divide
-					F1 view_y = ndc_y * scale_factor / near * -1.0f;
-					// Linearize depth from perspective projection
-					F1 view_z = -(2.0f * far * near) / (far + near - ndc_z * (far - near));
+					F3 ndc_point = {ndc_x, ndc_y, ndc_z};
+					F3 world_pos = mat4_transform_point(inverse_vp, ndc_point);
 
-					// Scale by actual depth
-					view_x *= view_z;
-					view_y *= view_z;
-
-					// Now transform from view space to world space (inverse view transform)
-					F1 rot_x_rad = ramR->cam_rot_x * PI / 180.0f;
-					F1 rot_y_rad = ramR->cam_rot_y * PI / 180.0f;
-					F1 cos_x = cosf(rot_x_rad);
-					F1 sin_x = sinf(rot_x_rad);
-					F1 cos_y = cosf(rot_y_rad);
-					F1 sin_y = sinf(rot_y_rad);
-
-					// Inverse rotation: first inverse X rotation, then inverse Y rotation
-					F1 temp_y = view_y * cos_x + view_z * sin_x;
-					F1 temp_z = -view_y * sin_x + view_z * cos_x;
-
-					F3 world_pos;
-					world_pos.x = view_x * cos_y - temp_z * sin_y;
-					world_pos.y = temp_y;
-					world_pos.z = view_x * sin_y + temp_z * cos_y;
-
-					// Inverse translation
-					F3 cam_forward = {
-						sin_y * cos_x,
-						sin_x,
-						-cos_y * cos_x
-					};
-					F3 cam_pos = cam_forward * -ramR->cam_dist;
-					world_pos = world_pos + cam_pos;
-
-					// Find which AABB contains or is closest to this world position
+					// Find which entity's AABB contains or is closest to this world position
 					F1 closest_dist = F1_MAX;
 					for EachIndex(entity_index, ramR->entity_count) {
 						Entity e = ramR->entities[entity_index];
 						F3 aabb_min = e.pos - e.size;
 						F3 aabb_max = e.pos + e.size;
 
-						// Otherwise find closest AABB
+						// Find closest point on AABB to world_pos
 						F3 closest_point;
-						closest_point.x = world_pos.x < aabb_min.x ? aabb_min.x : (world_pos.x > aabb_max.x ? aabb_max.x : world_pos.x);
-						closest_point.y = world_pos.y < aabb_min.y ? aabb_min.y : (world_pos.y > aabb_max.y ? aabb_max.y : world_pos.y);
-						closest_point.z = world_pos.z < aabb_min.z ? aabb_min.z : (world_pos.z > aabb_max.z ? aabb_max.z : world_pos.z);
+						closest_point.x = world_pos.x < aabb_min.x ? aabb_min.x : Min(world_pos.x, aabb_max.x);
+						closest_point.y = world_pos.y < aabb_min.y ? aabb_min.y : Min(world_pos.y, aabb_max.y);
+						closest_point.z = world_pos.z < aabb_min.z ? aabb_min.z : Min(world_pos.z, aabb_max.z);
 
 						F3 diff = world_pos - closest_point;
 						F1 dist = F3_length(diff);
-
 						if (dist < closest_dist) {
 							closest_dist = dist;
 							ramR->selected_entity_idx = entity_index;
@@ -412,7 +573,7 @@ Internal void lane(L1 arena) {
 			}
 
 			// ---- WORLD AXES ----
-			glDisable(GL_DEPTH_TEST);
+/*			glDisable(GL_DEPTH_TEST);
 			glLineWidth(3.0f);
 			glBegin(GL_LINES);
 				glColor3f(0.0f, 0.0f, 1.0f);
@@ -426,7 +587,7 @@ Internal void lane(L1 arena) {
 			glEnd();
 			glLineWidth(1.0f);
 			glEnable(GL_DEPTH_TEST);
-
+*/
 			// ---- SIDE PANEL UI ----
 
 			glViewport(0, 0, window_width, window_height);
@@ -461,7 +622,20 @@ Internal void lane(L1 arena) {
 			L1 pos = arena_pos(arena);
 
 			if (ramR->selected_entity_idx == L1_MAX) {
-				ui_text(Str8_("NO ENTITY SELECTED"));
+				ui_text(Str8_("ENTITIES"));
+
+				for EachIndex(entity_index, ramR->entity_count) {
+					if (ui_button(str8f(arena, "%llu", entity_index))) {
+						ramR->selected_entity_idx = entity_index;
+					}
+				}
+
+				if (ui_button(Str8_("CREATE NEW"))) {
+					ramR->entities[ramR->entity_count].size = (F3){0.5f, 0.5f, 0.5f};
+					ramR->entities[ramR->entity_count].color = (F3){1, 1, 1};
+					ramR->entity_count += 1;
+				}
+
 			} else {
 				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
 

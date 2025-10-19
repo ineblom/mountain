@@ -54,9 +54,9 @@ Internal String8 str8fv(L1 arena, CString fmt, va_list args) {
   va_copy(args2, args);
 
   String8 result = {0};
-  result.len = vsnprintf(0, 0, fmt, args)+1;
-  result.str = push_array(arena, B1, result.len);
-  vsnprintf(result.str, result.len, fmt, args2);
+  L1 bytes_needed = vsnprintf(0, 0, fmt, args)+1;
+  result.str = push_array(arena, B1, bytes_needed);
+  result.len = vsnprintf(result.str, bytes_needed, fmt, args2);
 
   va_end(args2);
 

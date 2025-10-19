@@ -7,7 +7,7 @@
 #define LocalPersist static
 #define Restrict     __restrict
 #define Volatile     volatile
-#define ThreadLocal  _Thread_local 
+#define ThreadLocal  _Thread_local
 #define W_           __attribute__((__stdcall__)) __attribute__((__force_align_arg_pointer__))
 
 typedef float            F1;
@@ -22,6 +22,7 @@ typedef float            F4 __attribute__((ext_vector_type(4)));
 #define F1_MAX 3.4028234664e+38
 #define F1_MIN 1.1754943508e-38
 #define I1_MAX 0xFFFFFFFF
+#define L1_MAX 0xFFFFFFFFFFFFFFFF
 
 typedef F1 *Restrict F1R; typedef F1 Volatile* F1V;
 typedef D1 *Restrict D1R; typedef D1 Volatile* D1V;
@@ -74,7 +75,7 @@ Inline void BarM(void) { __builtin_ia32_mfence(); }     // Memory Barrier
 Inline void BarR(void) { __builtin_ia32_lfence();}      // Read Barrier
 Inline void BarW(void) { __builtin_ia32_sfence();}      // Write Barrier
 
-/*Inline I1 ClockI1(void) { 
+/*Inline I1 ClockI1(void) {
 	I1 aa, dd;
 	asm volatile("rdtsc":"=a"(aa),"=d"(dd));
 	return aa;
@@ -117,7 +118,7 @@ Inline L1 atomic_swap_L1(L1V a, L1 v) {
 
 #define EachIndex(it, count) (L1 it = 0; it < (count); it += 1)
 #define EachInRange(it, range) (L1 it = (range).min; it < (range).max; it += 1)
- 
+
 #define KiB(x) (1024 * (x))
 #define MiB(x) (1024 * 1024 * (x))
 #define GiB(x) (1024 * 1024 * 1024 * (x))

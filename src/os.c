@@ -24,7 +24,7 @@
 #define O_CREAT  100
 #define O_EXCL   200
 #define SEEK_SET 0
-#define SEEK_END 2 
+#define SEEK_END 2
 
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
@@ -60,7 +60,7 @@ struct Posix_Time_Spec {
 };
 
 extern L1 stdin;
-extern L1 stdout; 
+extern L1 stdout;
 extern L1 stderr;
 
 Internal L1 os_reserve(L1);
@@ -68,6 +68,8 @@ Internal void os_commit(L1, L1);
 Internal void os_release(L1, L1);
 
 SI1 printf(CString, ...);
+SI1 snprintf(L1, L1, CString, ...);
+SI1 vsnprintf(L1, L1, CString, va_list);
 SI1 fprintf(L1, CString, ...);
 SI1 fflush(L1);
 
@@ -182,7 +184,7 @@ Internal L1 os_write_entire_file(CString filename, L1 data, L1 data_size) {
   I1 file = open(filename, O_CREAT | O_WRONLY, 0666);
   if (LtSI1(file, 0)) {
     return 0;
-  } 
+  }
 
   L1 bytes_written = write(file, data, data_size);
   close(file);
@@ -219,7 +221,7 @@ Internal I1 os_num_cores(void) {
 Internal Thread os_thread_launch(ThreadFunc *func, L1 ptr) {
   Thread result = {0};
 
-  pthread_create(L1_(&result.handle), 0, L1_(func), ptr); 
+  pthread_create(L1_(&result.handle), 0, L1_(func), ptr);
 
   return result;
 }

@@ -38,6 +38,10 @@ L1 active_hash;
 
 F1 panel_current_y;
 
+I1 hot_axis;  // 0=none, 1=X, 2=Y, 3=Z
+I1 active_axis;
+F3 drag_start_pos;
+
 #endif
 
 #if (CPU_ && ROM_)
@@ -155,6 +159,39 @@ Inline F3 mat4_transform_point(Mat4 m, F3 p) {
 	result.y = (m.m[1] * p.x + m.m[5] * p.y + m.m[9] * p.z + m.m[13]) / w;
 	result.z = (m.m[2] * p.x + m.m[6] * p.y + m.m[10] * p.z + m.m[14]) / w;
 	return result;
+}
+
+// Project 3D world point to screen space
+Inline F3 project_to_screen(F3 world_pos, Mat4 view_projection, F1 viewport_width, F1 viewport_height) {
+	F3 ndc = mat4_transform_point(view_projection, world_pos);
+	F3 screen;
+	screen.x = (ndc.x + 1.0f) * 0.5f * viewport_width + sidebar_w;
+	screen.y = (1.0f - ndc.y) * 0.5f * viewport_height;
+	screen.z = ndc.z;
+	return screen;
+}
+
+// Check if mouse is near a line segment in screen space
+Inline F1 distance_to_line_segment(F1 mx, F1 my, F3 p0_screen, F3 p1_screen) {
+	F1 dx = p1_screen.x - p0_screen.x;
+	F1 dy = p1_screen.y - p0_screen.y;
+	F1 len_sq = dx*dx + dy*dy;
+
+	if (len_sq < 0.0001f) {
+		F1 ddx = mx - p0_screen.x;
+		F1 ddy = my - p0_screen.y;
+		return sqrtf(ddx*ddx + ddy*ddy);
+	}
+
+	F1 t = ((mx - p0_screen.x) * dx + (my - p0_screen.y) * dy) / len_sq;
+	t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+
+	F1 proj_x = p0_screen.x + t * dx;
+	F1 proj_y = p0_screen.y + t * dy;
+
+	F1 ddx = mx - proj_x;
+	F1 ddy = my - proj_y;
+	return sqrtf(ddx*ddx + ddy*ddy);
 }
 
 Internal F1 draw_text(String8 msg, F1 x, F1 y, F1 size, F3 color) {
@@ -459,6 +496,43 @@ Internal void lane(L1 arena) {
 				}
 			glEnd();
 
+			// ---- AXIS DETECTION ----
+			Mat4 view_projection = mat4_multiply(projection, view);
+			ramR->hot_axis = 0;
+			if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
+				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+
+				// Project axis endpoints to screen space
+				F3 x_end = e->pos; x_end.x += 1.0f;
+				F3 y_end = e->pos; y_end.y += 1.0f;
+				F3 z_end = e->pos; z_end.z += 1.0f;
+				F3 origin_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
+				F3 x_screen = project_to_screen(x_end, view_projection, viewport_width, viewport_height);
+				F3 y_screen = project_to_screen(y_end, view_projection, viewport_width, viewport_height);
+				F3 z_screen = project_to_screen(z_end, view_projection, viewport_width, viewport_height);
+
+				F1 dist_x = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, x_screen);
+				F1 dist_y = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, y_screen);
+				F1 dist_z = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, z_screen);
+
+				// Find which axis is closest
+				F1 min_dist = dist_x;
+				ramR->hot_axis = 1;
+				if (dist_y < min_dist) {
+					min_dist = dist_y;
+					ramR->hot_axis = 2;
+				}
+				if (dist_z < min_dist) {
+					min_dist = dist_z;
+					ramR->hot_axis = 3;
+				}
+
+				F1 threshold = 10.0f; // pixels
+				if (min_dist > threshold) {
+					ramR->hot_axis = 0;
+				}
+			}
+
 			// ---- ENTITIES ----
 			for EachIndex(entity_index, ramR->entity_count) {
 				Entity e = ramR->entities[entity_index];
@@ -518,7 +592,7 @@ Internal void lane(L1 arena) {
 			}
 
 			// ---- SELECTION (DEPTH BUFFER UNPROJECTION) ----
-			if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w) {
+			if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w && ramR->hot_axis == 0) {
 				ramR->selected_entity_idx = L1_MAX;
 
 				// Read depth value at mouse position
@@ -576,18 +650,73 @@ Internal void lane(L1 arena) {
 			if (ramR->selected_entity_idx != L1_MAX) {
 				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
 
+				// Handle axis dragging
+				if (ramR->active_axis != 0) {
+					F3 axis_dir = {0, 0, 0};
+					if (ramR->active_axis == 1) axis_dir.x = 1.0f;
+					else if (ramR->active_axis == 2) axis_dir.y = 1.0f;
+					else if (ramR->active_axis == 3) axis_dir.z = 1.0f;
+
+					F3 axis_end_world = e->pos + axis_dir;
+					F3 pos_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
+					F3 axis_end_screen = project_to_screen(axis_end_world, view_projection, viewport_width, viewport_height);
+
+					F1 screen_dx = axis_end_screen.x - pos_screen.x;
+					F1 screen_dy = axis_end_screen.y - pos_screen.y;
+					F1 screen_len = sqrtf(screen_dx*screen_dx + screen_dy*screen_dy);
+
+					if (screen_len > 0.0001f) {
+						// Project mouse delta onto screen-space axis direction
+						F1 mouse_proj = (ramR->delta_mx * screen_dx + delta_my * screen_dy) / screen_len;
+						F1 world_delta = mouse_proj / screen_len;
+
+						if (ramR->active_axis == 1) e->pos.x += world_delta;
+						else if (ramR->active_axis == 2) e->pos.y += world_delta;
+						else if (ramR->active_axis == 3) e->pos.z += world_delta;
+					}
+
+					if (ramR->left_just_released) {
+						ramR->active_axis = 0;
+					}
+				} else if (ramR->hot_axis != 0 && ramR->left_just_pressed) {
+					ramR->active_axis = ramR->hot_axis;
+					ramR->drag_start_pos = e->pos;
+				}
+
 				glDisable(GL_DEPTH_TEST);
-				glLineWidth(3.0f);
+
+				F1 base_brightness = 0.7f;
+				F1 hot_brightness = 1.0f;
+				F1 base_width = 3.0f;
+				F1 hot_width = 5.0f;
+
+				// X axis (blue)
+				F1 x_brightness = (ramR->hot_axis == 1 || ramR->active_axis == 1) ? hot_brightness : base_brightness;
+				F1 x_width = (ramR->hot_axis == 1 || ramR->active_axis == 1) ? hot_width : base_width;
+				glLineWidth(x_width);
 				glBegin(GL_LINES);
-					glColor3f(0.0f, 0.0f, 1.0f);
-					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x+1, e->pos.y, e->pos.z);
-
-					glColor3f(1.0f, 0.0f, 0.0f);
-					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y+1, e->pos.z);
-
-					glColor3f(0.0f, 1.0f, 0.0f);
-					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y, e->pos.z+1);
+				glColor3f(0.0f, 0.0f, x_brightness);
+				glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x+1, e->pos.y, e->pos.z);
 				glEnd();
+
+				// Y axis (red)
+				F1 y_brightness = (ramR->hot_axis == 2 || ramR->active_axis == 2) ? hot_brightness : base_brightness;
+				F1 y_width = (ramR->hot_axis == 2 || ramR->active_axis == 2) ? hot_width : base_width;
+				glLineWidth(y_width);
+				glBegin(GL_LINES);
+				glColor3f(y_brightness, 0.0f, 0.0f);
+				glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y+1, e->pos.z);
+				glEnd();
+
+				// Z axis (green)
+				F1 z_brightness = (ramR->hot_axis == 3 || ramR->active_axis == 3) ? hot_brightness : base_brightness;
+				F1 z_width = (ramR->hot_axis == 3 || ramR->active_axis == 3) ? hot_width : base_width;
+				glLineWidth(z_width);
+				glBegin(GL_LINES);
+				glColor3f(0.0f, z_brightness, 0.0f);
+				glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y, e->pos.z+1);
+				glEnd();
+
 				glLineWidth(1.0f);
 				glEnable(GL_DEPTH_TEST);
 			}

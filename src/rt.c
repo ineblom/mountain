@@ -1,13 +1,13 @@
-// rt.c - Ray Tracer 
+// rt.c - Ray Tracer
 
 // Coordinate system:
 // +x right, +y forwards, +z up
 
 // TODO:
 // Shadow rays (higher quality w/ lower ray counts)
-// SIMD
 // Textures
 // Quads
+// SIMD
 // BVH (for larger scenes)
 
 #if (CPU_ && TYP_)
@@ -188,11 +188,10 @@ Inline F1 pdf_GGX(F3 n, F3 h, F3 v, F1 alpha) {
   return result;
 }
 
-
 Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bounces) {
 	F1 min_hit_distance = 0.001f;
 	F1 tolerance = 0.0001f;
- 
+
 	F3 result = {0};
 	F3 attenuation = {1, 1, 1};
 	for EachIndex(ray_index, max_num_bounces) {
@@ -227,10 +226,10 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 			F1 b = 2.0f * F3_dot(ray_direction, sphere_relative_ray_origin);
 			F1 c = F3_dot(sphere_relative_ray_origin, sphere_relative_ray_origin) - sphere.r*sphere.r;
 
-			F1 root_term = sqrtf(b*b - 4.0f*c); 
+			F1 root_term = sqrtf(b*b - 4.0f*c);
 			if (root_term > tolerance) {
 				F1 tp = (-b + root_term) / 2.0f;
-				F1 tn = (-b - root_term) / 2.0f; 
+				F1 tn = (-b - root_term) / 2.0f;
 
 				F1 t = tp;
 				if (tn > min_hit_distance && tn < tp) {
@@ -278,7 +277,7 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 				F3 center = (box.min + box.max) * 0.5f;
 				F3 local_hit = next_origin - center;
 				F3 box_size = box.max - box.min;
-        
+
     		F3 d = F3_abs(local_hit) / (box_size * 0.5f);
     		if (d.x > d.y && d.x > d.z) next_normal = F1_sign(local_hit.x) * (F3){1,0,0};
     		else if (d.y > d.z) next_normal = F1_sign(local_hit.y) * (F3){0,1,0};
@@ -370,8 +369,8 @@ Internal F3 ray_cast(World world, F3 ray_origin, F3 ray_direction, L1 max_num_bo
 		} else {
 			// F1 height = (ray_direction.z + 1) * 0.5;
 			// F3 sky_color = F3_lerp((F3){1.0f, 1.0f, 1.0f}, height, (F3){0.2f, 0.4f, 1.0f});
-			// result += attenuation * sky_color; 
-			break;	
+			// result += attenuation * sky_color;
+			break;
 		}
 	}
 
@@ -398,7 +397,7 @@ Inline F3 tonemap_aces(F3 v) {
 	const F1 e = 0.14f;
 	F3 result = F3_clamp01((v * (a * v + b)) / (v * (c * v + d) + e));
 	return result;
-} 
+}
 
 Inline F3 tonemap_reinhard(F3 v) {
 	F3 result = v / (1.0f + v);
@@ -661,7 +660,7 @@ Internal void lane(L1 arena) {
 				for EachIndex(x, out.width) {
 					L1 sx = x*2;
 
-					// TODO: look into 13-tap bilinear tent filter. 
+					// TODO: look into 13-tap bilinear tent filter.
 
 					F3 sum = {0};
 
@@ -696,7 +695,7 @@ Internal void lane(L1 arena) {
 					TR_(F3, out.pixels)[x + y*out.width] = karis_average;
 				}
 			}
-		}
+		}>
 
 		// Upsample and sum
 		for (L1 pass_index = bloom_pass_count-1; pass_index >= 1; pass_index -= 1) {

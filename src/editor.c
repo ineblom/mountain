@@ -507,7 +507,7 @@ Internal void lane(L1 arena) {
 
 
 					// BOTTOM
-					color *= 0.9f;
+					color *= 0.5f;
 					glColor3f(color.x, color.y, color.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
 					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
@@ -572,22 +572,26 @@ Internal void lane(L1 arena) {
 				}
 			}
 
-			// ---- WORLD AXES ----
-/*			glDisable(GL_DEPTH_TEST);
-			glLineWidth(3.0f);
-			glBegin(GL_LINES);
-				glColor3f(0.0f, 0.0f, 1.0f);
-				glVertex3f(0, 0, 0); glVertex3f(1, 0, 0);
+			// ---- AXES ----
+			if (ramR->selected_entity_idx != L1_MAX) {
+				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
 
-				glColor3f(1.0f, 0.0f, 0.0f);
-				glVertex3f(0, 0, 0); glVertex3f(0, 1, 0);
+				glDisable(GL_DEPTH_TEST);
+				glLineWidth(3.0f);
+				glBegin(GL_LINES);
+					glColor3f(0.0f, 0.0f, 1.0f);
+					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x+1, e->pos.y, e->pos.z);
 
-				glColor3f(0.0f, 1.0f, 0.0f);
-				glVertex3f(0, 0, 0); glVertex3f(0, 0, 1);
-			glEnd();
-			glLineWidth(1.0f);
-			glEnable(GL_DEPTH_TEST);
-*/
+					glColor3f(1.0f, 0.0f, 0.0f);
+					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y+1, e->pos.z);
+
+					glColor3f(0.0f, 1.0f, 0.0f);
+					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y, e->pos.z+1);
+				glEnd();
+				glLineWidth(1.0f);
+				glEnable(GL_DEPTH_TEST);
+			}
+
 			// ---- SIDE PANEL UI ----
 
 			glViewport(0, 0, window_width, window_height);

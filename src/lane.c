@@ -16,6 +16,12 @@ struct Range {
 Internal void lane(L1);
 #endif
 
+#if (CPU_ && RAM_)
+
+L1 sync_l1_val;
+
+#endif
+
 #if (CPU_ && ROM_)
 
 #define lane_idx() (TR_(LaneCtx, lane_ctx)->lane_idx)
@@ -24,7 +30,13 @@ Internal void lane(L1);
 #define lane_sync() os_barrier_wait(TR_(LaneCtx, lane_ctx)->barrier)
 #define lane_range(count) range_for_section(lane_idx(), lane_count(), count)
 
-// lane_sync_L1(&value, src_lane_idx)
+Inline void lane_sync_L1(L1 ptr, L1 src_lane_idx) {
+  if (lane_idx() == src_lane_idx) {
+    ramR->sync_l1_val = L1R_(ptr)[0];
+  }
+  lane_sync();
+  L1R_(ptr)[0] = ramR->sync_l1_val;
+}
 
 Internal Range range_for_section(L1 section_idx, L1 section_count, L1 count) {
   L1 main_quotient = count/section_count;

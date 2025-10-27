@@ -70,5 +70,5 @@ NoInline void WrmEnd(void) { Crash(1); }
 #include "lane.c"
 #include "math.c"
 #include "image.c"
-// #include "rt.c" 
-#include "testing.c"
+// #include "rt.c"
+#include "editor.c"

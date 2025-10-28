@@ -14,6 +14,11 @@ struct Entity {
 	F3 color;
 };
 
+enum {
+	AXIS_MODE__POS = 0,
+	AXIS_MODE__SIZE,
+};
+
 #endif
 
 #if (CPU_ && RAM_)
@@ -41,6 +46,7 @@ F1 panel_current_y;
 I1 hot_axis;  // 0=none, 1=X, 2=Y, 3=Z
 I1 active_axis;
 F3 drag_start_pos;
+I1 axis_mode;
 
 #endif
 
@@ -360,6 +366,59 @@ Internal I1 ui_button(String8 label) {
 	return return_value;
 }
 
+Internal void draw_cube(F3 pos, F3 size, F3 color) {
+	glBegin(GL_QUADS);
+		// TOP
+		glColor3f(color.x, color.y, color.z);
+		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z+size.z);
+		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z-size.z);
+		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z-size.z);
+		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z+size.z);
+
+		// FRONT
+		color *= 0.9f;
+		glColor3f(color.x, color.y, color.z);
+		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z+size.z);
+		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z+size.z);
+		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z+size.z);
+		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z+size.z);
+
+		// BACK
+		color *= 0.9f;
+		glColor3f(color.x, color.y, color.z);
+		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z-size.z);
+		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z-size.z);
+		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z-size.z);
+		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z-size.z);
+
+		// LEFT
+		color *= 0.9f;
+		glColor3f(color.x, color.y, color.z);
+		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z+size.z);
+		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z-size.z);
+		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z-size.z);
+		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z+size.z);
+
+		// RIGHT
+		color *= 0.9f;
+		glColor3f(color.x, color.y, color.z);
+		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z+size.z);
+		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z-size.z);
+		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z-size.z);
+		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z+size.z);
+
+
+		// BOTTOM
+		color *= 0.5f;
+		glColor3f(color.x, color.y, color.z);
+		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z+size.z);
+		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z-size.z);
+		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z-size.z);
+		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z+size.z);
+
+	glEnd();
+}
+
 Internal void lane(L1 arena) {
 	if (lane_idx() == 0) {
 		L1 window = os_window_open(arena, "Hello", 1280, 720);
@@ -375,6 +434,8 @@ Internal void lane(L1 arena) {
 		ramR->entity_count += 1;
 
 		ramR->selected_entity_idx = L1_MAX;
+
+		ramR->axis_mode = AXIS_MODE__SIZE;
 
 		F1 near = 0.1f;
 		F1 far = 40.0f;
@@ -449,13 +510,13 @@ Internal void lane(L1 arena) {
 				ramR->cam_rot_x += delta_my * 0.2f;
 			}
 
-			ramR->cam_dist += ramR->scroll_y/20.0f;
 			if (key_w) {
-				ramR->cam_dist -= 0.1f;
+				ramR->axis_mode = AXIS_MODE__POS;
+			} else if (key_s) {
+				ramR->axis_mode = AXIS_MODE__SIZE;
 			}
-			if (key_s) {
-				ramR->cam_dist += 0.1f;
-			}
+
+			ramR->cam_dist += ramR->scroll_y/20.0f;
 
 			// ---- RENDERING ----
 
@@ -536,59 +597,7 @@ Internal void lane(L1 arena) {
 			// ---- ENTITIES ----
 			for EachIndex(entity_index, ramR->entity_count) {
 				Entity e = ramR->entities[entity_index];
-
-				glBegin(GL_QUADS);
-					F3 color = e.color;
-
-					// TOP
-					glColor3f(color.x, color.y, color.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
-
-					// FRONT
-					color *= 0.9f;
-					glColor3f(color.x, color.y, color.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
-
-					// BACK
-					color *= 0.9f;
-					glColor3f(color.x, color.y, color.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
-
-					// LEFT
-					color *= 0.9f;
-					glColor3f(color.x, color.y, color.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
-
-					// RIGHT
-					color *= 0.9f;
-					glColor3f(color.x, color.y, color.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z+e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y+e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
-
-
-					// BOTTOM
-					color *= 0.5f;
-					glColor3f(color.x, color.y, color.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
-					glVertex3f(e.pos.x+e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z-e.size.z);
-					glVertex3f(e.pos.x-e.size.x, e.pos.y-e.size.y, e.pos.z+e.size.z);
-
-				glEnd();
+				draw_cube(e.pos, e.size, e.color);
 			}
 
 			// ---- SELECTION (DEPTH BUFFER UNPROJECTION) ----
@@ -652,10 +661,11 @@ Internal void lane(L1 arena) {
 
 				// Handle axis dragging
 				if (ramR->active_axis != 0) {
-					F3 axis_dir = {0, 0, 0};
-					if (ramR->active_axis == 1) axis_dir.x = 1.0f;
-					else if (ramR->active_axis == 2) axis_dir.y = 1.0f;
-					else if (ramR->active_axis == 3) axis_dir.z = 1.0f;
+					I1 is_x = (ramR->active_axis == 1);
+					I1 is_y = (ramR->active_axis == 2);
+					I1 is_z = (ramR->active_axis == 3);
+
+					F3 axis_dir = {is_x, is_y, is_z};
 
 					F3 axis_end_world = e->pos + axis_dir;
 					F3 pos_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
@@ -669,10 +679,14 @@ Internal void lane(L1 arena) {
 						// Project mouse delta onto screen-space axis direction
 						F1 mouse_proj = (ramR->delta_mx * screen_dx + delta_my * screen_dy) / screen_len;
 						F1 world_delta = mouse_proj / screen_len;
+						F3 delta_v = (F3){world_delta * is_x, world_delta * is_y, world_delta * is_z};
 
-						if (ramR->active_axis == 1) e->pos.x += world_delta;
-						else if (ramR->active_axis == 2) e->pos.y += world_delta;
-						else if (ramR->active_axis == 3) e->pos.z += world_delta;
+						if (ramR->axis_mode == AXIS_MODE__POS) {
+							e->pos += delta_v;
+						} else if (ramR->axis_mode == AXIS_MODE__SIZE) {
+							e->size += delta_v;
+						}
+
 					}
 
 					if (ramR->left_just_released) {
@@ -716,6 +730,13 @@ Internal void lane(L1 arena) {
 				glColor3f(0.0f, z_brightness, 0.0f);
 				glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y, e->pos.z+1);
 				glEnd();
+
+				if (ramR->axis_mode == AXIS_MODE__SIZE) {
+					F1 s = 0.05f;
+					draw_cube((F3){e->pos.x+1, e->pos.y, e->pos.z}, (F3){s,s,s}, (F3){0, 0, x_brightness});
+					draw_cube((F3){e->pos.x, e->pos.y+1, e->pos.z}, (F3){s,s,s}, (F3){y_brightness, 0, 0});
+					draw_cube((F3){e->pos.x, e->pos.y, e->pos.z+1}, (F3){s,s,s}, (F3){0, z_brightness, 0});
+				}
 
 				glLineWidth(1.0f);
 				glEnable(GL_DEPTH_TEST);

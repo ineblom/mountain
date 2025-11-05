@@ -23,6 +23,7 @@ enum {
 enum {
 	SHAPE__BOX = 0,
 	SHAPE__SPHERE,
+	SHAPE__COUNT,
 };
 
 #endif
@@ -57,6 +58,12 @@ I1 axis_mode;
 #endif
 
 #if (CPU_ && ROM_)
+
+String8 shape_strs[] = {
+	[SHAPE__BOX] = Str8_("BOX"),
+	[SHAPE__SPHERE] = Str8_("SPHERE"),
+};
+StaticAssert(ArrayCount(shape_strs) == SHAPE__COUNT);
 
 #define sidebar_w 400.0f
 
@@ -316,13 +323,68 @@ Internal void ui_drag(L1 arena, String8 label, F1R value) {
 }
 
 Internal L1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1R value) {
-	L1 hash = str8_hash(label);
-
-	label = cut_label(label);
+	ramR->panel_current_y += 10.0f;
 
 	F3 text_color = (F3){0.8f, 0.8f, 0.8f};
-	ramR->panel_current_y += 10.0f;
-	draw_text(label, 10.0f, ramR->panel_current_y, 16.0f, text_color);
+	F1 text_size = 16.0f;
+	F1 pad_y = 5.0f;
+	F1 left = 10.0f;
+	F1 right = sidebar_w - left * 2.0f;
+	F1 alt_h = text_size+pad_y*2.0f;
+	F1 alts_h = alternative_count * alt_h;
+	F1 top = ramR->panel_current_y;
+	F1 bottom =  top + text_size + 10.0f + alts_h;
+
+	L1 base_hash = str8_hash(label);
+	label = cut_label(label);
+
+	top += draw_text(label, 10.0f, ramR->panel_current_y, text_size, text_color);
+	top += 10.0f;
+
+	L1 hover_alt_i = (ramR->mouse_y-top) / alt_h;
+	if ((ramR->active_hash == 0 || ramR->active_hash == base_hash + hover_alt_i) &&
+		ramR->mouse_x > left && ramR->mouse_x < right &&
+		ramR->mouse_y > top && ramR->mouse_y < bottom) {
+		ramR->hot_hash = base_hash + hover_alt_i;
+	}
+
+	for EachIndex(i, alternative_count) {
+		L1 hash = base_hash + i;
+
+		F1 red = 0.1f;
+		if (i == value[0]) {
+			red = 0.8f;
+		} else if (ramR->active_hash == hash) {
+			red = 0.5f;
+
+			if (ramR->left_just_released) {
+				ramR->active_hash = 0;
+				if (ramR->hot_hash == hash) {
+					value[0] = i;
+				}
+			}
+		} else if (ramR->hot_hash == hash) {
+			red = 0.3f;
+
+			if (ramR->left_just_pressed) {
+				ramR->active_hash = hash;
+			}
+		}
+
+		glBegin(GL_QUADS);
+		glColor3f(red, 0.0f, 0.0f);
+		glVertex2f(left, top);
+		glVertex2f(right, top);
+		glVertex2f(right, top+alt_h);
+		glVertex2f(left, top+alt_h);
+		glEnd();
+
+		top += pad_y;
+		top += draw_text(TR_(String8, alternatives)[i], left, top, 16.0f, text_color);
+		top += pad_y;
+	}
+
+	ramR->panel_current_y = bottom;
 
 	return 0;
 }
@@ -433,7 +495,7 @@ Internal void draw_cube(F3 pos, F3 size, F3 color) {
 	glEnd();
 }
 
-Internal L1 entity_create() {
+Internal L1 entity_create(void) {
 	Entity new_entity = {
 		.shape = SHAPE__BOX,
 		.pos = {0.0f, 0.0f, 0.0f},
@@ -856,11 +918,7 @@ Internal void lane(L1 arena) {
 				ui_drag(arena, Str8_(" Z##color"), &z);
 				e->color = F3_clamp01((F3){x, y, z});
 
-				String8 alternatives[] = {
-					Str8_("BOX"),
-					Str8_("SPHERE")
-				};
-				ui_select(Str8_("SHAPE"), L1_(alternatives), ArrayLength(alternatives), &e->shape);
+				ui_select(Str8_("SHAPE"), L1_(shape_strs), ArrayCount(shape_strs), &e->shape);
 			}
 
 			arena_pop_to(arena, pos);

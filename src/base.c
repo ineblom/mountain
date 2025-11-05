@@ -123,12 +123,13 @@ Inline L1 atomic_swap_L1(L1V a, L1 v) {
 #define MiB(x) (1024 * 1024 * (x))
 #define GiB(x) (1024 * 1024 * 1024 * (x))
 
-#define ArrayLength(arr) (sizeof(arr) / sizeof(arr[0]))
+#define ArrayCount(arr) (sizeof(arr) / sizeof(arr[0]))
 
 #define Min(a, b) ((a) < (b) ? (a) : (b))
 #define Max(a, b) ((a) > (b) ? (a) : (b))
 
 #define Crash(x) __builtin_trap()
+#define StaticAssert(x) _Static_assert(x, "")
 #define Assert(x) do { if (!(x)) {\
 	fprintf(stderr, "Assert Failed (%s:%d) %s\n", __FILE__, __LINE__, #x);\
 	fflush(stderr); \

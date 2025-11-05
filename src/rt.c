@@ -525,13 +525,13 @@ Internal void lane(L1 arena) {
 	F3 camera_y = F3_normalize(F3_cross(camera_z, camera_x));
 
 	World world = {0};
-	world.material_count = ArrayLength(materials);
+	world.material_count = ArrayCount(materials);
 	world.materials      = L1_(materials);
-	world.plane_count    = ArrayLength(planes);
+	world.plane_count    = ArrayCount(planes);
 	world.planes         = L1_(planes);
-	world.sphere_count   = ArrayLength(spheres);
+	world.sphere_count   = ArrayCount(spheres);
 	world.spheres        = L1_(spheres);
-	world.box_count    = ArrayLength(boxes);
+	world.box_count      = ArrayCount(boxes);
 	world.boxes          = L1_(boxes);
 
 	F1 film_dist   = 1.0f;

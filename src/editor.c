@@ -9,6 +9,7 @@
 
 typedef struct Entity Entity;
 struct Entity {
+	L1 shape;
 	F3 pos;
 	F3 size;
 	F3 color;
@@ -17,6 +18,11 @@ struct Entity {
 enum {
 	AXIS_MODE__POS = 0,
 	AXIS_MODE__SIZE,
+};
+
+enum {
+	SHAPE__BOX = 0,
+	SHAPE__SPHERE,
 };
 
 #endif
@@ -254,11 +260,24 @@ Internal F1 draw_text(String8 msg, F1 x, F1 y, F1 size, F3 color) {
 }
 
 Internal void ui_text(String8 msg) {
-	F3 color = (F3){0.5f, 0.0f, 0.0f};
+	F3 color = (F3){0.8f, 0.8f, 0.8f};
 
 	ramR->panel_current_y += 10.0f;
 	F1 height = draw_text(msg, 10.0f, ramR->panel_current_y, 16.0f, color);
 	ramR->panel_current_y += height;
+}
+
+Internal String8 cut_label(String8 label) {
+	// cut label at ##.
+	String8 result = label;
+	for EachIndex(i, result.len-1) {
+		if (B1R_(result.str)[i] == '#' && B1R_(result.str)[i+1] == '#') {
+			result.len = i;
+			break;
+		}
+	}
+
+	return result;
 }
 
 Internal void ui_drag(L1 arena, String8 label, F1R value) {
@@ -282,24 +301,30 @@ Internal void ui_drag(L1 arena, String8 label, F1R value) {
 		}
 	}
 
-	F3 color = (F3){0.3f, 0.0f, 0.8f};
+	F3 color = (F3){0.8f, 0.8f, 0.8f};
 	if (ramR->hot_hash == hash || ramR->active_hash == hash) {
 		color *= 1.5f;
 	}
 
-	// cut label at the first instance of ##.
-	for EachIndex(i, label.len-1) {
-		if (B1R_(label.str)[i] == '#' && B1R_(label.str)[i+1] == '#') {
-			label.len = i;
-			break;
-		}
-	}
+	label = cut_label(label);
 
 	ramR->panel_current_y += 10.0f;
 	String8 text = str8f(arena, "%.*s %f", label.len, label.str, value[0]);
 	F1 height = draw_text(text, 10.0f, ramR->panel_current_y, 16.0f, color);
 
 	ramR->panel_current_y += height;
+}
+
+Internal L1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1R value) {
+	L1 hash = str8_hash(label);
+
+	label = cut_label(label);
+
+	F3 text_color = (F3){0.8f, 0.8f, 0.8f};
+	ramR->panel_current_y += 10.0f;
+	draw_text(label, 10.0f, ramR->panel_current_y, 16.0f, text_color);
+
+	return 0;
 }
 
 Internal I1 ui_button(String8 label) {
@@ -334,21 +359,12 @@ Internal I1 ui_button(String8 label) {
 		}
 	}
 
-	// cut label at the first instance of ##.
-	for EachIndex(i, label.len-1) {
-		if (B1R_(label.str)[i] == '#' && B1R_(label.str)[i+1] == '#') {
-			label.len = i;
-			break;
-		}
-	}
+	label = cut_label(label);
 
 	F3 back_color = (F3){0.5f, 0.0f, 0.0f};
-	F3 text_color = (F3){1.0f, 0.0f, 0.0f};
+	F3 text_color = (F3){0.8f, 0.8f, 0.8f};
 	if (ramR->hot_hash == hash ) {
-		back_color *= 1.1f;
-	}
-	if (ramR->active_hash == hash) {
-		back_color *= 1.3f;
+		back_color *= 1.5f;
 	}
 
 	glBegin(GL_QUADS);
@@ -367,41 +383,40 @@ Internal I1 ui_button(String8 label) {
 }
 
 Internal void draw_cube(F3 pos, F3 size, F3 color) {
+
+	glColor3f(color.x, color.y, color.z);
+
 	glBegin(GL_QUADS);
 		// TOP
-		glColor3f(color.x, color.y, color.z);
+		glNormal3d(0, 1, 0);
 		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z+size.z);
 		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z-size.z);
 		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z-size.z);
 		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z+size.z);
 
 		// FRONT
-		color *= 0.9f;
-		glColor3f(color.x, color.y, color.z);
+		glNormal3d(0, 0, 1);
 		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z+size.z);
 		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z+size.z);
 		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z+size.z);
 		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z+size.z);
 
 		// BACK
-		color *= 0.9f;
-		glColor3f(color.x, color.y, color.z);
+		glNormal3d(0, 0,-1);
 		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z-size.z);
 		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z-size.z);
 		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z-size.z);
 		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z-size.z);
 
 		// LEFT
-		color *= 0.9f;
-		glColor3f(color.x, color.y, color.z);
+		glNormal3d(-1, 0, 0);
 		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z+size.z);
 		glVertex3f(pos.x-size.x, pos.y+size.y, pos.z-size.z);
 		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z-size.z);
 		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z+size.z);
 
 		// RIGHT
-		color *= 0.9f;
-		glColor3f(color.x, color.y, color.z);
+		glNormal3d(1, 0, 0);
 		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z+size.z);
 		glVertex3f(pos.x+size.x, pos.y+size.y, pos.z-size.z);
 		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z-size.z);
@@ -409,14 +424,26 @@ Internal void draw_cube(F3 pos, F3 size, F3 color) {
 
 
 		// BOTTOM
-		color *= 0.5f;
-		glColor3f(color.x, color.y, color.z);
+		glNormal3d(0,-1, 0);
 		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z+size.z);
 		glVertex3f(pos.x+size.x, pos.y-size.y, pos.z-size.z);
 		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z-size.z);
 		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z+size.z);
 
 	glEnd();
+}
+
+Internal L1 entity_create() {
+	Entity new_entity = {
+		.shape = SHAPE__BOX,
+		.pos = {0.0f, 0.0f, 0.0f},
+		.size = {0.5f, 0.5f, 0.5f},
+		.color = {0.8f, 0.8f, 0.8f},
+	};
+	L1 idx = ramR->entity_count;
+	ramR->entities[idx] = new_entity;
+	ramR->entity_count += 1;
+	return idx;
 }
 
 Internal void lane(L1 arena) {
@@ -428,14 +455,10 @@ Internal void lane(L1 arena) {
 		ramR->cam_rot_x = 35.0f;
 		ramR->cam_rot_y = -45.0f;
 
-		ramR->entities[ramR->entity_count].pos = (F3){0, 0, 0};
-		ramR->entities[ramR->entity_count].size = (F3){0.5f, 0.5f, 0.5f};
-		ramR->entities[ramR->entity_count].color = (F3){1.0f, 1.0f, 0.0f};
-		ramR->entity_count += 1;
+		L1 first_entity_idx = entity_create();
+		ramR->selected_entity_idx = first_entity_idx;
 
-		ramR->selected_entity_idx = L1_MAX;
-
-		ramR->axis_mode = AXIS_MODE__SIZE;
+		ramR->axis_mode = AXIS_MODE__POS;
 
 		F1 near = 0.1f;
 		F1 far = 40.0f;
@@ -490,7 +513,6 @@ Internal void lane(L1 arena) {
 			left_was_pressed = left_pressed;
 			right_was_pressed = right_pressed;
 
-			I1 key_esc = os_key(1);
 			I1 key_space = os_key(57);
 			I1 key_w = os_key(17);
 			I1 key_s = os_key(31);
@@ -502,9 +524,6 @@ Internal void lane(L1 arena) {
 			F1 viewport_height = window_height;
 			F1 viewport_aspect = viewport_width/viewport_height;
 
-			if (key_esc) {
-				break;
-			}
 			if (right_pressed) {
 				ramR->cam_rot_y += ramR->delta_mx * 0.2f;
 				ramR->cam_rot_x += delta_my * 0.2f;
@@ -595,10 +614,27 @@ Internal void lane(L1 arena) {
 			}
 
 			// ---- ENTITIES ----
+
+			GLfloat white[] = {1, 1, 1};
+			glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
+			glLightfv(GL_LIGHT0, GL_SPECULAR, white);
+			glMaterialf(GL_FRONT, GL_SHININESS, 30);
+			glEnable(GL_LIGHTING);
+			glEnable(GL_LIGHT0);
+
+			GLfloat light_pos[] = {2, 6,-3, 1};
+			glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
+
 			for EachIndex(entity_index, ramR->entity_count) {
 				Entity e = ramR->entities[entity_index];
+
+			 	GLfloat color[4] = {e.color.x, e.color.y, e.color.z, 1.0};
+				glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, color);
+				glMaterialfv(GL_FRONT, GL_SPECULAR, color);
 				draw_cube(e.pos, e.size, e.color);
 			}
+
+			glDisable(GL_LIGHTING);
 
 			// ---- SELECTION (DEPTH BUFFER UNPROJECTION) ----
 			if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w && ramR->hot_axis == 0) {
@@ -764,11 +800,11 @@ Internal void lane(L1 arena) {
 			glEnd();
 
 			// border line
-			glBegin(GL_LINES);
-				glColor3f(0.5f, 0.0f, 0.0f);
-				glVertex2f(sidebar_w, 0);
-				glVertex2f(sidebar_w, window_height);
-			glEnd();
+			// glBegin(GL_LINES);
+			// 	glColor3f(0.8f, 0.8f, 0.8f);
+			// 	glVertex2f(sidebar_w, 0);
+			// 	glVertex2f(sidebar_w, window_height);
+			// glEnd();
 
 			ramR->panel_current_y = 0.0f;
 			ramR->hot_hash = 0;
@@ -785,9 +821,7 @@ Internal void lane(L1 arena) {
 				}
 
 				if (ui_button(Str8_("CREATE NEW"))) {
-					ramR->entities[ramR->entity_count].size = (F3){0.5f, 0.5f, 0.5f};
-					ramR->entities[ramR->entity_count].color = (F3){1, 1, 1};
-					ramR->entity_count += 1;
+					entity_create();
 				}
 
 			} else {
@@ -795,7 +829,11 @@ Internal void lane(L1 arena) {
 
 				ui_text(str8f(arena, "ENTITY %llu", ramR->selected_entity_idx));
 
-				ramR->panel_current_y += 16.0f;
+				if (ui_button(Str8_("DELETE"))) {
+					ramR->entities[ramR->selected_entity_idx] = ramR->entities[ramR->entity_count-1];
+					ramR->selected_entity_idx = L1_MAX;
+					ramR->entity_count -= 1;
+				}
 
 				ui_text(Str8_("POSITION"));
 				F1 x = e->pos.x, y = e->pos.y, z = e->pos.z;
@@ -817,6 +855,12 @@ Internal void lane(L1 arena) {
 				ui_drag(arena, Str8_(" Y##color"), &y);
 				ui_drag(arena, Str8_(" Z##color"), &z);
 				e->color = F3_clamp01((F3){x, y, z});
+
+				String8 alternatives[] = {
+					Str8_("BOX"),
+					Str8_("SPHERE")
+				};
+				ui_select(Str8_("SHAPE"), L1_(alternatives), ArrayLength(alternatives), &e->shape);
 			}
 
 			arena_pop_to(arena, pos);

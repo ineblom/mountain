@@ -322,7 +322,9 @@ Internal void ui_drag(L1 arena, String8 label, F1R value) {
 	ramR->panel_current_y += height;
 }
 
-Internal L1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1R value) {
+Internal I1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1R value) {
+	I1 did_change_value = 0;
+
 	ramR->panel_current_y += 10.0f;
 
 	F3 text_color = (F3){0.8f, 0.8f, 0.8f};
@@ -351,7 +353,7 @@ Internal L1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1R 
 	for EachIndex(i, alternative_count) {
 		L1 hash = base_hash + i;
 
-		F1 red = 0.1f;
+		F1 red = 0.2f;
 		if (i == value[0]) {
 			red = 0.8f;
 		} else if (ramR->active_hash == hash) {
@@ -361,6 +363,7 @@ Internal L1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1R 
 				ramR->active_hash = 0;
 				if (ramR->hot_hash == hash) {
 					value[0] = i;
+					did_change_value = 1;
 				}
 			}
 		} else if (ramR->hot_hash == hash) {
@@ -386,7 +389,7 @@ Internal L1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1R 
 
 	ramR->panel_current_y = bottom;
 
-	return 0;
+	return did_change_value;
 }
 
 Internal I1 ui_button(String8 label) {
@@ -394,6 +397,7 @@ Internal I1 ui_button(String8 label) {
 
 	L1 hash = str8_hash(label);
 
+	F3 text_color = (F3){0.8f, 0.8f, 0.8f};
 	F1 text_size = 16.0f;
 	F1 padding_x = 10.0f;
 	F1 padding_y = 5.0f;
@@ -423,14 +427,15 @@ Internal I1 ui_button(String8 label) {
 
 	label = cut_label(label);
 
-	F3 back_color = (F3){0.5f, 0.0f, 0.0f};
-	F3 text_color = (F3){0.8f, 0.8f, 0.8f};
-	if (ramR->hot_hash == hash ) {
-		back_color *= 1.5f;
+	F1 red = 0.2f;
+	if (ramR->active_hash == hash) {
+		red = 0.5f;
+	} else if (ramR->hot_hash == hash) {
+		red = 0.3f;
 	}
 
 	glBegin(GL_QUADS);
-	glColor3f(back_color.x, back_color.y, back_color.z);
+	glColor3f(red, 0, 0);
 	glVertex2f(left, top);
 	glVertex2f(right, top);
 	glVertex2f(right, bottom);
@@ -445,7 +450,6 @@ Internal I1 ui_button(String8 label) {
 }
 
 Internal void draw_cube(F3 pos, F3 size, F3 color) {
-
 	glColor3f(color.x, color.y, color.z);
 
 	glBegin(GL_QUADS);
@@ -493,6 +497,36 @@ Internal void draw_cube(F3 pos, F3 size, F3 color) {
 		glVertex3f(pos.x-size.x, pos.y-size.y, pos.z+size.z);
 
 	glEnd();
+}
+
+// Source - https://stackoverflow.com/questions/7687148/drawing-sphere-in-opengl-without-using-glusphere
+// Posted by Constantinius
+// Retrieved 2025-11-06, License - CC BY-SA 4.0
+Internal void draw_sphere(F3 pos, F1 radius, F3 color) {
+	L1 lats = 32;
+	L1 longs = 32;
+  for(L1 i = 0; i <= lats; i++) {
+      F1 lat0 = M_PI * (-0.5 + F1_(i - 1) / lats);
+      F1 z0  = sinf(lat0);
+      F1 zr0 =  cosf(lat0);
+
+      F1 lat1 = M_PI * (-0.5 + F1_(i) / lats);
+      F1 z1 = sinf(lat1);
+      F1 zr1 = cosf(lat1);
+
+      glBegin(GL_QUAD_STRIP);
+      for(L1 j = 0; j <= longs; j++) {
+          F1 lng = 2 * M_PI * F1_(j - 1) / longs;
+          F1 x = cosf(lng);
+          F1 y = sinf(lng);
+
+          glNormal3f(x * zr0, y * zr0, z0);
+          glVertex3f(pos.x + radius*x*zr0, pos.y + radius*y*zr0, pos.z + radius*z0);
+          glNormal3f(x * zr1, y * zr1, z1);
+          glVertex3f(pos.x + radius*x*zr1, pos.y + radius*y*zr1, pos.z + radius*z1);
+      }
+      glEnd();
+  }
 }
 
 Internal L1 entity_create(void) {
@@ -688,12 +722,21 @@ Internal void lane(L1 arena) {
 			glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
 
 			for EachIndex(entity_index, ramR->entity_count) {
-				Entity e = ramR->entities[entity_index];
+				TR(Entity) e = &ramR->entities[entity_index];
 
-			 	GLfloat color[4] = {e.color.x, e.color.y, e.color.z, 1.0};
+			 	GLfloat color[4] = {e->color.x, e->color.y, e->color.z, 1.0};
 				glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, color);
 				glMaterialfv(GL_FRONT, GL_SPECULAR, color);
-				draw_cube(e.pos, e.size, e.color);
+
+				switch (e->shape) {
+					case SHAPE__BOX: {
+						draw_cube(e->pos, e->size, e->color);
+					} break;
+
+					case SHAPE__SPHERE: {
+						draw_sphere(e->pos, e->size.x, e->color);
+					} break;
+				}
 			}
 
 			glDisable(GL_LIGHTING);
@@ -782,7 +825,11 @@ Internal void lane(L1 arena) {
 						if (ramR->axis_mode == AXIS_MODE__POS) {
 							e->pos += delta_v;
 						} else if (ramR->axis_mode == AXIS_MODE__SIZE) {
-							e->size += delta_v;
+							if (e->shape == SHAPE__SPHERE) {
+								e->size.x += world_delta;
+							} else {
+								e->size += delta_v;
+							}
 						}
 
 					}
@@ -907,8 +954,10 @@ Internal void lane(L1 arena) {
 				ui_text(Str8_("SIZE"));
 				x = e->size.x, y = e->size.y, z = e->size.z;
 				ui_drag(arena, Str8_(" X##size"), &x);
-				ui_drag(arena, Str8_(" Y##size"), &y);
-				ui_drag(arena, Str8_(" Z##size"), &z);
+				if (e->shape != SHAPE__SPHERE) {
+					ui_drag(arena, Str8_(" Y##size"), &y);
+					ui_drag(arena, Str8_(" Z##size"), &z);
+				}
 				e->size = (F3){Max(0, x), Max(0, y), Max(z, 0)};
 
 				ui_text(Str8_("COLOR"));

@@ -12,8 +12,8 @@
 
 #if (CPU_ && TYP_)
 
-typedef struct Material Material;
-struct Material {
+typedef struct RT_Material RT_Material;
+struct RT_Material {
 	F3 base_color;
 	F1 metallic;
 	F1 roughness;
@@ -28,37 +28,37 @@ struct Material {
 	// F1 clearcoat_gloss;
 };
 
-typedef struct Sphere Sphere;
-struct Sphere {
+typedef struct RT_Sphere RT_Sphere;
+struct RT_Sphere {
 	F3 p;
 	F1 r;
 	I1 material_idx;
 };
 
-typedef struct Plane Plane;
-struct Plane {
+typedef struct RT_Plane RT_Plane;
+struct RT_Plane {
 	F3 n;
 	F1 d;
 	I1 material_idx;
 };
 
-typedef struct Box Box;
-struct Box {
+typedef struct RT_Box RT_Box;
+struct RT_Box {
 	F3 min;
 	F3 max;
 	I1 material_idx;
 };
 
-typedef struct Camera Camera;
-struct Camera {
+typedef struct RT_Camera RT_Camera;
+struct RT_Camera {
 	F3 pos;
 	F3 forward;
 	F1 aperture_radius;
 	F1 focal_distance;
 };
 
-typedef struct Scene Scene;
-struct Scene {
+typedef struct RT_Scene RT_Scene;
+struct RT_Scene {
 	String8 output_filename;
 	L1 output_width;
 	L1 output_height;
@@ -106,14 +106,14 @@ L1 total_memory_usage;
 
 #if (CPU_ && ROM_)
 
-typedef struct Random_State Random_State;
-struct Random_State {
+typedef struct RT_Random_State RT_Random_State;
+struct RT_Random_State {
 	L1 state;
 	L1 inc;
 };
 
 // TODO: Take as parameter to rand_pcg
-ThreadLocal Random_State rng;
+ThreadLocal RT_Random_State rng;
 
 Inline I1 rand_pcg() {
 	L1 oldstate = rng.state;
@@ -210,7 +210,7 @@ Inline F1 pdf_GGX(F3 n, F3 h, F3 v, F1 alpha) {
   return result;
 }
 
-Internal F3 ray_cast(Scene scene, F3 ray_origin, F3 ray_direction) {
+Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
 	F1 min_hit_distance = 0.001f;
 	F1 tolerance = 0.0001f;
 
@@ -225,7 +225,7 @@ Internal F3 ray_cast(Scene scene, F3 ray_origin, F3 ray_direction) {
 
 		// Check planes
 		for EachIndex(plane_index, scene.plane_count) {
-			Plane plane = TR_(Plane, scene.planes)[plane_index];
+			RT_Plane plane = TR_(RT_Plane, scene.planes)[plane_index];
 
 			F1 denom = F3_dot(plane.n, ray_direction);
 			if (denom < -tolerance || denom > tolerance) {
@@ -242,7 +242,7 @@ Internal F3 ray_cast(Scene scene, F3 ray_origin, F3 ray_direction) {
 
 		// Check spheres
 		for EachIndex(sphere_index, scene.sphere_count) {
-			Sphere sphere = TR_(Sphere, scene.spheres)[sphere_index];
+			RT_Sphere sphere = TR_(RT_Sphere, scene.spheres)[sphere_index];
 
 			F3 sphere_relative_ray_origin = ray_origin - sphere.p;
 			F1 b = 2.0f * F3_dot(ray_direction, sphere_relative_ray_origin);
@@ -270,7 +270,7 @@ Internal F3 ray_cast(Scene scene, F3 ray_origin, F3 ray_direction) {
 
 		// Check boxes
 		for EachIndex(box_index, scene.box_count) {
-			Box box = TR_(Box, scene.boxes)[box_index];
+			RT_Box box = TR_(RT_Box, scene.boxes)[box_index];
 
 			F1 t_min = (box.min.x - ray_origin.x) / ray_direction.x;
 			F1 t_max = (box.max.x - ray_origin.x) / ray_direction.x;
@@ -312,7 +312,7 @@ Internal F3 ray_cast(Scene scene, F3 ray_origin, F3 ray_direction) {
 		}
 
 		if (hit_material_idx != I1_(-1)) {
-			Material mat = TR_(Material, scene.materials)[hit_material_idx];
+			RT_Material mat = TR_(RT_Material, scene.materials)[hit_material_idx];
 
 			result += attenuation * mat.emissive;
 
@@ -448,7 +448,7 @@ Inline F3 tonemap_lottes(F3 v) {
 
 #define tonemap tonemap_lottes
 
-Internal void trace_scene(L1 arena, Scene scene) {
+Internal void trace_scene(L1 arena, RT_Scene scene) {
 	L1 start_time = os_clock();
 
 	if (lane_idx() == 0) {
@@ -723,7 +723,7 @@ Internal void trace_scene(L1 arena, Scene scene) {
 }
 
 Internal void lane(L1 arena) {
-	Material materials[] = {
+	RT_Material materials[] = {
 		{ // ground
 			.base_color  = (F3){0.63f, 0.53f, 0.13f},
 			.metallic = 0.3f,
@@ -751,7 +751,7 @@ Internal void lane(L1 arena) {
 		},
 	};
 
-	Plane planes[] = {
+	RT_Plane planes[] = {
 		{
 			.n = (F3){0, 0, 1},
 			.d = 1.0f,
@@ -759,7 +759,7 @@ Internal void lane(L1 arena) {
 		}
 	};
 
-	Sphere spheres[] = {
+	RT_Sphere spheres[] = {
 		{
 			.p = (F3){-2.0f, 2.0f, 0.0f},
 			.r = 1.0f,
@@ -777,7 +777,7 @@ Internal void lane(L1 arena) {
 		},
 	};
 
-	Box boxes[] = {
+	RT_Box boxes[] = {
 		{
 			.min = {-2.6f, -2.0f,-1.0},
 			.max = {-2.5f,  0.7f,-0.5},
@@ -785,13 +785,13 @@ Internal void lane(L1 arena) {
 	 	}
 	};
 
-	Camera camera = {0};
+		RT_Camera camera = {0};
 	camera.pos = (F3){0.0f, -5.0f, 0.5f};
 	camera.forward = F3_normalize(camera.pos);
 	camera.aperture_radius =  0.02f;
 	camera.focal_distance = 5.0f;
 
-	Scene scene = {
+	RT_Scene scene = {
 		.output_filename = Str8_("output.bmp"),
 		.output_width    = 1280,
 		.output_height   = 720,

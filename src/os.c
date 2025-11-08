@@ -32,6 +32,8 @@
 
 #define CLOCK_MONOTONIC 1
 
+#define MAX_FILENAME_LEN 256
+
 typedef L1 pthread_t;
 typedef struct {
   B1 __opaque[32];
@@ -158,8 +160,12 @@ I1 keys[256];
 
 #if (CPU_ && ROM_)
 
-Internal String8 os_read_entire_file(L1 arena, CString filename) {
-  I1 file = open(filename, O_RDONLY);
+Internal String8 os_read_entire_file(L1 arena, String8 filename) {
+  Assert(filename.len < MAX_FILENAME_LEN);
+  char cstr_filename[MAX_FILENAME_LEN] = {0};
+  memmove(L1_(cstr_filename), filename.str, filename.len);
+
+  I1 file = open(cstr_filename, O_RDONLY);
   if (LtSI1(file, 0)) {
     return (String8){0};
   }

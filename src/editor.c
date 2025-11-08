@@ -553,7 +553,7 @@ Internal L1 entity_create(L1 flags, String8 name) {
 
 Internal void lane(L1 arena) {
 	if (lane_idx() == 0) {
-		L1 window = os_window_open(arena, "Hello", 1280, 720);
+		L1 window = os_window_open(arena, Str8_("Hello"), 1280, 720);
 		os_window_get_context(window);
 
 		ramR->cam_dist = 3.0f;

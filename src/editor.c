@@ -7,8 +7,21 @@
 
 #if (CPU_ && TYP_)
 
+enum {
+	ENTITY_FLAG__SHAPE = 1 << 0,
+	ENTITY_FLAG__CAMERA = 1 << 1,
+};
+
+enum {
+	SHAPE__BOX = 0,
+	SHAPE__SPHERE,
+	SHAPE__COUNT,
+};
+
 typedef struct Entity Entity;
 struct Entity {
+	L1 flags;
+	String8 name;
 	L1 shape;
 	F3 pos;
 	F3 size;
@@ -18,12 +31,6 @@ struct Entity {
 enum {
 	AXIS_MODE__POS = 0,
 	AXIS_MODE__SIZE,
-};
-
-enum {
-	SHAPE__BOX = 0,
-	SHAPE__SPHERE,
-	SHAPE__COUNT,
 };
 
 #endif
@@ -529,16 +536,18 @@ Internal void draw_sphere(F3 pos, F1 radius, F3 color) {
   }
 }
 
-Internal L1 entity_create(void) {
-	Entity new_entity = {
+Internal L1 entity_create(L1 flags, String8 name) {
+	L1 idx = ramR->entity_count;
+	ramR->entity_count += 1;
+
+	ramR->entities[idx] = (Entity){
+		.flags = flags,
+		.name = name,
 		.shape = SHAPE__BOX,
 		.pos = {0.0f, 0.0f, 0.0f},
 		.size = {0.5f, 0.5f, 0.5f},
 		.color = {0.8f, 0.8f, 0.8f},
 	};
-	L1 idx = ramR->entity_count;
-	ramR->entities[idx] = new_entity;
-	ramR->entity_count += 1;
 	return idx;
 }
 
@@ -551,8 +560,11 @@ Internal void lane(L1 arena) {
 		ramR->cam_rot_x = 35.0f;
 		ramR->cam_rot_y = -45.0f;
 
-		L1 first_entity_idx = entity_create();
-		ramR->selected_entity_idx = first_entity_idx;
+		L1 camera = entity_create(ENTITY_FLAG__CAMERA, Str8_("CAMERA"));
+		ramR->entities[camera].pos = (F3){0.0f, 0.5f, -5.0f};
+
+		L1 starting_cube = entity_create(ENTITY_FLAG__SHAPE, Str8_("CUBE"));
+		ramR->selected_entity_idx = starting_cube;
 
 		ramR->axis_mode = AXIS_MODE__POS;
 
@@ -633,14 +645,6 @@ Internal void lane(L1 arena) {
 
 			ramR->cam_dist += ramR->scroll_y/20.0f;
 
-			// ---- RENDERING ----
-
-			glEnable(GL_DEPTH_TEST);
-			glViewport(sidebar_w, 0, viewport_width, viewport_height);
-
-			glClearColor(0, 0, 0, 1);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
 			Mat4 projection = mat4_frustum(
 				-viewport_aspect*scale_factor, viewport_aspect*scale_factor,
 				-1 * scale_factor, 1 * scale_factor,
@@ -649,97 +653,8 @@ Internal void lane(L1 arena) {
 			Mat4 view = mat4_translate(0, 0, -ramR->cam_dist);
 			view = mat4_multiply(view, mat4_rotate_x(ramR->cam_rot_x));
 			view = mat4_multiply(view, mat4_rotate_y(ramR->cam_rot_y));
-
-			glMatrixMode(GL_PROJECTION);
-			glLoadMatrixf(projection.m);
-
-			glMatrixMode(GL_MODELVIEW);
-			glLoadMatrixf(view.m);
-
-			// ---- GRID ----
-			glBegin(GL_LINES);
-				glColor3f(0.1f, 0.1f, 0.1f);
-				I1 grid_s = 25;
-				F1 square_s = 0.25f;
-				F1 half_grid_w = 0.5f*grid_s*square_s;
-				for (I1 i = 0; i <= grid_s; i++) {
-					F1 x = i * square_s - half_grid_w;
-					glVertex3f(x, 0.0f, -half_grid_w);
-					glVertex3f(x, 0.0f, half_grid_w);
-
-					glVertex3f(-half_grid_w, 0.0f, x);
-					glVertex3f(half_grid_w, 0.0f, x);
-				}
-			glEnd();
-
-			// ---- AXIS DETECTION ----
-			Mat4 view_projection = mat4_multiply(projection, view);
-			ramR->hot_axis = 0;
-			if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
-				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
-
-				// Project axis endpoints to screen space
-				F3 x_end = e->pos; x_end.x += 1.0f;
-				F3 y_end = e->pos; y_end.y += 1.0f;
-				F3 z_end = e->pos; z_end.z += 1.0f;
-				F3 origin_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
-				F3 x_screen = project_to_screen(x_end, view_projection, viewport_width, viewport_height);
-				F3 y_screen = project_to_screen(y_end, view_projection, viewport_width, viewport_height);
-				F3 z_screen = project_to_screen(z_end, view_projection, viewport_width, viewport_height);
-
-				F1 dist_x = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, x_screen);
-				F1 dist_y = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, y_screen);
-				F1 dist_z = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, z_screen);
-
-				// Find which axis is closest
-				F1 min_dist = dist_x;
-				ramR->hot_axis = 1;
-				if (dist_y < min_dist) {
-					min_dist = dist_y;
-					ramR->hot_axis = 2;
-				}
-				if (dist_z < min_dist) {
-					min_dist = dist_z;
-					ramR->hot_axis = 3;
-				}
-
-				F1 threshold = 10.0f; // pixels
-				if (min_dist > threshold) {
-					ramR->hot_axis = 0;
-				}
-			}
-
-			// ---- ENTITIES ----
-
-			GLfloat white[] = {1, 1, 1};
-			glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
-			glLightfv(GL_LIGHT0, GL_SPECULAR, white);
-			glMaterialf(GL_FRONT, GL_SHININESS, 30);
-			glEnable(GL_LIGHTING);
-			glEnable(GL_LIGHT0);
-
-			GLfloat light_pos[] = {2, 6,-3, 1};
-			glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
-
-			for EachIndex(entity_index, ramR->entity_count) {
-				TR(Entity) e = &ramR->entities[entity_index];
-
-			 	GLfloat color[4] = {e->color.x, e->color.y, e->color.z, 1.0};
-				glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, color);
-				glMaterialfv(GL_FRONT, GL_SPECULAR, color);
-
-				switch (e->shape) {
-					case SHAPE__BOX: {
-						draw_cube(e->pos, e->size, e->color);
-					} break;
-
-					case SHAPE__SPHERE: {
-						draw_sphere(e->pos, e->size.x, e->color);
-					} break;
-				}
-			}
-
-			glDisable(GL_LIGHTING);
+			F3 camera_right = {view.m[0], view.m[4], view.m[8]};
+			F3 camera_up = {view.m[1], view.m[5], view.m[9]};
 
 			// ---- SELECTION (DEPTH BUFFER UNPROJECTION) ----
 			if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w && ramR->hot_axis == 0) {
@@ -795,6 +710,137 @@ Internal void lane(L1 arena) {
 					}
 				}
 			}
+
+			// ---- AXIS DETECTION ----
+			Mat4 view_projection = mat4_multiply(projection, view);
+			ramR->hot_axis = 0;
+			if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
+				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+
+				// Project axis endpoints to screen space
+				F3 x_end = e->pos; x_end.x += 1.0f;
+				F3 y_end = e->pos; y_end.y += 1.0f;
+				F3 z_end = e->pos; z_end.z += 1.0f;
+				F3 origin_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
+				F3 x_screen = project_to_screen(x_end, view_projection, viewport_width, viewport_height);
+				F3 y_screen = project_to_screen(y_end, view_projection, viewport_width, viewport_height);
+				F3 z_screen = project_to_screen(z_end, view_projection, viewport_width, viewport_height);
+
+				F1 dist_x = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, x_screen);
+				F1 dist_y = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, y_screen);
+				F1 dist_z = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, z_screen);
+
+				// Find which axis is closest
+				F1 min_dist = dist_x;
+				ramR->hot_axis = 1;
+				if (dist_y < min_dist) {
+					min_dist = dist_y;
+					ramR->hot_axis = 2;
+				}
+				if (dist_z < min_dist) {
+					min_dist = dist_z;
+					ramR->hot_axis = 3;
+				}
+
+				F1 threshold = 10.0f; // pixels
+				if (min_dist > threshold) {
+					ramR->hot_axis = 0;
+				}
+			}
+
+			// ---- RENDERING ----
+
+			glEnable(GL_DEPTH_TEST);
+			glViewport(sidebar_w, 0, viewport_width, viewport_height);
+
+			glClearColor(0, 0, 0, 1);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+			glMatrixMode(GL_PROJECTION);
+			glLoadMatrixf(projection.m);
+
+			glMatrixMode(GL_MODELVIEW);
+			glLoadMatrixf(view.m);
+
+			// ---- GRID ----
+			glBegin(GL_LINES);
+				glColor3f(0.1f, 0.1f, 0.1f);
+				I1 grid_s = 25;
+				F1 square_s = 0.25f;
+				F1 half_grid_w = 0.5f*grid_s*square_s;
+				for (I1 i = 0; i <= grid_s; i++) {
+					F1 x = i * square_s - half_grid_w;
+					glVertex3f(x, 0.0f, -half_grid_w);
+					glVertex3f(x, 0.0f, half_grid_w);
+
+					glVertex3f(-half_grid_w, 0.0f, x);
+					glVertex3f(half_grid_w, 0.0f, x);
+				}
+			glEnd();
+
+			// ---- ENTITIES ----
+
+			GLfloat white[] = {1, 1, 1};
+			glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
+			glLightfv(GL_LIGHT0, GL_SPECULAR, white);
+			glMaterialf(GL_FRONT, GL_SHININESS, 30);
+			glEnable(GL_LIGHTING);
+			glEnable(GL_LIGHT0);
+
+			GLfloat light_pos[] = {2, 6,-3, 1};
+			glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
+
+			for EachIndex(entity_index, ramR->entity_count) {
+				TR(Entity) e = &ramR->entities[entity_index];
+
+			 	GLfloat color[4] = {e->color.x, e->color.y, e->color.z, 1.0};
+				glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, color);
+				glMaterialfv(GL_FRONT, GL_SPECULAR, color);
+
+				if (e->flags & ENTITY_FLAG__SHAPE) {
+					switch (e->shape) {
+						case SHAPE__BOX: {
+							draw_cube(e->pos, e->size, e->color);
+						} break;
+
+						case SHAPE__SPHERE: {
+							draw_sphere(e->pos, e->size.x, e->color);
+						} break;
+					}
+				}
+
+				if (e->flags & ENTITY_FLAG__CAMERA) {
+					glDisable(GL_LIGHTING);
+
+					F3 tl = e->pos - camera_right*0.3f + camera_up*0.2f;
+					F3 tr = e->pos + camera_right*0.3f + camera_up*0.2f;
+					F3 bl = e->pos - camera_right*0.3f - camera_up*0.2f;
+					F3 br = e->pos + camera_right*0.3f - camera_up*0.2f;
+					F3 mt = e->pos - camera_right*0.3f + camera_up*0.1f;
+					F3 mb = e->pos - camera_right*0.3f - camera_up*0.1f;
+					F3 ot = e->pos - camera_right*0.5f + camera_up*0.15f;
+					F3 ob = e->pos - camera_right*0.5f - camera_up*0.15f;
+
+					glLineWidth(3.0f);
+					glBegin(GL_LINE_STRIP);
+						glColor3f(0.8f, 0.8f, 0.8f);
+						glVertex3f(ot.x, ot.y, ot.z);
+						glVertex3f(mt.x, mt.y, mt.z);
+						glVertex3f(tl.x, tl.y, tl.z);
+						glVertex3f(tr.x, tr.y, tr.z);
+						glVertex3f(br.x, br.y, br.z);
+						glVertex3f(bl.x, bl.y, bl.z);
+						glVertex3f(mb.x, mb.y, mb.z);
+						glVertex3f(ob.x, ob.y, ob.z);
+						glVertex3f(ot.x, ot.y, ot.z);
+					glEnd();
+					glLineWidth(1.0f);
+
+					glEnable(GL_LIGHTING);
+				}
+			}
+
+			glDisable(GL_LIGHTING);
 
 			// ---- AXES ----
 			if (ramR->selected_entity_idx != L1_MAX) {
@@ -921,22 +967,22 @@ Internal void lane(L1 arena) {
 			L1 pos = arena_pos(arena);
 
 			if (ramR->selected_entity_idx == L1_MAX) {
+				if (ui_button(Str8_("CREATE ENTITY"))) {
+					String8 new_entity_name = str8f(arena, "%d", ramR->entity_count);
+					entity_create(ENTITY_FLAG__SHAPE, new_entity_name);
+				}
+
 				ui_text(Str8_("ENTITIES"));
 
 				for EachIndex(entity_index, ramR->entity_count) {
-					if (ui_button(str8f(arena, "%llu", entity_index))) {
+					if (ui_button(ramR->entities[entity_index].name)) {
 						ramR->selected_entity_idx = entity_index;
 					}
 				}
-
-				if (ui_button(Str8_("CREATE NEW"))) {
-					entity_create();
-				}
-
 			} else {
 				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
 
-				ui_text(str8f(arena, "ENTITY %llu", ramR->selected_entity_idx));
+				ui_text(e->name);
 
 				if (ui_button(Str8_("DELETE"))) {
 					ramR->entities[ramR->selected_entity_idx] = ramR->entities[ramR->entity_count-1];

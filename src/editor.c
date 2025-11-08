@@ -964,8 +964,6 @@ Internal void lane(L1 arena) {
 			ramR->panel_current_y = 0.0f;
 			ramR->hot_hash = 0;
 
-			L1 pos = arena_pos(arena);
-
 			if (ramR->selected_entity_idx == L1_MAX) {
 				if (ui_button(Str8_("CREATE ENTITY"))) {
 					String8 new_entity_name = str8f(arena, "%d", ramR->entity_count);
@@ -989,6 +987,8 @@ Internal void lane(L1 arena) {
 					ramR->selected_entity_idx = L1_MAX;
 					ramR->entity_count -= 1;
 				}
+
+				L1 pos = arena_pos(arena);
 
 				ui_text(Str8_("POSITION"));
 				F1 x = e->pos.x, y = e->pos.y, z = e->pos.z;
@@ -1014,9 +1014,9 @@ Internal void lane(L1 arena) {
 				e->color = F3_clamp01((F3){x, y, z});
 
 				ui_select(Str8_("SHAPE"), L1_(shape_strs), ArrayCount(shape_strs), &e->shape);
-			}
 
-			arena_pop_to(arena, pos);
+				arena_pop_to(arena, pos);
+			}
 
 			glFlush();
 

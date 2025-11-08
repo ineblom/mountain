@@ -186,8 +186,12 @@ Internal String8 os_read_entire_file(L1 arena, String8 filename) {
   return result;
 }
 
-Internal L1 os_write_entire_file(CString filename, L1 data, L1 data_size) {
-  I1 file = open(filename, O_CREAT | O_WRONLY, 0666);
+Internal L1 os_write_entire_file(String8 filename, L1 data, L1 data_size) {
+  Assert(filename.len < MAX_FILENAME_LEN);
+  char cstr_filename[MAX_FILENAME_LEN] = {0};
+  memmove(L1_(cstr_filename), filename.str, filename.len);
+
+  I1 file = open(cstr_filename, O_CREAT | O_WRONLY, 0666);
   if (LtSI1(file, 0)) {
     return 0;
   }
@@ -491,7 +495,7 @@ Internal void keyboard_repeat_info_handler(
   SI1 delay)
 {}
 
-Internal L1 os_window_open(L1 arena, CString title, I1 width, I1 height) {
+Internal L1 os_window_open(L1 arena, String8 title, I1 width, I1 height) {
   if (ramR->first_window == 0) {
     ramR->display = wl_display_connect(0);
     Assert(ramR->display != 0);
@@ -587,7 +591,11 @@ Internal L1 os_window_open(L1 arena, CString title, I1 width, I1 height) {
   result->xdg_toplevel_listener.close = xdg_toplevel_close_handler;
   xdg_toplevel_add_listener(result->xdg_toplevel, &result->xdg_toplevel_listener, (void *)result);
 
-  xdg_toplevel_set_title(result->xdg_toplevel, title);
+  // Use max filename length as a reasonable title length limit.
+  Assert(title.len < MAX_FILENAME_LEN);
+  char cstr_title[MAX_FILENAME_LEN] = {0};
+  memmove(L1_(cstr_title), title.str, title.len);
+  xdg_toplevel_set_title(result->xdg_toplevel, cstr_title);
 
   wl_surface_commit(result->surface);
 

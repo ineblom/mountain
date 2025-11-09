@@ -573,9 +573,10 @@ Internal L1 entity_create(L1 flags, String8 name) {
 
 Internal void lane(L1 arena) {
 	L1 should_render = 0;
+	L1 window = 0;
 
 	if (lane_idx() == 0) {
-		L1 window = os_window_open(arena, Str8_("Editor"), 1280, 720);
+		window = os_window_open(arena, Str8_("Editor"), 1280, 720);
 		os_window_get_context(window);
 
 		ramR->cam_dist = 3.0f;
@@ -600,10 +601,6 @@ Internal void lane(L1 arena) {
 		light->material_idx = light_material_idx;
 
 		ramR->axis_mode = AXIS_MODE__POS;
-
-		F1 near = 0.1f;
-		F1 far = 40.0f;
-		F1 scale_factor = near / 1.0f;
 
 		// ---- FONT ----
 		ramR->font_num_letters = 26 + 10 + 2;
@@ -631,559 +628,582 @@ Internal void lane(L1 arena) {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, font_tex_w, font_tex_h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, tex_data);
 		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 
-		// ---- MAIN LOOP ----
+	lane_sync_L1(&window, 0);
 
-		I1 left_was_pressed = os_mouse_button(0);
-		I1 right_was_pressed = os_mouse_button(0);
+	while (TR_(OS_Window, window)->should_close == 0) {
+		if (lane_idx() == 0) {
+			// ---- MAIN LOOP ----
 
-		while (TR_(OS_Window, window)->should_close == 0) {
-			F1 time = F1_(os_clock() / 1000000) / 1000.0f;
+			F1 near = 0.1f;
+			F1 far = 40.0f;
+			F1 scale_factor = near / 1.0f;
+			I1 left_was_pressed = os_mouse_button(0);
+			I1 right_was_pressed = os_mouse_button(0);
 
-			F1 prev_mx = ramR->mouse_x;
-			F1 prev_my = ramR->mouse_y;
-			os_poll_events();
+			while (TR_(OS_Window, window)->should_close == 0) {
+				F1 time = F1_(os_clock() / 1000000) / 1000.0f;
 
-			ramR->delta_mx = ramR->mouse_x - prev_mx;
-			F1 delta_my = ramR->mouse_y - prev_my;
-			I1 left_pressed = os_mouse_button(0);
-			ramR->left_just_pressed = left_pressed && !left_was_pressed;
-			ramR->left_just_released = !left_pressed && left_was_pressed;
-			I1 right_pressed = os_mouse_button(1);
-			I1 right_just_pressed = right_pressed && !right_was_pressed;
-			left_was_pressed = left_pressed;
-			right_was_pressed = right_pressed;
+				F1 prev_mx = ramR->mouse_x;
+				F1 prev_my = ramR->mouse_y;
+				os_poll_events();
 
-			I1 key_space = os_key(57);
-			I1 key_w = os_key(17);
-			I1 key_s = os_key(31);
+				ramR->delta_mx = ramR->mouse_x - prev_mx;
+				F1 delta_my = ramR->mouse_y - prev_my;
+				I1 left_pressed = os_mouse_button(0);
+				ramR->left_just_pressed = left_pressed && !left_was_pressed;
+				ramR->left_just_released = !left_pressed && left_was_pressed;
+				I1 right_pressed = os_mouse_button(1);
+				I1 right_just_pressed = right_pressed && !right_was_pressed;
+				left_was_pressed = left_pressed;
+				right_was_pressed = right_pressed;
 
-			F1 window_width = F1_(TR_(OS_Window, window)->width);
-			F1 window_height = F1_(TR_(OS_Window, window)->height);
+				I1 key_space = os_key(57);
+				I1 key_w = os_key(17);
+				I1 key_s = os_key(31);
 
-			F1 viewport_width = window_width-sidebar_w;
-			F1 viewport_height = window_height;
-			F1 viewport_aspect = viewport_width/viewport_height;
+				F1 window_width = F1_(TR_(OS_Window, window)->width);
+				F1 window_height = F1_(TR_(OS_Window, window)->height);
+				F1 viewport_width = window_width-sidebar_w;
+				F1 viewport_height = window_height;
+				F1 viewport_aspect = viewport_width/viewport_height;
 
-			if (right_pressed) {
-				ramR->cam_rot_y += ramR->delta_mx * 0.2f;
-				ramR->cam_rot_x += delta_my * 0.2f;
-			}
+				if (right_pressed) {
+					ramR->cam_rot_y += ramR->delta_mx * 0.2f;
+					ramR->cam_rot_x += delta_my * 0.2f;
+				}
 
-			if (key_w) {
-				ramR->axis_mode = AXIS_MODE__POS;
-			} else if (key_s) {
-				ramR->axis_mode = AXIS_MODE__SIZE;
-			}
+				if (key_w) {
+					ramR->axis_mode = AXIS_MODE__POS;
+				} else if (key_s) {
+					ramR->axis_mode = AXIS_MODE__SIZE;
+				}
 
-			ramR->cam_dist += ramR->scroll_y/20.0f;
+				ramR->cam_dist += ramR->scroll_y/20.0f;
 
-			Mat4 projection = mat4_frustum(
-				-viewport_aspect*scale_factor, viewport_aspect*scale_factor,
-				-1 * scale_factor, 1 * scale_factor,
-				near, far);
+				Mat4 projection = mat4_frustum(
+					-viewport_aspect*scale_factor, viewport_aspect*scale_factor,
+					-1 * scale_factor, 1 * scale_factor,
+					near, far);
 
-			Mat4 view = mat4_translate(0, 0, -ramR->cam_dist);
-			view = mat4_multiply(view, mat4_rotate_x(ramR->cam_rot_x));
-			view = mat4_multiply(view, mat4_rotate_y(ramR->cam_rot_y));
-			F3 camera_right = {view.m[0], view.m[4], view.m[8]};
-			F3 camera_up = {view.m[1], view.m[5], view.m[9]};
+				Mat4 view = mat4_translate(0, 0, -ramR->cam_dist);
+				view = mat4_multiply(view, mat4_rotate_x(ramR->cam_rot_x));
+				view = mat4_multiply(view, mat4_rotate_y(ramR->cam_rot_y));
+				F3 camera_right = {view.m[0], view.m[4], view.m[8]};
+				F3 camera_up = {view.m[1], view.m[5], view.m[9]};
 
-			// ---- SELECTION (DEPTH BUFFER UNPROJECTION) ----
-			if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w && ramR->hot_axis == 0) {
-				ramR->selected_entity_idx = L1_MAX;
-				ramR->selected_material_idx = L1_MAX;
+				// ---- SELECTION (DEPTH BUFFER UNPROJECTION) ----
+				if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w && ramR->hot_axis == 0) {
+					ramR->selected_entity_idx = L1_MAX;
+					ramR->selected_material_idx = L1_MAX;
 
-				// Read depth value at mouse position
-				F1 depth;
-				glReadPixels(
-					I1_(ramR->mouse_x),
-					I1_(window_height - ramR->mouse_y), // OpenGL y is bottom-up
-					1, 1,
-					GL_DEPTH_COMPONENT,
-					GL_FLOAT,
-					&depth
-				);
+					// Read depth value at mouse position
+					F1 depth;
+					glReadPixels(
+						I1_(ramR->mouse_x),
+						I1_(window_height - ramR->mouse_y), // OpenGL y is bottom-up
+						1, 1,
+						GL_DEPTH_COMPONENT,
+						GL_FLOAT,
+						&depth
+					);
 
-				// Only proceed if we clicked on geometry (not the background)
-				if (depth < 1.0f) {
-					F1 viewport_mx = ramR->mouse_x - sidebar_w;
-					F1 viewport_my = ramR->mouse_y;
+					// Only proceed if we clicked on geometry (not the background)
+					if (depth < 1.0f) {
+						F1 viewport_mx = ramR->mouse_x - sidebar_w;
+						F1 viewport_my = ramR->mouse_y;
 
-					// Convert to normalized device coordinates
-					F1 ndc_x = (viewport_mx / viewport_width) * 2.0f - 1.0f;
-					F1 ndc_y = 1.0f - (viewport_my / viewport_height) * 2.0f;
-					F1 ndc_z = depth * 2.0f - 1.0f; // Convert [0,1] to [-1,1]
+						// Convert to normalized device coordinates
+						F1 ndc_x = (viewport_mx / viewport_width) * 2.0f - 1.0f;
+						F1 ndc_y = 1.0f - (viewport_my / viewport_height) * 2.0f;
+						F1 ndc_z = depth * 2.0f - 1.0f; // Convert [0,1] to [-1,1]
 
-					// Unproject: transform from NDC to world space
-					Mat4 view_projection = mat4_multiply(projection, view);
-					Mat4 inverse_vp = mat4_invert(view_projection);
+						// Unproject: transform from NDC to world space
+						Mat4 view_projection = mat4_multiply(projection, view);
+						Mat4 inverse_vp = mat4_invert(view_projection);
 
-					F3 ndc_point = {ndc_x, ndc_y, ndc_z};
-					F3 world_pos = mat4_transform_point(inverse_vp, ndc_point);
+						F3 ndc_point = {ndc_x, ndc_y, ndc_z};
+						F3 world_pos = mat4_transform_point(inverse_vp, ndc_point);
 
-					// Find which entity's AABB contains or is closest to this world position
-					F1 closest_dist = F1_MAX;
-					for EachIndex(entity_index, ramR->entity_count) {
-						Entity e = ramR->entities[entity_index];
-						F3 aabb_min = e.pos - e.size;
-						F3 aabb_max = e.pos + e.size;
+						// Find which entity's AABB contains or is closest to this world position
+						F1 closest_dist = F1_MAX;
+						for EachIndex(entity_index, ramR->entity_count) {
+							Entity e = ramR->entities[entity_index];
+							F3 aabb_min = e.pos - e.size;
+							F3 aabb_max = e.pos + e.size;
 
-						// Find closest point on AABB to world_pos
-						F3 closest_point;
-						closest_point.x = world_pos.x < aabb_min.x ? aabb_min.x : Min(world_pos.x, aabb_max.x);
-						closest_point.y = world_pos.y < aabb_min.y ? aabb_min.y : Min(world_pos.y, aabb_max.y);
-						closest_point.z = world_pos.z < aabb_min.z ? aabb_min.z : Min(world_pos.z, aabb_max.z);
+							// Find closest point on AABB to world_pos
+							F3 closest_point;
+							closest_point.x = world_pos.x < aabb_min.x ? aabb_min.x : Min(world_pos.x, aabb_max.x);
+							closest_point.y = world_pos.y < aabb_min.y ? aabb_min.y : Min(world_pos.y, aabb_max.y);
+							closest_point.z = world_pos.z < aabb_min.z ? aabb_min.z : Min(world_pos.z, aabb_max.z);
 
-						F3 diff = world_pos - closest_point;
-						F1 dist = F3_length(diff);
-						if (dist < closest_dist) {
-							closest_dist = dist;
-							ramR->selected_entity_idx = entity_index;
+							F3 diff = world_pos - closest_point;
+							F1 dist = F3_length(diff);
+							if (dist < closest_dist) {
+								closest_dist = dist;
+								ramR->selected_entity_idx = entity_index;
+							}
 						}
 					}
 				}
+
+				// ---- AXIS DETECTION ----
+				Mat4 view_projection = mat4_multiply(projection, view);
+				ramR->hot_axis = 0;
+				if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
+					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+
+					// Project axis endpoints to screen space
+					F3 x_end = e->pos; x_end.x += 1.0f;
+					F3 y_end = e->pos; y_end.y += 1.0f;
+					F3 z_end = e->pos; z_end.z += 1.0f;
+					F3 origin_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
+					F3 x_screen = project_to_screen(x_end, view_projection, viewport_width, viewport_height);
+					F3 y_screen = project_to_screen(y_end, view_projection, viewport_width, viewport_height);
+					F3 z_screen = project_to_screen(z_end, view_projection, viewport_width, viewport_height);
+
+					F1 dist_x = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, x_screen);
+					F1 dist_y = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, y_screen);
+					F1 dist_z = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, z_screen);
+
+					// Find which axis is closest
+					F1 min_dist = dist_x;
+					ramR->hot_axis = 1;
+					if (dist_y < min_dist) {
+						min_dist = dist_y;
+						ramR->hot_axis = 2;
+					}
+					if (dist_z < min_dist) {
+						min_dist = dist_z;
+						ramR->hot_axis = 3;
+					}
+
+					F1 threshold = 10.0f; // pixels
+					if (min_dist > threshold) {
+						ramR->hot_axis = 0;
+					}
+				}
+
+				// ---- RENDERING ----
+
+				glEnable(GL_DEPTH_TEST);
+				glViewport(sidebar_w, 0, viewport_width, viewport_height);
+
+				glClearColor(0, 0, 0, 1);
+				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+				glMatrixMode(GL_PROJECTION);
+				glLoadMatrixf(projection.m);
+
+				glMatrixMode(GL_MODELVIEW);
+				glLoadMatrixf(view.m);
+
+				// ---- GRID ----
+				glBegin(GL_LINES);
+					glColor3f(0.1f, 0.1f, 0.1f);
+					I1 grid_s = 25;
+					F1 square_s = 0.25f;
+					F1 half_grid_w = 0.5f*grid_s*square_s;
+					for (I1 i = 0; i <= grid_s; i++) {
+						F1 x = i * square_s - half_grid_w;
+						glVertex3f(x, 0.0f, -half_grid_w);
+						glVertex3f(x, 0.0f, half_grid_w);
+
+						glVertex3f(-half_grid_w, 0.0f, x);
+						glVertex3f(half_grid_w, 0.0f, x);
+					}
+				glEnd();
+
+				// ---- ENTITIES ----
+
+				GLfloat white[] = {1, 1, 1};
+				glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
+				glLightfv(GL_LIGHT0, GL_SPECULAR, white);
+				glMaterialf(GL_FRONT, GL_SHININESS, 30);
+				glEnable(GL_LIGHTING);
+				glEnable(GL_LIGHT0);
+
+				GLfloat light_pos[] = {2, 6,-3, 1};
+				glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
+
+				for EachIndex(entity_index, ramR->entity_count) {
+					TR(Entity) e = &ramR->entities[entity_index];
+
+					TR(RT_Material) mat = &ramR->materials[e->material_idx];
+				 	GLfloat color[4] = {mat->base_color.x, mat->base_color.y, mat->base_color.z, 1.0};
+					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, color);
+					glMaterialfv(GL_FRONT, GL_SPECULAR, color);
+
+					if (e->flags & ENTITY_FLAG__SHAPE) {
+						switch (e->shape) {
+							case SHAPE__BOX: {
+								draw_box(e->pos, e->size, mat->base_color);
+							} break;
+
+							case SHAPE__SPHERE: {
+								draw_sphere(e->pos, e->size.x, mat->base_color);
+							} break;
+						}
+					}
+
+					if (e->flags & ENTITY_FLAG__CAMERA) {
+						glDisable(GL_LIGHTING);
+
+						F3 tl = e->pos - camera_right*0.3f + camera_up*0.2f;
+						F3 tr = e->pos + camera_right*0.3f + camera_up*0.2f;
+						F3 bl = e->pos - camera_right*0.3f - camera_up*0.2f;
+						F3 br = e->pos + camera_right*0.3f - camera_up*0.2f;
+						F3 mt = e->pos - camera_right*0.3f + camera_up*0.1f;
+						F3 mb = e->pos - camera_right*0.3f - camera_up*0.1f;
+						F3 ot = e->pos - camera_right*0.5f + camera_up*0.15f;
+						F3 ob = e->pos - camera_right*0.5f - camera_up*0.15f;
+
+						glLineWidth(3.0f);
+						glBegin(GL_LINE_STRIP);
+							glColor3f(0.8f, 0.8f, 0.8f);
+							glVertex3f(ot.x, ot.y, ot.z);
+							glVertex3f(mt.x, mt.y, mt.z);
+							glVertex3f(tl.x, tl.y, tl.z);
+							glVertex3f(tr.x, tr.y, tr.z);
+							glVertex3f(br.x, br.y, br.z);
+							glVertex3f(bl.x, bl.y, bl.z);
+							glVertex3f(mb.x, mb.y, mb.z);
+							glVertex3f(ob.x, ob.y, ob.z);
+							glVertex3f(ot.x, ot.y, ot.z);
+						glEnd();
+						glLineWidth(1.0f);
+
+						glEnable(GL_LIGHTING);
+					}
+				}
+
+				glDisable(GL_LIGHTING);
+
+				// ---- AXES ----
+				if (ramR->selected_entity_idx != L1_MAX) {
+					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+
+					// Handle axis dragging
+					if (ramR->active_axis != 0) {
+						I1 is_x = (ramR->active_axis == 1);
+						I1 is_y = (ramR->active_axis == 2);
+						I1 is_z = (ramR->active_axis == 3);
+
+						F3 axis_dir = {is_x, is_y, is_z};
+
+						F3 axis_end_world = e->pos + axis_dir;
+						F3 pos_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
+						F3 axis_end_screen = project_to_screen(axis_end_world, view_projection, viewport_width, viewport_height);
+
+						F1 screen_dx = axis_end_screen.x - pos_screen.x;
+						F1 screen_dy = axis_end_screen.y - pos_screen.y;
+						F1 screen_len = sqrtf(screen_dx*screen_dx + screen_dy*screen_dy);
+
+						if (screen_len > 0.0001f) {
+							// Project mouse delta onto screen-space axis direction
+							F1 mouse_proj = (ramR->delta_mx * screen_dx + delta_my * screen_dy) / screen_len;
+							F1 world_delta = mouse_proj / screen_len;
+							F3 delta_v = (F3){world_delta * is_x, world_delta * is_y, world_delta * is_z};
+
+							if (ramR->axis_mode == AXIS_MODE__POS) {
+								e->pos += delta_v;
+							} else if (ramR->axis_mode == AXIS_MODE__SIZE) {
+								if (e->shape == SHAPE__SPHERE) {
+									e->size.x += world_delta;
+								} else {
+									e->size += delta_v;
+								}
+							}
+
+						}
+
+						if (ramR->left_just_released) {
+							ramR->active_axis = 0;
+						}
+					} else if (ramR->hot_axis != 0 && ramR->left_just_pressed) {
+						ramR->active_axis = ramR->hot_axis;
+						ramR->drag_start_pos = e->pos;
+					}
+
+					glDisable(GL_DEPTH_TEST);
+
+					F1 base_brightness = 0.7f;
+					F1 hot_brightness = 1.0f;
+					F1 base_width = 3.0f;
+					F1 hot_width = 5.0f;
+
+					// X axis (blue)
+					F1 x_brightness = (ramR->hot_axis == 1 || ramR->active_axis == 1) ? hot_brightness : base_brightness;
+					F1 x_width = (ramR->hot_axis == 1 || ramR->active_axis == 1) ? hot_width : base_width;
+					glLineWidth(x_width);
+					glBegin(GL_LINES);
+					glColor3f(0.0f, 0.0f, x_brightness);
+					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x+1, e->pos.y, e->pos.z);
+					glEnd();
+
+					// Y axis (red)
+					F1 y_brightness = (ramR->hot_axis == 2 || ramR->active_axis == 2) ? hot_brightness : base_brightness;
+					F1 y_width = (ramR->hot_axis == 2 || ramR->active_axis == 2) ? hot_width : base_width;
+					glLineWidth(y_width);
+					glBegin(GL_LINES);
+					glColor3f(y_brightness, 0.0f, 0.0f);
+					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y+1, e->pos.z);
+					glEnd();
+
+					// Z axis (green)
+					F1 z_brightness = (ramR->hot_axis == 3 || ramR->active_axis == 3) ? hot_brightness : base_brightness;
+					F1 z_width = (ramR->hot_axis == 3 || ramR->active_axis == 3) ? hot_width : base_width;
+					glLineWidth(z_width);
+					glBegin(GL_LINES);
+					glColor3f(0.0f, z_brightness, 0.0f);
+					glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y, e->pos.z+1);
+					glEnd();
+
+					if (ramR->axis_mode == AXIS_MODE__SIZE) {
+						F1 s = 0.05f;
+						draw_box((F3){e->pos.x+1, e->pos.y, e->pos.z}, (F3){s,s,s}, (F3){0, 0, x_brightness});
+						draw_box((F3){e->pos.x, e->pos.y+1, e->pos.z}, (F3){s,s,s}, (F3){y_brightness, 0, 0});
+						draw_box((F3){e->pos.x, e->pos.y, e->pos.z+1}, (F3){s,s,s}, (F3){0, z_brightness, 0});
+					}
+
+					glLineWidth(1.0f);
+					glEnable(GL_DEPTH_TEST);
+				}
+
+				// ---- SIDE PANEL UI ----
+
+				glViewport(0, 0, window_width, window_height);
+				glDisable(GL_DEPTH_TEST);
+
+				glMatrixMode(GL_PROJECTION);
+				glLoadIdentity();
+				glOrtho(0, window_width, window_height, 0.0f, -1.0f, 1.0f);
+
+				glMatrixMode(GL_MODELVIEW);
+				glLoadIdentity();
+
+				// sidebar background
+				glBegin(GL_QUADS);
+					glColor3f(0.0f, 0.0f, 0.0f);
+					glVertex2f(0, 0);
+					glVertex2f(sidebar_w, 0);
+					glVertex2f(sidebar_w, window_height);
+					glVertex2f(0, window_height);
+				glEnd();
+
+				ramR->panel_current_y = 0.0f;
+				ramR->hot_hash = 0;
+
+				if (ui_button(Str8_("RENDER"))) {
+					should_render = 1;
+					break;
+				}
+
+				if (ui_button(Str8_("CREATE MATERIAL"))) {
+					String8 new_material_name = str8f(arena, "%d", ramR->material_count);
+					material_create(new_material_name);
+				}
+
+				if (ui_button(Str8_("CREATE ENTITY"))) {
+					String8 new_entity_name = str8f(arena, "%d", ramR->entity_count);
+					entity_create(ENTITY_FLAG__SHAPE, new_entity_name);
+				}
+
+				if (ramR->selected_entity_idx != L1_MAX) {
+					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+
+					ui_text(e->name);
+
+					if (ui_button(Str8_("DELETE"))) {
+						ramR->entities[ramR->selected_entity_idx] = ramR->entities[ramR->entity_count-1];
+						ramR->selected_entity_idx = L1_MAX;
+						ramR->entity_count -= 1;
+					}
+
+					L1 pos = arena_pos(arena);
+
+					ui_text(Str8_("POSITION"));
+					F1 x = e->pos.x, y = e->pos.y, z = e->pos.z;
+					ui_drag(arena, Str8_(" X##pos"), &x);
+					ui_drag(arena, Str8_(" Y##pos"), &y);
+					ui_drag(arena, Str8_(" Z##pos"), &z);
+					e->pos = (F3){x, y, z};
+
+					if (e->flags & ENTITY_FLAG__SHAPE) {
+						ui_text(Str8_("SIZE"));
+						x = e->size.x, y = e->size.y, z = e->size.z;
+						ui_drag(arena, Str8_(" X##size"), &x);
+						if (e->shape != SHAPE__SPHERE) {
+							ui_drag(arena, Str8_(" Y##size"), &y);
+							ui_drag(arena, Str8_(" Z##size"), &z);
+						}
+						e->size = (F3){Max(0, x), Max(0, y), Max(z, 0)};
+
+						if (ui_button(Str8_("OPEN MATERIAL"))) {
+							ramR->selected_entity_idx = L1_MAX;
+							ramR->selected_material_idx = e->material_idx;
+						}
+						ui_select(Str8_("MATERIAL"), L1_(ramR->material_names), ramR->material_count, &e->material_idx);
+
+						ui_select(Str8_("SHAPE"), L1_(shape_strs), ArrayCount(shape_strs), &e->shape);
+					}
+
+					arena_pop_to(arena, pos);
+				} else if(ramR->selected_material_idx != L1_MAX) {
+					TR(RT_Material) mat = &ramR->materials[ramR->selected_material_idx];
+
+					ui_text(Str8_("MATERIAL"));
+
+					L1 pos = arena_pos(arena);
+
+					F1 x = mat->base_color.x, y = mat->base_color.y, z = mat->base_color.z;
+					ui_drag(arena, Str8_(" R##color"), &x);
+					ui_drag(arena, Str8_(" G##color"), &y);
+					ui_drag(arena, Str8_(" B##color"), &z);
+					mat->base_color = (F3){x, y, z};
+					mat->base_color = F3_clamp01(mat->base_color);
+
+					ui_drag(arena, Str8_("METALLIC"), &mat->metallic);
+					ui_drag(arena, Str8_("ROUGHNESS"), &mat->roughness);
+					mat->metallic = F1_clamp01(mat->metallic);
+					mat->roughness = F1_clamp01(mat->roughness);
+
+					x = mat->emissive.x, y = mat->emissive.y, z = mat->emissive.z;
+					ui_drag(arena, Str8_(" R##emissive"), &x);
+					ui_drag(arena, Str8_(" G##emissive"), &y);
+					ui_drag(arena, Str8_(" B##emissive"), &z);
+					mat->emissive = (F3){Max(0, x), Max(0, y), Max(0, z)};
+
+					ui_text(Str8_("ENTITIES"));
+
+					for EachIndex(entity_idx, ramR->entity_count) {
+						TR(Entity) e = &ramR->entities[entity_idx];
+						if (e->flags & ENTITY_FLAG__SHAPE && e->material_idx == ramR->selected_material_idx) {
+							if (ui_button(e->name)) {
+								ramR->selected_entity_idx = entity_idx;
+								ramR->selected_material_idx = L1_MAX;
+							}
+						}
+					}
+
+					arena_pop_to(arena, pos);
+				} else {
+					ui_select(Str8_("MATERIALS"), L1_(ramR->material_names), ramR->material_count, &ramR->selected_material_idx);
+
+					L1 pos = arena_pos(arena);
+					L1 entity_names = push_array(arena, String8, ramR->entity_count);
+
+					for EachIndex(entity_index, ramR->entity_count) {
+						TR_(String8, entity_names)[entity_index] = ramR->entities[entity_index].name;
+					}
+
+					ui_select(Str8_("ENTITIES"), entity_names, ramR->entity_count, &ramR->selected_entity_idx);
+
+					arena_pop_to(arena, pos);
+				}
+
+				glFlush();
+
+				os_window_swap_buffers(window);
 			}
+		}
 
-			// ---- AXIS DETECTION ----
-			Mat4 view_projection = mat4_multiply(projection, view);
-			ramR->hot_axis = 0;
-			if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
-				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+		lane_sync_L1(&should_render, 0);
 
-				// Project axis endpoints to screen space
-				F3 x_end = e->pos; x_end.x += 1.0f;
-				F3 y_end = e->pos; y_end.y += 1.0f;
-				F3 z_end = e->pos; z_end.z += 1.0f;
-				F3 origin_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
-				F3 x_screen = project_to_screen(x_end, view_projection, viewport_width, viewport_height);
-				F3 y_screen = project_to_screen(y_end, view_projection, viewport_width, viewport_height);
-				F3 z_screen = project_to_screen(z_end, view_projection, viewport_width, viewport_height);
+		if (should_render) {
+			L1 pre_render_arena_pos = arena_pos(arena);
 
-				F1 dist_x = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, x_screen);
-				F1 dist_y = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, y_screen);
-				F1 dist_z = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, z_screen);
+			L1 camera_idx = L1_MAX;
 
-				// Find which axis is closest
-				F1 min_dist = dist_x;
-				ramR->hot_axis = 1;
-				if (dist_y < min_dist) {
-					min_dist = dist_y;
-					ramR->hot_axis = 2;
-				}
-				if (dist_z < min_dist) {
-					min_dist = dist_z;
-					ramR->hot_axis = 3;
-				}
+			L1 sphere_count = 0;
+			RT_Sphere spheres[32] = {};
 
-				F1 threshold = 10.0f; // pixels
-				if (min_dist > threshold) {
-					ramR->hot_axis = 0;
-				}
-			}
-
-			// ---- RENDERING ----
-
-			glEnable(GL_DEPTH_TEST);
-			glViewport(sidebar_w, 0, viewport_width, viewport_height);
-
-			glClearColor(0, 0, 0, 1);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-			glMatrixMode(GL_PROJECTION);
-			glLoadMatrixf(projection.m);
-
-			glMatrixMode(GL_MODELVIEW);
-			glLoadMatrixf(view.m);
-
-			// ---- GRID ----
-			glBegin(GL_LINES);
-				glColor3f(0.1f, 0.1f, 0.1f);
-				I1 grid_s = 25;
-				F1 square_s = 0.25f;
-				F1 half_grid_w = 0.5f*grid_s*square_s;
-				for (I1 i = 0; i <= grid_s; i++) {
-					F1 x = i * square_s - half_grid_w;
-					glVertex3f(x, 0.0f, -half_grid_w);
-					glVertex3f(x, 0.0f, half_grid_w);
-
-					glVertex3f(-half_grid_w, 0.0f, x);
-					glVertex3f(half_grid_w, 0.0f, x);
-				}
-			glEnd();
-
-			// ---- ENTITIES ----
-
-			GLfloat white[] = {1, 1, 1};
-			glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
-			glLightfv(GL_LIGHT0, GL_SPECULAR, white);
-			glMaterialf(GL_FRONT, GL_SHININESS, 30);
-			glEnable(GL_LIGHTING);
-			glEnable(GL_LIGHT0);
-
-			GLfloat light_pos[] = {2, 6,-3, 1};
-			glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
+			L1 box_count = 0;
+			RT_Box boxes[32] = {};
 
 			for EachIndex(entity_index, ramR->entity_count) {
 				TR(Entity) e = &ramR->entities[entity_index];
-
-				TR(RT_Material) mat = &ramR->materials[e->material_idx];
-			 	GLfloat color[4] = {mat->base_color.x, mat->base_color.y, mat->base_color.z, 1.0};
-				glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, color);
-				glMaterialfv(GL_FRONT, GL_SPECULAR, color);
-
-				if (e->flags & ENTITY_FLAG__SHAPE) {
-					switch (e->shape) {
-						case SHAPE__BOX: {
-							draw_box(e->pos, e->size, mat->base_color);
-						} break;
-
-						case SHAPE__SPHERE: {
-							draw_sphere(e->pos, e->size.x, mat->base_color);
-						} break;
-					}
-				}
-
 				if (e->flags & ENTITY_FLAG__CAMERA) {
-					glDisable(GL_LIGHTING);
+					camera_idx = entity_index;
+				} else if (e->flags & ENTITY_FLAG__SHAPE) {
 
-					F3 tl = e->pos - camera_right*0.3f + camera_up*0.2f;
-					F3 tr = e->pos + camera_right*0.3f + camera_up*0.2f;
-					F3 bl = e->pos - camera_right*0.3f - camera_up*0.2f;
-					F3 br = e->pos + camera_right*0.3f - camera_up*0.2f;
-					F3 mt = e->pos - camera_right*0.3f + camera_up*0.1f;
-					F3 mb = e->pos - camera_right*0.3f - camera_up*0.1f;
-					F3 ot = e->pos - camera_right*0.5f + camera_up*0.15f;
-					F3 ob = e->pos - camera_right*0.5f - camera_up*0.15f;
-
-					glLineWidth(3.0f);
-					glBegin(GL_LINE_STRIP);
-						glColor3f(0.8f, 0.8f, 0.8f);
-						glVertex3f(ot.x, ot.y, ot.z);
-						glVertex3f(mt.x, mt.y, mt.z);
-						glVertex3f(tl.x, tl.y, tl.z);
-						glVertex3f(tr.x, tr.y, tr.z);
-						glVertex3f(br.x, br.y, br.z);
-						glVertex3f(bl.x, bl.y, bl.z);
-						glVertex3f(mb.x, mb.y, mb.z);
-						glVertex3f(ob.x, ob.y, ob.z);
-						glVertex3f(ot.x, ot.y, ot.z);
-					glEnd();
-					glLineWidth(1.0f);
-
-					glEnable(GL_LIGHTING);
-				}
-			}
-
-			glDisable(GL_LIGHTING);
-
-			// ---- AXES ----
-			if (ramR->selected_entity_idx != L1_MAX) {
-				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
-
-				// Handle axis dragging
-				if (ramR->active_axis != 0) {
-					I1 is_x = (ramR->active_axis == 1);
-					I1 is_y = (ramR->active_axis == 2);
-					I1 is_z = (ramR->active_axis == 3);
-
-					F3 axis_dir = {is_x, is_y, is_z};
-
-					F3 axis_end_world = e->pos + axis_dir;
-					F3 pos_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
-					F3 axis_end_screen = project_to_screen(axis_end_world, view_projection, viewport_width, viewport_height);
-
-					F1 screen_dx = axis_end_screen.x - pos_screen.x;
-					F1 screen_dy = axis_end_screen.y - pos_screen.y;
-					F1 screen_len = sqrtf(screen_dx*screen_dx + screen_dy*screen_dy);
-
-					if (screen_len > 0.0001f) {
-						// Project mouse delta onto screen-space axis direction
-						F1 mouse_proj = (ramR->delta_mx * screen_dx + delta_my * screen_dy) / screen_len;
-						F1 world_delta = mouse_proj / screen_len;
-						F3 delta_v = (F3){world_delta * is_x, world_delta * is_y, world_delta * is_z};
-
-						if (ramR->axis_mode == AXIS_MODE__POS) {
-							e->pos += delta_v;
-						} else if (ramR->axis_mode == AXIS_MODE__SIZE) {
-							if (e->shape == SHAPE__SPHERE) {
-								e->size.x += world_delta;
-							} else {
-								e->size += delta_v;
-							}
-						}
-
-					}
-
-					if (ramR->left_just_released) {
-						ramR->active_axis = 0;
-					}
-				} else if (ramR->hot_axis != 0 && ramR->left_just_pressed) {
-					ramR->active_axis = ramR->hot_axis;
-					ramR->drag_start_pos = e->pos;
-				}
-
-				glDisable(GL_DEPTH_TEST);
-
-				F1 base_brightness = 0.7f;
-				F1 hot_brightness = 1.0f;
-				F1 base_width = 3.0f;
-				F1 hot_width = 5.0f;
-
-				// X axis (blue)
-				F1 x_brightness = (ramR->hot_axis == 1 || ramR->active_axis == 1) ? hot_brightness : base_brightness;
-				F1 x_width = (ramR->hot_axis == 1 || ramR->active_axis == 1) ? hot_width : base_width;
-				glLineWidth(x_width);
-				glBegin(GL_LINES);
-				glColor3f(0.0f, 0.0f, x_brightness);
-				glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x+1, e->pos.y, e->pos.z);
-				glEnd();
-
-				// Y axis (red)
-				F1 y_brightness = (ramR->hot_axis == 2 || ramR->active_axis == 2) ? hot_brightness : base_brightness;
-				F1 y_width = (ramR->hot_axis == 2 || ramR->active_axis == 2) ? hot_width : base_width;
-				glLineWidth(y_width);
-				glBegin(GL_LINES);
-				glColor3f(y_brightness, 0.0f, 0.0f);
-				glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y+1, e->pos.z);
-				glEnd();
-
-				// Z axis (green)
-				F1 z_brightness = (ramR->hot_axis == 3 || ramR->active_axis == 3) ? hot_brightness : base_brightness;
-				F1 z_width = (ramR->hot_axis == 3 || ramR->active_axis == 3) ? hot_width : base_width;
-				glLineWidth(z_width);
-				glBegin(GL_LINES);
-				glColor3f(0.0f, z_brightness, 0.0f);
-				glVertex3f(e->pos.x, e->pos.y, e->pos.z); glVertex3f(e->pos.x, e->pos.y, e->pos.z+1);
-				glEnd();
-
-				if (ramR->axis_mode == AXIS_MODE__SIZE) {
-					F1 s = 0.05f;
-					draw_box((F3){e->pos.x+1, e->pos.y, e->pos.z}, (F3){s,s,s}, (F3){0, 0, x_brightness});
-					draw_box((F3){e->pos.x, e->pos.y+1, e->pos.z}, (F3){s,s,s}, (F3){y_brightness, 0, 0});
-					draw_box((F3){e->pos.x, e->pos.y, e->pos.z+1}, (F3){s,s,s}, (F3){0, z_brightness, 0});
-				}
-
-				glLineWidth(1.0f);
-				glEnable(GL_DEPTH_TEST);
-			}
-
-			// ---- SIDE PANEL UI ----
-
-			glViewport(0, 0, window_width, window_height);
-			glDisable(GL_DEPTH_TEST);
-
-			glMatrixMode(GL_PROJECTION);
-			glLoadIdentity();
-			glOrtho(0, window_width, window_height, 0.0f, -1.0f, 1.0f);
-
-			glMatrixMode(GL_MODELVIEW);
-			glLoadIdentity();
-
-			// sidebar background
-			glBegin(GL_QUADS);
-				glColor3f(0.05f, 0.05f, 0.05f);
-				glVertex2f(0, 0);
-				glVertex2f(sidebar_w, 0);
-				glVertex2f(sidebar_w, window_height);
-				glVertex2f(0, window_height);
-			glEnd();
-
-			ramR->panel_current_y = 0.0f;
-			ramR->hot_hash = 0;
-
-			if (ui_button(Str8_("RENDER"))) {
-				should_render = 1;
-				break;
-			}
-
-			if (ui_button(Str8_("CREATE MATERIAL"))) {
-				String8 new_material_name = str8f(arena, "%d", ramR->material_count);
-				material_create(new_material_name);
-			}
-
-			if (ui_button(Str8_("CREATE ENTITY"))) {
-				String8 new_entity_name = str8f(arena, "%d", ramR->entity_count);
-				entity_create(ENTITY_FLAG__SHAPE, new_entity_name);
-			}
-
-			if (ramR->selected_entity_idx != L1_MAX) {
-				TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
-
-				ui_text(e->name);
-
-				if (ui_button(Str8_("DELETE"))) {
-					ramR->entities[ramR->selected_entity_idx] = ramR->entities[ramR->entity_count-1];
-					ramR->selected_entity_idx = L1_MAX;
-					ramR->entity_count -= 1;
-				}
-
-				L1 pos = arena_pos(arena);
-
-				ui_text(Str8_("POSITION"));
-				F1 x = e->pos.x, y = e->pos.y, z = e->pos.z;
-				ui_drag(arena, Str8_(" X##pos"), &x);
-				ui_drag(arena, Str8_(" Y##pos"), &y);
-				ui_drag(arena, Str8_(" Z##pos"), &z);
-				e->pos = (F3){x, y, z};
-
-				if (e->flags & ENTITY_FLAG__SHAPE) {
-					ui_text(Str8_("SIZE"));
-					x = e->size.x, y = e->size.y, z = e->size.z;
-					ui_drag(arena, Str8_(" X##size"), &x);
-					if (e->shape != SHAPE__SPHERE) {
-						ui_drag(arena, Str8_(" Y##size"), &y);
-						ui_drag(arena, Str8_(" Z##size"), &z);
-					}
-					e->size = (F3){Max(0, x), Max(0, y), Max(z, 0)};
-
-					if (ui_button(Str8_("OPEN MATERIAL"))) {
-						ramR->selected_entity_idx = L1_MAX;
-						ramR->selected_material_idx = e->material_idx;
-					}
-					ui_select(Str8_("MATERIAL"), L1_(ramR->material_names), ramR->material_count, &e->material_idx);
-
-					ui_select(Str8_("SHAPE"), L1_(shape_strs), ArrayCount(shape_strs), &e->shape);
-				}
-
-				arena_pop_to(arena, pos);
-			} else if(ramR->selected_material_idx != L1_MAX) {
-				TR(RT_Material) mat = &ramR->materials[ramR->selected_material_idx];
-
-				ui_text(Str8_("MATERIAL"));
-
-				L1 pos = arena_pos(arena);
-
-				F1 x = mat->base_color.x, y = mat->base_color.y, z = mat->base_color.z;
-				ui_drag(arena, Str8_(" R##color"), &x);
-				ui_drag(arena, Str8_(" G##color"), &y);
-				ui_drag(arena, Str8_(" B##color"), &z);
-				mat->base_color = (F3){x, y, z};
-				mat->base_color = F3_clamp01(mat->base_color);
-
-				ui_drag(arena, Str8_("METALLIC"), &mat->metallic);
-				ui_drag(arena, Str8_("ROUGHNESS"), &mat->roughness);
-
-				x = mat->emissive.x, y = mat->emissive.y, z = mat->emissive.z;
-				ui_drag(arena, Str8_(" R##emissive"), &x);
-				ui_drag(arena, Str8_(" G##emissive"), &y);
-				ui_drag(arena, Str8_(" B##emissive"), &z);
-				mat->emissive = (F3){Max(0, x), Max(0, y), Max(0, z)};
-
-				ui_text(Str8_("ENTITIES"));
-
-				for EachIndex(entity_idx, ramR->entity_count) {
-					TR(Entity) e = &ramR->entities[entity_idx];
-					if (e->flags & ENTITY_FLAG__SHAPE && e->material_idx == ramR->selected_material_idx) {
-						if (ui_button(e->name)) {
-							ramR->selected_entity_idx = entity_idx;
-							ramR->selected_material_idx = L1_MAX;
-						}
-					}
-				}
-
-				arena_pop_to(arena, pos);
-			} else {
-				ui_select(Str8_("MATERIALS"), L1_(ramR->material_names), ramR->material_count, &ramR->selected_material_idx);
-
-				ui_text(Str8_("ENTITIES"));
-
-				for EachIndex(entity_index, ramR->entity_count) {
-					if (ui_button(ramR->entities[entity_index].name)) {
-						ramR->selected_entity_idx = entity_index;
+					if (e->shape == SHAPE__SPHERE && sphere_count < ArrayCount(spheres)) {
+						spheres[sphere_count] = (RT_Sphere){
+							.p = (F3){e->pos.x, -e->pos.z, e->pos.y},
+							.r = e->size.x,
+							.material_idx = e->material_idx,
+						};
+						sphere_count += 1;
+					} else if (e->shape == SHAPE__BOX && box_count < ArrayCount(boxes)) {
+						F3 p = {e->pos.x, -e->pos.z, e->pos.y};
+						F3 s = {e->size.x, e->size.z, e->size.y};
+						boxes[box_count] = (RT_Box){
+							.min = p - s,
+							.max = p + s,
+							.material_idx = e->material_idx,
+						};
+						box_count += 1;
 					}
 				}
 			}
 
-			glFlush();
+			if (camera_idx == L1_MAX) {
+				printf("No camera in scene. Cannot render.\n");
+				return;
+			}
 
-			os_window_swap_buffers(window);
-		}
+			TR(Entity) camera_entity = &ramR->entities[camera_idx];
 
-		os_window_close(window);
-	}
+			RT_Camera camera = {0};
+			camera.pos = (F3){camera_entity->pos.x, -camera_entity->pos.z, camera_entity->pos.y};
+			camera.forward = F3_normalize(camera.pos);
+			camera.aperture_radius =  0.02f;
+			camera.focal_distance = 5.0f;
 
-	lane_sync_L1(L1_(&should_render), 0);
+			RT_Scene scene = {
+				.output_filename = Str8_("output.bmp"),
+				.output_width    = 1280,
+				.output_height   = 720,
 
-	if (should_render) {
-		L1 camera_idx = L1_MAX;
+				.rays_per_pixel  = 128,
+				.max_num_bounces = 8,
 
-		L1 sphere_count = 0;
-		RT_Sphere spheres[16] = {};
+				.bloom_pass_count       = 8,
+				.bloom_threshold        = 0.5f,
+				.bloom_strength         = 0.4f,
+				.bloom_knee             = 0.5f,
+				.bloom_overlay_filename = Str8_("lens-dirt.bmp"),
+				.bloom_overlay_strength = 2.0f,
 
-		L1 box_count = 0;
-		RT_Box boxes[16] = {};
+				.camera = camera,
 
-		for EachIndex(entity_index, ramR->entity_count) {
-			TR(Entity) e = &ramR->entities[entity_index];
-			if (e->flags & ENTITY_FLAG__CAMERA) {
-				camera_idx = entity_index;
-			} else if (e->flags & ENTITY_FLAG__SHAPE) {
+				.materials = L1_(ramR->materials),
+				.material_count = ramR->material_count,
 
-				if (e->shape == SHAPE__SPHERE && sphere_count < ArrayCount(spheres)) {
-					spheres[sphere_count] = (RT_Sphere){
-						.p = (F3){e->pos.x, -e->pos.z, e->pos.y},
-						.r = e->size.x,
-						.material_idx = e->material_idx,
-					};
-					sphere_count += 1;
-				} else if (e->shape == SHAPE__BOX && box_count < ArrayCount(boxes)) {
-					F3 p = {e->pos.x, -e->pos.z, e->pos.y};
-					F3 s = {e->size.x, e->size.z, e->size.y};
-					boxes[box_count] = (RT_Box){
-						.min = p - s,
-						.max = p + s,
-						.material_idx = e->material_idx,
-					};
-					box_count += 1;
-				}
+				.spheres = L1_(spheres),
+				.sphere_count = sphere_count,
+
+				.planes = 0,
+				.plane_count = 0,
+
+				.boxes = L1_(boxes),
+				.box_count = box_count,
+			};
+
+			trace_scene(arena, scene);
+
+			should_render = 0;
+
+			arena_pop_to(arena, pre_render_arena_pos);
+
+			lane_sync();
+		} else {
+			if (lane_idx() == 0) {
+				os_window_close(window);
 			}
 		}
-
-		if (camera_idx == L1_MAX) {
-			printf("No camera in scene. Cannot render.\n");
-			return;
-		}
-
-		TR(Entity) camera_entity = &ramR->entities[camera_idx];
-
-		RT_Camera camera = {0};
-		camera.pos = (F3){camera_entity->pos.x, -camera_entity->pos.z, camera_entity->pos.y};
-		camera.forward = F3_normalize(camera.pos);
-		camera.aperture_radius =  0.02f;
-		camera.focal_distance = 5.0f;
-
-		RT_Scene scene = {
-			.output_filename = Str8_("output.bmp"),
-			.output_width    = 1280,
-			.output_height   = 720,
-
-			.rays_per_pixel  = 128,
-			.max_num_bounces = 8,
-
-			.bloom_pass_count       = 8,
-			.bloom_threshold        = 0.5f,
-			.bloom_strength         = 0.4f,
-			.bloom_knee             = 0.5f,
-			.bloom_overlay_filename = Str8_("lens-dirt.bmp"),
-			.bloom_overlay_strength = 2.0f,
-
-			.camera = camera,
-
-			.materials = L1_(ramR->materials),
-			.material_count = ramR->material_count,
-
-			.spheres = L1_(spheres),
-			.sphere_count = sphere_count,
-
-			.planes = 0,
-			.plane_count = 0,
-
-			.boxes = L1_(boxes),
-			.box_count = box_count,
-		};
-
-		trace_scene(arena, scene);
 	}
 }
 

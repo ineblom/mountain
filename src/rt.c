@@ -448,6 +448,8 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 
 		ramR->section_count = lane_count() * 8;
 		ramR->current_section_idx = 0;
+		ramR->complete_sections_count = 0;
+		ramR->total_memory_usage = 0;
 
 		ramR->bloom_overlay_image = image_read_from_file(arena, scene.bloom_overlay_filename);
 	}
@@ -695,7 +697,7 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 		}
 	}
 
-	L1 memory_usage = TR_(Arena, arena)->pos;
+	L1 memory_usage = arena_pos(arena);
 	atomic_add_L1(&ramV->total_memory_usage, memory_usage);
 
 	if (lane_idx() == 0) {

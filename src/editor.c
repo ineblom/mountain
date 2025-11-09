@@ -552,6 +552,8 @@ Internal L1 entity_create(L1 flags, String8 name) {
 }
 
 Internal void lane(L1 arena) {
+	L1 should_render = 0;
+
 	if (lane_idx() == 0) {
 		L1 window = os_window_open(arena, Str8_("Hello"), 1280, 720);
 		os_window_get_context(window);
@@ -947,19 +949,12 @@ Internal void lane(L1 arena) {
 
 			// sidebar background
 			glBegin(GL_QUADS);
-				glColor3f(0.0f, 0.0f, 0.0f);
+				glColor3f(0.05f, 0.05f, 0.05f);
 				glVertex2f(0, 0);
 				glVertex2f(sidebar_w, 0);
 				glVertex2f(sidebar_w, window_height);
 				glVertex2f(0, window_height);
 			glEnd();
-
-			// border line
-			// glBegin(GL_LINES);
-			// 	glColor3f(0.8f, 0.8f, 0.8f);
-			// 	glVertex2f(sidebar_w, 0);
-			// 	glVertex2f(sidebar_w, window_height);
-			// glEnd();
 
 			ramR->panel_current_y = 0.0f;
 			ramR->hot_hash = 0;
@@ -968,6 +963,11 @@ Internal void lane(L1 arena) {
 				if (ui_button(Str8_("CREATE ENTITY"))) {
 					String8 new_entity_name = str8f(arena, "%d", ramR->entity_count);
 					entity_create(ENTITY_FLAG__SHAPE, new_entity_name);
+				}
+
+				if (ui_button(Str8_("RENDER"))) {
+					should_render = 1;
+					break;
 				}
 
 				ui_text(Str8_("ENTITIES"));
@@ -1024,6 +1024,110 @@ Internal void lane(L1 arena) {
 		}
 
 		os_window_close(window);
+	}
+
+	lane_sync_L1(L1_(&should_render), 0);
+
+	if (should_render) {
+		RT_Material materials[] = {
+			{ // ground
+				.base_color  = (F3){0.63f, 0.53f, 0.13f},
+				.metallic = 0.3f,
+				.roughness = 0.5f,
+			},
+			{ // left
+				.base_color  = (F3){1.0f, 1.0f, 1.0f},
+				.metallic = 1.0f,
+				.roughness = 0.40f,
+			},
+			{ // right
+				.base_color  = (F3){0.1f, 1.0f, 1.0f},
+				.metallic = 0.0f,
+				.roughness = 0.10f,
+			},
+			{ // pink glow
+				.base_color  = (F3){1.0f, 0.2f, 1.0f},
+				.emissive = (F3){2.0f, 0.6f, 2.0f},
+				.metallic = 0.1f,
+				.roughness = 1.00f,
+			},
+			{ // blue glow
+				.base_color  = (F3){1.0f, 1.0f, 1.0f},
+				.emissive = (F3){1.0f, 1.0f, 6.0f},
+			},
+		};
+
+		RT_Plane planes[] = {
+			{
+				.n = (F3){0, 0, 1},
+				.d = 1.0f,
+				.material_idx = 0
+			}
+		};
+
+		RT_Sphere spheres[] = {
+			{
+				.p = (F3){-2.0f, 2.0f, 0.0f},
+				.r = 1.0f,
+				.material_idx = 1,
+			},
+			{
+				.p = (F3){2.0f, 0.0f, 0.0f},
+				.r = 1.0f,
+				.material_idx = 2,
+			},
+			{
+				.p = (F3){0.0f, 20.0f, 0.0f},
+				.r = 1.0f,
+				.material_idx = 3,
+			},
+		};
+
+		RT_Box boxes[] = {
+			{
+				.min = {-2.6f, -2.0f,-1.0},
+				.max = {-2.5f,  0.7f,-0.5},
+				.material_idx = 4,
+		 	}
+		};
+
+		RT_Camera camera = {0};
+		camera.pos = (F3){0.0f, -5.0f, 0.5f};
+		camera.forward = F3_normalize(camera.pos);
+		camera.aperture_radius =  0.02f;
+		camera.focal_distance = 5.0f;
+
+		RT_Scene scene = {
+			.output_filename = Str8_("output.bmp"),
+			.output_width    = 1280,
+			.output_height   = 720,
+
+			.rays_per_pixel  = 128,
+			.max_num_bounces = 8,
+
+			.bloom_pass_count       = 8,
+			.bloom_threshold        = 0.5f,
+			.bloom_strength         = 0.4f,
+			.bloom_knee             = 0.5f,
+			.bloom_overlay_filename = Str8_("lens-dirt.bmp"),
+			.bloom_overlay_strength = 2.0f,
+
+			.camera = camera,
+
+			.materials = L1_(materials),
+			.material_count = ArrayCount(materials),
+
+			.spheres = L1_(spheres),
+			.sphere_count = ArrayCount(spheres),
+
+			.planes = L1_(planes),
+			.plane_count = ArrayCount(planes),
+
+			.boxes = L1_(boxes),
+			.box_count = ArrayCount(boxes),
+		};
+
+		trace_scene(arena, scene);
 	}
 }
 

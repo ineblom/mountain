@@ -18,7 +18,7 @@ Internal void lane(L1);
 
 #if (CPU_ && RAM_)
 
-L1 sync_l1_val;
+L1 sync_L1_val;
 
 #endif
 
@@ -32,10 +32,10 @@ L1 sync_l1_val;
 
 Inline void lane_sync_L1(L1 ptr, L1 src_lane_idx) {
   if (lane_idx() == src_lane_idx) {
-    ramR->sync_l1_val = L1R_(ptr)[0];
+    ramR->sync_L1_val = L1R_(ptr)[0];
   }
   lane_sync();
-  L1R_(ptr)[0] = ramR->sync_l1_val;
+  L1R_(ptr)[0] = ramR->sync_L1_val;
 }
 
 Internal Range range_for_section(L1 section_idx, L1 section_count, L1 count) {

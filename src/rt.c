@@ -18,14 +18,6 @@ struct RT_Material {
 	F1 metallic;
 	F1 roughness;
 	F3 emissive;
-	// F1 specular;
-	// F1 subsurface;
-	// F1 specular_tint;
-	// F1 antisotropic;
-	// F1 sheen;
-	// F1 sheen_tint;
-	// F1 clearcoat;
-	// F1 clearcoat_gloss;
 };
 
 typedef struct RT_Sphere RT_Sphere;
@@ -73,7 +65,7 @@ struct RT_Scene {
 	String8 bloom_overlay_filename;
 	F1 bloom_overlay_strength;
 
-	Camera camera;
+	RT_Camera camera;
 
 	L1 material_count;
 	L1 materials;
@@ -544,14 +536,12 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 
 		TR(Image) bloom_passes = TR_(Image, push_array(arena, Image, scene.bloom_pass_count));
 
-		L1 ray_img_w = ramR->ray_image.width;
-		L1 ray_img_h = ramR->ray_image.height;
-		bloom_passes[0] = image_alloc(arena, ray_img_w, ray_img_h, sizeof(F3));
+		bloom_passes[0] = image_alloc(arena, scene.output_width, scene.output_height, sizeof(F3));
 
 		// Filter on bright pixels
 		L1 in = ramR->ray_image.pixels;
 		L1 out = bloom_passes[0].pixels;
-		for EachIndex(pixel_index, ray_img_w*ray_img_h) {
+		for EachIndex(pixel_index, bloom_passes[0].width*bloom_passes[0].height) {
 			F3 color = TR_(F3, in)[0];
 
 			F1 luminance = F3_luminance(color);
@@ -722,6 +712,7 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 	}
 }
 
+#ifdef RT_APP
 Internal void lane(L1 arena) {
 	RT_Material materials[] = {
 		{ // ground
@@ -785,7 +776,7 @@ Internal void lane(L1 arena) {
 	 	}
 	};
 
-		RT_Camera camera = {0};
+	RT_Camera camera = {0};
 	camera.pos = (F3){0.0f, -5.0f, 0.5f};
 	camera.forward = F3_normalize(camera.pos);
 	camera.aperture_radius =  0.02f;
@@ -823,5 +814,6 @@ Internal void lane(L1 arena) {
 
 	trace_scene(arena, scene);
 }
+#endif
 
 #endif

@@ -2,12 +2,12 @@
 
 // TODO: What garbage does this bring in?
 // Can we minimize or stop relying on it completely?
+#include <wayland-client.h>
+#include <wayland-egl.h>
 #include "xdg-shell-protocol.c"
 #include "xdg-shell-protocol.h"
 #include <EGL/egl.h>
 #include <GL/gl.h>
-#include <wayland-client.h>
-#include <wayland-egl.h>
 
 #define PROT_READ 0x1
 #define PROT_WRITE 02
@@ -483,9 +483,7 @@ Internal L1 os_clock(void) {
 #define KEY_BRIGHTNESSDOWN 224
 #define KEY_BRIGHTNESSUP 225
 #define KEY_MEDIA 226
-#define KEY_SWITCHVIDEOMODE                                                    \
-  227 /* Cycle between available video                                         \
-outputs (Monitor/LCD/TV-out/etc) */
+#define KEY_SWITCHVIDEOMODE 227 /* Cycle between available video outputs (Monitor/LCD/TV-out/etc) */
 #define KEY_KBDILLUMTOGGLE 228
 #define KEY_KBDILLUMDOWN 229
 #define KEY_KBDILLUMUP 230
@@ -502,10 +500,7 @@ outputs (Monitor/LCD/TV-out/etc) */
 #define KEY_VIDEO_NEXT 241       /* drive next video source */
 #define KEY_VIDEO_PREV 242       /* drive previous video source */
 #define KEY_BRIGHTNESS_CYCLE 243 /* brightness up, after max is min */
-#define KEY_BRIGHTNESS_AUTO                                                    \
-  244 /* Set Auto Brightness: manual                                           \
-brightness control is off,                                                     \
-rely on ambient */
+#define KEY_BRIGHTNESS_AUTO 244 /* Set Auto Brightness: manual brightness control is off, rely on ambient */
 #define KEY_BRIGHTNESS_ZERO KEY_BRIGHTNESS_AUTO
 #define KEY_DISPLAY_OFF 245 /* display device to off state */
 #define KEY_WWAN 246        /* Wireless WAN (LTE, UMTS, GSM, etc.) */

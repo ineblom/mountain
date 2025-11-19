@@ -47,10 +47,10 @@ extern const struct wl_interface xdg_surface_interface;
 extern const struct wl_interface xdg_toplevel_interface;
 
 static const struct wl_interface *xdg_shell_types[] = {
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	0,
+	0,
+	0,
+	0,
 	&xdg_positioner_interface,
 	&xdg_surface_interface,
 	&wl_surface_interface,
@@ -60,19 +60,19 @@ static const struct wl_interface *xdg_shell_types[] = {
 	&xdg_positioner_interface,
 	&xdg_toplevel_interface,
 	&wl_seat_interface,
-	NULL,
-	NULL,
-	NULL,
+	0,
+	0,
+	0,
 	&wl_seat_interface,
-	NULL,
+	0,
 	&wl_seat_interface,
-	NULL,
-	NULL,
+	0,
+	0,
 	&wl_output_interface,
 	&wl_seat_interface,
-	NULL,
+	0,
 	&xdg_positioner_interface,
-	NULL,
+	0,
 };
 
 static const struct wl_message xdg_wm_base_requests[] = {
@@ -108,7 +108,7 @@ static const struct wl_message xdg_positioner_requests[] = {
 WL_PRIVATE const struct wl_interface xdg_positioner_interface = {
 	"xdg_positioner", 7,
 	10, xdg_positioner_requests,
-	0, NULL,
+	0, 0,
 };
 
 static const struct wl_message xdg_surface_requests[] = {

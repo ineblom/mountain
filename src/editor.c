@@ -1,8 +1,8 @@
-
 #if (CPU_ && DEF_)
 
 #define MAX_MATERIAL_COUNT 128
 #define MAX_ENTITY_COUNT 128
+#define MAX_NAME_LEN 128
 
 #endif
 
@@ -22,7 +22,8 @@ enum {
 typedef struct Entity Entity;
 struct Entity {
 	L1 flags;
-	String8 name;
+	B1 name[MAX_NAME_LEN];
+	L1 name_len;
 	L1 shape;
 	F3 pos;
 	F3 size;
@@ -41,6 +42,8 @@ enum {
 F1 delta_mx;
 I1 left_just_pressed;
 I1 left_just_released;
+
+I1 prev_keys[256];
 
 L1 font_num_letters;
 I1 font_tex;
@@ -279,6 +282,22 @@ Internal F1 draw_text(String8 msg, F1 x, F1 y, F1 size, F3 color) {
 	return current_y - y + size;
 }
 
+Internal String8 cut_label(String8 label) {
+	String8 result = label;
+
+	if (label.len > 2) {
+		// cut label at ##.
+		for EachIndex(i, result.len-1) {
+			if (B1R_(result.str)[i] == '#' && B1R_(result.str)[i+1] == '#') {
+				result.len = i;
+				break;
+			}
+		}
+	}
+
+	return result;
+}
+
 Internal void ui_text(String8 msg) {
 	F3 color = (F3){0.8f, 0.8f, 0.8f};
 
@@ -287,17 +306,129 @@ Internal void ui_text(String8 msg) {
 	ramR->panel_current_y += height;
 }
 
-Internal String8 cut_label(String8 label) {
-	// cut label at ##.
-	String8 result = label;
-	for EachIndex(i, result.len-1) {
-		if (B1R_(result.str)[i] == '#' && B1R_(result.str)[i+1] == '#') {
-			result.len = i;
-			break;
+Internal void ui_textedit(L1 str, L1R len, L1 capacity) {
+	String8 str8_text = (String8){str, len[0]};
+	L1 hash = str8_hash(str8_text);
+
+	if (ramR->active_hash == hash) {
+		for (L1 i = 0; i < 256; i++) {
+			I1 is_pressed = os_key(i);
+			I1 was_pressed = ramR->prev_keys[i];
+
+			if (is_pressed && !was_pressed) {
+				char c = '~';
+
+				switch (i) {
+				case KEY_A: c = 'A'; break;
+				case KEY_B: c = 'B'; break;
+				case KEY_C: c = 'C'; break;
+				case KEY_D: c = 'D'; break;
+				case KEY_E: c = 'E'; break;
+				case KEY_F: c = 'F'; break;
+				case KEY_G: c = 'G'; break;
+				case KEY_H: c = 'H'; break;
+				case KEY_I: c = 'I'; break;
+				case KEY_J: c = 'J'; break;
+				case KEY_K: c = 'K'; break;
+				case KEY_L: c = 'L'; break;
+				case KEY_M: c = 'M'; break;
+				case KEY_N: c = 'N'; break;
+				case KEY_O: c = 'O'; break;
+				case KEY_P: c = 'P'; break;
+				case KEY_Q: c = 'Q'; break;
+				case KEY_R: c = 'R'; break;
+				case KEY_S: c = 'S'; break;
+				case KEY_T: c = 'T'; break;
+				case KEY_U: c = 'U'; break;
+				case KEY_V: c = 'V'; break;
+				case KEY_W: c = 'W'; break;
+				case KEY_X: c = 'X'; break;
+				case KEY_Y: c = 'Y'; break;
+				case KEY_Z: c = 'Z'; break;
+
+				case KEY_SPACE: c = ' '; break;
+				case KEY_MINUS: c = '-'; break;
+				case KEY_COMMA:
+				case KEY_DOT:
+					c = '.';
+					break;
+				}
+
+				if (i == KEY_BACKSPACE) {
+					if (len[0] > 0) {
+						len[0] -= 1;
+					}
+				} else if (c != '~') {
+					B1R_(str)[len[0]] = c;
+					len[0] += 1;
+				}
+
+				str8_text = (String8){str, len[0]};
+				hash = str8_hash(str8_text);
+				ramR->active_hash = hash;
+			}
 		}
 	}
 
-	return result;
+	F3 color = (F3){0.8f, 0.8f, 0.8f};
+
+	F1 ml = 10.0f;
+	F1 mt = 10.0f;
+	F1 py = 5.0f;
+	F1 px = 5.0f;
+	F1 text_size = 16.0f;
+
+	F1 top = ramR->panel_current_y + mt;
+	F1 left = ml;
+	F1 right = sidebar_w - ml;
+	F1 bottom = top + text_size + py * 2;
+
+	F1 bg = 0.05f;
+	F1 border = 0.2f;
+
+	if ((ramR->active_hash == 0 || ramR->active_hash == hash) &&
+			ramR->mouse_x > left && ramR->mouse_x < right &&
+			ramR->mouse_y > top && ramR->mouse_y < bottom) {
+		ramR->hot_hash = hash;
+		border = 0.3f;
+
+		if (ramR->left_just_pressed) {
+			ramR->active_hash = hash;
+		}
+	}
+
+	if (ramR->active_hash == hash) {
+		if (ramR->hot_hash != hash && ramR->left_just_pressed) {
+			ramR->active_hash = 0;
+		}
+		if (os_key(KEY_ESC)) {
+			ramR->active_hash = 0;
+		}
+
+		border = 0.5f;
+	}
+
+	glBegin(GL_QUADS);
+		glColor3f(bg, bg, bg);
+		glVertex3f(left, top, 0);
+		glVertex3f(right, top, 0);
+		glVertex3f(right, bottom, 0);
+		glVertex3f(left, bottom, 0);
+	glEnd();
+
+	glBegin(GL_LINE_STRIP);
+		glColor3f(border, border, border);
+		glVertex3f(left-1, top-1, 0);
+		glVertex3f(right+1, top-1, 0);
+		glVertex3f(right+1, bottom+1, 0);
+		glVertex3f(left-1, bottom+1, 0);
+		glVertex3f(left-1, top-1, 0);
+	glEnd();
+
+	F1 height = draw_text(str8_text, left+px, top+py, text_size, color);
+	ramR->panel_current_y += height;
+
+	ramR->panel_current_y = bottom;
 }
 
 Internal void ui_drag(L1 arena, String8 label, F1R value) {
@@ -412,12 +543,14 @@ Internal I1 ui_button(String8 label) {
 	L1 hash = str8_hash(label);
 
 	F3 text_color = (F3){0.8f, 0.8f, 0.8f};
-	F1 text_size = 16.0f;
-	F1 padding_x = 10.0f;
-	F1 padding_y = 5.0f;
-	F1 left = 10.0f;
-	F1 right = left + text_size*label.len + padding_x*2;
-	F1 top = ramR->panel_current_y+10.0f;
+	F1 text_size  = 16.0f;
+	F1 margin_top = 10.0f;
+	F1 padding_x  = 10.0f;
+	F1 padding_y  = 5.0f;
+
+	F1 left   = 10.0f;
+	F1 right  = left + text_size*label.len + padding_x*2;
+	F1 top    = ramR->panel_current_y+margin_top;
 	F1 bottom = top + text_size + padding_y*2;
 
 	if ((ramR->active_hash == 0 || ramR->active_hash == hash) &&
@@ -563,11 +696,14 @@ Internal L1 entity_create(L1 flags, String8 name) {
 
 	ramR->entities[idx] = (Entity){
 		.flags = flags,
-		.name = name,
+		.name_len = name.len,
 		.shape = SHAPE__BOX,
 		.pos = {0.0f, 0.0f, 0.0f},
 		.size = {0.5f, 0.5f, 0.5f},
 	};
+
+	memmove(L1_(ramR->entities[idx].name), name.str, name.len);
+
 	return idx;
 }
 
@@ -583,17 +719,40 @@ Internal void lane(L1 arena) {
 		ramR->cam_rot_x = 35.0f;
 		ramR->cam_rot_y = -45.0f;
 
-		L1 default_material_idx = material_create(Str8_("CUBE"));
+		// DEFAULT MATERIAL
+		material_create(Str8_("DEFAULT"));
+
+		// CUBE MATERIAL
+		L1 cube_material_idx = material_create(Str8_("CUBE"));
+		ramR->materials[cube_material_idx] = (RT_Material){
+			.base_color = (F3){1.0f, 0.5f, 0.0f},
+			.metallic = 0.0f,
+			.roughness = 0.01f,
+		};
+
+		// LIGHT MATERIAL
 		L1 light_material_idx = material_create(Str8_("LIGHT"));
 		ramR->materials[light_material_idx].emissive = (F3){3.0f, 3.0f, 3.0f};
 		ramR->selected_material_idx = L1_MAX;
 
+		// ENTITIES
+
+		// CAMERA
 		L1 camera = entity_create(ENTITY_FLAG__CAMERA, Str8_("CAMERA"));
-		ramR->entities[camera].pos = (F3){0.0f, 2.5f, 5.0f};
+		ramR->entities[camera].pos = (F3){0.0f, 1.5f, 3.0f};
 
-		L1 starting_cube_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("CUBE"));
-		ramR->selected_entity_idx = starting_cube_idx;
+		// CUBE
+		L1 cube_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("CUBE"));
+		ramR->entities[cube_idx].pos = (F3){0.0f, 0.0f, 0.0f};
+		ramR->entities[cube_idx].material_idx = cube_material_idx;
+		ramR->selected_entity_idx = cube_idx;
 
+		// FLOOR
+		L1 floor_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("FLOOR"));
+		ramR->entities[floor_idx].pos = (F3){0.0f,-0.55f, 0.0f};
+		ramR->entities[floor_idx].size = (F3){5.0f, 0.05f, 5.0f};
+
+		// LIGHT
 		L1 light_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("LIGHT"));
 		TV(Entity) light = &ramV->entities[light_idx];
 		light->pos = (F3){0.0f, 6.0f, 0.0f};
@@ -647,6 +806,7 @@ Internal void lane(L1 arena) {
 
 				F1 prev_mx = ramR->mouse_x;
 				F1 prev_my = ramR->mouse_y;
+				memmove(L1_(ramR->prev_keys), L1_(ramR->keys), sizeof(I1)*256);
 				os_poll_events();
 
 				ramR->delta_mx = ramR->mouse_x - prev_mx;
@@ -659,9 +819,8 @@ Internal void lane(L1 arena) {
 				left_was_pressed = left_pressed;
 				right_was_pressed = right_pressed;
 
-				I1 key_space = os_key(57);
-				I1 key_w = os_key(17);
-				I1 key_s = os_key(31);
+				I1 key_w = os_key(KEY_W);
+				I1 key_s = os_key(KEY_S);
 
 				F1 window_width = F1_(TR_(OS_Window, window)->width);
 				F1 window_height = F1_(TR_(OS_Window, window)->height);
@@ -801,7 +960,7 @@ Internal void lane(L1 arena) {
 				glLoadMatrixf(view.m);
 
 				// ---- GRID ----
-				glBegin(GL_LINES);
+				/*glBegin(GL_LINES);
 					glColor3f(0.1f, 0.1f, 0.1f);
 					I1 grid_s = 25;
 					F1 square_s = 0.25f;
@@ -814,7 +973,7 @@ Internal void lane(L1 arena) {
 						glVertex3f(-half_grid_w, 0.0f, x);
 						glVertex3f(half_grid_w, 0.0f, x);
 					}
-				glEnd();
+				glEnd();*/
 
 				// ---- ENTITIES ----
 
@@ -1014,7 +1173,7 @@ Internal void lane(L1 arena) {
 				if (ramR->selected_entity_idx != L1_MAX) {
 					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
 
-					ui_text(e->name);
+					ui_textedit(L1_(e->name), &e->name_len, MAX_NAME_LEN);
 
 					if (ui_button(Str8_("DELETE"))) {
 						ramR->entities[ramR->selected_entity_idx] = ramR->entities[ramR->entity_count-1];
@@ -1081,7 +1240,7 @@ Internal void lane(L1 arena) {
 					for EachIndex(entity_idx, ramR->entity_count) {
 						TR(Entity) e = &ramR->entities[entity_idx];
 						if (e->flags & ENTITY_FLAG__SHAPE && e->material_idx == ramR->selected_material_idx) {
-							if (ui_button(e->name)) {
+							if (ui_button((String8){L1_(e->name), e->name_len})) {
 								ramR->selected_entity_idx = entity_idx;
 								ramR->selected_material_idx = L1_MAX;
 							}
@@ -1096,7 +1255,8 @@ Internal void lane(L1 arena) {
 					L1 entity_names = push_array(arena, String8, ramR->entity_count);
 
 					for EachIndex(entity_index, ramR->entity_count) {
-						TR_(String8, entity_names)[entity_index] = ramR->entities[entity_index].name;
+						TR(Entity) e = &ramR->entities[entity_index];
+						TR_(String8, entity_names)[entity_index] = (String8){ L1_(e->name), e->name_len};
 					}
 
 					ui_select(Str8_("ENTITIES"), entity_names, ramR->entity_count, &ramR->selected_entity_idx);
@@ -1160,14 +1320,14 @@ Internal void lane(L1 arena) {
 			camera.pos = (F3){camera_entity->pos.x, -camera_entity->pos.z, camera_entity->pos.y};
 			camera.forward = F3_normalize(camera.pos);
 			camera.aperture_radius =  0.02f;
-			camera.focal_distance = 5.0f;
+			camera.focal_distance = 3.0f;
 
 			RT_Scene scene = {
 				.output_filename = Str8_("output.bmp"),
 				.output_width    = 1280,
 				.output_height   = 720,
 
-				.rays_per_pixel  = 128,
+				.rays_per_pixel  = 512,
 				.max_num_bounces = 8,
 
 				.bloom_pass_count       = 8,
@@ -1206,6 +1366,5 @@ Internal void lane(L1 arena) {
 		}
 	}
 }
-
 
 #endif

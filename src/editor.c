@@ -316,7 +316,7 @@ Internal void ui_textedit(L1 str, L1R len, L1 capacity) {
 			I1 was_pressed = ramR->prev_keys[i];
 
 			if (is_pressed && !was_pressed) {
-				char c = '~';
+				char c = 0;
 
 				switch (i) {
 				case KEY_A: c = 'A'; break;
@@ -358,7 +358,7 @@ Internal void ui_textedit(L1 str, L1R len, L1 capacity) {
 					if (len[0] > 0) {
 						len[0] -= 1;
 					}
-				} else if (c != '~') {
+				} else if (c != 0) {
 					B1R_(str)[len[0]] = c;
 					len[0] += 1;
 				}
@@ -849,6 +849,7 @@ Internal void lane(L1 arena) {
 				Mat4 view = mat4_translate(0, 0, -ramR->cam_dist);
 				view = mat4_multiply(view, mat4_rotate_x(ramR->cam_rot_x));
 				view = mat4_multiply(view, mat4_rotate_y(ramR->cam_rot_y));
+				Mat4 view_projection = mat4_multiply(projection, view);
 				F3 camera_right = {view.m[0], view.m[4], view.m[8]};
 				F3 camera_up = {view.m[1], view.m[5], view.m[9]};
 
@@ -879,7 +880,6 @@ Internal void lane(L1 arena) {
 						F1 ndc_z = depth * 2.0f - 1.0f; // Convert [0,1] to [-1,1]
 
 						// Unproject: transform from NDC to world space
-						Mat4 view_projection = mat4_multiply(projection, view);
 						Mat4 inverse_vp = mat4_invert(view_projection);
 
 						F3 ndc_point = {ndc_x, ndc_y, ndc_z};
@@ -905,43 +905,6 @@ Internal void lane(L1 arena) {
 								ramR->selected_entity_idx = entity_index;
 							}
 						}
-					}
-				}
-
-				// ---- AXIS DETECTION ----
-				Mat4 view_projection = mat4_multiply(projection, view);
-				ramR->hot_axis = 0;
-				if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
-					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
-
-					// Project axis endpoints to screen space
-					F3 x_end = e->pos; x_end.x += 1.0f;
-					F3 y_end = e->pos; y_end.y += 1.0f;
-					F3 z_end = e->pos; z_end.z += 1.0f;
-					F3 origin_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
-					F3 x_screen = project_to_screen(x_end, view_projection, viewport_width, viewport_height);
-					F3 y_screen = project_to_screen(y_end, view_projection, viewport_width, viewport_height);
-					F3 z_screen = project_to_screen(z_end, view_projection, viewport_width, viewport_height);
-
-					F1 dist_x = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, x_screen);
-					F1 dist_y = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, y_screen);
-					F1 dist_z = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, z_screen);
-
-					// Find which axis is closest
-					F1 min_dist = dist_x;
-					ramR->hot_axis = 1;
-					if (dist_y < min_dist) {
-						min_dist = dist_y;
-						ramR->hot_axis = 2;
-					}
-					if (dist_z < min_dist) {
-						min_dist = dist_z;
-						ramR->hot_axis = 3;
-					}
-
-					F1 threshold = 10.0f; // pixels
-					if (min_dist > threshold) {
-						ramR->hot_axis = 0;
 					}
 				}
 
@@ -1010,29 +973,31 @@ Internal void lane(L1 arena) {
 					if (e->flags & ENTITY_FLAG__CAMERA) {
 						glDisable(GL_LIGHTING);
 
-						F3 tl = e->pos - camera_right*0.3f + camera_up*0.2f;
-						F3 tr = e->pos + camera_right*0.3f + camera_up*0.2f;
-						F3 bl = e->pos - camera_right*0.3f - camera_up*0.2f;
-						F3 br = e->pos + camera_right*0.3f - camera_up*0.2f;
-						F3 mt = e->pos - camera_right*0.3f + camera_up*0.1f;
-						F3 mb = e->pos - camera_right*0.3f - camera_up*0.1f;
-						F3 ot = e->pos - camera_right*0.5f + camera_up*0.15f;
-						F3 ob = e->pos - camera_right*0.5f - camera_up*0.15f;
+						for EachIndex(i, 2) {
+							F3 tl = e->pos - camera_right*0.3f + camera_up*0.2f;
+							F3 tr = e->pos + camera_right*0.3f + camera_up*0.2f;
+							F3 bl = e->pos - camera_right*0.3f - camera_up*0.2f;
+							F3 br = e->pos + camera_right*0.3f - camera_up*0.2f;
+							F3 mt = e->pos - camera_right*0.3f + camera_up*0.1f;
+							F3 mb = e->pos - camera_right*0.3f - camera_up*0.1f;
+							F3 ot = e->pos - camera_right*0.5f + camera_up*0.15f;
+							F3 ob = e->pos - camera_right*0.5f - camera_up*0.15f;
 
-						glLineWidth(3.0f);
-						glBegin(GL_LINE_STRIP);
-							glColor3f(0.8f, 0.8f, 0.8f);
-							glVertex3f(ot.x, ot.y, ot.z);
-							glVertex3f(mt.x, mt.y, mt.z);
-							glVertex3f(tl.x, tl.y, tl.z);
-							glVertex3f(tr.x, tr.y, tr.z);
-							glVertex3f(br.x, br.y, br.z);
-							glVertex3f(bl.x, bl.y, bl.z);
-							glVertex3f(mb.x, mb.y, mb.z);
-							glVertex3f(ob.x, ob.y, ob.z);
-							glVertex3f(ot.x, ot.y, ot.z);
-						glEnd();
-						glLineWidth(1.0f);
+							glLineWidth(3.0f * (i+1));
+							glBegin(GL_LINE_STRIP);
+								glColor3f(1-0.8f*i, 1-0.8f*i, 1-0.8f*i);
+								glVertex3f(ot.x, ot.y, ot.z);
+								glVertex3f(mt.x, mt.y, mt.z);
+								glVertex3f(tl.x, tl.y, tl.z);
+								glVertex3f(tr.x, tr.y, tr.z);
+								glVertex3f(br.x, br.y, br.z);
+								glVertex3f(bl.x, bl.y, bl.z);
+								glVertex3f(mb.x, mb.y, mb.z);
+								glVertex3f(ob.x, ob.y, ob.z);
+								glVertex3f(ot.x, ot.y, ot.z);
+							glEnd();
+							glLineWidth(1.0f);
+						}
 
 						glEnable(GL_LIGHTING);
 					}
@@ -1041,8 +1006,44 @@ Internal void lane(L1 arena) {
 				glDisable(GL_LIGHTING);
 
 				// ---- AXES ----
-				if (ramR->selected_entity_idx != L1_MAX) {
+
+				ramR->hot_axis = 0;
+				if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
 					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+
+					// Project axis endpoints to screen space
+					F3 x_end = e->pos; x_end.x += 1.0f;
+					F3 y_end = e->pos; y_end.y += 1.0f;
+					F3 z_end = e->pos; z_end.z += 1.0f;
+					F3 origin_screen = project_to_screen(e->pos, view_projection, viewport_width, viewport_height);
+					F3 x_screen = project_to_screen(x_end, view_projection, viewport_width, viewport_height);
+					F3 y_screen = project_to_screen(y_end, view_projection, viewport_width, viewport_height);
+					F3 z_screen = project_to_screen(z_end, view_projection, viewport_width, viewport_height);
+
+					F1 dist_x = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, x_screen);
+					F1 dist_y = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, y_screen);
+					F1 dist_z = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, z_screen);
+
+					// Find which axis is closest
+					F1 min_dist = dist_x;
+					ramR->hot_axis = 1;
+					if (dist_y < min_dist) {
+						min_dist = dist_y;
+						ramR->hot_axis = 2;
+					}
+					if (dist_z < min_dist) {
+						min_dist = dist_z;
+						ramR->hot_axis = 3;
+					}
+
+					F1 threshold = 10.0f; // pixels
+					if (min_dist > threshold) {
+						ramR->hot_axis = 0;
+					}
+				}
+
+				if (ramR->selected_entity_idx != L1_MAX) {
+					TV(Entity) e = &ramV->entities[ramR->selected_entity_idx];
 
 					// Handle axis dragging
 					if (ramR->active_axis != 0) {
@@ -1071,8 +1072,42 @@ Internal void lane(L1 arena) {
 							} else if (ramR->axis_mode == AXIS_MODE__SIZE) {
 								if (e->shape == SHAPE__SPHERE) {
 									e->size.x += world_delta;
+									e->size.y = e->size.x;
+									e->size.z = e->size.x;
 								} else {
 									e->size += delta_v;
+								}
+							}
+
+							// Snap objects along the dragging axis.
+
+							for EachIndex(axis, 3) {
+								if (axis_dir[axis] < 0.1f) continue;
+								for EachIndex(entity_idx, ramR->entity_count) {
+									TV(Entity) oe = &ramV->entities[entity_idx];
+									if (oe == e || !(oe->flags & ENTITY_FLAG__SHAPE)) continue;
+
+									F1 e_min = e->pos[axis] - e->size[axis];
+									F1 e_max = e->pos[axis] + e->size[axis];
+									F1 oe_min = oe->pos[axis] - oe->size[axis];
+									F1 oe_max = oe->pos[axis] + oe->size[axis];
+
+									if (fabsf(e_min - oe_max) < 0.05f) {
+										e->pos[axis] = oe_max + e->size[axis];
+										break;
+									}
+									if (fabsf(e_max - oe_min) < 0.05f) {
+										e->pos[axis] = oe_min - e->size[axis];
+										break;
+									}
+									if (fabsf(e_min - oe_min) < 0.05f) {
+									 	e->pos[axis] = oe_min + e->size[axis];
+									 	break;
+									}
+									if (fabsf(e_max - oe_max) < 0.05f) {
+										e->pos[axis] = oe_max - e->size[axis];
+										break;
+									}
 								}
 							}
 

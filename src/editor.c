@@ -1065,7 +1065,7 @@ Internal void lane(L1 arena) {
 							// Project mouse delta onto screen-space axis direction
 							F1 mouse_proj = (ramR->delta_mx * screen_dx + delta_my * screen_dy) / screen_len;
 							F1 world_delta = mouse_proj / screen_len;
-							F3 delta_v = (F3){world_delta * is_x, world_delta * is_y, world_delta * is_z};
+							F3 delta_v = axis_dir * world_delta;
 
 							if (ramR->axis_mode == AXIS_MODE__POS) {
 								e->pos += delta_v;
@@ -1080,34 +1080,31 @@ Internal void lane(L1 arena) {
 							}
 
 							// Snap objects along the dragging axis.
+							L1 axis = ramR->active_axis - 1;
+							for EachIndex(entity_idx, ramR->entity_count) {
+								TV(Entity) oe = &ramV->entities[entity_idx];
+								if (oe == e || !(oe->flags & ENTITY_FLAG__SHAPE)) continue;
 
-							for EachIndex(axis, 3) {
-								if (axis_dir[axis] < 0.1f) continue;
-								for EachIndex(entity_idx, ramR->entity_count) {
-									TV(Entity) oe = &ramV->entities[entity_idx];
-									if (oe == e || !(oe->flags & ENTITY_FLAG__SHAPE)) continue;
+								F1 e_min = e->pos[axis] - e->size[axis];
+								F1 e_max = e->pos[axis] + e->size[axis];
+								F1 oe_min = oe->pos[axis] - oe->size[axis];
+								F1 oe_max = oe->pos[axis] + oe->size[axis];
 
-									F1 e_min = e->pos[axis] - e->size[axis];
-									F1 e_max = e->pos[axis] + e->size[axis];
-									F1 oe_min = oe->pos[axis] - oe->size[axis];
-									F1 oe_max = oe->pos[axis] + oe->size[axis];
-
-									if (fabsf(e_min - oe_max) < 0.05f) {
-										e->pos[axis] = oe_max + e->size[axis];
-										break;
-									}
-									if (fabsf(e_max - oe_min) < 0.05f) {
-										e->pos[axis] = oe_min - e->size[axis];
-										break;
-									}
-									if (fabsf(e_min - oe_min) < 0.05f) {
-									 	e->pos[axis] = oe_min + e->size[axis];
-									 	break;
-									}
-									if (fabsf(e_max - oe_max) < 0.05f) {
-										e->pos[axis] = oe_max - e->size[axis];
-										break;
-									}
+								if (fabsf(e_min - oe_max) < 0.05f) {
+									e->pos[axis] = oe_max + e->size[axis];
+									break;
+								}
+								if (fabsf(e_max - oe_min) < 0.05f) {
+									e->pos[axis] = oe_min - e->size[axis];
+									break;
+								}
+								if (fabsf(e_min - oe_min) < 0.05f) {
+								 	e->pos[axis] = oe_min + e->size[axis];
+								 	break;
+								}
+								if (fabsf(e_max - oe_max) < 0.05f) {
+									e->pos[axis] = oe_max - e->size[axis];
+									break;
 								}
 							}
 

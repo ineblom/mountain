@@ -63,7 +63,7 @@ Internal L1 thread_entrypoint(L1 arg) {
 SI1 main(void) {
   I1 thread_count = os_num_cores();
 
-  Barrier barrier = os_barrier_alloc(thread_count);
+  OS_Barrier barrier = os_barrier_alloc(thread_count);
 
   L1 threads_arena = arena_create(MiB(1));
 
@@ -77,14 +77,14 @@ SI1 main(void) {
     };
   }
 
-  L1 threads = push_array(threads_arena, Thread, thread_count);
+  L1 threads = push_array(threads_arena, OS_Thread, thread_count);
   for EachIndex(i, thread_count) {
     L1 lane_ctx = lane_contexts + sizeof(LaneCtx) * i;
-    TR_(Thread, threads)[i] = os_thread_launch(&thread_entrypoint, lane_ctx);
+    TR_(OS_Thread, threads)[i] = os_thread_launch(&thread_entrypoint, lane_ctx);
   }
 
   for EachIndex(i, thread_count) {
-    os_thread_join(TR_(Thread, threads)[i]);
+    os_thread_join(TR_(OS_Thread, threads)[i]);
   }
 
   for EachIndex(i, thread_count) {

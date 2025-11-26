@@ -40,10 +40,14 @@ enum {
 #if (CPU_ && RAM_)
 
 F1 delta_mx;
+F1 delta_my;
+I1 right_just_pressed;
 I1 left_just_pressed;
 I1 left_just_released;
 
-I1 prev_keys[256];
+I1 mouse_x, mouse_y;
+B1 keys[512];
+B1 prev_keys[512];
 
 L1 font_num_letters;
 I1 font_tex;
@@ -83,7 +87,6 @@ StaticAssert(ArrayCount(shape_strs) == SHAPE__COUNT);
 
 #define sidebar_w 400.0f
 
-// 4x4 matrix stored in column-major order
 typedef struct Mat4 Mat4;
 struct Mat4 {
 	F1 m[16];
@@ -286,7 +289,7 @@ Internal String8 cut_label(String8 label) {
 	String8 result = label;
 
 	if (label.len > 2) {
-		// cut label at ##.
+		//- kti: cut label at ##.
 		for EachIndex(i, result.len-1) {
 			if (B1R_(result.str)[i] == '#' && B1R_(result.str)[i+1] == '#') {
 				result.len = i;
@@ -306,55 +309,55 @@ Internal void ui_text(String8 msg) {
 	ramR->panel_current_y += height;
 }
 
-Internal void ui_textedit(L1 str, L1R len, L1 capacity) {
+Internal void ui_textedit(L1 str, L1V len, L1 capacity) {
 	String8 str8_text = (String8){str, len[0]};
 	L1 hash = str8_hash(str8_text);
 
 	if (ramR->active_hash == hash) {
 		for (L1 i = 0; i < 256; i++) {
-			I1 is_pressed = os_key(i);
+			I1 is_pressed = ramR->keys[i];
 			I1 was_pressed = ramR->prev_keys[i];
 
 			if (is_pressed && !was_pressed) {
 				char c = 0;
 
 				switch (i) {
-				case KEY_A: c = 'A'; break;
-				case KEY_B: c = 'B'; break;
-				case KEY_C: c = 'C'; break;
-				case KEY_D: c = 'D'; break;
-				case KEY_E: c = 'E'; break;
-				case KEY_F: c = 'F'; break;
-				case KEY_G: c = 'G'; break;
-				case KEY_H: c = 'H'; break;
-				case KEY_I: c = 'I'; break;
-				case KEY_J: c = 'J'; break;
-				case KEY_K: c = 'K'; break;
-				case KEY_L: c = 'L'; break;
-				case KEY_M: c = 'M'; break;
-				case KEY_N: c = 'N'; break;
-				case KEY_O: c = 'O'; break;
-				case KEY_P: c = 'P'; break;
-				case KEY_Q: c = 'Q'; break;
-				case KEY_R: c = 'R'; break;
-				case KEY_S: c = 'S'; break;
-				case KEY_T: c = 'T'; break;
-				case KEY_U: c = 'U'; break;
-				case KEY_V: c = 'V'; break;
-				case KEY_W: c = 'W'; break;
-				case KEY_X: c = 'X'; break;
-				case KEY_Y: c = 'Y'; break;
-				case KEY_Z: c = 'Z'; break;
+				case OS_KEY__A: c = 'A'; break;
+				case OS_KEY__B: c = 'B'; break;
+				case OS_KEY__C: c = 'C'; break;
+				case OS_KEY__D: c = 'D'; break;
+				case OS_KEY__E: c = 'E'; break;
+				case OS_KEY__F: c = 'F'; break;
+				case OS_KEY__G: c = 'G'; break;
+				case OS_KEY__H: c = 'H'; break;
+				case OS_KEY__I: c = 'I'; break;
+				case OS_KEY__J: c = 'J'; break;
+				case OS_KEY__K: c = 'K'; break;
+				case OS_KEY__L: c = 'L'; break;
+				case OS_KEY__M: c = 'M'; break;
+				case OS_KEY__N: c = 'N'; break;
+				case OS_KEY__O: c = 'O'; break;
+				case OS_KEY__P: c = 'P'; break;
+				case OS_KEY__Q: c = 'Q'; break;
+				case OS_KEY__R: c = 'R'; break;
+				case OS_KEY__S: c = 'S'; break;
+				case OS_KEY__T: c = 'T'; break;
+				case OS_KEY__U: c = 'U'; break;
+				case OS_KEY__V: c = 'V'; break;
+				case OS_KEY__W: c = 'W'; break;
+				case OS_KEY__X: c = 'X'; break;
+				case OS_KEY__Y: c = 'Y'; break;
+				case OS_KEY__Z: c = 'Z'; break;
 
-				case KEY_SPACE: c = ' '; break;
-				case KEY_MINUS: c = '-'; break;
-				case KEY_COMMA:
-				case KEY_DOT:
+				case OS_KEY__SPACE: c = ' '; break;
+				case OS_KEY__MINUS: c = '-'; break;
+				case OS_KEY__COMMA:
+				case OS_KEY__DOT:
 					c = '.';
 					break;
 				}
 
-				if (i == KEY_BACKSPACE) {
+				if (i == OS_KEY__BACKSPACE) {
 					if (len[0] > 0) {
 						len[0] -= 1;
 					}
@@ -401,7 +404,7 @@ Internal void ui_textedit(L1 str, L1R len, L1 capacity) {
 		if (ramR->hot_hash != hash && ramR->left_just_pressed) {
 			ramR->active_hash = 0;
 		}
-		if (os_key(KEY_ESC)) {
+		if (ramR->keys[OS_KEY__ESC]) {
 			ramR->active_hash = 0;
 		}
 
@@ -467,7 +470,7 @@ Internal void ui_drag(L1 arena, String8 label, F1R value) {
 	ramR->panel_current_y += height;
 }
 
-Internal I1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1R value) {
+Internal I1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1V value) {
 	I1 did_change_value = 0;
 
 	ramR->panel_current_y += 10.0f;
@@ -719,10 +722,13 @@ Internal void lane(L1 arena) {
 		ramR->cam_rot_x = 35.0f;
 		ramR->cam_rot_y = -45.0f;
 
-		// DEFAULT MATERIAL
+		////////////////////////////////
+		//~ kti: Materials
+
+		//- kti: Default
 		material_create(Str8_("DEFAULT"));
 
-		// CUBE MATERIAL
+		//- kti: Cube
 		L1 cube_material_idx = material_create(Str8_("CUBE"));
 		ramR->materials[cube_material_idx] = (RT_Material){
 			.base_color = (F3){1.0f, 0.5f, 0.0f},
@@ -730,29 +736,32 @@ Internal void lane(L1 arena) {
 			.roughness = 0.01f,
 		};
 
-		// LIGHT MATERIAL
+		//- kti: Light Material
 		L1 light_material_idx = material_create(Str8_("LIGHT"));
 		ramR->materials[light_material_idx].emissive = (F3){3.0f, 3.0f, 3.0f};
 		ramR->selected_material_idx = L1_MAX;
 
-		// ENTITIES
+		////////////////////////////////
+		//~ kti: Entities
 
-		// CAMERA
+		//- kti: Camera
 		L1 camera = entity_create(ENTITY_FLAG__CAMERA, Str8_("CAMERA"));
 		ramR->entities[camera].pos = (F3){0.0f, 1.5f, 3.0f};
 
-		// CUBE
+		//- kti: Cube
 		L1 cube_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("CUBE"));
 		ramR->entities[cube_idx].pos = (F3){0.0f, 0.0f, 0.0f};
 		ramR->entities[cube_idx].material_idx = cube_material_idx;
 		ramR->selected_entity_idx = cube_idx;
 
-		// FLOOR
+		//- kti: Floor
+
 		L1 floor_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("FLOOR"));
 		ramR->entities[floor_idx].pos = (F3){0.0f,-0.55f, 0.0f};
 		ramR->entities[floor_idx].size = (F3){5.0f, 0.05f, 5.0f};
 
-		// LIGHT
+		//- kti: Light
+
 		L1 light_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("LIGHT"));
 		TV(Entity) light = &ramV->entities[light_idx];
 		light->pos = (F3){0.0f, 6.0f, 0.0f};
@@ -761,7 +770,9 @@ Internal void lane(L1 arena) {
 
 		ramR->axis_mode = AXIS_MODE__POS;
 
-		// ---- FONT ----
+		////////////////////////////////
+		//~ kti: Font
+
 		ramR->font_num_letters = 26 + 10 + 2;
 		I1 font_tex_w = 8*ramR->font_num_letters;
 		I1 font_tex_h = 8;
@@ -791,36 +802,50 @@ Internal void lane(L1 arena) {
 
 	lane_sync_L1(&window, 0);
 
+	////////////////////////////////
+	//~ kti: Main Loop
+
 	while (TR_(OS_Window, window)->should_close == 0) {
 		if (lane_idx() == 0) {
-			// ---- MAIN LOOP ----
 
 			F1 near = 0.1f;
 			F1 far = 40.0f;
 			F1 scale_factor = near / 1.0f;
-			I1 left_was_pressed = os_mouse_button(0);
-			I1 right_was_pressed = os_mouse_button(0);
 
 			while (TR_(OS_Window, window)->should_close == 0) {
 				F1 time = F1_(os_clock() / 1000000) / 1000.0f;
 
 				F1 prev_mx = ramR->mouse_x;
 				F1 prev_my = ramR->mouse_y;
-				memmove(L1_(ramR->prev_keys), L1_(ramR->keys), sizeof(I1)*256);
+				I1 left_was_down = ramR->keys[OS_KEY__LEFT_MOUSE_BUTTON];
+				I1 right_was_down = ramR->keys[OS_KEY__RIGHT_MOUSE_BUTTON];
+
 				os_poll_events();
+				memmove(L1_(ramR->prev_keys), L1_(ramR->keys), sizeof(B1)*512);
+				for EachIndex(i, ramR->event_count) {
+					TR(OS_Event) e = &ramR->events[i];
+
+					switch (e->type) {
+						case OS_EVENT_TYPE__PRESS:
+						case OS_EVENT_TYPE__RELEASE: {
+							ramR->keys[e->key] = (e->type == OS_EVENT_TYPE__PRESS);
+						} break;
+						case OS_EVENT_TYPE_MOUSE_MOVE: {
+
+						} break;
+					}
+				}
 
 				ramR->delta_mx = ramR->mouse_x - prev_mx;
-				F1 delta_my = ramR->mouse_y - prev_my;
-				I1 left_pressed = os_mouse_button(0);
-				ramR->left_just_pressed = left_pressed && !left_was_pressed;
-				ramR->left_just_released = !left_pressed && left_was_pressed;
-				I1 right_pressed = os_mouse_button(1);
-				I1 right_just_pressed = right_pressed && !right_was_pressed;
-				left_was_pressed = left_pressed;
-				right_was_pressed = right_pressed;
+				ramR->delta_my = ramR->mouse_y - prev_my;
 
-				I1 key_w = os_key(KEY_W);
-				I1 key_s = os_key(KEY_S);
+				ramR->left_just_pressed = ramR->keys[OS_KEY__LEFT_MOUSE_BUTTON] && !left_was_down;
+				ramR->left_just_released = !ramR->keys[OS_KEY__LEFT_MOUSE_BUTTON] && left_was_down;
+
+				ramR->right_just_pressed = ramR->keys[OS_KEY__RIGHT_MOUSE_BUTTON] && !right_was_down;
+
+				I1 key_w = ramR->keys[OS_KEY__W];
+				I1 key_s = ramR->keys[OS_KEY__S];
 
 				F1 window_width = F1_(TR_(OS_Window, window)->width);
 				F1 window_height = F1_(TR_(OS_Window, window)->height);
@@ -828,9 +853,9 @@ Internal void lane(L1 arena) {
 				F1 viewport_height = window_height;
 				F1 viewport_aspect = viewport_width/viewport_height;
 
-				if (right_pressed) {
+				if (ramR->keys[OS_KEY__RIGHT_MOUSE_BUTTON]) {
 					ramR->cam_rot_y += ramR->delta_mx * 0.2f;
-					ramR->cam_rot_x += delta_my * 0.2f;
+					ramR->cam_rot_x += ramR->delta_my * 0.2f;
 				}
 
 				if (key_w) {
@@ -839,7 +864,7 @@ Internal void lane(L1 arena) {
 					ramR->axis_mode = AXIS_MODE__SIZE;
 				}
 
-				ramR->cam_dist += ramR->scroll_y/20.0f;
+				// ramR->cam_dist += ramR->scroll_y/20.0f;
 
 				Mat4 projection = mat4_frustum(
 					-viewport_aspect*scale_factor, viewport_aspect*scale_factor,
@@ -1063,7 +1088,7 @@ Internal void lane(L1 arena) {
 
 						if (screen_len > 0.0001f) {
 							// Project mouse delta onto screen-space axis direction
-							F1 mouse_proj = (ramR->delta_mx * screen_dx + delta_my * screen_dy) / screen_len;
+							F1 mouse_proj = (ramR->delta_mx * screen_dx + ramR->delta_my * screen_dy) / screen_len;
 							F1 world_delta = mouse_proj / screen_len;
 							F3 delta_v = axis_dir * world_delta;
 
@@ -1203,7 +1228,7 @@ Internal void lane(L1 arena) {
 				}
 
 				if (ramR->selected_entity_idx != L1_MAX) {
-					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+					TV(Entity) e = &ramV->entities[ramR->selected_entity_idx];
 
 					ui_textedit(L1_(e->name), &e->name_len, MAX_NAME_LEN);
 

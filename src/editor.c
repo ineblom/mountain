@@ -802,16 +802,12 @@ Internal void lane(L1 arena) {
 
 	lane_sync_L1(&window, 0);
 
-	////////////////////////////////
-	//~ kti: Main Loop
-
+	//- kti: Outer loop. { main loop, render }
 	while (TR_(OS_Window, window)->should_close == 0) {
+
+		////////////////////////////////
+		//~ kti: Main Loop - Only on lane 0
 		if (lane_idx() == 0) {
-
-			F1 near = 0.1f;
-			F1 far = 40.0f;
-			F1 scale_factor = near / 1.0f;
-
 			while (TR_(OS_Window, window)->should_close == 0) {
 				F1 time = F1_(os_clock() / 1000000) / 1000.0f;
 
@@ -871,6 +867,9 @@ Internal void lane(L1 arena) {
 
 				ramR->cam_dist += scroll_y/20.0f;
 
+				F1 near = 0.1f;
+				F1 far = 40.0f;
+				F1 scale_factor = near / 1.0f;
 				Mat4 projection = mat4_frustum(
 					-viewport_aspect*scale_factor, viewport_aspect*scale_factor,
 					-1 * scale_factor, 1 * scale_factor,
@@ -889,6 +888,7 @@ Internal void lane(L1 arena) {
 				if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w && ramR->hot_axis == 0) {
 					ramR->selected_entity_idx = L1_MAX;
 					ramR->selected_material_idx = L1_MAX;
+					ramR->active_hash = 0;
 
 					F1 depth;
 					glReadPixels(
@@ -930,6 +930,7 @@ Internal void lane(L1 arena) {
 							if (dist < closest_dist) {
 								closest_dist = dist;
 								ramR->selected_entity_idx = entity_index;
+								ramR->selected_material_idx = L1_MAX;
 							}
 						}
 					}
@@ -1113,31 +1114,33 @@ Internal void lane(L1 arena) {
 							}
 
 							//- kti: Snap objects along the dragging axis.
-							L1 axis = ramR->active_axis - 1;
-							for EachIndex(entity_idx, ramR->entity_count) {
-								TV(Entity) oe = &ramV->entities[entity_idx];
-								if (oe == e || !(oe->flags & ENTITY_FLAG__SHAPE)) continue;
+							if (e->flags & ENTITY_FLAG__SHAPE) {
+								L1 axis = ramR->active_axis - 1;
+								for EachIndex(entity_idx, ramR->entity_count) {
+									TV(Entity) oe = &ramV->entities[entity_idx];
+									if (oe == e || !(oe->flags & ENTITY_FLAG__SHAPE)) continue;
 
-								F1 e_min = e->pos[axis] - e->size[axis];
-								F1 e_max = e->pos[axis] + e->size[axis];
-								F1 oe_min = oe->pos[axis] - oe->size[axis];
-								F1 oe_max = oe->pos[axis] + oe->size[axis];
+									F1 e_min = e->pos[axis] - e->size[axis];
+									F1 e_max = e->pos[axis] + e->size[axis];
+									F1 oe_min = oe->pos[axis] - oe->size[axis];
+									F1 oe_max = oe->pos[axis] + oe->size[axis];
 
-								if (fabsf(e_min - oe_max) < 0.05f) {
-									e->pos[axis] = oe_max + e->size[axis];
-									break;
-								}
-								if (fabsf(e_max - oe_min) < 0.05f) {
-									e->pos[axis] = oe_min - e->size[axis];
-									break;
-								}
-								if (fabsf(e_min - oe_min) < 0.05f) {
-								 	e->pos[axis] = oe_min + e->size[axis];
-								 	break;
-								}
-								if (fabsf(e_max - oe_max) < 0.05f) {
-									e->pos[axis] = oe_max - e->size[axis];
-									break;
+									if (fabsf(e_min - oe_max) < 0.05f) {
+										e->pos[axis] = oe_max + e->size[axis];
+										break;
+									}
+									if (fabsf(e_max - oe_min) < 0.05f) {
+										e->pos[axis] = oe_min - e->size[axis];
+										break;
+									}
+									if (fabsf(e_min - oe_min) < 0.05f) {
+									 	e->pos[axis] = oe_min + e->size[axis];
+									 	break;
+									}
+									if (fabsf(e_max - oe_max) < 0.05f) {
+										e->pos[axis] = oe_max - e->size[axis];
+										break;
+									}
 								}
 							}
 
@@ -1196,7 +1199,8 @@ Internal void lane(L1 arena) {
 					glEnable(GL_DEPTH_TEST);
 				}
 
-				// ---- SIDE PANEL UI ----
+				////////////////////////////////
+				//~ kti: Side Panel UI
 
 				glViewport(0, 0, window_width, window_height);
 				glDisable(GL_DEPTH_TEST);
@@ -1208,7 +1212,6 @@ Internal void lane(L1 arena) {
 				glMatrixMode(GL_MODELVIEW);
 				glLoadIdentity();
 
-				// sidebar background
 				glBegin(GL_QUADS);
 					glColor3f(0.0f, 0.0f, 0.0f);
 					glVertex2f(0, 0);
@@ -1243,6 +1246,7 @@ Internal void lane(L1 arena) {
 					if (ui_button(Str8_("DELETE"))) {
 						ramR->entities[ramR->selected_entity_idx] = ramR->entities[ramR->entity_count-1];
 						ramR->selected_entity_idx = L1_MAX;
+						ramR->selected_material_idx = L1_MAX;
 						ramR->entity_count -= 1;
 					}
 
@@ -1267,6 +1271,7 @@ Internal void lane(L1 arena) {
 
 						if (ui_button(Str8_("OPEN MATERIAL"))) {
 							ramR->selected_entity_idx = L1_MAX;
+							ramR->active_hash = 0;
 							ramR->selected_material_idx = e->material_idx;
 						}
 						ui_select(Str8_("MATERIAL"), L1_(ramR->material_names), ramR->material_count, &e->material_idx);
@@ -1338,6 +1343,9 @@ Internal void lane(L1 arena) {
 		lane_sync_L1(&should_render, 0);
 
 		if (should_render) {
+			////////////////////////////////
+			//~ kti: Render
+
 			L1 pre_render_arena_pos = arena_pos(arena);
 
 			L1 camera_idx = L1_MAX;
@@ -1424,11 +1432,14 @@ Internal void lane(L1 arena) {
 			arena_pop_to(arena, pre_render_arena_pos);
 
 			lane_sync();
-		} else {
-			if (lane_idx() == 0) {
-				os_window_close(window);
-			}
 		}
+	}
+
+	////////////////////////////////
+	//~ kti: Close window and exit.
+
+	if (window && lane_idx() == 0) {
+		os_window_close(window);
 	}
 }
 

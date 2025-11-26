@@ -819,6 +819,7 @@ Internal void lane(L1 arena) {
 				D1 prev_my = ramR->mouse_y;
 				I1 left_was_down = ramR->keys[OS_KEY__LEFT_MOUSE_BUTTON];
 				I1 right_was_down = ramR->keys[OS_KEY__RIGHT_MOUSE_BUTTON];
+				D1 scroll_y = 0;
 
 				os_poll_events();
 				memmove(L1_(ramR->prev_keys), L1_(ramR->keys), sizeof(B1)*512);
@@ -834,6 +835,9 @@ Internal void lane(L1 arena) {
 							ramR->mouse_x = e->x;
 							ramR->mouse_y = e->y;
 						} break;
+					case OS_EVENT_TYPE__SCROLL: {
+						scroll_y += e->y;
+					} break;
 					}
 				}
 
@@ -865,7 +869,7 @@ Internal void lane(L1 arena) {
 					ramR->axis_mode = AXIS_MODE__SIZE;
 				}
 
-				// ramR->cam_dist += ramR->scroll_y/20.0f;
+				ramR->cam_dist += scroll_y/20.0f;
 
 				Mat4 projection = mat4_frustum(
 					-viewport_aspect*scale_factor, viewport_aspect*scale_factor,
@@ -879,12 +883,13 @@ Internal void lane(L1 arena) {
 				F3 camera_right = {view.m[0], view.m[4], view.m[8]};
 				F3 camera_up = {view.m[1], view.m[5], view.m[9]};
 
-				// ---- SELECTION (DEPTH BUFFER UNPROJECTION) ----
+				////////////////////////////////
+				//~ kti: Selection (Depth Buffer Unprojection)
+
 				if (ramR->left_just_pressed && ramR->mouse_x >= sidebar_w && ramR->hot_axis == 0) {
 					ramR->selected_entity_idx = L1_MAX;
 					ramR->selected_material_idx = L1_MAX;
 
-					// Read depth value at mouse position
 					F1 depth;
 					glReadPixels(
 						I1_(ramR->mouse_x),
@@ -895,23 +900,19 @@ Internal void lane(L1 arena) {
 						&depth
 					);
 
-					// Only proceed if we clicked on geometry (not the background)
 					if (depth < 1.0f) {
 						F1 viewport_mx = ramR->mouse_x - sidebar_w;
 						F1 viewport_my = ramR->mouse_y;
 
-						// Convert to normalized device coordinates
 						F1 ndc_x = (viewport_mx / viewport_width) * 2.0f - 1.0f;
 						F1 ndc_y = 1.0f - (viewport_my / viewport_height) * 2.0f;
 						F1 ndc_z = depth * 2.0f - 1.0f; // Convert [0,1] to [-1,1]
 
-						// Unproject: transform from NDC to world space
 						Mat4 inverse_vp = mat4_invert(view_projection);
-
 						F3 ndc_point = {ndc_x, ndc_y, ndc_z};
 						F3 world_pos = mat4_transform_point(inverse_vp, ndc_point);
 
-						// Find which entity's AABB contains or is closest to this world position
+						//- kti: Find which entity's AABB contains or is closest to this world position
 						F1 closest_dist = F1_MAX;
 						for EachIndex(entity_index, ramR->entity_count) {
 							Entity e = ramR->entities[entity_index];
@@ -934,7 +935,8 @@ Internal void lane(L1 arena) {
 					}
 				}
 
-				// ---- RENDERING ----
+				////////////////////////////////
+				//~ kti: Rendering
 
 				glEnable(GL_DEPTH_TEST);
 				glViewport(sidebar_w, 0, viewport_width, viewport_height);
@@ -948,7 +950,8 @@ Internal void lane(L1 arena) {
 				glMatrixMode(GL_MODELVIEW);
 				glLoadMatrixf(view.m);
 
-				// ---- GRID ----
+				////////////////////////////////
+				//~ kti: Grid
 				/*glBegin(GL_LINES);
 					glColor3f(0.1f, 0.1f, 0.1f);
 					I1 grid_s = 25;
@@ -964,7 +967,8 @@ Internal void lane(L1 arena) {
 					}
 				glEnd();*/
 
-				// ---- ENTITIES ----
+				////////////////////////////////
+				//~ kti: Entities Rendering
 
 				GLfloat white[] = {1, 1, 1};
 				glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
@@ -1031,13 +1035,14 @@ Internal void lane(L1 arena) {
 
 				glDisable(GL_LIGHTING);
 
-				// ---- AXES ----
+				////////////////////////////////
+				//~ kti: Draw Axes
 
 				ramR->hot_axis = 0;
 				if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
 					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
 
-					// Project axis endpoints to screen space
+					//- kti: Project axis endpoints to screen space
 					F3 x_end = e->pos; x_end.x += 1.0f;
 					F3 y_end = e->pos; y_end.y += 1.0f;
 					F3 z_end = e->pos; z_end.z += 1.0f;
@@ -1050,7 +1055,7 @@ Internal void lane(L1 arena) {
 					F1 dist_y = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, y_screen);
 					F1 dist_z = distance_to_line_segment(ramR->mouse_x, ramR->mouse_y, origin_screen, z_screen);
 
-					// Find which axis is closest
+					//- kti: Find which axis is closest to mouse.
 					F1 min_dist = dist_x;
 					ramR->hot_axis = 1;
 					if (dist_y < min_dist) {
@@ -1071,7 +1076,7 @@ Internal void lane(L1 arena) {
 				if (ramR->selected_entity_idx != L1_MAX) {
 					TV(Entity) e = &ramV->entities[ramR->selected_entity_idx];
 
-					// Handle axis dragging
+					//- kti: Handle axis dragging
 					if (ramR->active_axis != 0) {
 						I1 is_x = (ramR->active_axis == 1);
 						I1 is_y = (ramR->active_axis == 2);
@@ -1088,16 +1093,18 @@ Internal void lane(L1 arena) {
 						F1 screen_len = sqrtf(screen_dx*screen_dx + screen_dy*screen_dy);
 
 						if (screen_len > 0.0001f) {
-							// Project mouse delta onto screen-space axis direction
-							F1 mouse_proj = (ramR->delta_mx * screen_dx + ramR->delta_my * screen_dy) / screen_len;
-							F1 world_delta = mouse_proj / screen_len;
-							F3 delta_v = axis_dir * world_delta;
+							//- kti: Project mouse delta onto screen-space axis direction.
+							F1 dot_product = (ramR->delta_mx*screen_dx + ramR->delta_my*screen_dy);
+							F1 projected_len_px = dot_product / screen_len;
+							F1 projected_len_world = projected_len_px / screen_len;
+
+							F3 delta_v = axis_dir * projected_len_world;
 
 							if (ramR->axis_mode == AXIS_MODE__POS) {
 								e->pos += delta_v;
 							} else if (ramR->axis_mode == AXIS_MODE__SIZE) {
 								if (e->shape == SHAPE__SPHERE) {
-									e->size.x += world_delta;
+									e->size.x += projected_len_world;
 									e->size.y = e->size.x;
 									e->size.z = e->size.x;
 								} else {
@@ -1105,7 +1112,7 @@ Internal void lane(L1 arena) {
 								}
 							}
 
-							// Snap objects along the dragging axis.
+							//- kti: Snap objects along the dragging axis.
 							L1 axis = ramR->active_axis - 1;
 							for EachIndex(entity_idx, ramR->entity_count) {
 								TV(Entity) oe = &ramV->entities[entity_idx];

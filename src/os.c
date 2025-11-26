@@ -78,7 +78,7 @@ struct OS_Event {
   I1 type;
   I1 key;
   I1 modifiers;
-  I1 x, y;
+  D1 x, y;
 };
 
 typedef struct Posix_Time_Spec Posix_Time_Spec;
@@ -425,256 +425,128 @@ Internal L1 os_clock(void) {
   return result;
 }
 
-// Wayland
-
-#define WL_KEY__NULL 0
-#define WL_KEY__ESC 1
-#define WL_KEY__1 2
-#define WL_KEY__2 3
-#define WL_KEY__3 4
-#define WL_KEY__4 5
-#define WL_KEY__5 6
-#define WL_KEY__6 7
-#define WL_KEY__7 8
-#define WL_KEY__8 9
-#define WL_KEY__9 10
-#define WL_KEY__0 11
-#define WL_KEY__MINUS 12
-#define WL_KEY__EQUAL 13
-#define WL_KEY__BACKSPACE 14
-#define WL_KEY__TAB 15
-#define WL_KEY__Q 16
-#define WL_KEY__W 17
-#define WL_KEY__E 18
-#define WL_KEY__R 19
-#define WL_KEY__T 20
-#define WL_KEY__Y 21
-#define WL_KEY__U 22
-#define WL_KEY__I 23
-#define WL_KEY__O 24
-#define WL_KEY__P 25
-#define WL_KEY__LEFTBRACE 26
-#define WL_KEY__RIGHTBRACE 27
-#define WL_KEY__ENTER 28
-#define WL_KEY__LEFTCTRL 29
-#define WL_KEY__A 30
-#define WL_KEY__S 31
-#define WL_KEY__D 32
-#define WL_KEY__F 33
-#define WL_KEY__G 34
-#define WL_KEY__H 35
-#define WL_KEY__J 36
-#define WL_KEY__K 37
-#define WL_KEY__L 38
-#define WL_KEY__SEMICOLON 39
-#define WL_KEY__APOSTROPHE 40
-#define WL_KEY__GRAVE 41
-#define WL_KEY__LEFTSHIFT 42
-#define WL_KEY__BACKSLASH 43
-#define WL_KEY__Z 44
-#define WL_KEY__X 45
-#define WL_KEY__C 46
-#define WL_KEY__V 47
-#define WL_KEY__B 48
-#define WL_KEY__N 49
-#define WL_KEY__M 50
-#define WL_KEY__COMMA 51
-#define WL_KEY__DOT 52
-#define WL_KEY__SLASH 53
-#define WL_KEY__RIGHTSHIFT 54
-#define WL_KEY__KPASTERISK 55
-#define WL_KEY__LEFTALT 56
-#define WL_KEY__SPACE 57
-#define WL_KEY__CAPSLOCK 58
-#define WL_KEY__F1 59
-#define WL_KEY__F2 60
-#define WL_KEY__F3 61
-#define WL_KEY__F4 62
-#define WL_KEY__F5 63
-#define WL_KEY__F6 64
-#define WL_KEY__F7 65
-#define WL_KEY__F8 66
-#define WL_KEY__F9 67
-#define WL_KEY__F10 68
-#define WL_KEY__NUMLOCK 69
-#define WL_KEY__SCROLLLOCK 70
-#define WL_KEY__KP7 71
-#define WL_KEY__KP8 72
-#define WL_KEY__KP9 73
-#define WL_KEY__KPMINUS 74
-#define WL_KEY__KP4 75
-#define WL_KEY__KP5 76
-#define WL_KEY__KP6 77
-#define WL_KEY__KPPLUS 78
-#define WL_KEY__KP1 79
-#define WL_KEY__KP2 80
-#define WL_KEY__KP3 81
-#define WL_KEY__KP0 82
-#define WL_KEY__KPDOT 83
-#define WL_KEY__ZENKAKUHANKAKU 85
-#define WL_KEY__102ND 86
-#define WL_KEY__F11 87
-#define WL_KEY__F12 88
-#define WL_KEY__RO 89
-#define WL_KEY__KATAKANA 90
-#define WL_KEY__HIRAGANA 91
-#define WL_KEY__HENKAN 92
-#define WL_KEY__KATAKANAHIRAGANA 93
-#define WL_KEY__MUHENKAN 94
-#define WL_KEY__KPJPCOMMA 95
-#define WL_KEY__KPENTER 96
-#define WL_KEY__RIGHTCTRL 97
-#define WL_KEY__KPSLASH 98
-#define WL_KEY__SYSRQ 99
-#define WL_KEY__RIGHTALT 100
-#define WL_KEY__LINEFEED 101
-#define WL_KEY__HOME 102
-#define WL_KEY__UP 103
-#define WL_KEY__PAGEUP 104
-#define WL_KEY__LEFT 105
-#define WL_KEY__RIGHT 106
-#define WL_KEY__END 107
-#define WL_KEY__DOWN 108
-#define WL_KEY__PAGEDOWN 109
-#define WL_KEY__INSERT 110
-#define WL_KEY__DELETE 111
-#define WL_KEY__MACRO 112
-#define WL_KEY__MUTE 113
-#define WL_KEY__VOLUMEDOWN 114
-#define WL_KEY__VOLUMEUP 115
-#define WL_KEY__POWER 116 /* SC System Power Down */
-#define WL_KEY__KPEQUAL 117
-#define WL_KEY__KPPLUSMINUS 118
-#define WL_KEY__PAUSE 119
-#define WL_KEY__SCALE 120 /* AL Compiz Scale (Expose) */
-#define WL_KEY__KPCOMMA 121
-#define WL_KEY__HANGEUL 122
-#define WL_KEY__HANGUEL KEY_HANGEUL
-#define WL_KEY__HANJA 123
-#define WL_KEY__YEN 124
-#define WL_KEY__LEFTMETA 125
-#define WL_KEY__RIGHTMETA 126
-#define WL_KEY__COMPOSE 127
-#define WL_KEY__STOP 128 /* AC Stop */
-#define WL_KEY__AGAIN 129
-#define WL_KEY__PROPS 130 /* AC Properties */
-#define WL_KEY__UNDO 131  /* AC Undo */
-#define WL_KEY__FRONT 132
-#define WL_KEY__COPY 133  /* AC Copy */
-#define WL_KEY__OPEN 134  /* AC Open */
-#define WL_KEY__PASTE 135 /* AC Paste */
-#define WL_KEY__FIND 136  /* AC Search */
-#define WL_KEY__CUT 137   /* AC Cut */
-#define WL_KEY__HELP 138  /* AL Integrated Help Center */
-#define WL_KEY__MENU 139  /* Menu (show menu) */
-#define WL_KEY__CALC 140  /* AL Calculator */
-#define WL_KEY__SETUP 141
-#define WL_KEY__SLEEP 142  /* SC System Sleep */
-#define WL_KEY__WAKEUP 143 /* System Wake Up */
-#define WL_KEY__FILE 144   /* AL Local Machine Browser */
-#define WL_KEY__SENDFILE 145
-#define WL_KEY__DELETEFILE 146
-#define WL_KEY__XFER 147
-#define WL_KEY__PROG1 148
-#define WL_KEY__PROG2 149
-#define WL_KEY__WWW 150 /* AL Internet Browser */
-#define WL_KEY__MSDOS 151
-#define WL_KEY__COFFEE 152 /* AL Terminal Lock/Screensaver */
-#define WL_KEY__SCREENLOCK KEY_COFFEE
-#define WL_KEY__ROTATE_DISPLAY 153 /* Display orientation for e.g. tablets */
-#define WL_KEY__DIRECTION KEY_ROTATE_DISPLAY
-#define WL_KEY__CYCLEWINDOWS 154
-#define WL_KEY__MAIL 155
-#define WL_KEY__BOOKMARKS 156 /* AC Bookmarks */
-#define WL_KEY__COMPUTER 157
-#define WL_KEY__BACK 158    /* AC Back */
-#define WL_KEY__FORWARD 159 /* AC Forward */
-#define WL_KEY__CLOSECD 160
-#define WL_KEY__EJECTCD 161
-#define WL_KEY__EJECTCLOSECD 162
-#define WL_KEY__NEXTSONG 163
-#define WL_KEY__PLAYPAUSE 164
-#define WL_KEY__PREVIOUSSONG 165
-#define WL_KEY__STOPCD 166
-#define WL_KEY__RECORD 167
-#define WL_KEY__REWIND 168
-#define WL_KEY__PHONE 169 /* Media Select Telephone */
-#define WL_KEY__ISO 170
-#define WL_KEY__CONFIG 171   /* AL Consumer Control Configuration */
-#define WL_KEY__HOMEPAGE 172 /* AC Home */
-#define WL_KEY__REFRESH 173  /* AC Refresh */
-#define WL_KEY__EXIT 174     /* AC Exit */
-#define WL_KEY__MOVE 175
-#define WL_KEY__EDIT 176
-#define WL_KEY__SCROLLUP 177
-#define WL_KEY__SCROLLDOWN 178
-#define WL_KEY__KPLEFTPAREN 179
-#define WL_KEY__KPRIGHTPAREN 180
-#define WL_KEY__NEW 181  /* AC New */
-#define WL_KEY__REDO 182 /* AC Redo/Repeat */
-#define WL_KEY__F13 183
-#define WL_KEY__F14 184
-#define WL_KEY__F15 185
-#define WL_KEY__F16 186
-#define WL_KEY__F17 187
-#define WL_KEY__F18 188
-#define WL_KEY__F19 189
-#define WL_KEY__F20 190
-#define WL_KEY__F21 191
-#define WL_KEY__F22 192
-#define WL_KEY__F23 193
-#define WL_KEY__F24 194
-#define WL_KEY__PLAYCD 200
-#define WL_KEY__PAUSECD 201
-#define WL_KEY__PROG3 202
-#define WL_KEY__PROG4 203
-#define WL_KEY__DASHBOARD 204 /* AL Dashboard */
-#define WL_KEY__SUSPEND 205
-#define WL_KEY__CLOSE 206 /* AC Close */
-#define WL_KEY__PLAY 207
-#define WL_KEY__FASTFORWARD 208
-#define WL_KEY__BASSBOOST 209
-#define WL_KEY__PRINT 210 /* AC Print */
-#define WL_KEY__HP 211
-#define WL_KEY__CAMERA 212
-#define WL_KEY__SOUND 213
-#define WL_KEY__QUESTION 214
-#define WL_KEY__EMAIL 215
-#define WL_KEY__CHAT 216
-#define WL_KEY__SEARCH 217
-#define WL_KEY__CONNECT 218
-#define WL_KEY__FINANCE 219 /* AL Checkbook/Finance */
-#define WL_KEY__SPORT 220
-#define WL_KEY__SHOP 221
-#define WL_KEY__ALTERASE 222
-#define WL_KEY__CANCEL 223 /* AC Cancel */
-#define WL_KEY__BRIGHTNESSDOWN 224
-#define WL_KEY__BRIGHTNESSUP 225
-#define WL_KEY__MEDIA 226
-#define WL_KEY__SWITCHVIDEOMODE 227 /* Cycle between available video outputs (Monitor/LCD/TV-out/etc) */
-#define WL_KEY__KBDILLUMTOGGLE 228
-#define WL_KEY__KBDILLUMDOWN 229
-#define WL_KEY__KBDILLUMUP 230
-#define WL_KEY__SEND 231        /* AC Send */
-#define WL_KEY__REPLY 232       /* AC Reply */
-#define WL_KEY__FORWARDMAIL 233 /* AC Forward Msg */
-#define WL_KEY__SAVE 234        /* AC Save */
-#define WL_KEY__DOCUMENTS 235
-#define WL_KEY__BATTERY 236
-#define WL_KEY__BLUETOOTH 237
-#define WL_KEY__WLAN 238
-#define WL_KEY__UWB 239
-#define WL_KEY__UNKNOWN 240
-#define WL_KEY__VIDEO_NEXT 241       /* drive next video source */
-#define WL_KEY__VIDEO_PREV 242       /* drive previous video source */
-#define WL_KEY__BRIGHTNESS_CYCLE 243 /* brightness up, after max is min */
-#define WL_KEY__BRIGHTNESS_AUTO 244 /* Set Auto Brightness: manual brightness control is off, rely on ambient */
-#define WL_KEY__BRIGHTNESS_ZERO KEY_BRIGHTNESS_AUTO
-#define WL_KEY__DISPLAY_OFF 245 /* display device to off state */
-#define WL_KEY__WWAN 246        /* Wireless WAN (LTE, UMTS, GSM, etc.) */
-#define WL_KEY__WIMAX KEY_WWAN
-#define WL_KEY__RFKILL 247  /* Key that controls all radios */
-#define WL_KEY__MICMUTE 248 /* Mute / unmute the microphone */
+Internal I1 os_key_from_wl_key(I1 wl_key) {
+  I1 result = OS_KEY__NULL;
+  LocalPersist I1 initialized = 0;
+  LocalPersist I1 key_table[256] = {0};
+  if (initialized == 0) {
+    initialized = 1;
+    key_table[1] = OS_KEY__ESC;
+    key_table[2] = OS_KEY__1;
+    key_table[3] = OS_KEY__2;
+    key_table[4] = OS_KEY__3;
+    key_table[5] = OS_KEY__4;
+    key_table[6] = OS_KEY__5;
+    key_table[7] = OS_KEY__6;
+    key_table[8] = OS_KEY__7;
+    key_table[9] = OS_KEY__8;
+    key_table[10] = OS_KEY__9;
+    key_table[11] = OS_KEY__0;
+    key_table[12] = OS_KEY__MINUS;
+    key_table[13] = OS_KEY__EQUAL;
+    key_table[14] = OS_KEY__BACKSPACE;
+    key_table[15] = OS_KEY__TAB;
+    key_table[16] = OS_KEY__Q;
+    key_table[17] = OS_KEY__W;
+    key_table[18] = OS_KEY__E;
+    key_table[19] = OS_KEY__R;
+    key_table[20] = OS_KEY__T;
+    key_table[21] = OS_KEY__Y;
+    key_table[22] = OS_KEY__U;
+    key_table[23] = OS_KEY__I;
+    key_table[24] = OS_KEY__O;
+    key_table[25] = OS_KEY__P;
+    key_table[26] = OS_KEY__LEFT_BRACKET;
+    key_table[27] = OS_KEY__RIGHT_BRACKET;
+    key_table[28] = OS_KEY__RETURN;
+    key_table[29] = OS_KEY__CTRL;
+    key_table[30] = OS_KEY__A;
+    key_table[31] = OS_KEY__S;
+    key_table[32] = OS_KEY__D;
+    key_table[33] = OS_KEY__F;
+    key_table[34] = OS_KEY__G;
+    key_table[35] = OS_KEY__H;
+    key_table[36] = OS_KEY__J;
+    key_table[37] = OS_KEY__K;
+    key_table[38] = OS_KEY__L;
+    key_table[39] = OS_KEY__SEMICOLON;
+    key_table[40] = OS_KEY__QUOTE;
+    key_table[41] = OS_KEY__TICK;
+    key_table[42] = OS_KEY__SHIFT;
+    key_table[43] = OS_KEY__BACK_SLASH;
+    key_table[44] = OS_KEY__Z;
+    key_table[45] = OS_KEY__X;
+    key_table[46] = OS_KEY__C;
+    key_table[47] = OS_KEY__V;
+    key_table[48] = OS_KEY__B;
+    key_table[49] = OS_KEY__N;
+    key_table[50] = OS_KEY__M;
+    key_table[51] = OS_KEY__COMMA;
+    key_table[52] = OS_KEY__PERIOD;
+    key_table[53] = OS_KEY__SLASH;
+    key_table[54] = OS_KEY__SHIFT;
+    key_table[55] = OS_KEY__NUM_STAR;
+    key_table[56] = OS_KEY__ALT;
+    key_table[57] = OS_KEY__SPACE;
+    key_table[58] = OS_KEY__CAPS_LOCK;
+    key_table[59] = OS_KEY__F1;
+    key_table[60] = OS_KEY__F2;
+    key_table[61] = OS_KEY__F3;
+    key_table[62] = OS_KEY__F4;
+    key_table[63] = OS_KEY__F5;
+    key_table[64] = OS_KEY__F6;
+    key_table[65] = OS_KEY__F7;
+    key_table[66] = OS_KEY__F8;
+    key_table[67] = OS_KEY__F9;
+    key_table[68] = OS_KEY__F10;
+    key_table[69] = OS_KEY__NUM_LOCK;
+    key_table[70] = OS_KEY__SCROLL_LOCK;
+    key_table[71] = OS_KEY__NUM7;
+    key_table[72] = OS_KEY__NUM8;
+    key_table[73] = OS_KEY__NUM9;
+    key_table[74] = OS_KEY__NUM_MINUS;
+    key_table[75] = OS_KEY__NUM4;
+    key_table[76] = OS_KEY__NUM5;
+    key_table[77] = OS_KEY__NUM6;
+    key_table[78] = OS_KEY__NUM_PLUS;
+    key_table[79] = OS_KEY__NUM1;
+    key_table[80] = OS_KEY__NUM2;
+    key_table[81] = OS_KEY__NUM3;
+    key_table[82] = OS_KEY__NUM0;
+    key_table[83] = OS_KEY__NUM_PERIOD;
+    key_table[87] = OS_KEY__F11;
+    key_table[88] = OS_KEY__F12;
+    key_table[97] = OS_KEY__CTRL;
+    key_table[98] = OS_KEY__NUM_SLASH;
+    key_table[100] = OS_KEY__ALT;
+    key_table[102] = OS_KEY__HOME;
+    key_table[103] = OS_KEY__UP;
+    key_table[104] = OS_KEY__PAGE_UP;
+    key_table[105] = OS_KEY__LEFT;
+    key_table[106] = OS_KEY__RIGHT;
+    key_table[107] = OS_KEY__END;
+    key_table[108] = OS_KEY__DOWN;
+    key_table[109] = OS_KEY__PAGE_DOWN;
+    key_table[110] = OS_KEY__INSERT;
+    key_table[111] = OS_KEY__DELETE;
+    key_table[119] = OS_KEY__PAUSE;
+    key_table[139] = OS_KEY__MENU;
+    key_table[183] = OS_KEY__F13;
+    key_table[184] = OS_KEY__F14;
+    key_table[185] = OS_KEY__F15;
+    key_table[186] = OS_KEY__F16;
+    key_table[187] = OS_KEY__F17;
+    key_table[188] = OS_KEY__F18;
+    key_table[189] = OS_KEY__F19;
+    key_table[190] = OS_KEY__F20;
+    key_table[191] = OS_KEY__F21;
+    key_table[192] = OS_KEY__F22;
+    key_table[193] = OS_KEY__F23;
+    key_table[194] = OS_KEY__F24;
+  }
+  result = key_table[wl_key];
+  return result;
+}
 
 Internal void os_push_event(OS_Event event) {
   L1 idx = ramR->event_count;
@@ -777,8 +649,8 @@ Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer,
   OS_Event event = {
     .timestamp_ns = time * 1000000,
     .type = OS_EVENT_TYPE__MOUSE_MOVE,
-    .x = surface_x,
-    .y = surface_y,
+    .x = wl_fixed_to_double(surface_x),
+    .y = wl_fixed_to_double(surface_y),
   };
   os_push_event(event);
 }
@@ -815,9 +687,9 @@ Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer,
     .type = OS_EVENT_TYPE__SCROLL,
   };
   if (axis == 0) {
-    event.y = value;
+    event.y = wl_fixed_to_double(value);
   } else if (axis == 1) {
-    event.x = value;
+    event.x = wl_fixed_to_double(value);
   }
 
   os_push_event(event);
@@ -853,11 +725,12 @@ Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard,
 
 Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard,
                                    I1 serial, I1 time, I1 key, I1 state) {
-  if (key < 256) {
+  I1 os_key = os_key_from_wl_key(key);
+  if (os_key != OS_KEY__NULL) {
     OS_Event event = {
       .timestamp_ns = time * 1000000,
       .type = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE,
-      .key = key,
+      .key = os_key,
     };
     os_push_event(event);
   }

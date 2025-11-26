@@ -39,13 +39,13 @@ enum {
 
 #if (CPU_ && RAM_)
 
-F1 delta_mx;
-F1 delta_my;
+D1 delta_mx;
+D1 delta_my;
 I1 right_just_pressed;
 I1 left_just_pressed;
 I1 left_just_released;
 
-I1 mouse_x, mouse_y;
+D1 mouse_x, mouse_y;
 B1 keys[512];
 B1 prev_keys[512];
 
@@ -352,7 +352,7 @@ Internal void ui_textedit(L1 str, L1V len, L1 capacity) {
 				case OS_KEY__SPACE: c = ' '; break;
 				case OS_KEY__MINUS: c = '-'; break;
 				case OS_KEY__COMMA:
-				case OS_KEY__DOT:
+				case OS_KEY__PERIOD:
 					c = '.';
 					break;
 				}
@@ -815,8 +815,8 @@ Internal void lane(L1 arena) {
 			while (TR_(OS_Window, window)->should_close == 0) {
 				F1 time = F1_(os_clock() / 1000000) / 1000.0f;
 
-				F1 prev_mx = ramR->mouse_x;
-				F1 prev_my = ramR->mouse_y;
+				D1 prev_mx = ramR->mouse_x;
+				D1 prev_my = ramR->mouse_y;
 				I1 left_was_down = ramR->keys[OS_KEY__LEFT_MOUSE_BUTTON];
 				I1 right_was_down = ramR->keys[OS_KEY__RIGHT_MOUSE_BUTTON];
 
@@ -830,8 +830,9 @@ Internal void lane(L1 arena) {
 						case OS_EVENT_TYPE__RELEASE: {
 							ramR->keys[e->key] = (e->type == OS_EVENT_TYPE__PRESS);
 						} break;
-						case OS_EVENT_TYPE_MOUSE_MOVE: {
-
+						case OS_EVENT_TYPE__MOUSE_MOVE: {
+							ramR->mouse_x = e->x;
+							ramR->mouse_y = e->y;
 						} break;
 					}
 				}

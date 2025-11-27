@@ -44,11 +44,9 @@ typedef struct {
   Align(64) L1 end[1024*1024/8];
 } RamT;
 
-Global Align(64) L1 ramM[sizeof(RamT)/8];
-#define ramR TR_(RamT, L1_(ramM))
-#define ramV TV_(RamT, L1_(ramM))
-
-Global ThreadLocal L1 lane_ctx;
+Global Align(64) RamT ramM;
+#define ramR (&ramM)
+#define ramV (&ramM)
 
 #undef RAM_
 #define RAM_ 0

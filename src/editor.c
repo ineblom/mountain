@@ -161,8 +161,8 @@ Inline Mat4 mat4_multiply(Mat4 a, Mat4 b) {
 
 Inline Mat4 mat4_invert(Mat4 m) {
 	Mat4 inv = {0};
-	F1R mm = m.m;
-	F1R dst = inv.m;
+	F1 *mm = m.m;
+	F1 *dst = inv.m;
 
 	dst[ 0] =  mm[5]*mm[10]*mm[15] - mm[5]*mm[11]*mm[14] - mm[9]*mm[6]*mm[15] + mm[9]*mm[7]*mm[14] + mm[13]*mm[6]*mm[11] - mm[13]*mm[7]*mm[10];
 	dst[ 4] = -mm[4]*mm[10]*mm[15] + mm[4]*mm[11]*mm[14] + mm[8]*mm[6]*mm[15] - mm[8]*mm[7]*mm[14] - mm[12]*mm[6]*mm[11] + mm[12]*mm[7]*mm[10];
@@ -245,7 +245,7 @@ Internal F1 draw_text(String8 msg, F1 x, F1 y, F1 size, F3 color) {
 		F1 current_y = y;
 
 		for EachIndex(i, msg.len) {
-			B1 c = B1R_(msg.str)[i];
+			B1 c = msg.str[i];
 			L1 c_i = 0;
 			if (c >= '0' && c <= '9') {
 				c_i = c - '0' + 26;
@@ -291,7 +291,7 @@ Internal String8 cut_label(String8 label) {
 	if (label.len > 2) {
 		//- kti: cut label at ##.
 		for EachIndex(i, result.len-1) {
-			if (B1R_(result.str)[i] == '#' && B1R_(result.str)[i+1] == '#') {
+			if (result.str[i] == '#' && result.str[i+1] == '#') {
 				result.len = i;
 				break;
 			}
@@ -309,7 +309,7 @@ Internal void ui_text(String8 msg) {
 	ramR->panel_current_y += height;
 }
 
-Internal void ui_textedit(L1 str, L1V len, L1 capacity) {
+Internal void ui_textedit(B1 *str, L1 *len, L1 capacity) {
 	String8 str8_text = (String8){str, len[0]};
 	L1 hash = str8_hash(str8_text);
 
@@ -362,7 +362,7 @@ Internal void ui_textedit(L1 str, L1V len, L1 capacity) {
 						len[0] -= 1;
 					}
 				} else if (c != 0) {
-					B1R_(str)[len[0]] = c;
+					str[len[0]] = c;
 					len[0] += 1;
 				}
 
@@ -434,7 +434,7 @@ Internal void ui_textedit(L1 str, L1V len, L1 capacity) {
 	ramR->panel_current_y = bottom;
 }
 
-Internal void ui_drag(L1 arena, String8 label, F1R value) {
+Internal void ui_drag(String8 label, F1 *value) {
 	L1 hash = str8_hash(label);
 
 	if (ramR->active_hash == 0 &&
@@ -462,15 +462,18 @@ Internal void ui_drag(L1 arena, String8 label, F1R value) {
 
 	label = cut_label(label);
 
+	Temp_Arena scratch = scratch_begin(0, 0);
+	String8 text = str8f(scratch.arena, "%.*s %.3f", label.len, label.str, value[0]);
+	scratch_end(scratch);
+
 	ramR->panel_current_y += 10.0f;
-	// TODO: UI system should probably keep buffers for text.
-	String8 text = str8f(arena, "%.*s %f", label.len, label.str, value[0]);
 	F1 height = draw_text(text, 10.0f, ramR->panel_current_y, 16.0f, color);
 
 	ramR->panel_current_y += height;
+
 }
 
-Internal I1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1V value) {
+Internal I1 ui_select(String8 label, String8 *alternatives, L1 alternative_count, L1 *value) {
 	I1 did_change_value = 0;
 
 	ramR->panel_current_y += 10.0f;
@@ -531,7 +534,7 @@ Internal I1 ui_select(String8 label, L1 alternatives, L1 alternative_count, L1V 
 		glEnd();
 
 		top += pad_y;
-		top += draw_text(TR_(String8, alternatives)[i], left, top, 16.0f, text_color);
+		top += draw_text(alternatives[i], left, top, 16.0f, text_color);
 		top += pad_y;
 	}
 
@@ -705,14 +708,14 @@ Internal L1 entity_create(L1 flags, String8 name) {
 		.size = {0.5f, 0.5f, 0.5f},
 	};
 
-	memmove(L1_(ramR->entities[idx].name), name.str, name.len);
+	memmove(ramR->entities[idx].name, name.str, name.len);
 
 	return idx;
 }
 
-Internal void lane(L1 arena) {
+Internal void lane(Arena *arena) {
 	L1 should_render = 0;
-	L1 window = 0;
+	OS_Window *window = 0;
 
 	if (lane_idx() == 0) {
 		window = os_window_open(arena, Str8_("Editor"), 1280, 720);
@@ -763,7 +766,7 @@ Internal void lane(L1 arena) {
 		//- kti: Light
 
 		L1 light_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("LIGHT"));
-		TV(Entity) light = &ramV->entities[light_idx];
+		Entity *light = &ramV->entities[light_idx];
 		light->pos = (F3){0.0f, 6.0f, 0.0f};
 		light->size = (F3){2.0f, 0.05f, 2.0f};
 		light->material_idx = light_material_idx;
@@ -800,15 +803,17 @@ Internal void lane(L1 arena) {
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 
-	lane_sync_L1(&window, 0);
+	lane_sync_L1((L1 *)&window, 0);
 
 	//- kti: Outer loop. { main loop, render }
-	while (TR_(OS_Window, window)->should_close == 0) {
+	while (window->should_close == 0) {
 
 		////////////////////////////////
 		//~ kti: Main Loop - Only on lane 0
 		if (lane_idx() == 0) {
-			while (TR_(OS_Window, window)->should_close == 0) {
+			while (window->should_close == 0) {
+				Temp_Arena frame_arena = scratch_begin(0, 0);
+
 				F1 time = F1_(os_clock() / 1000000) / 1000.0f;
 
 				D1 prev_mx = ramR->mouse_x;
@@ -817,11 +822,10 @@ Internal void lane(L1 arena) {
 				I1 right_was_down = ramR->keys[OS_KEY__RIGHT_MOUSE_BUTTON];
 				D1 scroll_y = 0;
 
-				os_poll_events();
-				memmove(L1_(ramR->prev_keys), L1_(ramR->keys), sizeof(B1)*512);
-				for EachIndex(i, ramR->event_count) {
-					TR(OS_Event) e = &ramR->events[i];
+				os_poll_events(frame_arena.arena);
 
+				memmove(ramR->prev_keys, ramR->keys, sizeof(B1)*512);
+				for (OS_Event *e = ramR->first_event; e != 0; e = e->next) {
 					switch (e->type) {
 						case OS_EVENT_TYPE__PRESS:
 						case OS_EVENT_TYPE__RELEASE: {
@@ -848,8 +852,8 @@ Internal void lane(L1 arena) {
 				I1 key_w = ramR->keys[OS_KEY__W];
 				I1 key_s = ramR->keys[OS_KEY__S];
 
-				F1 window_width = F1_(TR_(OS_Window, window)->width);
-				F1 window_height = F1_(TR_(OS_Window, window)->height);
+				F1 window_width = F1_(window->width);
+				F1 window_height = F1_(window->height);
 				F1 viewport_width = window_width-sidebar_w;
 				F1 viewport_height = window_height;
 				F1 viewport_aspect = viewport_width/viewport_height;
@@ -982,9 +986,9 @@ Internal void lane(L1 arena) {
 				glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
 
 				for EachIndex(entity_index, ramR->entity_count) {
-					TR(Entity) e = &ramR->entities[entity_index];
+					Entity *e = &ramR->entities[entity_index];
 
-					TR(RT_Material) mat = &ramR->materials[e->material_idx];
+					RT_Material *mat = &ramR->materials[e->material_idx];
 				 	GLfloat color[4] = {mat->base_color.x, mat->base_color.y, mat->base_color.z, 1.0};
 					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, color);
 					glMaterialfv(GL_FRONT, GL_SPECULAR, color);
@@ -1041,7 +1045,7 @@ Internal void lane(L1 arena) {
 
 				ramR->hot_axis = 0;
 				if (ramR->selected_entity_idx != L1_MAX && ramR->active_axis == 0 && ramR->mouse_x >= sidebar_w) {
-					TR(Entity) e = &ramR->entities[ramR->selected_entity_idx];
+					Entity *e = &ramR->entities[ramR->selected_entity_idx];
 
 					//- kti: Project axis endpoints to screen space
 					F3 x_end = e->pos; x_end.x += 1.0f;
@@ -1075,7 +1079,7 @@ Internal void lane(L1 arena) {
 				}
 
 				if (ramR->selected_entity_idx != L1_MAX) {
-					TV(Entity) e = &ramV->entities[ramR->selected_entity_idx];
+					Entity *e = &ramV->entities[ramR->selected_entity_idx];
 
 					//- kti: Handle axis dragging
 					if (ramR->active_axis != 0) {
@@ -1117,7 +1121,7 @@ Internal void lane(L1 arena) {
 							if (e->flags & ENTITY_FLAG__SHAPE) {
 								L1 axis = ramR->active_axis - 1;
 								for EachIndex(entity_idx, ramR->entity_count) {
-									TV(Entity) oe = &ramV->entities[entity_idx];
+									Entity *oe = &ramV->entities[entity_idx];
 									if (oe == e || !(oe->flags & ENTITY_FLAG__SHAPE)) continue;
 
 									F1 e_min = e->pos[axis] - e->size[axis];
@@ -1239,9 +1243,9 @@ Internal void lane(L1 arena) {
 				}
 
 				if (ramR->selected_entity_idx != L1_MAX) {
-					TV(Entity) e = &ramV->entities[ramR->selected_entity_idx];
+					Entity *e = &ramV->entities[ramR->selected_entity_idx];
 
-					ui_textedit(L1_(e->name), &e->name_len, MAX_NAME_LEN);
+					ui_textedit(e->name, &e->name_len, MAX_NAME_LEN);
 
 					if (ui_button(Str8_("DELETE"))) {
 						ramR->entities[ramR->selected_entity_idx] = ramR->entities[ramR->entity_count-1];
@@ -1250,22 +1254,20 @@ Internal void lane(L1 arena) {
 						ramR->entity_count -= 1;
 					}
 
-					L1 pos = arena_pos(arena);
-
 					ui_text(Str8_("POSITION"));
 					F1 x = e->pos.x, y = e->pos.y, z = e->pos.z;
-					ui_drag(arena, Str8_(" X##pos"), &x);
-					ui_drag(arena, Str8_(" Y##pos"), &y);
-					ui_drag(arena, Str8_(" Z##pos"), &z);
+					ui_drag(Str8_(" X##pos"), &x);
+					ui_drag(Str8_(" Y##pos"), &y);
+					ui_drag(Str8_(" Z##pos"), &z);
 					e->pos = (F3){x, y, z};
 
 					if (e->flags & ENTITY_FLAG__SHAPE) {
 						ui_text(Str8_("SIZE"));
 						x = e->size.x, y = e->size.y, z = e->size.z;
-						ui_drag(arena, Str8_(" X##size"), &x);
+						ui_drag(Str8_(" X##size"), &x);
 						if (e->shape != SHAPE__SPHERE) {
-							ui_drag(arena, Str8_(" Y##size"), &y);
-							ui_drag(arena, Str8_(" Z##size"), &z);
+							ui_drag(Str8_(" Y##size"), &y);
+							ui_drag(Str8_(" Z##size"), &z);
 						}
 						e->size = (F3){Max(0, x), Max(0, y), Max(z, 0)};
 
@@ -1274,69 +1276,64 @@ Internal void lane(L1 arena) {
 							ramR->active_hash = 0;
 							ramR->selected_material_idx = e->material_idx;
 						}
-						ui_select(Str8_("MATERIAL"), L1_(ramR->material_names), ramR->material_count, &e->material_idx);
+						ui_select(Str8_("MATERIAL"), ramR->material_names, ramR->material_count, &e->material_idx);
 
-						ui_select(Str8_("SHAPE"), L1_(shape_strs), ArrayCount(shape_strs), &e->shape);
+						ui_select(Str8_("SHAPE"), shape_strs, ArrayCount(shape_strs), &e->shape);
 					}
 
-					arena_pop_to(arena, pos);
 				} else if(ramR->selected_material_idx != L1_MAX) {
-					TR(RT_Material) mat = &ramR->materials[ramR->selected_material_idx];
+					RT_Material *mat = &ramR->materials[ramR->selected_material_idx];
 
 					ui_text(Str8_("MATERIAL"));
 
-					L1 pos = arena_pos(arena);
-
 					F1 x = mat->base_color.x, y = mat->base_color.y, z = mat->base_color.z;
-					ui_drag(arena, Str8_(" R##color"), &x);
-					ui_drag(arena, Str8_(" G##color"), &y);
-					ui_drag(arena, Str8_(" B##color"), &z);
+					ui_drag(Str8_(" R##color"), &x);
+					ui_drag(Str8_(" G##color"), &y);
+					ui_drag(Str8_(" B##color"), &z);
 					mat->base_color = (F3){x, y, z};
 					mat->base_color = F3_clamp01(mat->base_color);
 
-					ui_drag(arena, Str8_("METALLIC"), &mat->metallic);
-					ui_drag(arena, Str8_("ROUGHNESS"), &mat->roughness);
+					ui_drag(Str8_("METALLIC"), &mat->metallic);
+					ui_drag(Str8_("ROUGHNESS"), &mat->roughness);
 					mat->metallic = F1_clamp01(mat->metallic);
 					mat->roughness = F1_clamp01(mat->roughness);
 
 					x = mat->emissive.x, y = mat->emissive.y, z = mat->emissive.z;
-					ui_drag(arena, Str8_(" R##emissive"), &x);
-					ui_drag(arena, Str8_(" G##emissive"), &y);
-					ui_drag(arena, Str8_(" B##emissive"), &z);
+					ui_drag(Str8_(" R##emissive"), &x);
+					ui_drag(Str8_(" G##emissive"), &y);
+					ui_drag(Str8_(" B##emissive"), &z);
 					mat->emissive = (F3){Max(0, x), Max(0, y), Max(0, z)};
 
 					ui_text(Str8_("ENTITIES"));
 
 					for EachIndex(entity_idx, ramR->entity_count) {
-						TR(Entity) e = &ramR->entities[entity_idx];
+						Entity *e = &ramR->entities[entity_idx];
 						if (e->flags & ENTITY_FLAG__SHAPE && e->material_idx == ramR->selected_material_idx) {
-							if (ui_button((String8){L1_(e->name), e->name_len})) {
+							if (ui_button((String8){e->name, e->name_len})) {
 								ramR->selected_entity_idx = entity_idx;
 								ramR->selected_material_idx = L1_MAX;
 							}
 						}
 					}
-
-					arena_pop_to(arena, pos);
 				} else {
-					ui_select(Str8_("MATERIALS"), L1_(ramR->material_names), ramR->material_count, &ramR->selected_material_idx);
+					ui_select(Str8_("MATERIALS"), ramR->material_names, ramR->material_count, &ramR->selected_material_idx);
 
-					L1 pos = arena_pos(arena);
-					L1 entity_names = push_array(arena, String8, ramR->entity_count);
+					String8 *entity_names = push_array(frame_arena.arena, String8, ramR->entity_count);
 
 					for EachIndex(entity_index, ramR->entity_count) {
-						TR(Entity) e = &ramR->entities[entity_index];
-						TR_(String8, entity_names)[entity_index] = (String8){ L1_(e->name), e->name_len};
+						Entity *e = &ramR->entities[entity_index];
+						entity_names[entity_index] = (String8){ e->name, e->name_len};
 					}
 
 					ui_select(Str8_("ENTITIES"), entity_names, ramR->entity_count, &ramR->selected_entity_idx);
 
-					arena_pop_to(arena, pos);
 				}
 
 				glFlush();
 
 				os_window_swap_buffers(window);
+
+				scratch_end(frame_arena);
 			}
 		}
 
@@ -1357,7 +1354,7 @@ Internal void lane(L1 arena) {
 			RT_Box boxes[32] = {};
 
 			for EachIndex(entity_index, ramR->entity_count) {
-				TR(Entity) e = &ramR->entities[entity_index];
+				Entity *e = &ramR->entities[entity_index];
 				if (e->flags & ENTITY_FLAG__CAMERA) {
 					camera_idx = entity_index;
 				} else if (e->flags & ENTITY_FLAG__SHAPE) {
@@ -1387,7 +1384,7 @@ Internal void lane(L1 arena) {
 				return;
 			}
 
-			TR(Entity) camera_entity = &ramR->entities[camera_idx];
+			Entity *camera_entity = &ramR->entities[camera_idx];
 
 			RT_Camera camera = {0};
 			camera.pos = (F3){camera_entity->pos.x, -camera_entity->pos.z, camera_entity->pos.y};
@@ -1412,16 +1409,16 @@ Internal void lane(L1 arena) {
 
 				.camera = camera,
 
-				.materials = L1_(ramR->materials),
+				.materials = ramR->materials,
 				.material_count = ramR->material_count,
 
-				.spheres = L1_(spheres),
+				.spheres = spheres,
 				.sphere_count = sphere_count,
 
 				.planes = 0,
 				.plane_count = 0,
 
-				.boxes = L1_(boxes),
+				.boxes = boxes,
 				.box_count = box_count,
 			};
 

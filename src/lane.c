@@ -2,10 +2,11 @@
 #if (CPU_ && TYP_)
 typedef struct LaneCtx LaneCtx;
 struct LaneCtx {
-  L1 arena;
+  Arena *arena;
+  Arena *scratch_arenas[2];
   L1 lane_idx;
   L1 lane_count;
-  L1 barrier;
+  OS_Barrier *barrier;
 };
 
 typedef struct Range Range;
@@ -13,7 +14,7 @@ struct Range {
   L1 min, max;
 };
 
-Internal void lane(L1);
+Internal void lane(Arena *);
 #endif
 
 #if (CPU_ && RAM_)
@@ -24,13 +25,18 @@ L1 sync_L1_val;
 
 #if (CPU_ && ROM_)
 
-#define lane_idx() (TR_(LaneCtx, lane_ctx)->lane_idx)
-#define lane_count() (TR_(LaneCtx, lane_ctx)->lane_count)
-#define lane_from_task_idx(idx) ((idx) % TR_(LaneCtx, lane_ctx)->lane_count)
-#define lane_sync() os_barrier_wait(TR_(LaneCtx, lane_ctx)->barrier)
-#define lane_range(count) range_for_section(lane_idx(), lane_count(), count)
+Global ThreadLocal LaneCtx *lane_ctx;
 
-Inline void lane_sync_L1(L1R ptr, L1 src_lane_idx) {
+#define lane_idx() (lane_ctx->lane_idx)
+#define lane_count() (lane_ctx->lane_count)
+#define lane_from_task_idx(idx) ((idx) % lane_ctx->lane_count)
+#define lane_sync() os_barrier_wait(lane_ctx->barrier)
+#define lane_range(count) lane_range_for_section(lane_idx(), lane_count(), count)
+
+#define scratch_begin(conflicts, count) temp_arena_begin(lane_get_scratch_arena(conflicts, count))
+#define scratch_end(temp) temp_arena_end(temp)
+
+Inline void lane_sync_L1(L1 *ptr, L1 src_lane_idx) {
   if (lane_idx() == src_lane_idx) {
     ramR->sync_L1_val = ptr[0];
   }
@@ -38,7 +44,7 @@ Inline void lane_sync_L1(L1R ptr, L1 src_lane_idx) {
   ptr[0] = ramR->sync_L1_val;
 }
 
-Internal Range range_for_section(L1 section_idx, L1 section_count, L1 count) {
+Internal Range lane_range_for_section(L1 section_idx, L1 section_count, L1 count) {
   L1 main_quotient = count/section_count;
   L1 leftover = count - main_quotient*section_count;
 
@@ -52,9 +58,30 @@ Internal Range range_for_section(L1 section_idx, L1 section_count, L1 count) {
   return (Range){min__clamped, max__clamped};
 }
 
-Internal L1 thread_entrypoint(L1 arg) {
-  lane_ctx = arg;
-  L1 arena = TR_(LaneCtx, lane_ctx)->arena;
+Internal Arena *lane_get_scratch_arena(Arena **conflicts, L1 count) {
+  Arena *result = 0;
+
+  for EachIndex(i, ArrayCount(lane_ctx->scratch_arenas)) {
+    I1 has_conflict = 0;
+    for EachIndex(j, count) {
+      if (conflicts[j] == lane_ctx->scratch_arenas[i]) {
+        has_conflict = 1;
+        break;
+      }
+    }
+
+    if (!has_conflict) {
+      result = lane_ctx->scratch_arenas[i];
+      break;
+    }
+  }
+
+  return result;
+}
+
+Internal void *lane_thread_entrypoint(void *arg) {
+  lane_ctx = (LaneCtx *)arg;
+  Arena *arena = lane_ctx->arena;
   lane(arena);
 
   return 0;
@@ -65,33 +92,38 @@ SI1 main(void) {
 
   OS_Barrier barrier = os_barrier_alloc(thread_count);
 
-  L1 threads_arena = arena_create(MiB(1));
+  Arena *threads_arena = arena_create(MiB(1));
 
-  L1 lane_contexts = push_array(threads_arena, LaneCtx, thread_count);
+  LaneCtx *lane_contexts = push_array(threads_arena, LaneCtx, thread_count);
+
   for EachIndex(i, thread_count) {
-    TR_(LaneCtx, lane_contexts)[i] = (LaneCtx){
+    LaneCtx ctx = {
       .arena = arena_create(MiB(512)),
       .lane_idx = i,
       .lane_count = thread_count,
-      .barrier = L1_(&barrier),
+      .barrier = &barrier,
     };
+    for EachIndex(j, ArrayCount(ctx.scratch_arenas)) {
+      ctx.scratch_arenas[j] = arena_create(MiB(64));
+    }
+    lane_contexts[i] = ctx;
   }
 
-  L1 threads = push_array(threads_arena, OS_Thread, thread_count);
+  OS_Thread *threads = push_array(threads_arena, OS_Thread, thread_count);
   for EachIndex(i, thread_count) {
-    L1 lane_ctx = lane_contexts + sizeof(LaneCtx) * i;
-    TR_(OS_Thread, threads)[i] = os_thread_launch(&thread_entrypoint, lane_ctx);
+    LaneCtx *lane_ctx = lane_contexts + i;
+    threads[i] = os_thread_launch(&lane_thread_entrypoint, lane_ctx);
   }
 
   for EachIndex(i, thread_count) {
-    os_thread_join(TR_(OS_Thread, threads)[i]);
+    os_thread_join(threads[i]);
   }
 
   for EachIndex(i, thread_count) {
-    arena_release(TR_(LaneCtx, lane_contexts)[i].arena);
+    arena_release(lane_contexts[i].arena);
   }
 
-  os_barrier_release(L1_(&barrier));
+  os_barrier_release(&barrier);
   arena_release(threads_arena);
 
   return 0;

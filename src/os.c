@@ -9,42 +9,23 @@
 #include <EGL/egl.h>
 #include <GL/gl.h>
 
-#define PROT_READ 0x1
-#define PROT_WRITE 02
-#define PROT_NONE 0x0
-#define MAP_SHARED 0x01
-#define MAP_PRIVATE 0x02
-#define MAP_ANON 0x20
-#define MAP_FAILED L1_MAX
-#define MADV_DONTNEED 4
-
-#define O_RDWR 2
-#define O_RDONLY 0
-#define O_WRONLY 1
-#define O_CREAT 100
-#define O_EXCL 200
-#define SEEK_SET 0
-#define SEEK_END 2
-
-#define STDIN_FILENO 0
-#define STDOUT_FILENO 1
-#define STDERR_FILENO 2
-
-#define CLOCK_MONOTONIC 1
+#include <stdlib.h>
+#include <stdio.h>
+#include <pthread.h>
+#include <time.h>
+#include <memory.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/sysinfo.h>
 
 #define MAX_FILENAME_LEN 256
-#define MAX_EVENT_COUNT 512
-
-typedef L1 pthread_t;
-typedef struct {
-  B1 __opaque[32];
-} pthread_barrier_t;
 
 #endif
 
 #if (CPU_ && TYP_)
 
-typedef L1 ThreadFunc(L1);
+typedef void *ThreadFunc(void *);
 
 typedef struct OS_Thread OS_Thread;
 struct OS_Thread {
@@ -54,6 +35,26 @@ struct OS_Thread {
 typedef struct OS_Barrier OS_Barrier;
 struct OS_Barrier {
   pthread_barrier_t handle;
+};
+
+typedef struct OS_Window OS_Window;
+struct OS_Window {
+  struct wl_surface *surface;
+  struct xdg_surface *xdg_surface;
+  struct xdg_toplevel *xdg_toplevel;
+  struct wl_egl_window *egl_window;
+  EGLSurface egl_surface;
+  struct xdg_surface_listener xdg_surface_listener;
+  struct xdg_toplevel_listener xdg_toplevel_listener;
+
+  I1 configured;
+  I1 should_close;
+  SI1 width;
+  SI1 height;
+  I1 resized;
+
+  OS_Window *prev;
+  OS_Window *next;
 };
 
 enum {
@@ -73,7 +74,9 @@ enum {
 
 typedef struct OS_Event OS_Event;
 struct OS_Event {
-  L1 window;
+  OS_Event *next;
+  OS_Event *prev;
+  OS_Window *window;
   L1 timestamp_ns;
   I1 type;
   I1 key;
@@ -81,73 +84,10 @@ struct OS_Event {
   D1 x, y;
 };
 
-typedef struct Posix_Time_Spec Posix_Time_Spec;
-struct Posix_Time_Spec {
-  L1 seconds;
-  L1 nanoseconds;
-};
-
-extern L1 stdin;
-extern L1 stdout;
-extern L1 stderr;
-
-Internal L1 os_reserve(L1);
-Internal void os_commit(L1, L1);
-Internal void os_release(L1, L1);
-
-SI1 printf(CString, ...);
-SI1 snprintf(L1, L1, CString, ...);
-SI1 vsnprintf(L1, L1, CString, va_list);
-SI1 fprintf(L1, CString, ...);
-SI1 fflush(L1);
-
-L1 memset(L1, SI1, L1);
-L1 memmove(L1, L1, L1);
-
+Internal void *os_reserve(L1);
+Internal void os_commit(void *, L1);
+Internal void os_release(void *, L1);
 Internal L1 os_clock(void);
-
-L1 mmap(L1, L1, I1, I1, I1, L1);
-I1 munmap(L1, L1);
-I1 mprotect(L1, L1, I1);
-I1 madvise(L1, L1, I1);
-SI1 shm_open(CString, I1, I1);
-SI1 shm_unlink(CString);
-SI1 ftruncate(I1, L1);
-
-I1 open(CString, I1, ...);
-L1 lseek(I1, L1, I1);
-L1 read(I1, L1, L1);
-L1 write(I1, L1, L1);
-I1 close(I1);
-
-SI1 clock_gettime(I1, L1);
-
-I1 get_nprocs(void);
-I1 pthread_create(L1, L1, L1, L1);
-I1 pthread_join(pthread_t, L1);
-I1 pthread_barrier_init(L1, L1, I1);
-I1 pthread_barrier_destroy(L1);
-I1 pthread_barrier_wait(L1);
-
-typedef struct OS_Window OS_Window;
-struct OS_Window {
-  struct wl_surface *surface;
-  struct xdg_surface *xdg_surface;
-  struct xdg_toplevel *xdg_toplevel;
-  struct wl_egl_window *egl_window;
-  EGLSurface egl_surface;
-  struct xdg_surface_listener xdg_surface_listener;
-  struct xdg_toplevel_listener xdg_toplevel_listener;
-
-  I1 configured;
-  I1 should_close;
-  SI1 width;
-  SI1 height;
-  I1 resized;
-
-  L1 prev;
-  L1 next;
-};
 
 enum {
   OS_KEY__NULL,
@@ -300,8 +240,8 @@ enum {
 
 #if (CPU_ && RAM_)
 
-L1 hovered_window;
-L1 first_window;
+OS_Window *hovered_window;
+OS_Window *first_window;
 
 struct wl_display *display;
 EGLDisplay egl_display;
@@ -321,17 +261,18 @@ struct wl_keyboard_listener keyboard_listener;
 EGLConfig egl_config;
 EGLContext egl_context;
 
-L1 event_count;
-OS_Event events[MAX_EVENT_COUNT];
+Arena *event_arena;
+OS_Event *first_event;
+OS_Event *last_event;
 
 #endif
 
 #if (CPU_ && ROM_)
 
-Internal String8 os_read_entire_file(L1 arena, String8 filename) {
+Internal String8 os_read_entire_file(Arena *arena, String8 filename) {
   Assert(filename.len < MAX_FILENAME_LEN);
   char cstr_filename[MAX_FILENAME_LEN] = {0};
-  memmove(L1_(cstr_filename), filename.str, filename.len);
+  memmove(cstr_filename, filename.str, filename.len);
 
   I1 file = open(cstr_filename, O_RDONLY);
   if (LtSI1(file, 0)) {
@@ -341,7 +282,7 @@ Internal String8 os_read_entire_file(L1 arena, String8 filename) {
   L1 size = lseek(file, 0, SEEK_END);
   lseek(file, 0, SEEK_SET);
 
-  L1 buffer = push_array(arena, B1, size);
+  B1 *buffer = push_array(arena, B1, size);
   L1 bytes_read = read(file, buffer, size);
   Assert(size == bytes_read);
 
@@ -354,10 +295,10 @@ Internal String8 os_read_entire_file(L1 arena, String8 filename) {
   return result;
 }
 
-Internal L1 os_write_entire_file(String8 filename, L1 data, L1 data_size) {
+Internal L1 os_write_entire_file(String8 filename, void *data, L1 data_size) {
   Assert(filename.len < MAX_FILENAME_LEN);
   char cstr_filename[MAX_FILENAME_LEN] = {0};
-  memmove(L1_(cstr_filename), filename.str, filename.len);
+  memmove(cstr_filename, filename.str, filename.len);
 
   I1 file = open(cstr_filename, O_CREAT | O_WRONLY, 0666);
   if (LtSI1(file, 0)) {
@@ -370,32 +311,32 @@ Internal L1 os_write_entire_file(String8 filename, L1 data, L1 data_size) {
   return bytes_written;
 }
 
-Internal L1 os_reserve(L1 size) {
+Internal void *os_reserve(L1 size) {
   // TODO: Optinally do large pages: MAP_HUGETBL
-  L1 result = L1_(mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0));
+  void *result = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
   if (result == MAP_FAILED) {
     result = 0;
   }
   return result;
 }
 
-Internal void os_commit(L1 ptr, L1 size) {
+Internal void os_commit(void *ptr, L1 size) {
   mprotect(ptr, size, PROT_READ | PROT_WRITE);
 }
 
-Internal void os_decommit(L1 ptr, L1 size) {
+Internal void os_decommit(void *ptr, L1 size) {
   madvise(ptr, size, MADV_DONTNEED);
   mprotect(ptr, size, PROT_NONE);
 }
 
-Internal void os_release(L1 ptr, L1 size) { munmap(ptr, size); }
+Internal void os_release(void *ptr, L1 size) { munmap(ptr, size); }
 
 Internal I1 os_num_cores(void) { return get_nprocs(); }
 
-Internal OS_Thread os_thread_launch(ThreadFunc *func, L1 ptr) {
+Internal OS_Thread os_thread_launch(ThreadFunc *func, void *ptr) {
   OS_Thread result = {0};
 
-  pthread_create(L1_(&result.handle), 0, L1_(func), ptr);
+  pthread_create(&result.handle, 0, func, ptr);
 
   return result;
 }
@@ -404,24 +345,22 @@ Internal void os_thread_join(OS_Thread thread) { pthread_join(thread.handle, 0);
 
 Internal OS_Barrier os_barrier_alloc(I1 count) {
   OS_Barrier result = {0};
-  pthread_barrier_init(L1_(&result.handle), 0, count);
+  pthread_barrier_init(&result.handle, 0, count);
   return result;
 }
 
-Internal void os_barrier_release(L1 barrier) {
-  L1 handle_ptr = L1_(&TR_(OS_Barrier, barrier)->handle);
-  pthread_barrier_destroy(handle_ptr);
+Internal void os_barrier_release(OS_Barrier *barrier) {
+  pthread_barrier_destroy(&barrier->handle);
 }
 
-Internal void os_barrier_wait(L1 barrier) {
-  L1 handle_ptr = L1_(&TR_(OS_Barrier, barrier)->handle);
-  pthread_barrier_wait(handle_ptr);
+Internal void os_barrier_wait(OS_Barrier *barrier) {
+  pthread_barrier_wait(&barrier->handle);
 }
 
 Internal L1 os_clock(void) {
-  Posix_Time_Spec timespec = {0};
-  clock_gettime(CLOCK_MONOTONIC, L1_(&timespec));
-  L1 result = timespec.seconds * 1000000000 + timespec.nanoseconds;
+  struct timespec timespec = {0};
+  clock_gettime(CLOCK_MONOTONIC, &timespec);
+  L1 result = timespec.tv_sec * 1000000000 + timespec.tv_nsec;
   return result;
 }
 
@@ -549,11 +488,10 @@ Internal I1 os_key_from_wl_key(I1 wl_key) {
 }
 
 Internal void os_push_event(OS_Event event) {
-  L1 idx = ramR->event_count;
-  Assert(idx < MAX_EVENT_COUNT);
+  OS_Event *new_event = push_array(ramR->event_arena, OS_Event, 1);
+  new_event[0] = event;
 
-  ramR->events[idx] = event;
-  ramR->event_count += 1;
+  DLLPushBack(ramR->first_event, ramR->last_event, new_event);
 }
 
 Internal void registry_global_handler(void *data, struct wl_registry *registry,
@@ -582,7 +520,7 @@ Internal void xdg_wm_base_ping_handler(void *data,
 Internal void xdg_surface_configure_handler(void *data,
                                             struct xdg_surface *xdg_surface,
                                             I1 serial) {
-  TR(OS_Window) window = TR_(OS_Window, data);
+  OS_Window *window = (OS_Window *)data;
   xdg_surface_ack_configure(xdg_surface, serial);
   window->configured = 1;
 }
@@ -592,7 +530,7 @@ Internal void xdg_toplevel_configure_handler(void *data,
                                              SI1 width, SI1 height,
                                              struct wl_array *states) {
   if (width > 0 && height > 0) {
-    TR(OS_Window) window = TR_(OS_Window, data);
+    OS_Window *window = (OS_Window *)data;
     window->width = width;
     window->height = height;
     window->resized = 1;
@@ -601,7 +539,7 @@ Internal void xdg_toplevel_configure_handler(void *data,
 
 Internal void xdg_toplevel_close_handler(void *data,
                                          struct xdg_toplevel *xdg_toplevel) {
-  TR(OS_Window) window = TR_(OS_Window, data);
+  OS_Window *window = (OS_Window *)data;
   window->should_close = 1;
 }
 
@@ -627,15 +565,15 @@ Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer,
                                     I1 serial, struct wl_surface *surface,
                                     wl_fixed_t surface_x,
                                     wl_fixed_t surface_y) {
-  TR(OS_Window) window;
-  for (L1 it = ramR->first_window; it != 0; it = TR_(OS_Window, it)->next) {
-    window = TR_(OS_Window, it);
-    if (surface == window->surface) {
+  OS_Window *window = 0;
+  for (OS_Window *it = ramR->first_window; it != 0; it = it->next) {
+    if (surface == it->surface) {
+      window = it;
       break;
     }
   }
 
-  ramR->hovered_window = L1_(window);
+  ramR->hovered_window = window;
 }
 
 Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer,
@@ -746,7 +684,7 @@ Internal void keyboard_repeat_info_handler(void *data,
                                            struct wl_keyboard *keyboard,
                                            SI1 rate, SI1 delay) {}
 
-Internal L1 os_window_open(L1 arena, String8 title, I1 width, I1 height) {
+Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 height) {
   if (ramR->first_window == 0) {
     ramR->display = wl_display_connect(0);
     Assert(ramR->display != 0);
@@ -831,7 +769,7 @@ Internal L1 os_window_open(L1 arena, String8 title, I1 width, I1 height) {
     Assert(ramR->egl_context != EGL_NO_CONTEXT);
   }
 
-  TR(OS_Window) result = TR_(OS_Window, push_array(arena, OS_Window, 1));
+  OS_Window *result = push_array(arena, OS_Window, 1);
 
   result->surface = wl_compositor_create_surface(ramR->compositor);
   Assert(result->surface != 0);
@@ -852,7 +790,7 @@ Internal L1 os_window_open(L1 arena, String8 title, I1 width, I1 height) {
   //- kti: Use max filename length as a reasonable title length limit.
   Assert(title.len < MAX_FILENAME_LEN);
   char cstr_title[MAX_FILENAME_LEN] = {0};
-  memmove(L1_(cstr_title), title.str, title.len);
+  memmove(cstr_title, title.str, title.len);
   xdg_toplevel_set_title(result->xdg_toplevel, cstr_title);
 
   wl_surface_commit(result->surface);
@@ -874,34 +812,32 @@ Internal L1 os_window_open(L1 arena, String8 title, I1 width, I1 height) {
 
   result->next = ramR->first_window;
   if (ramR->first_window != 0) {
-    TR_(OS_Window, ramR->first_window)->prev = L1_(result);
+    ramR->first_window->prev = result;
   }
-  ramR->first_window = L1_(result);
+  ramR->first_window = result;
 
-  return L1_(result);
+  return result;
 }
 
-Internal void os_window_get_context(L1 window_ptr) {
-  TR(OS_Window) window = TR_(OS_Window, window_ptr);
-  if (window_ptr == 0) {
-    eglMakeCurrent(ramR->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
-                   EGL_NO_CONTEXT);
+Internal void os_window_get_context(OS_Window *window) {
+  if (window == 0) {
+    eglMakeCurrent(ramR->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
   } else {
-    I1 made_current = eglMakeCurrent(ramR->egl_display, window->egl_surface,
-                                     window->egl_surface, ramR->egl_context);
+    I1 made_current = eglMakeCurrent(ramR->egl_display, window->egl_surface, window->egl_surface, ramR->egl_context);
     Assert(made_current);
   }
 }
 
-Internal void os_window_swap_buffers(L1 window_ptr) {
-  TR(OS_Window) window = TR_(OS_Window, window_ptr);
+Internal void os_window_swap_buffers(OS_Window *window) {
   eglSwapBuffers(ramR->egl_display, window->egl_surface);
 }
 
-Internal void os_poll_events(void) {
+Internal void os_poll_events(Arena *arena) {
   Assert(ramR->first_window != 0);
 
-  ramR->event_count = 0;
+  ramR->event_arena = arena;
+  ramR->first_event = 0;
+  ramR->last_event = 0;
 
   while (wl_display_prepare_read(ramR->display) != 0) {
     wl_display_dispatch_pending(ramR->display);
@@ -910,19 +846,15 @@ Internal void os_poll_events(void) {
   wl_display_read_events(ramR->display);
   wl_display_dispatch_pending(ramR->display);
 
-  for (L1 it = ramR->first_window; it != 0; it = TR_(OS_Window, it)->next) {
-    TR(OS_Window) window = TR_(OS_Window, it);
-
-    if (window->resized) {
-      window->resized = 0;
-      wl_egl_window_resize(window->egl_window, window->width, window->height, 0, 0);
+  for (OS_Window *it = ramR->first_window; it != 0; it = it->next) {
+    if (it->resized) {
+      it->resized = 0;
+      wl_egl_window_resize(it->egl_window, it->width, it->height, 0, 0);
     }
   }
 }
 
-Internal void os_window_close(L1 window_ptr) {
-  TR(OS_Window) window = TR_(OS_Window, window_ptr);
-
+Internal void os_window_close(OS_Window *window) {
   eglDestroySurface(ramR->egl_display, window->egl_surface);
   wl_egl_window_destroy(window->egl_window);
 
@@ -930,7 +862,7 @@ Internal void os_window_close(L1 window_ptr) {
   xdg_surface_destroy(window->xdg_surface);
   wl_surface_destroy(window->surface);
 
-  if (ramR->first_window == window_ptr && window->next == 0) {
+  if (ramR->first_window == window && window->next == 0) {
     os_window_get_context(0);
 
     if (ramR->pointer)
@@ -948,12 +880,12 @@ Internal void os_window_close(L1 window_ptr) {
   }
 
   if (window->prev != 0) {
-    TR_(OS_Window, window->prev)->next = window->next;
+    window->prev->next = window->next;
   }
   if (window->next != 0) {
-    TR_(OS_Window, window->next)->prev = window->prev;
+    window->next->prev = window->prev;
   }
-  if (window_ptr == ramR->first_window) {
+  if (window == ramR->first_window) {
     ramR->first_window = window->next;
   }
 }

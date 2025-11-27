@@ -68,16 +68,16 @@ struct RT_Scene {
 	RT_Camera camera;
 
 	L1 material_count;
-	L1 materials;
+	RT_Material *materials;
 
 	L1 plane_count;
-	L1 planes;
+	RT_Plane *planes;
 
 	L1 sphere_count;
-	L1 spheres;
+	RT_Sphere *spheres;
 
 	L1 box_count;
-	L1 boxes;
+	RT_Box *boxes;
 };
 
 #endif
@@ -217,7 +217,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
 
 		// Check planes
 		for EachIndex(plane_index, scene.plane_count) {
-			RT_Plane plane = TR_(RT_Plane, scene.planes)[plane_index];
+			RT_Plane plane = scene.planes[plane_index];
 
 			F1 denom = F3_dot(plane.n, ray_direction);
 			if (denom < -tolerance || denom > tolerance) {
@@ -234,7 +234,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
 
 		// Check spheres
 		for EachIndex(sphere_index, scene.sphere_count) {
-			RT_Sphere sphere = TR_(RT_Sphere, scene.spheres)[sphere_index];
+			RT_Sphere sphere = scene.spheres[sphere_index];
 
 			F3 sphere_relative_ray_origin = ray_origin - sphere.p;
 			F1 b = 2.0f * F3_dot(ray_direction, sphere_relative_ray_origin);
@@ -262,7 +262,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
 
 		// Check boxes
 		for EachIndex(box_index, scene.box_count) {
-			RT_Box box = TR_(RT_Box, scene.boxes)[box_index];
+			RT_Box box = scene.boxes[box_index];
 
 			F1 t_min = (box.min.x - ray_origin.x) / ray_direction.x;
 			F1 t_max = (box.max.x - ray_origin.x) / ray_direction.x;
@@ -304,7 +304,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
 		}
 
 		if (hit_material_idx != I1_(-1)) {
-			RT_Material mat = TR_(RT_Material, scene.materials)[hit_material_idx];
+			RT_Material mat = scene.materials[hit_material_idx];
 
 			result += attenuation * mat.emissive;
 
@@ -440,7 +440,7 @@ Inline F3 tonemap_lottes(F3 v) {
 
 #define tonemap tonemap_lottes
 
-Internal void trace_scene(L1 arena, RT_Scene scene) {
+Internal void trace_scene(Arena *arena, RT_Scene scene) {
 	L1 start_time = os_clock();
 
 	if (lane_idx() == 0) {
@@ -474,7 +474,7 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 	L1 lane_begin_time = os_clock();
 
 	L1 section_pixel_count = scene.output_width*scene.output_height/ramR->section_count;
-	L1 ray_pixels = push_array(arena, F3, section_pixel_count);
+	F3 *ray_pixels = push_array(arena, F3, section_pixel_count);
 
 	while (ramR->current_section_idx < ramR->section_count) {
 		L1 section_idx = atomic_add_L1(&ramV->current_section_idx, 1);
@@ -484,7 +484,7 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 			.max = section_pixel_count * (section_idx + 1)
 		};
 
-		L1 out = ray_pixels;
+		F3 *out = ray_pixels;
 		for EachInRange(pixel_index, pixels_range) {
 			I1 x = pixel_index%scene.output_width;
 			I1 y = pixel_index/scene.output_width;
@@ -511,12 +511,12 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 				color += ray_cast(scene, ray_origin, ray_direction) * contrib;
 			}
 
-			TR_(F3, out)[0] = color;
-			out += sizeof(F3);
+			out[0] = color;
+			out += 1;
 
 		}
 
-		L1 dest = ramR->ray_image.pixels + sizeof(F3)*pixels_range.min;
+		B1 *dest = ramR->ray_image.pixels + sizeof(F3)*pixels_range.min;
 		memmove(dest, ray_pixels, sizeof(F3)*section_pixel_count);
 
 		atomic_add_L1(&ramV->complete_sections_count, 1);
@@ -536,15 +536,15 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 
 		// TODO: Multithread
 
-		TR(Image) bloom_passes = TR_(Image, push_array(arena, Image, scene.bloom_pass_count));
+		Image *bloom_passes = push_array(arena, Image, scene.bloom_pass_count);
 
 		bloom_passes[0] = image_alloc(arena, scene.output_width, scene.output_height, sizeof(F3));
 
 		// Filter on bright pixels
-		L1 in = ramR->ray_image.pixels;
-		L1 out = bloom_passes[0].pixels;
+		F3 *in = (F3 *)ramR->ray_image.pixels;
+		F3 *out = (F3 *)bloom_passes[0].pixels;
 		for EachIndex(pixel_index, bloom_passes[0].width*bloom_passes[0].height) {
-			F3 color = TR_(F3, in)[0];
+			F3 color = in[0];
 
 			F1 luminance = F3_luminance(color);
 
@@ -567,10 +567,10 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 				color = (F3){0};
 			}
 
-			TR_(F3, out)[0] = color;
+			out[0] = color;
 
-			in  += sizeof(F3);
-			out += sizeof(F3);
+			in  += 1;
+			out += 1;
 		}
 
 		// Downsample
@@ -588,36 +588,37 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 					// TODO: look into 13-tap bilinear tent filter.
 
 					F3 sum = {0};
+					F3 *in_p = (F3 *)in.pixels;
 
 					// Center (4)
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+0,sy+0)] * 4.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy+0)] * 4.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy+1)] * 4.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+0,sy+1)] * 4.0f;
+					sum += in_p[image_xy_to_index(in,sx+0,sy+0)] * 4.0f;
+					sum += in_p[image_xy_to_index(in,sx+1,sy+0)] * 4.0f;
+					sum += in_p[image_xy_to_index(in,sx+1,sy+1)] * 4.0f;
+					sum += in_p[image_xy_to_index(in,sx+0,sy+1)] * 4.0f;
 
 					// Edges (2)
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy+0)] * 2.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy+1)] * 2.0f;
+					sum += in_p[image_xy_to_index(in,sx-1,sy+0)] * 2.0f;
+					sum += in_p[image_xy_to_index(in,sx-1,sy+1)] * 2.0f;
 
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+2,sy+0)] * 2.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+2,sy+1)] * 2.0f;
+					sum += in_p[image_xy_to_index(in,sx+2,sy+0)] * 2.0f;
+					sum += in_p[image_xy_to_index(in,sx+2,sy+1)] * 2.0f;
 
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+0,sy-1)] * 2.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy-1)] * 2.0f;
+					sum += in_p[image_xy_to_index(in,sx+0,sy-1)] * 2.0f;
+					sum += in_p[image_xy_to_index(in,sx+1,sy-1)] * 2.0f;
 
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+0,sy+2)] * 2.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy+2)] * 2.0f;
+					sum += in_p[image_xy_to_index(in,sx+0,sy+2)] * 2.0f;
+					sum += in_p[image_xy_to_index(in,sx+1,sy+2)] * 2.0f;
 
 					// Corners (1)
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy-1)] * 1.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+2,sy-1)] * 1.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy+2)] * 1.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+2,sy+2)] * 1.0f;
+					sum += in_p[image_xy_to_index(in,sx-1,sy-1)] * 1.0f;
+					sum += in_p[image_xy_to_index(in,sx+2,sy-1)] * 1.0f;
+					sum += in_p[image_xy_to_index(in,sx-1,sy+2)] * 1.0f;
+					sum += in_p[image_xy_to_index(in,sx+2,sy+2)] * 1.0f;
 
 					sum /= 36.0f;
 					F3 karis_average = sum / (1.0f + F3_luminance(sum));
 
-					TR_(F3, out.pixels)[x + y*out.width] = karis_average;
+					((F3 *)out.pixels)[x + y*out.width] = karis_average;
 				}
 			}
 		}
@@ -633,25 +634,26 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 					L1 sx = x/2;
 
 					F3 sum = {0};
+					F3 *in_p = (F3 *)in.pixels;
 
 					// center
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx,sy)]*4.0f;
+					sum += in_p[image_xy_to_index(in,sx,sy)]*4.0f;
 
 					// edges
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy)]*2.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy)]*2.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx,sy-1)]*2.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx,sy+1)]*2.0f;
+					sum += in_p[image_xy_to_index(in,sx-1,sy)]*2.0f;
+					sum += in_p[image_xy_to_index(in,sx+1,sy)]*2.0f;
+					sum += in_p[image_xy_to_index(in,sx,sy-1)]*2.0f;
+					sum += in_p[image_xy_to_index(in,sx,sy+1)]*2.0f;
 
 					// corners
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy-1)]*1.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy-1)]*1.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx-1,sy+1)]*1.0f;
-					sum += TR_(F3, in.pixels)[image_xy_to_index(in,sx+1,sy+1)]*1.0f;
+					sum += in_p[image_xy_to_index(in,sx-1,sy-1)]*1.0f;
+					sum += in_p[image_xy_to_index(in,sx+1,sy-1)]*1.0f;
+					sum += in_p[image_xy_to_index(in,sx-1,sy+1)]*1.0f;
+					sum += in_p[image_xy_to_index(in,sx+1,sy+1)]*1.0f;
 
 					sum /= 16.0f;
 
-					TR_(F3, out.pixels)[x + y*out.width] += sum;
+					((F3 *)out.pixels)[x + y*out.width] += sum;
 				}
 			}
 		}
@@ -659,17 +661,17 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 		ramR->final_image = image_alloc(arena, scene.output_width, scene.output_height, sizeof(I1));
 
 		// Composit & Tonemap
-		L1 in_ray    = ramR->ray_image.pixels;
-		L1 in_bloom  = bloom_passes[0].pixels;
-		out          = ramR->final_image.pixels;
+		F3 *in_ray    = (F3 *)ramR->ray_image.pixels;
+		F3 *in_bloom  = (F3 *)bloom_passes[0].pixels;
+		I1 *final_out = (I1 *)ramR->final_image.pixels;
 		for EachIndex(y, scene.output_height) {
 			for EachIndex(x, scene.output_width) {
 				F1 u = F1_(x) / F1_(scene.output_width);
 				F1 v = F1_(y) / F1_(scene.output_height);
 
 				F3 bloom_overlay = image_sample_bilinear_I1_to_F3(ramR->bloom_overlay_image, u, v);
-				F3 ray           = TR_(F3, in_ray)[0];
-				F3 bloom         = TR_(F3, in_bloom)[0];
+				F3 ray           = in_ray[0];
+				F3 bloom         = in_bloom[0];
 
 				bloom *= 1.0f + F3_luminance(bloom_overlay)*scene.bloom_overlay_strength;
 
@@ -685,14 +687,14 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 					255.0f
 				};
 
-				I1R_(out)[0] = 0xFF000000 |
+				final_out[0] = 0xFF000000 |
 													I1_(bmp_color.x) << 16 |
 													I1_(bmp_color.y) << 8 |
 													I1_(bmp_color.z) << 0;
 
-				in_ray    += sizeof(F3);
-				in_bloom  += sizeof(F3);
-				out       += sizeof(I1);
+				in_ray    += 1;
+				in_bloom  += 1;
+				final_out += 1;
 			}
 		}
 	}
@@ -715,7 +717,7 @@ Internal void trace_scene(L1 arena, RT_Scene scene) {
 }
 
 #ifdef RT_APP
-Internal void lane(L1 arena) {
+Internal void lane(Arena *arena) {
 	RT_Material materials[] = {
 		{ // ground
 			.base_color  = (F3){0.63f, 0.53f, 0.13f},
@@ -801,16 +803,16 @@ Internal void lane(L1 arena) {
 
 		.camera = camera,
 
-		.materials = L1_(materials),
+		.materials = materials,
 		.material_count = ArrayCount(materials),
 
-		.spheres = L1_(spheres),
+		.spheres = spheres,
 		.sphere_count = ArrayCount(spheres),
 
-		.planes = L1_(planes),
+		.planes = planes,
 		.plane_count = ArrayCount(planes),
 
-		.boxes = L1_(boxes),
+		.boxes = boxes,
 		.box_count = ArrayCount(boxes),
 	};
 

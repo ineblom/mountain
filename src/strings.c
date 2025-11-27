@@ -6,11 +6,11 @@ typedef const char *Restrict CString;
 
 typedef struct String8 String8;
 struct String8 {
-  L1 str;
+  B1 *str;
   L1 len;
 };
 
-#define Str8_(x) (String8){ .str = L1_(x), .len = sizeof(x) - 1 }
+#define Str8_(x) (String8){ .str = (B1 *)x, .len = sizeof(x) - 1 }
 
 #endif
 
@@ -38,32 +38,32 @@ Internal I1 cstr_compare(CString a, CString b) {
   return *a == *b;
 }
 
-Internal String8 str8_concat(L1 arena, String8 a, String8 b) {
+Internal String8 str8_concat(Arena *arena, String8 a, String8 b) {
   String8 result = {0};
   result.len = a.len + b.len;
   result.str = push_array(arena, B1, result.len);
 
-  memmove(result.str, a.str, a.len);
+  memmove(result.str,       a.str, a.len);
   memmove(result.str+a.len, b.str, b.len);
 
   return result;
 }
 
-Internal String8 str8fv(L1 arena, CString fmt, va_list args) {
+Internal String8 str8fv(Arena *arena, CString fmt, va_list args) {
   va_list args2;
   va_copy(args2, args);
 
   String8 result = {0};
   L1 bytes_needed = vsnprintf(0, 0, fmt, args)+1;
   result.str = push_array(arena, B1, bytes_needed);
-  result.len = vsnprintf(result.str, bytes_needed, fmt, args2);
+  result.len = vsnprintf((SB1 *)result.str, bytes_needed, fmt, args2);
 
   va_end(args2);
 
   return result;
 }
 
-Internal String8 str8f(L1 arena, CString fmt, ...) {
+Internal String8 str8f(Arena *arena, CString fmt, ...) {
   va_list args;
   va_start(args, fmt);
   String8 result = str8fv(arena, fmt, args);
@@ -76,7 +76,7 @@ Internal L1 str8_hash(String8 string) {
   L1 hash = 5281;
 
   for EachIndex(i, string.len) {
-    I1 c = B1R_(string.str)[i];
+    I1 c = string.str[i];
     hash = ((hash << 5) + hash) + c;
   }
 

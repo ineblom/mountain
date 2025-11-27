@@ -27,7 +27,7 @@ struct Image {
 	I1 width;
 	I1 height;
 	I1 bytes_per_pixel;
-	L1 pixels;
+	B1 *pixels;
 };
 
 #endif
@@ -39,7 +39,7 @@ Inline L1 image_pixels_size(Image image) {
 	return image.bytes_per_pixel * image.width * image.height;
 }
 
-Inline Image image_alloc(L1 arena, I1 width, I1 height, I1 bytes_per_pixel) {
+Inline Image image_alloc(Arena *arena, I1 width, I1 height, I1 bytes_per_pixel) {
 	Image image  = {0};
 	image.width  = width;
 	image.height = height;
@@ -82,10 +82,11 @@ Inline F3 image_sample_bilinear_F3(Image image, F1 u, F1 v) {
 	F1 fx = tex_x - F1_(x0);
 	F1 fy = tex_y - F1_(y0);
 
-	F3 c00 = TR_(F3, image.pixels)[x0+y0*image.width];
-	F3 c10 = TR_(F3, image.pixels)[x1+y0*image.width];
-	F3 c01 = TR_(F3, image.pixels)[x0+y1*image.width];
-	F3 c11 = TR_(F3, image.pixels)[x1+y1*image.width];
+	F3 *p = (F3 *)image.pixels;
+	F3 c00 = p[x0+y0*image.width];
+	F3 c10 = p[x1+y0*image.width];
+	F3 c01 = p[x0+y1*image.width];
+	F3 c11 = p[x1+y1*image.width];
 
 	F3 top_row = F3_lerp(c00, fx, c10);
 	F3 bot_row = F3_lerp(c01, fx, c11);
@@ -111,10 +112,11 @@ Inline F3 image_sample_bilinear_I1_to_F3(Image image, F1 u, F1 v) {
 	F1 fx = tex_x - F1_(x0);
 	F1 fy = tex_y - F1_(y0);
 
-	I1 c00 = I1R_(image.pixels)[x0+y0*image.width];
-	I1 c10 = I1R_(image.pixels)[x1+y0*image.width];
-	I1 c01 = I1R_(image.pixels)[x0+y1*image.width];
-	I1 c11 = I1R_(image.pixels)[x1+y1*image.width];
+	I1 *p = (I1 *)image.pixels;
+	I1 c00 = p[x0+y0*image.width];
+	I1 c10 = p[x1+y0*image.width];
+	I1 c01 = p[x0+y1*image.width];
+	I1 c11 = p[x1+y1*image.width];
 
 	F3 c00rgb = I1_to_F3(c00);
 	F3 c10rgb = I1_to_F3(c10);
@@ -128,11 +130,11 @@ Inline F3 image_sample_bilinear_I1_to_F3(Image image, F1 u, F1 v) {
 	return result;
 }
 
-Internal Image image_read_from_file(L1 arena, String8 filename) {
+Internal Image image_read_from_file(Arena *arena, String8 filename) {
 	String8 contents = os_read_entire_file(arena, filename);
 	Assert(contents.len > 0 && "failed to read image file");
 
-	TR(Bitmap_Header) header = TR_(Bitmap_Header, contents.str);
+	Bitmap_Header *header = (Bitmap_Header *)contents.str;
 	Assert(header->file_type == 0x4D42);
 	Assert(header->bits_per_pixel == 24 || header->bits_per_pixel == 32);
 	Assert(header->compression == 0);
@@ -147,16 +149,16 @@ Internal Image image_read_from_file(L1 arena, String8 filename) {
 		result.pixels = contents.str + header->bitmap_offset;
 	} else {
 		L1 pixel_count = result.width * result.height;
-		result.pixels = push_array(arena, I1, pixel_count);
+		result.pixels = push_array(arena, B1, pixel_count*result.bytes_per_pixel);
 
-		L1 src = contents.str + header->bitmap_offset;
-		L1 dst = result.pixels;
+		B1 *src = contents.str + header->bitmap_offset;
+		B1 *dst = result.pixels;
 		for EachIndex(pixel_index, pixel_count) {
-			B1 b = B1R_(src)[0];
-			B1 g = B1R_(src)[1];
-			B1 r = B1R_(src)[2];
+			B1 b = src[0];
+			B1 g = src[1];
+			B1 r = src[2];
 
-			I1R_(dst)[0] = 0xFF000000 | (r << 16) | (g << 8) | b;
+			((I1 *)dst)[0] = 0xFF000000 | (r << 16) | (g << 8) | b;
 
 			src += 3;
 			dst += 4;
@@ -188,12 +190,12 @@ Internal void image_write_to_file(Image image, String8 filename) {
 	// - Just take a CString and let the user decide.
 	Assert(filename.len < MAX_FILENAME_LEN);
 	char cstr_filename[MAX_FILENAME_LEN] = {0};
-	memmove(L1_(cstr_filename), filename.str, filename.len);
+	memmove(cstr_filename, filename.str, filename.len);
 
 	// TODO: Create os_ functions for this
 	L1 file = open(cstr_filename, O_CREAT | O_WRONLY, 0666);
 	if (GtSI1(file, 0)) {
-		write(file, L1_(&header), sizeof(Bitmap_Header));
+		write(file, &header, sizeof(Bitmap_Header));
 		write(file, image.pixels, pixels_size);
 		close(file);
 		printf("Image written to %s\n", cstr_filename);

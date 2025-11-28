@@ -5,7 +5,7 @@ DEFS="-DCPU_=1 -DDEV_=1"
 LIBS="-lm -lwayland-client -lwayland-egl -lEGL -lGL"
 
 cd src
-clang $WARN $DEFS $LIBS -g -march=native build.c -o ../m
+clang $WARN $DEFS $LIBS -O3 -march=native build.c -o ../m
 BUILD_STATUS=$?
 cd ..
 

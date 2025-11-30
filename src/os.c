@@ -1,13 +1,8 @@
 #if (CPU_ && DEF_)
 
-// TODO: What garbage does this bring in?
-// Can we minimize or stop relying on it completely?
 #include <wayland-client.h>
-#include <wayland-egl.h>
 #include "xdg-shell-protocol.c"
 #include "xdg-shell-protocol.h"
-#include <EGL/egl.h>
-#include <GL/gl.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -42,16 +37,12 @@ struct OS_Window {
   struct wl_surface *surface;
   struct xdg_surface *xdg_surface;
   struct xdg_toplevel *xdg_toplevel;
-  struct wl_egl_window *egl_window;
-  EGLSurface egl_surface;
   struct xdg_surface_listener xdg_surface_listener;
   struct xdg_toplevel_listener xdg_toplevel_listener;
 
   I1 configured;
-  I1 should_close;
   SI1 width;
   SI1 height;
-  I1 resized;
 
   OS_Window *prev;
   OS_Window *next;
@@ -63,6 +54,7 @@ enum {
   OS_EVENT_TYPE__RELEASE,
   OS_EVENT_TYPE__MOUSE_MOVE,
   OS_EVENT_TYPE__SCROLL,
+  OS_EVENT_TYPE__WINDOW_CLOSE,
   OS_EVENT_TYPE_COUNT,
 };
 
@@ -244,7 +236,6 @@ OS_Window *hovered_window;
 OS_Window *first_window;
 
 struct wl_display *display;
-EGLDisplay egl_display;
 
 struct wl_compositor *compositor;
 struct xdg_wm_base *xdg_wm_base;
@@ -257,9 +248,6 @@ struct xdg_wm_base_listener xdg_wm_base_listener;
 struct wl_seat_listener seat_listener;
 struct wl_pointer_listener pointer_listener;
 struct wl_keyboard_listener keyboard_listener;
-
-EGLConfig egl_config;
-EGLContext egl_context;
 
 Arena *event_arena;
 OS_Event *first_event;
@@ -533,14 +521,19 @@ Internal void xdg_toplevel_configure_handler(void *data,
     OS_Window *window = (OS_Window *)data;
     window->width = width;
     window->height = height;
-    window->resized = 1;
   }
 }
 
 Internal void xdg_toplevel_close_handler(void *data,
                                          struct xdg_toplevel *xdg_toplevel) {
   OS_Window *window = (OS_Window *)data;
-  window->should_close = 1;
+
+  OS_Event event = {
+    .timestamp_ns = 0,
+    .type = OS_EVENT_TYPE__WINDOW_CLOSE,
+    .window = window,
+  };
+  os_push_event(event);
 }
 
 ////////////////////////////////
@@ -727,46 +720,6 @@ Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 hei
     ramR->keyboard_listener.repeat_info = keyboard_repeat_info_handler;
 
     wl_display_roundtrip(ramR->display);
-
-    ramR->egl_display = eglGetDisplay((EGLNativeDisplayType)ramR->display);
-    Assert(ramR->egl_display != EGL_NO_DISPLAY);
-
-    EGLint major, minor;
-    I1 egl_initialized = eglInitialize(ramR->egl_display, &major, &minor);
-    Assert(egl_initialized);
-
-    EGLint config_attribs[] = {EGL_SURFACE_TYPE,
-                               EGL_WINDOW_BIT,
-                               EGL_RENDERABLE_TYPE,
-                               EGL_OPENGL_BIT,
-                               EGL_RED_SIZE,
-                               8,
-                               EGL_GREEN_SIZE,
-                               8,
-                               EGL_BLUE_SIZE,
-                               8,
-                               EGL_ALPHA_SIZE,
-                               8,
-                               EGL_DEPTH_SIZE,
-                               24,
-                               EGL_NONE};
-
-    EGLint num_configs;
-    I1 config_chosen = eglChooseConfig(ramR->egl_display, config_attribs, &ramR->egl_config, 1, &num_configs);
-    Assert(config_chosen && num_configs > 0);
-
-    eglBindAPI(EGL_OPENGL_API);
-
-    EGLint context_attribs[] = {EGL_CONTEXT_MAJOR_VERSION,
-                                3,
-                                EGL_CONTEXT_MINOR_VERSION,
-                                3,
-                                EGL_CONTEXT_OPENGL_PROFILE_MASK,
-                                EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT,
-                                EGL_NONE};
-    ramR->egl_context = eglCreateContext(ramR->egl_display, ramR->egl_config,
-                                         EGL_NO_CONTEXT, context_attribs);
-    Assert(ramR->egl_context != EGL_NO_CONTEXT);
   }
 
   OS_Window *result = push_array(arena, OS_Window, 1);
@@ -801,14 +754,6 @@ Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 hei
 
   result->width = width;
   result->height = height;
-  result->egl_window =
-      wl_egl_window_create(result->surface, result->width, result->height);
-  Assert(result->egl_window != 0);
-
-  result->egl_surface =
-      eglCreateWindowSurface(ramR->egl_display, ramR->egl_config,
-                             (EGLNativeWindowType)result->egl_window, 0);
-  Assert(result->egl_surface != EGL_NO_SURFACE);
 
   result->next = ramR->first_window;
   if (ramR->first_window != 0) {
@@ -819,20 +764,7 @@ Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 hei
   return result;
 }
 
-Internal void os_window_get_context(OS_Window *window) {
-  if (window == 0) {
-    eglMakeCurrent(ramR->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-  } else {
-    I1 made_current = eglMakeCurrent(ramR->egl_display, window->egl_surface, window->egl_surface, ramR->egl_context);
-    Assert(made_current);
-  }
-}
-
-Internal void os_window_swap_buffers(OS_Window *window) {
-  eglSwapBuffers(ramR->egl_display, window->egl_surface);
-}
-
-Internal void os_poll_events(Arena *arena) {
+Internal OS_Event *os_poll_events(Arena *arena) {
   Assert(ramR->first_window != 0);
 
   ramR->event_arena = arena;
@@ -846,34 +778,21 @@ Internal void os_poll_events(Arena *arena) {
   wl_display_read_events(ramR->display);
   wl_display_dispatch_pending(ramR->display);
 
-  for (OS_Window *it = ramR->first_window; it != 0; it = it->next) {
-    if (it->resized) {
-      it->resized = 0;
-      wl_egl_window_resize(it->egl_window, it->width, it->height, 0, 0);
-    }
-  }
+  return ramR->first_event;
 }
 
 Internal void os_window_close(OS_Window *window) {
-  eglDestroySurface(ramR->egl_display, window->egl_surface);
-  wl_egl_window_destroy(window->egl_window);
-
   xdg_toplevel_destroy(window->xdg_toplevel);
   xdg_surface_destroy(window->xdg_surface);
   wl_surface_destroy(window->surface);
 
   if (ramR->first_window == window && window->next == 0) {
-    os_window_get_context(0);
-
     if (ramR->pointer)
       wl_pointer_destroy(ramR->pointer);
     if (ramR->keyboard)
       wl_keyboard_destroy(ramR->keyboard);
     if (ramR->seat)
       wl_seat_destroy(ramR->seat);
-
-    eglDestroyContext(ramR->egl_display, ramR->egl_context);
-    eglTerminate(ramR->egl_display);
 
     xdg_wm_base_destroy(ramR->xdg_wm_base);
     wl_display_disconnect(ramR->display);

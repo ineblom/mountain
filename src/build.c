@@ -68,6 +68,8 @@ NoInline void WrmEnd(void) { Crash(1); }
 #include "lane.c"
 #include "math.c"
 #include "image.c"
+#include "gfx.c"
 // #define RT_APP
 #include "rt.c"
-#include "editor.c"
+// #include "editor.c"
+#include "testing.c"

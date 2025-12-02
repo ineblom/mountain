@@ -19,6 +19,8 @@ typedef long long SL1; typedef unsigned long long L1;
 typedef float     F3 __attribute__((ext_vector_type(3)));
 typedef float     F4 __attribute__((ext_vector_type(4)));
 
+typedef void VoidProc(void);
+
 #define F1_MAX 3.4028234664e+38
 #define F1_MIN 1.1754943508e-38
 #define I1_MAX 0xFFFFFFFF

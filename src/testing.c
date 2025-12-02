@@ -5,18 +5,21 @@
 #if (CPU_ && ROM_)
 
 Internal void lane(Arena *arena) {
-	OS_Window *wnd = 0;
+	OS_Window *window = 0;
 
 	////////////////////////////////
 	//~ kti: Initialization.
 
 	if (lane_idx() == 0) {
 
-		gfx_init();
+		gfx_init(arena);
 
-		return;
-		wnd = os_window_open(arena, Str8_("Testing"), 1280, 720);
+		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
+
+		gfx_window_equip(arena, window);
 	}
+
+	lane_sync();
 
 	L1 running = 1;
 
@@ -45,7 +48,7 @@ Internal void lane(Arena *arena) {
 	//~ kti: Shutdown
 
 	if (lane_idx() == 0) {
-		os_window_close(wnd);
+		os_window_close(window);
 	}
 }
 

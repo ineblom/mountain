@@ -11,6 +11,7 @@
 #include <memory.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <dlfcn.h>
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
 
@@ -351,6 +352,33 @@ Internal L1 os_clock(void) {
   L1 result = timespec.tv_sec * 1000000000 + timespec.tv_nsec;
   return result;
 }
+
+Internal void *os_library_open(String8 filename) {
+  Assert(filename.len < MAX_FILENAME_LEN);
+  char cstr_filename[MAX_FILENAME_LEN] = {0};
+  memmove(cstr_filename, filename.str, filename.len);
+
+  void *handle = dlopen(cstr_filename, RTLD_LAZY|RTLD_LOCAL);
+
+  return handle;
+}
+
+Internal VoidProc *os_library_load_proc(void *lib, String8 name) {
+  Assert(name.len < MAX_FILENAME_LEN);
+  char cstr_name[MAX_FILENAME_LEN] = {0};
+  memmove(cstr_name, name.str, name.len);
+
+  VoidProc *proc = dlsym(lib, cstr_name);
+
+  return proc;
+}
+
+Internal void os_library_close(void *handle) {
+  dlclose(handle);
+}
+
+////////////////////////////////
+//~ kti: Wayland
 
 Internal I1 os_key_from_wl_key(I1 wl_key) {
   I1 result = OS_KEY__NULL;

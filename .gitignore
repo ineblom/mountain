@@ -4,3 +4,4 @@ history
 .tags_sorted_by_file
 m
 .vscode
+shaders/*.spv

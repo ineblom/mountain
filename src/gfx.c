@@ -187,11 +187,12 @@ Internal void gfx_init(Arena *arena) {
   ////////////////////////////////
   //~ kti: Create Instance
 
-  VkApplicationInfo app_info = {0};
-  app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  app_info.pApplicationName = "m";
-  app_info.engineVersion = 1;
-  app_info.apiVersion = VK_API_VERSION_1_3;
+  VkApplicationInfo app_info = {
+    .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    .pApplicationName = "m";
+    .engineVersion = 1;
+    .apiVersion = VK_API_VERSION_1_3;
+  };
 
   I1 layer_count = 0;
   vkEnumerateInstanceLayerProperties(&layer_count, 0);
@@ -224,7 +225,7 @@ Internal void gfx_init(Arena *arena) {
 
   Assert(found_extension_count == ArrayCount(required_extensions));
 
-  VkInstanceCreateInfo inst_info = {0
+  VkInstanceCreateInfo inst_info = {
     .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     .pApplicationInfo = &app_info;
     .enabledExtensionCount = ArrayCount(required_extensions);
@@ -334,7 +335,7 @@ Internal void gfx_init(Arena *arena) {
   };
 
   float queue_priorities[] = { 1.0f };
-  VkDeviceQueueCreateInfo queue_ci = {0
+  VkDeviceQueueCreateInfo queue_ci = {
     .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     .queueFamilyIndex = ramM.present_queue_index;
     .queueCount = 1;
@@ -749,6 +750,9 @@ Internal void gfx_vk_transition_image_layout(
 Internal void gfx_begin_frame(OS_Window *os_window, GFX_Window *vkw) { }
 
 Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
+  ////////////////////////////////
+  //~ kti: Acquire image
+
   //- kti: Check for window resize.
   if (os_window->width != vkw->swapchain_extent.width || os_window->height != vkw->swapchain_extent.height) {
     gfx_vk_recreate_swapchain(0, os_window, vkw);
@@ -786,7 +790,6 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     return;
   }
 
-
   //- kti: Wait for previous work submitted to this image is complete.
   vkWaitForFences(ramM.device, 1, &vkw->per_frame[image_idx].queue_submit_fence, VK_TRUE, L1_MAX);
   vkResetFences(ramM.device, 1, &vkw->per_frame[image_idx].queue_submit_fence);
@@ -802,7 +805,8 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   vkw->per_frame[image_idx].swapchain_acquire_semaphore = acquire_semaphore;
 
-  // TODO: Properly handle img_acquire_result.
+  ////////////////////////////////
+  //~ kti: Begin Rendering
 
   VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
   VkCommandBufferBeginInfo begin_info = {
@@ -873,6 +877,12 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
   vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
+  ////////////////////////////////
+  //~ kti: Render
+
+  ////////////////////////////////
+  //~ kti: End Rendering
+
   vkCmdEndRendering(cmd);
 
   gfx_vk_transition_image_layout(
@@ -906,6 +916,9 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   };
   result = vkQueueSubmit(ramM.queue, 1, &submit_info, vkw->per_frame[image_idx].queue_submit_fence);
   Assert(result == VK_SUCCESS);
+
+  ////////////////////////////////
+  //~ kti: Present
 
   VkPresentInfoKHR present_info = {
     .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,

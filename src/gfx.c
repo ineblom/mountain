@@ -587,17 +587,18 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
   ////////////////////////////////
   //~ kti: Image Views
 
-  I1 image_count = 0;
-  vkGetSwapchainImagesKHR(ramM.device, vkw->swapchain, &image_count, 0);
-  if (vkw->image_count == 0) {
-    vkw->swapchain_images = push_array(arena, VkImage, image_count);
-  } else {
-    Assert(vkw->image_count == image_count);
+  I1 prev_image_count = vkw->image_count;
+  vkGetSwapchainImagesKHR(ramM.device, vkw->swapchain, &vkw->image_count, 0);
+  if (prev_image_count == 0) {
+    vkw->swapchain_images = push_array(arena, VkImage, vkw->image_count);
+  } else if (prev_image_count != vkw->image_count) {
+    Assert(0);
   }
-  vkw->image_count = image_count;
   vkGetSwapchainImagesKHR(ramM.device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
 
-  vkw->swapchain_image_views = push_array(arena, VkImageView, vkw->image_count);
+  if (prev_image_count == 0) {
+    vkw->swapchain_image_views = push_array(arena, VkImageView, vkw->image_count);
+  }
 
   for EachIndex(i, vkw->image_count) {
     VkImageViewCreateInfo image_view_ci = {0};

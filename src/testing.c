@@ -41,8 +41,8 @@ Internal void lane(Arena *arena) {
 		lane_sync_L1(&running, 0);
 
 		if (lane_idx() == 0) {
-			gfx_begin_frame(gfx_window);
-			gfx_end_frame(gfx_window);
+			gfx_begin_frame(window, gfx_window);
+			gfx_end_frame(window, gfx_window);
 		}
 
 		scratch_end(scratch);

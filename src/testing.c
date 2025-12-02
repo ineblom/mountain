@@ -6,6 +6,7 @@
 
 Internal void lane(Arena *arena) {
 	OS_Window *window = 0;
+	GFX_Window *gfx_window = 0;
 
 	////////////////////////////////
 	//~ kti: Initialization.
@@ -15,8 +16,7 @@ Internal void lane(Arena *arena) {
 		gfx_init(arena);
 
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
-
-		gfx_window_equip(arena, window);
+		gfx_window = gfx_window_equip(arena, window);
 	}
 
 	lane_sync();
@@ -40,6 +40,11 @@ Internal void lane(Arena *arena) {
 
 		lane_sync_L1(&running, 0);
 
+		if (lane_idx() == 0) {
+			gfx_begin_frame(gfx_window);
+			gfx_end_frame(gfx_window);
+		}
+
 		scratch_end(scratch);
 		lane_sync();
 	}
@@ -48,6 +53,7 @@ Internal void lane(Arena *arena) {
 	//~ kti: Shutdown
 
 	if (lane_idx() == 0) {
+		gfx_window_unequip(gfx_window);
 		os_window_close(window);
 	}
 }

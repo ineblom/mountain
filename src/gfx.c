@@ -188,10 +188,10 @@ Internal void gfx_init(Arena *arena) {
   //~ kti: Create Instance
 
   VkApplicationInfo app_info = {
-    .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    .pApplicationName = "m";
-    .engineVersion = 1;
-    .apiVersion = VK_API_VERSION_1_3;
+    .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+    .pApplicationName = "m",
+    .engineVersion = 1,
+    .apiVersion = VK_API_VERSION_1_3,
   };
 
   I1 layer_count = 0;
@@ -226,10 +226,10 @@ Internal void gfx_init(Arena *arena) {
   Assert(found_extension_count == ArrayCount(required_extensions));
 
   VkInstanceCreateInfo inst_info = {
-    .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    .pApplicationInfo = &app_info;
-    .enabledExtensionCount = ArrayCount(required_extensions);
-    .ppEnabledExtensionNames = required_extensions;
+    .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+    .pApplicationInfo = &app_info,
+    .enabledExtensionCount = ArrayCount(required_extensions),
+    .ppEnabledExtensionNames = required_extensions,
   };
 
   const char *layer_names[] = { "VK_LAYER_KHRONOS_validation" };
@@ -252,10 +252,10 @@ Internal void gfx_init(Arena *arena) {
   //~ kti: Register Debug Report Callback
 
   VkDebugReportCallbackCreateInfoEXT callback_ci = {
-    .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
-    .flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-    .pfnCallback = &debug_report_callback;
-    .pUserData = NULL;
+    .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT,
+    .flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+    .pfnCallback = &debug_report_callback,
+    .pUserData = NULL,
   };
 
   result = vkCreateDebugReportCallbackEXT(ramM.instance, &callback_ci, NULL, &ramM.vk_debug_callback);
@@ -336,24 +336,24 @@ Internal void gfx_init(Arena *arena) {
 
   float queue_priorities[] = { 1.0f };
   VkDeviceQueueCreateInfo queue_ci = {
-    .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    .queueFamilyIndex = ramM.present_queue_index;
-    .queueCount = 1;
-    .pQueuePriorities = queue_priorities;
+    .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+    .queueFamilyIndex = ramM.present_queue_index,
+    .queueCount = 1,
+    .pQueuePriorities = queue_priorities,
   };
 
   const char *device_extensions[] = { "VK_KHR_swapchain" };
   VkDeviceCreateInfo device_info = {
-    .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    .pNext = &enable_device_features2;
-    .queueCreateInfoCount = 1;
-    .pQueueCreateInfos = &queue_ci;
+    .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+    .pNext = &enable_device_features2,
+    .queueCreateInfoCount = 1,
+    .pQueueCreateInfos = &queue_ci,
 
-    .enabledLayerCount = ArrayCount(layer_names);
-    .ppEnabledLayerNames = layer_names;
+    .enabledLayerCount = ArrayCount(layer_names),
+    .ppEnabledLayerNames = layer_names,
 
-    .enabledExtensionCount = ArrayCount(device_extensions);
-    .ppEnabledExtensionNames = device_extensions;
+    .enabledExtensionCount = ArrayCount(device_extensions),
+    .ppEnabledExtensionNames = device_extensions,
   };
 
   result = vkCreateDevice(ramM.physical_device, &device_info, NULL, &ramM.device);
@@ -508,6 +508,11 @@ Internal void gfx_init(Arena *arena) {
 
   vkDestroyShaderModule(ramM.device, vert_shader, 0);
   vkDestroyShaderModule(ramM.device, frag_shader, 0);
+
+  ////////////////////////////////
+  //~ kti: Vertex Buffer
+
+
 }
 
 Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_Window *vkw) {
@@ -570,19 +575,19 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
   }
 
   VkSwapchainCreateInfoKHR swpachain_ci = {
-    .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    .surface = vkw->surface;
-    .minImageCount = desired_image_count;
-    .imageFormat = color_format;
-    .imageColorSpace = color_space;
-    .imageExtent = surface_resolution;
-    .imageArrayLayers = 1;
-    .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    .preTransform = pre_transform;
-    .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    .presentMode = present_mode;
-    .clipped = VK_TRUE;
+    .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+    .surface = vkw->surface,
+    .minImageCount = desired_image_count,
+    .imageFormat = color_format,
+    .imageColorSpace = color_space,
+    .imageExtent = surface_resolution,
+    .imageArrayLayers = 1,
+    .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+    .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    .preTransform = pre_transform,
+    .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+    .presentMode = present_mode,
+    .clipped = VK_TRUE,
   };
 
   VkResult result = vkCreateSwapchainKHR(ramM.device, &swpachain_ci, NULL, &vkw->swapchain);
@@ -608,15 +613,15 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
 
   for EachIndex(i, vkw->image_count) {
     VkImageViewCreateInfo image_view_ci = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-      .image = vkw->swapchain_images[i];
-      .viewType = VK_IMAGE_VIEW_TYPE_2D;
-      .format = color_format;
-      .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      .subresourceRange.baseMipLevel = 0;
-      .subresourceRange.levelCount = 1;
-      .subresourceRange.baseArrayLayer = 0;
-      .subresourceRange.layerCount = 1;
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = vkw->swapchain_images[i],
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = color_format,
+      .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .subresourceRange.baseMipLevel = 0,
+      .subresourceRange.levelCount = 1,
+      .subresourceRange.baseArrayLayer = 0,
+      .subresourceRange.layerCount = 1,
     };
     vkCreateImageView(ramM.device, &image_view_ci, 0, &vkw->swapchain_image_views[i]);
   }
@@ -634,9 +639,9 @@ Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
   //~ kti: Surface
 
   VkWaylandSurfaceCreateInfoKHR surface_ci = {
-    .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
-    .display = ramM.display;
-    .surface = window->surface;
+    .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+    .display = ramM.display,
+    .surface = window->surface,
   };
   VkResult result = vkCreateWaylandSurfaceKHR(ramM.instance, &surface_ci, 0, &vkw->surface);
   Assert(result == VK_SUCCESS);
@@ -666,26 +671,26 @@ Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
     GFX_Per_Frame *frame = &vkw->per_frame[i];
 
     VkFenceCreateInfo fence_ci = {
-      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-      .flags = VK_FENCE_CREATE_SIGNALED_BIT;
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .flags = VK_FENCE_CREATE_SIGNALED_BIT,
     };
     result = vkCreateFence(ramM.device, &fence_ci, 0, &frame->queue_submit_fence);
     Assert(result == VK_SUCCESS);
 
     VkCommandPoolCreateInfo command_pool_ci = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-      .queueFamilyIndex = ramM.present_queue_index;
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+      .queueFamilyIndex = ramM.present_queue_index,
     };
 
     result = vkCreateCommandPool(ramM.device, &command_pool_ci, 0, &frame->command_pool);
     Assert(result == VK_SUCCESS);
 
     VkCommandBufferAllocateInfo command_buffer_alloc_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-      .commandPool = frame->command_pool;
-      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-      .commandBufferCount = 1;
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = frame->command_pool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
     };
 
     result = vkAllocateCommandBuffers(ramM.device, &command_buffer_alloc_info, &frame->command_buffer);

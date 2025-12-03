@@ -35,6 +35,7 @@ struct GFX_Window {
 typedef struct GFX_Vertex GFX_Vertex;
 struct GFX_Vertex {
   F1 x, y;
+  F1 r, g, b;
 };
 
 #endif
@@ -50,6 +51,9 @@ VkQueue queue;
 L1 present_queue_index;
 VkPipelineLayout pipeline_layout;
 VkPipeline pipeline;
+
+VkBuffer vertex_buffer;
+VkDeviceMemory vertex_buffer_memory;
 
 L1 recycle_semaphores_count;
 VkSemaphore recycle_semaphores[16];
@@ -110,6 +114,15 @@ Global PFN_vkCmdSetScissor vkCmdSetScissor = 0;
 Global PFN_vkDestroyImageView vkDestroyImageView = 0;
 Global PFN_vkDeviceWaitIdle vkDeviceWaitIdle = 0;
 Global PFN_vkQueueWaitIdle vkQueueWaitIdle = 0;
+Global PFN_vkCreateBuffer vkCreateBuffer = 0;
+Global PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements = 0;
+Global PFN_vkAllocateMemory vkAllocateMemory = 0;
+Global PFN_vkMapMemory vkMapMemory = 0;
+Global PFN_vkUnmapMemory vkUnmapMemory = 0;
+Global PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties = 0;
+Global PFN_vkBindBufferMemory vkBindBufferMemory = 0;
+Global PFN_vkCmdBindVertexBuffers vkCmdBindVertexBuffers = 0;
+Global PFN_vkCmdDraw vkCmdDraw = 0;
 
 Global PFN_vkCreateWaylandSurfaceKHR vkCreateWaylandSurfaceKHR = 0;
 Global PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR vkGetPhysicalDeviceWaylandPresentationSupportKHR = 0;
@@ -180,6 +193,15 @@ Internal void gfx_init(Arena *arena) {
   *(void **)&vkDestroyImageView = os_library_load_proc(lib, Str8_("vkDestroyImageView"));
   *(void **)&vkDeviceWaitIdle = os_library_load_proc(lib, Str8_("vkDeviceWaitIdle"));
   *(void **)&vkQueueWaitIdle = os_library_load_proc(lib, Str8_("vkQueueWaitIdle"));
+  *(void **)&vkCreateBuffer = os_library_load_proc(lib, Str8_("vkCreateBuffer"));
+  *(void **)&vkGetBufferMemoryRequirements = os_library_load_proc(lib, Str8_("vkGetBufferMemoryRequirements"));
+  *(void **)&vkAllocateMemory = os_library_load_proc(lib, Str8_("vkAllocateMemory"));
+  *(void **)&vkMapMemory = os_library_load_proc(lib, Str8_("vkMapMemory"));
+  *(void **)&vkUnmapMemory = os_library_load_proc(lib, Str8_("vkUnmapMemory"));
+  *(void **)&vkGetPhysicalDeviceMemoryProperties = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceMemoryProperties"));
+  *(void **)&vkBindBufferMemory = os_library_load_proc(lib, Str8_("vkBindBufferMemory"));
+  *(void **)&vkCmdBindVertexBuffers = os_library_load_proc(lib, Str8_("vkCmdBindVertexBuffers"));
+  *(void **)&vkCmdDraw = os_library_load_proc(lib, Str8_("vkCmdDraw"));
 
   *(void **)&vkCreateWaylandSurfaceKHR = os_library_load_proc(lib, Str8_("vkCreateWaylandSurfaceKHR"));
   *(void **)&vkGetPhysicalDeviceWaylandPresentationSupportKHR = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceWaylandPresentationSupportKHR"));
@@ -378,6 +400,7 @@ Internal void gfx_init(Arena *arena) {
 
   VkVertexInputAttributeDescription attribute_descriptions[] = {
     {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0},
+    {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(GFX_Vertex, r)},
   };
 
   VkPipelineVertexInputStateCreateInfo vertex_input = {
@@ -443,8 +466,15 @@ Internal void gfx_init(Arena *arena) {
     .pDynamicStates = dynamic_states,
   };
 
-  String8 vert_shader_code = os_read_entire_file(arena, Str8_("./shaders/triangle.vert.spv"));
-  String8 frag_shader_code = os_read_entire_file(arena, Str8_("./shaders/triangle.frag.spv"));
+  String8 vert_shader_code = os_read_entire_file(arena, Str8_("./shaders/shader.vert.spv"));
+  String8 frag_shader_code = os_read_entire_file(arena, Str8_("./shaders/shader.frag.spv"));
+
+  if (vert_shader_code.len == 0) {
+    printf("Failed to read vertex shader.\n");
+  }
+  if (frag_shader_code.len == 0) {
+    printf("Failed to read fragment shader.\n");
+  }
 
   VkShaderModuleCreateInfo vert_shader_ci = {
     .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -512,6 +542,53 @@ Internal void gfx_init(Arena *arena) {
   ////////////////////////////////
   //~ kti: Vertex Buffer
 
+  GFX_Vertex vertices[3] = {
+    {0.0f, -0.5f,  1.0f, 0.0f, 0.0f},
+    {0.5f,  0.5f,  0.0f, 1.0f, 0.0f},
+    {-0.5f, 0.5f,  0.0f, 0.0f, 1.0f},
+  };
+  VkBufferCreateInfo vertex_buffer_ci = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .size = sizeof(vertices),
+    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  result = vkCreateBuffer(ramM.device, &vertex_buffer_ci, 0, &ramM.vertex_buffer);
+  Assert(result == VK_SUCCESS);
+
+VkMemoryRequirements memory_requirements = {0};
+vkGetBufferMemoryRequirements(ramM.device, ramM.vertex_buffer, &memory_requirements);
+
+VkMemoryAllocateInfo alloc_info = {
+  .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+  .allocationSize  = memory_requirements.size,
+};
+
+VkPhysicalDeviceMemoryProperties mem_properties = {};
+vkGetPhysicalDeviceMemoryProperties(ramM.physical_device, &mem_properties);
+for EachIndex(i, mem_properties.memoryTypeCount) {
+  if (memory_requirements.memoryTypeBits & (1 << i)) {
+    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    if ((mem_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+      alloc_info.memoryTypeIndex = i;
+      break;
+    }
+  }
+}
+
+result = vkAllocateMemory(ramM.device, &alloc_info, 0, &ramM.vertex_buffer_memory);
+Assert(result == VK_SUCCESS);
+
+result = vkBindBufferMemory(ramM.device, ramM.vertex_buffer, ramM.vertex_buffer_memory, 0);
+Assert(result == VK_SUCCESS);
+
+void *data;
+result = vkMapMemory(ramM.device, ramM.vertex_buffer_memory, 0, sizeof(vertices), 0, &data);
+Assert(result == VK_SUCCESS);
+
+memcpy(data, vertices, sizeof(vertices));
+
+vkUnmapMemory(ramM.device, ramM.vertex_buffer_memory);
 
 }
 
@@ -832,7 +909,7 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-  VkClearValue clear_value = {.color= {{0.01f, 0.01f, 0.033f, 1.0f}}};
+  VkClearValue clear_value = {.color= {{0.0f, 0.01f, 0.05f, 1.0f}}};
 
   VkRenderingAttachmentInfo color_attachment = {
     .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -884,6 +961,10 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   ////////////////////////////////
   //~ kti: Render
+
+  VkDeviceSize offset = {0};
+  vkCmdBindVertexBuffers(cmd, 0, 1, &ramM.vertex_buffer, &offset);
+  vkCmdDraw(cmd, 3, 1, 0, 0);
 
   ////////////////////////////////
   //~ kti: End Rendering

@@ -29,6 +29,11 @@ float rounded_box_sdf(vec2 pos, vec2 size, vec4 radii) {
     return dist;
 }
 
+// Simple dithering function to reduce banding
+float dither(vec2 pos) {
+    return fract(sin(dot(pos, vec2(12.9898, 78.233))) * 43758.5453) / 255.0;
+}
+
 void main() {
     float distance = rounded_box_sdf(in_rect_pos, in_rect_size, in_corner_radii);
 
@@ -40,10 +45,15 @@ void main() {
 
     float border_distance = distance + in_border_width;
 
+    vec2 pixel_pos = in_rect_pos * in_rect_size;
+    float dither_value = dither(pixel_pos) - 0.5 / 255.0;
+
     if (in_border_width > 0.0 && border_distance > 0.0) {
         float border_alpha = smoothstep(-1.0, 0.0, border_distance);
-        out_color = vec4(in_border_color.rgb, in_border_color.a * outer_alpha * border_alpha);
+        vec3 color = in_border_color.rgb + vec3(dither_value);
+        out_color = vec4(color, in_border_color.a * outer_alpha * border_alpha);
     } else {
-        out_color = vec4(in_color.rgb, in_color.a * outer_alpha);
+        vec3 color = in_color.rgb + vec3(dither_value);
+        out_color = vec4(color, in_color.a * outer_alpha);
     }
 }

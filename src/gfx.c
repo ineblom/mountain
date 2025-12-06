@@ -48,7 +48,7 @@ struct GFX_Rect_Instance {
 VkInstance instance;
 VkDebugReportCallbackEXT vk_debug_callback;
 VkPhysicalDevice physical_device;
-VkPhysicalDeviceProperties physical_devce_properties;
+VkPhysicalDeviceProperties physical_device_properties;
 VkDevice device;
 VkQueue queue;
 L1 present_queue_index;
@@ -148,8 +148,19 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags
   return VK_FALSE;
 }
 
-F1 c(F1 c) {
-  return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+F1 srgb(F1 c) {
+  F1 result = c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+  return result;
+}
+
+F4 srgb_F4(F4 v) {
+  F4 result = {
+    srgb(v.x),
+    srgb(v.y),
+    srgb(v.z),
+    srgb(v.w),
+  };
+  return result;
 }
 
 Internal void gfx_init(Arena *arena) {
@@ -265,7 +276,7 @@ Internal void gfx_init(Arena *arena) {
       // vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[i], j, )
       if (queue_family_properties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
         ramM.physical_device = physical_devices[i];
-        ramM.physical_devce_properties = props;
+        ramM.physical_device_properties = props;
         ramM.present_queue_index = j;
         break;
       }
@@ -523,8 +534,8 @@ Internal void gfx_init(Arena *arena) {
 
   ////////////////////////////////
   //~ kti: Instance Buffer
-  F4 dark_red = {c(0.2f), c(0.016f), c(0.016f), 1.0f};
-  F4 light_red = {c(0.3f), c(0.016f), c(0.016f), 1.0f};
+  F4 dark_red = srgb_F4((F4){0.2f, 0.016f, 0.016f, 1.0f});
+  F4 light_red = srgb_F4((F4){0.3f, 0.016f, 0.016f, 1.0f});
 
   GFX_Rect_Instance instances[] = {
     {
@@ -535,7 +546,7 @@ Internal void gfx_init(Arena *arena) {
         light_red, light_red,
       },
       .corner_radii = (F4){10.0f, 10.0f, 10.0f, 10.0f},
-      .border_color = (F4){0.50f, 0.02f, 0.02f, 1.0f},
+      .border_color = light_red,
       .border_width = 2,
     },
   };
@@ -549,37 +560,37 @@ Internal void gfx_init(Arena *arena) {
   result = vkCreateBuffer(ramM.device, &instance_buffer_ci, 0, &ramM.instance_buffer);
   Assert(result == VK_SUCCESS);
 
-VkMemoryRequirements memory_requirements = {0};
-vkGetBufferMemoryRequirements(ramM.device, ramM.instance_buffer, &memory_requirements);
+  VkMemoryRequirements memory_requirements = {0};
+  vkGetBufferMemoryRequirements(ramM.device, ramM.instance_buffer, &memory_requirements);
 
-VkMemoryAllocateInfo alloc_info = {
-  .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-  .allocationSize  = memory_requirements.size,
-};
+  VkMemoryAllocateInfo alloc_info = {
+    .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize  = memory_requirements.size,
+  };
 
-VkPhysicalDeviceMemoryProperties mem_properties = {};
-vkGetPhysicalDeviceMemoryProperties(ramM.physical_device, &mem_properties);
-for EachIndex(i, mem_properties.memoryTypeCount) {
-  if (memory_requirements.memoryTypeBits & (1 << i)) {
-    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if ((mem_properties.memoryTypes[i].propertyFlags & properties) == properties) {
-      alloc_info.memoryTypeIndex = i;
-      break;
+  VkPhysicalDeviceMemoryProperties mem_properties = {};
+  vkGetPhysicalDeviceMemoryProperties(ramM.physical_device, &mem_properties);
+  for EachIndex(i, mem_properties.memoryTypeCount) {
+    if (memory_requirements.memoryTypeBits & (1 << i)) {
+      VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+      if ((mem_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+        alloc_info.memoryTypeIndex = i;
+        break;
+      }
     }
   }
-}
 
-result = vkAllocateMemory(ramM.device, &alloc_info, 0, &ramM.instance_buffer_memory);
-Assert(result == VK_SUCCESS);
+  result = vkAllocateMemory(ramM.device, &alloc_info, 0, &ramM.instance_buffer_memory);
+  Assert(result == VK_SUCCESS);
 
-result = vkBindBufferMemory(ramM.device, ramM.instance_buffer, ramM.instance_buffer_memory, 0);
-Assert(result == VK_SUCCESS);
+  result = vkBindBufferMemory(ramM.device, ramM.instance_buffer, ramM.instance_buffer_memory, 0);
+  Assert(result == VK_SUCCESS);
 
-void *data;
-result = vkMapMemory(ramM.device, ramM.instance_buffer_memory, 0, sizeof(instances), 0, &data);
-Assert(result == VK_SUCCESS);
-memcpy(data, instances, sizeof(instances));
-vkUnmapMemory(ramM.device, ramM.instance_buffer_memory);
+  void *data;
+  result = vkMapMemory(ramM.device, ramM.instance_buffer_memory, 0, sizeof(instances), 0, &data);
+  Assert(result == VK_SUCCESS);
+  memcpy(data, instances, sizeof(instances));
+  vkUnmapMemory(ramM.device, ramM.instance_buffer_memory);
 
 }
 
@@ -623,7 +634,7 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
   }
 
   VkExtent2D surface_resolution = surface_capabilities.currentExtent;
-  if (surface_resolution.width == -1) {
+  if (surface_resolution.width == I1_MAX) {
     surface_resolution.width = os_window->width;
     surface_resolution.height = os_window->height;
   }

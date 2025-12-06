@@ -32,10 +32,13 @@ struct GFX_Window {
   GFX_Per_Frame *per_frame;
 };
 
-typedef struct GFX_Vertex GFX_Vertex;
-struct GFX_Vertex {
-  F1 x, y;
-  F1 r, g, b;
+typedef struct GFX_Rect_Instance GFX_Rect_Instance;
+struct GFX_Rect_Instance {
+  F4 rect;
+  F4 corner_radii;
+  F4 color;
+  F4 border_color;
+  F1 border_width;
 };
 
 #endif
@@ -52,8 +55,8 @@ L1 present_queue_index;
 VkPipelineLayout pipeline_layout;
 VkPipeline pipeline;
 
-VkBuffer vertex_buffer;
-VkDeviceMemory vertex_buffer_memory;
+VkBuffer instance_buffer;
+VkDeviceMemory instance_buffer_memory;
 
 L1 recycle_semaphores_count;
 VkSemaphore recycle_semaphores[16];
@@ -67,75 +70,86 @@ GFX_Window *first_free_vk_window;
 // Should every subsystem have its own arena. And not use the RAM system?
 // Instead we have a global gfx_state and the first time we call gfx_init it allocs.
 
-Global PFN_vkCreateInstance vkCreateInstance = 0;
-Global PFN_vkEnumerateInstanceLayerProperties vkEnumerateInstanceLayerProperties = 0;
-Global PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties = 0;
-Global PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = 0;
-Global PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = 0;
-Global PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = 0;
-Global PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties = 0;
-Global PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR = 0;
-Global PFN_vkCreateDevice vkCreateDevice = 0;
-Global PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR = 0;
-Global PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR = 0;
-Global PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR = 0;
-Global PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = 0;
-Global PFN_vkCreateCommandPool vkCreateCommandPool = 0;
-Global PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers = 0;
-Global PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR = 0;
-Global PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = 0;
-Global PFN_vkBeginCommandBuffer vkBeginCommandBuffer = 0;
-Global PFN_vkEndCommandBuffer vkEndCommandBuffer = 0;
-Global PFN_vkQueueSubmit vkQueueSubmit = 0;
-Global PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR = 0;
-Global PFN_vkCreateFence vkCreateFence = 0;
-Global PFN_vkCmdPipelineBarrier2 vkCmdPipelineBarrier2 = 0;
-Global PFN_vkWaitForFences vkWaitForFences = 0;
-Global PFN_vkResetFences vkResetFences = 0;
-Global PFN_vkResetCommandPool vkResetCommandPool = 0;
-Global PFN_vkCreateImageView vkCreateImageView = 0;
-Global PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 = 0;
-Global PFN_vkGetDeviceQueue vkGetDeviceQueue = 0;
-Global PFN_vkCreatePipelineLayout vkCreatePipelineLayout = 0;
-Global PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines = 0;
-Global PFN_vkDestroyShaderModule vkDestroyShaderModule = 0;
-Global PFN_vkCreateShaderModule vkCreateShaderModule = 0;
-Global PFN_vkCreateSemaphore vkCreateSemaphore = 0;
-Global PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR = 0;
-Global PFN_vkQueuePresentKHR vkQueuePresentKHR = 0;
-Global PFN_vkCmdBeginRendering vkCmdBeginRendering = 0;
-Global PFN_vkCmdSetViewport vkCmdSetViewport = 0;
-Global PFN_vkCmdBindPipeline vkCmdBindPipeline = 0;
-Global PFN_vkCmdSetCullMode vkCmdSetCullMode = 0;
-Global PFN_vkCmdSetFrontFace vkCmdSetFrontFace = 0;
-Global PFN_vkCmdSetPrimitiveTopology vkCmdSetPrimitiveTopology = 0;
-Global PFN_vkCmdEndRendering vkCmdEndRendering = 0;
-Global PFN_vkCmdSetScissor vkCmdSetScissor = 0;
-Global PFN_vkDestroyImageView vkDestroyImageView = 0;
-Global PFN_vkDeviceWaitIdle vkDeviceWaitIdle = 0;
-Global PFN_vkQueueWaitIdle vkQueueWaitIdle = 0;
-Global PFN_vkCreateBuffer vkCreateBuffer = 0;
-Global PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements = 0;
-Global PFN_vkAllocateMemory vkAllocateMemory = 0;
-Global PFN_vkMapMemory vkMapMemory = 0;
-Global PFN_vkUnmapMemory vkUnmapMemory = 0;
-Global PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties = 0;
-Global PFN_vkBindBufferMemory vkBindBufferMemory = 0;
-Global PFN_vkCmdBindVertexBuffers vkCmdBindVertexBuffers = 0;
-Global PFN_vkCmdDraw vkCmdDraw = 0;
+#define VK_CORE_FUNCTIONS \
+  X(vkCreateInstance) \
+  X(vkEnumerateInstanceLayerProperties) \
+  X(vkEnumerateInstanceExtensionProperties) \
+  X(vkGetInstanceProcAddr) \
+  X(vkEnumeratePhysicalDevices) \
+  X(vkGetPhysicalDeviceProperties) \
+  X(vkGetPhysicalDeviceQueueFamilyProperties) \
+  X(vkGetPhysicalDeviceSurfaceSupportKHR) \
+  X(vkCreateDevice) \
+  X(vkGetPhysicalDeviceSurfaceFormatsKHR) \
+  X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) \
+  X(vkGetPhysicalDeviceSurfacePresentModesKHR) \
+  X(vkCreateSwapchainKHR) \
+  X(vkCreateCommandPool) \
+  X(vkAllocateCommandBuffers) \
+  X(vkDestroySwapchainKHR) \
+  X(vkDestroySurfaceKHR) \
+  X(vkBeginCommandBuffer) \
+  X(vkEndCommandBuffer) \
+  X(vkQueueSubmit) \
+  X(vkGetSwapchainImagesKHR) \
+  X(vkCreateFence) \
+  X(vkCmdPipelineBarrier2) \
+  X(vkWaitForFences) \
+  X(vkResetFences) \
+  X(vkResetCommandPool) \
+  X(vkCreateImageView) \
+  X(vkGetPhysicalDeviceFeatures2) \
+  X(vkGetDeviceQueue) \
+  X(vkCreatePipelineLayout) \
+  X(vkCreateGraphicsPipelines) \
+  X(vkDestroyShaderModule) \
+  X(vkCreateShaderModule) \
+  X(vkCreateSemaphore) \
+  X(vkAcquireNextImageKHR) \
+  X(vkQueuePresentKHR) \
+  X(vkCmdBeginRendering) \
+  X(vkCmdSetViewport) \
+  X(vkCmdBindPipeline) \
+  X(vkCmdSetCullMode) \
+  X(vkCmdSetFrontFace) \
+  X(vkCmdSetPrimitiveTopology) \
+  X(vkCmdEndRendering) \
+  X(vkCmdSetScissor) \
+  X(vkDestroyImageView) \
+  X(vkDeviceWaitIdle) \
+  X(vkQueueWaitIdle) \
+  X(vkCreateBuffer) \
+  X(vkGetBufferMemoryRequirements) \
+  X(vkAllocateMemory) \
+  X(vkMapMemory) \
+  X(vkUnmapMemory) \
+  X(vkGetPhysicalDeviceMemoryProperties) \
+  X(vkBindBufferMemory) \
+  X(vkCmdBindVertexBuffers) \
+  X(vkCmdDraw) \
+  X(vkCreateWaylandSurfaceKHR) \
+  X(vkGetPhysicalDeviceWaylandPresentationSupportKHR) \
+  X(vkCmdPushConstants)
 
-Global PFN_vkCreateWaylandSurfaceKHR vkCreateWaylandSurfaceKHR = 0;
-Global PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR vkGetPhysicalDeviceWaylandPresentationSupportKHR = 0;
+#define VK_EXTENSION_FUNCTIONS \
+  X(vkCreateDebugReportCallbackEXT) \
+  X(vkDestroyDebugReportCallbackEXT) \
+  X(vkDebugReportMessageEXT)
 
-Global PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT = 0;
-Global PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallbackEXT = 0;
-Global PFN_vkDebugReportMessageEXT vkDebugReportMessageEXT = 0;
+#define X(name) Global PFN_##name name = 0;
+VK_CORE_FUNCTIONS
+VK_EXTENSION_FUNCTIONS
+#undef X
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT object_type, uint64_t object, size_t location,
     int32_t message_code, const char* layer_prefix, const char* message, void* user_data) {
   printf("%s - %s\n", layer_prefix, message);
   return VK_FALSE;
+}
+
+F1 c(F1 c) {
+  return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
 }
 
 Internal void gfx_init(Arena *arena) {
@@ -146,65 +160,9 @@ Internal void gfx_init(Arena *arena) {
   void *lib = os_library_open(Str8_("libvulkan.so.1"));
   Assert(lib != 0);
 
-  *(void **)&vkCreateInstance = os_library_load_proc(lib, Str8_("vkCreateInstance"));
-  *(void **)&vkEnumerateInstanceLayerProperties = os_library_load_proc(lib, Str8_("vkEnumerateInstanceLayerProperties"));
-  *(void **)&vkEnumerateInstanceExtensionProperties = os_library_load_proc(lib, Str8_("vkEnumerateInstanceExtensionProperties"));
-  *(void **)&vkGetInstanceProcAddr = os_library_load_proc(lib, Str8_("vkGetInstanceProcAddr"));
-  *(void **)&vkEnumeratePhysicalDevices = os_library_load_proc(lib, Str8_("vkEnumeratePhysicalDevices"));
-  *(void **)&vkGetPhysicalDeviceProperties = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceProperties"));
-  *(void **)&vkGetPhysicalDeviceQueueFamilyProperties = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceQueueFamilyProperties"));
-  *(void **)&vkGetPhysicalDeviceSurfaceSupportKHR = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceSurfaceSupportKHR"));
-  *(void **)&vkCreateDevice = os_library_load_proc(lib, Str8_("vkCreateDevice"));
-  *(void **)&vkGetPhysicalDeviceSurfaceFormatsKHR = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceSurfaceFormatsKHR"));
-  *(void **)&vkGetPhysicalDeviceSurfaceCapabilitiesKHR = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
-  *(void **)&vkGetPhysicalDeviceSurfacePresentModesKHR = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceSurfacePresentModesKHR"));
-  *(void **)&vkCreateSwapchainKHR = os_library_load_proc(lib, Str8_("vkCreateSwapchainKHR"));
-  *(void **)&vkCreateCommandPool = os_library_load_proc(lib, Str8_("vkCreateCommandPool"));
-  *(void **)&vkAllocateCommandBuffers = os_library_load_proc(lib, Str8_("vkAllocateCommandBuffers"));
-  *(void **)&vkDestroySwapchainKHR = os_library_load_proc(lib, Str8_("vkDestroySwapchainKHR"));
-  *(void **)&vkDestroySurfaceKHR = os_library_load_proc(lib, Str8_("vkDestroySurfaceKHR"));
-  *(void **)&vkBeginCommandBuffer = os_library_load_proc(lib, Str8_("vkBeginCommandBuffer"));
-  *(void **)&vkEndCommandBuffer = os_library_load_proc(lib, Str8_("vkEndCommandBuffer"));
-  *(void **)&vkQueueSubmit = os_library_load_proc(lib, Str8_("vkQueueSubmit"));
-  *(void **)&vkGetSwapchainImagesKHR = os_library_load_proc(lib, Str8_("vkGetSwapchainImagesKHR"));
-  *(void **)&vkCreateFence = os_library_load_proc(lib, Str8_("vkCreateFence"));
-  *(void **)&vkCmdPipelineBarrier2 = os_library_load_proc(lib, Str8_("vkCmdPipelineBarrier2"));
-  *(void **)&vkWaitForFences = os_library_load_proc(lib, Str8_("vkWaitForFences"));
-  *(void **)&vkResetFences = os_library_load_proc(lib, Str8_("vkResetFences"));
-  *(void **)&vkResetCommandPool = os_library_load_proc(lib, Str8_("vkResetCommandPool"));
-  *(void **)&vkCreateImageView = os_library_load_proc(lib, Str8_("vkCreateImageView"));
-  *(void **)&vkGetPhysicalDeviceFeatures2 = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceFeatures2"));
-  *(void **)&vkGetDeviceQueue = os_library_load_proc(lib, Str8_("vkGetDeviceQueue"));
-  *(void **)&vkCreatePipelineLayout = os_library_load_proc(lib, Str8_("vkCreatePipelineLayout"));
-  *(void **)&vkCreateGraphicsPipelines = os_library_load_proc(lib, Str8_("vkCreateGraphicsPipelines"));
-  *(void **)&vkDestroyShaderModule = os_library_load_proc(lib, Str8_("vkDestroyShaderModule"));
-  *(void **)&vkCreateShaderModule = os_library_load_proc(lib, Str8_("vkCreateShaderModule"));
-  *(void **)&vkCreateSemaphore = os_library_load_proc(lib, Str8_("vkCreateSemaphore"));
-  *(void **)&vkAcquireNextImageKHR = os_library_load_proc(lib, Str8_("vkAcquireNextImageKHR"));
-  *(void **)&vkQueuePresentKHR = os_library_load_proc(lib, Str8_("vkQueuePresentKHR"));
-  *(void **)&vkCmdBeginRendering = os_library_load_proc(lib, Str8_("vkCmdBeginRendering"));
-  *(void **)&vkCmdSetViewport = os_library_load_proc(lib, Str8_("vkCmdSetViewport"));
-  *(void **)&vkCmdBindPipeline = os_library_load_proc(lib, Str8_("vkCmdBindPipeline"));
-  *(void **)&vkCmdSetCullMode = os_library_load_proc(lib, Str8_("vkCmdSetCullMode"));
-  *(void **)&vkCmdSetFrontFace = os_library_load_proc(lib, Str8_("vkCmdSetFrontFace"));
-  *(void **)&vkCmdSetPrimitiveTopology = os_library_load_proc(lib, Str8_("vkCmdSetPrimitiveTopology"));
-  *(void **)&vkCmdEndRendering = os_library_load_proc(lib, Str8_("vkCmdEndRendering"));
-  *(void **)&vkCmdSetScissor = os_library_load_proc(lib, Str8_("vkCmdSetScissor"));
-  *(void **)&vkDestroyImageView = os_library_load_proc(lib, Str8_("vkDestroyImageView"));
-  *(void **)&vkDeviceWaitIdle = os_library_load_proc(lib, Str8_("vkDeviceWaitIdle"));
-  *(void **)&vkQueueWaitIdle = os_library_load_proc(lib, Str8_("vkQueueWaitIdle"));
-  *(void **)&vkCreateBuffer = os_library_load_proc(lib, Str8_("vkCreateBuffer"));
-  *(void **)&vkGetBufferMemoryRequirements = os_library_load_proc(lib, Str8_("vkGetBufferMemoryRequirements"));
-  *(void **)&vkAllocateMemory = os_library_load_proc(lib, Str8_("vkAllocateMemory"));
-  *(void **)&vkMapMemory = os_library_load_proc(lib, Str8_("vkMapMemory"));
-  *(void **)&vkUnmapMemory = os_library_load_proc(lib, Str8_("vkUnmapMemory"));
-  *(void **)&vkGetPhysicalDeviceMemoryProperties = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceMemoryProperties"));
-  *(void **)&vkBindBufferMemory = os_library_load_proc(lib, Str8_("vkBindBufferMemory"));
-  *(void **)&vkCmdBindVertexBuffers = os_library_load_proc(lib, Str8_("vkCmdBindVertexBuffers"));
-  *(void **)&vkCmdDraw = os_library_load_proc(lib, Str8_("vkCmdDraw"));
-
-  *(void **)&vkCreateWaylandSurfaceKHR = os_library_load_proc(lib, Str8_("vkCreateWaylandSurfaceKHR"));
-  *(void **)&vkGetPhysicalDeviceWaylandPresentationSupportKHR = os_library_load_proc(lib, Str8_("vkGetPhysicalDeviceWaylandPresentationSupportKHR"));
+#define X(name) *(void **)&name = os_library_load_proc(lib, Str8_(#name));
+  VK_CORE_FUNCTIONS
+#undef X
 
   ////////////////////////////////
   //~ kti: Create Instance
@@ -266,9 +224,9 @@ Internal void gfx_init(Arena *arena) {
   ////////////////////////////////
   //~ kti: Load Extension Procedures
 
-  *(void **)&vkCreateDebugReportCallbackEXT = vkGetInstanceProcAddr(ramM.instance, "vkCreateDebugReportCallbackEXT");
-  *(void **)&vkDestroyDebugReportCallbackEXT = vkGetInstanceProcAddr(ramM.instance, "vkDestroyDebugReportCallbackEXT");
-  *(void **)&vkDebugReportMessageEXT = vkGetInstanceProcAddr(ramM.instance, "vkDebugReportMessageEXT");
+#define X(name) *(void **)&name = vkGetInstanceProcAddr(ramM.instance, #name);
+  VK_EXTENSION_FUNCTIONS
+#undef X
 
   ////////////////////////////////
   //~ kti: Register Debug Report Callback
@@ -386,21 +344,32 @@ Internal void gfx_init(Arena *arena) {
   ////////////////////////////////
   //~ kti: Pipeline
 
+  VkPushConstantRange push_constants_range = {
+    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+    .offset = 0,
+    .size = sizeof(F1) * 2,
+  };
+
   VkPipelineLayoutCreateInfo layout_ci = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    .pushConstantRangeCount = 1,
+    .pPushConstantRanges = &push_constants_range,
   };
   result = vkCreatePipelineLayout(ramM.device, &layout_ci, 0, &ramM.pipeline_layout);
   Assert(result == VK_SUCCESS);
 
   VkVertexInputBindingDescription binding_description = {
     .binding = 0,
-    .stride = sizeof(GFX_Vertex),
-    .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    .stride = sizeof(GFX_Rect_Instance),
+    .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE,
   };
 
   VkVertexInputAttributeDescription attribute_descriptions[] = {
-    {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0},
-    {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(GFX_Vertex, r)},
+    {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, rect)},
+    {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, corner_radii)},
+    {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, color)},
+    {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, border_color)},
+    {.location = 4, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, border_width)},
   };
 
   VkPipelineVertexInputStateCreateInfo vertex_input = {
@@ -435,7 +404,17 @@ Internal void gfx_init(Arena *arena) {
   };
 
   VkPipelineColorBlendAttachmentState blend_attachment = {
-    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+    .blendEnable = VK_TRUE,
+    .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+    .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+    .colorBlendOp = VK_BLEND_OP_ADD,
+    .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+    .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+    .alphaBlendOp = VK_BLEND_OP_ADD,
+    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                      VK_COLOR_COMPONENT_G_BIT |
+                      VK_COLOR_COMPONENT_B_BIT |
+                      VK_COLOR_COMPONENT_A_BIT,
   };
 
   VkPipelineColorBlendStateCreateInfo blend = {
@@ -540,24 +519,29 @@ Internal void gfx_init(Arena *arena) {
   vkDestroyShaderModule(ramM.device, frag_shader, 0);
 
   ////////////////////////////////
-  //~ kti: Vertex Buffer
+  //~ kti: Instance Buffer
 
-  GFX_Vertex vertices[3] = {
-    {0.0f, -0.5f,  1.0f, 0.0f, 0.0f},
-    {0.5f,  0.5f,  0.0f, 1.0f, 0.0f},
-    {-0.5f, 0.5f,  0.0f, 0.0f, 1.0f},
+  GFX_Rect_Instance instances[] = {
+    {
+      .rect = (F4){100.0f, 100.0f, 100.0f, 100.0f},
+      .corner_radii = (F4){10.0f, 10.0f, 10.0f, 10.0f},
+      .color = (F4){c(0.2f), c(0.016f), c(0.016f), 1.0f},
+      .border_color = (F4){0.50f, 0.02f, 0.02f, 1.0f},
+      .border_width = 2,
+    },
   };
-  VkBufferCreateInfo vertex_buffer_ci = {
+
+  VkBufferCreateInfo instance_buffer_ci = {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-    .size = sizeof(vertices),
+    .size = sizeof(instances),
     .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
   };
-  result = vkCreateBuffer(ramM.device, &vertex_buffer_ci, 0, &ramM.vertex_buffer);
+  result = vkCreateBuffer(ramM.device, &instance_buffer_ci, 0, &ramM.instance_buffer);
   Assert(result == VK_SUCCESS);
 
 VkMemoryRequirements memory_requirements = {0};
-vkGetBufferMemoryRequirements(ramM.device, ramM.vertex_buffer, &memory_requirements);
+vkGetBufferMemoryRequirements(ramM.device, ramM.instance_buffer, &memory_requirements);
 
 VkMemoryAllocateInfo alloc_info = {
   .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -576,19 +560,17 @@ for EachIndex(i, mem_properties.memoryTypeCount) {
   }
 }
 
-result = vkAllocateMemory(ramM.device, &alloc_info, 0, &ramM.vertex_buffer_memory);
+result = vkAllocateMemory(ramM.device, &alloc_info, 0, &ramM.instance_buffer_memory);
 Assert(result == VK_SUCCESS);
 
-result = vkBindBufferMemory(ramM.device, ramM.vertex_buffer, ramM.vertex_buffer_memory, 0);
+result = vkBindBufferMemory(ramM.device, ramM.instance_buffer, ramM.instance_buffer_memory, 0);
 Assert(result == VK_SUCCESS);
 
 void *data;
-result = vkMapMemory(ramM.device, ramM.vertex_buffer_memory, 0, sizeof(vertices), 0, &data);
+result = vkMapMemory(ramM.device, ramM.instance_buffer_memory, 0, sizeof(instances), 0, &data);
 Assert(result == VK_SUCCESS);
-
-memcpy(data, vertices, sizeof(vertices));
-
-vkUnmapMemory(ramM.device, ramM.vertex_buffer_memory);
+memcpy(data, instances, sizeof(instances));
+vkUnmapMemory(ramM.device, ramM.instance_buffer_memory);
 
 }
 
@@ -909,7 +891,7 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-  VkClearValue clear_value = {.color= {{0.0f, 0.01f, 0.05f, 1.0f}}};
+  VkClearValue clear_value = {.color= {{0.0f, 0.0f, 0.0f, 1.0f}}};
 
   VkRenderingAttachmentInfo color_attachment = {
     .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -959,12 +941,17 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
   vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
+  F1 viewport_size[2] = { viewport.width, viewport.height };
+  vkCmdPushConstants(cmd, ramM.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport_size), viewport_size);
+
   ////////////////////////////////
   //~ kti: Render
 
+  I1 instance_count = 1;
+
   VkDeviceSize offset = {0};
-  vkCmdBindVertexBuffers(cmd, 0, 1, &ramM.vertex_buffer, &offset);
-  vkCmdDraw(cmd, 3, 1, 0, 0);
+  vkCmdBindVertexBuffers(cmd, 0, 1, &ramM.instance_buffer, &offset);
+  vkCmdDraw(cmd, 6, instance_count, 0, 0);
 
   ////////////////////////////////
   //~ kti: End Rendering

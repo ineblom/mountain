@@ -35,8 +35,8 @@ struct GFX_Window {
 typedef struct GFX_Rect_Instance GFX_Rect_Instance;
 struct GFX_Rect_Instance {
   F4 rect;
+  F4 colors[4];
   F4 corner_radii;
-  F4 color;
   F4 border_color;
   F1 border_width;
 };
@@ -366,10 +366,13 @@ Internal void gfx_init(Arena *arena) {
 
   VkVertexInputAttributeDescription attribute_descriptions[] = {
     {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, rect)},
-    {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, corner_radii)},
-    {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, color)},
-    {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, border_color)},
-    {.location = 4, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, border_width)},
+    {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[0])},
+    {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[1])},
+    {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[2])},
+    {.location = 4, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[3])},
+    {.location = 5, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, corner_radii)},
+    {.location = 6, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, border_color)},
+    {.location = 7, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, border_width)},
   };
 
   VkPipelineVertexInputStateCreateInfo vertex_input = {
@@ -520,12 +523,18 @@ Internal void gfx_init(Arena *arena) {
 
   ////////////////////////////////
   //~ kti: Instance Buffer
+  F4 dark_red = {c(0.2f), c(0.016f), c(0.016f), 1.0f};
+  F4 light_red = {c(0.3f), c(0.016f), c(0.016f), 1.0f};
 
   GFX_Rect_Instance instances[] = {
     {
-      .rect = (F4){100.0f, 100.0f, 100.0f, 100.0f},
+      .rect = (F4){100.0f, 100.0f,
+                   300.0f, 500.0f},
+      .colors = {
+        dark_red, dark_red,
+        light_red, light_red,
+      },
       .corner_radii = (F4){10.0f, 10.0f, 10.0f, 10.0f},
-      .color = (F4){c(0.2f), c(0.016f), c(0.016f), 1.0f},
       .border_color = (F4){0.50f, 0.02f, 0.02f, 1.0f},
       .border_width = 2,
     },

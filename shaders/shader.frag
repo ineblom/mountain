@@ -3,7 +3,7 @@
 layout(location = 0) in vec4 in_color;
 layout(location = 1) in vec2 in_rect_pos;        // 0-1 position within rect
 layout(location = 2) in vec2 in_rect_size;       // width, height in pixels
-layout(location = 3) in vec4 in_corner_radii;    // TL, TR, BR, BL
+layout(location = 3) in vec4 in_corner_radii;    // TL, TR, BL, BR
 layout(location = 4) in vec4 in_border_color;
 layout(location = 5) in float in_border_width;
 
@@ -16,9 +16,9 @@ float rounded_box_sdf(vec2 pos, vec2 size, vec4 radii) {
 
     float r;
     if (p.x > 0.0) {
-        r = (p.y > 0.0) ? radii.z : radii.y;  // BR : TR
+        r = (p.y > 0.0) ? radii.w : radii.y;  // BR : TR
     } else {
-        r = (p.y > 0.0) ? radii.w : radii.x;  // BL : TL
+        r = (p.y > 0.0) ? radii.z : radii.x;  // BL : TL
     }
 
     r = min(r, min(half_size.x, half_size.y));

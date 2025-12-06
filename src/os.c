@@ -1,6 +1,7 @@
 #if (CPU_ && DEF_)
 
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include "xdg-shell-protocol.c"
 #include "xdg-shell-protocol.h"
 
@@ -239,11 +240,16 @@ OS_Window *first_window;
 struct wl_display *display;
 
 struct wl_compositor *compositor;
+struct wl_shm *shm;
 struct xdg_wm_base *xdg_wm_base;
 
 struct wl_seat *seat;
 struct wl_pointer *pointer;
 struct wl_keyboard *keyboard;
+
+struct wl_cursor_theme *cursor_theme;
+struct wl_cursor *default_cursor;
+struct wl_surface *cursor_surface;
 
 struct xdg_wm_base_listener xdg_wm_base_listener;
 struct wl_seat_listener seat_listener;
@@ -515,6 +521,8 @@ Internal void registry_global_handler(void *data, struct wl_registry *registry,
   if (cstr_compare(interface, wl_compositor_interface.name)) {
     ramR->compositor =
         wl_registry_bind(registry, name, &wl_compositor_interface, 4);
+  } else if (cstr_compare(interface, wl_shm_interface.name)) {
+    ramR->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
   } else if (cstr_compare(interface, xdg_wm_base_interface.name)) {
     ramR->xdg_wm_base =
         wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
@@ -595,6 +603,17 @@ Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer,
   }
 
   ramR->hovered_window = window;
+
+  // Set the cursor to default pointer
+  if (ramR->default_cursor && ramR->cursor_surface) {
+    struct wl_cursor_image *image = ramR->default_cursor->images[0];
+    struct wl_buffer *buffer = wl_cursor_image_get_buffer(image);
+    wl_pointer_set_cursor(pointer, serial, ramR->cursor_surface,
+                          image->hotspot_x, image->hotspot_y);
+    wl_surface_attach(ramR->cursor_surface, buffer, 0, 0);
+    wl_surface_damage(ramR->cursor_surface, 0, 0, image->width, image->height);
+    wl_surface_commit(ramR->cursor_surface);
+  }
 }
 
 Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer,
@@ -748,6 +767,16 @@ Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 hei
     ramR->keyboard_listener.repeat_info = keyboard_repeat_info_handler;
 
     wl_display_roundtrip(ramR->display);
+
+    // Initialize cursor theme and default cursor
+    ramR->cursor_theme = wl_cursor_theme_load(0, 24, ramR->shm);
+    if (ramR->cursor_theme) {
+      ramR->default_cursor = wl_cursor_theme_get_cursor(ramR->cursor_theme, "default");
+      if (!ramR->default_cursor) {
+        ramR->default_cursor = wl_cursor_theme_get_cursor(ramR->cursor_theme, "left_ptr");
+      }
+      ramR->cursor_surface = wl_compositor_create_surface(ramR->compositor);
+    }
   }
 
   OS_Window *result = push_array(arena, OS_Window, 1);
@@ -815,12 +844,18 @@ Internal void os_window_close(OS_Window *window) {
   wl_surface_destroy(window->surface);
 
   if (ramR->first_window == window && window->next == 0) {
+    if (ramR->cursor_surface)
+      wl_surface_destroy(ramR->cursor_surface);
+    if (ramR->cursor_theme)
+      wl_cursor_theme_destroy(ramR->cursor_theme);
     if (ramR->pointer)
       wl_pointer_destroy(ramR->pointer);
     if (ramR->keyboard)
       wl_keyboard_destroy(ramR->keyboard);
     if (ramR->seat)
       wl_seat_destroy(ramR->seat);
+    if (ramR->shm)
+      wl_shm_destroy(ramR->shm);
 
     xdg_wm_base_destroy(ramR->xdg_wm_base);
     wl_display_disconnect(ramR->display);

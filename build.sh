@@ -2,7 +2,7 @@
 
 WARN="-Wall -Wno-builtin-requires-header -Wno-incompatible-library-redeclaration -Wno-unused-function -Wno-unused-variable"
 DEFS="-DCPU_=1 -DDEV_=1"
-LIBS="-lm -lwayland-client -lwayland-egl"
+LIBS="-lm -lwayland-client -lwayland-cursor"
 
 cd src
 clang $WARN $DEFS $LIBS -O3 -march=native build.c -o ../m

@@ -1,38 +1,19 @@
 #version 460
 
-layout(location = 0) in vec4 in_color_tl;
-layout(location = 1) in vec4 in_color_tr;
-layout(location = 2) in vec4 in_color_bl;
-layout(location = 3) in vec4 in_color_br;
-layout(location = 4) in vec2 in_rect_pos;        // 0-1 position within rect
-layout(location = 5) in vec2 in_rect_size;       // width, height in pixels
-layout(location = 6) in vec4 in_corner_radii;    // TL, TR, BL, BR
-layout(location = 7) in vec4 in_border_color;
-layout(location = 8) in float in_border_width;
+layout(location = 0) in vec4 in_color;
+layout(location = 1) in vec2 in_rect_pos;        // 0-1 position within rect
+layout(location = 2) in vec2 in_rect_size;       // width, height in pixels
+layout(location = 3) in vec4 in_corner_radii;    // TL, TR, BL, BR
+layout(location = 4) in vec4 in_border_color;
+layout(location = 5) in float in_border_width;
+layout(location = 6) in float in_softness;
 
 layout(location = 0) out vec4 out_color;
 
-float rounded_box_sdf(vec2 pos, vec2 size, vec4 radii) {
-    vec2 pixel_pos = pos * size;
-    vec2 half_size = size * 0.5;
-    vec2 p = pixel_pos - half_size;
-
-    float r;
-    if (p.x > 0.0) {
-        r = (p.y > 0.0) ? radii.w : radii.y;  // BR : TR
-    } else {
-        r = (p.y > 0.0) ? radii.z : radii.x;  // BL : TL
-    }
-
-    r = min(r, min(half_size.x, half_size.y));
-
-    vec2 q = abs(p) - half_size + r;
-    float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-
-    return dist;
+float rounded_box_sdf(vec2 sample_pos, vec2 rect_half_size, float r) {
+    return length(max(abs(sample_pos) - rect_half_size + r, 0.0)) - r;
 }
 
-// Bayer matrix dithering for better quality
 float bayer4x4(vec2 pos) {
     int x = int(mod(pos.x, 4.0));
     int y = int(mod(pos.y, 4.0));
@@ -45,38 +26,49 @@ float bayer4x4(vec2 pos) {
     return bayer[y * 4 + x] / 255.0 - 0.5/255.0;
 }
 
-// Bilinear gradient interpolation (colors already in linear space)
-vec4 bilinear_gradient(vec4 tl, vec4 tr, vec4 bl, vec4 br, vec2 pos) {
-    // Bilinear interpolation
-    vec4 top = mix(tl, tr, pos.x);
-    vec4 bottom = mix(bl, br, pos.x);
-    return mix(top, bottom, pos.y);
-}
-
 void main() {
-    float distance = rounded_box_sdf(in_rect_pos, in_rect_size, in_corner_radii);
+    vec2 rect_half_size = in_rect_size * 0.5;
+    vec2 sdf_sample_pos = (2.0 * in_rect_pos - 1.0) * rect_half_size;
 
-    if (distance > 0.0) {
-        discard;
+    vec4 fill_color = in_color;
+
+    float corner_radius;
+    if (in_rect_pos.x < 0.5) {
+        corner_radius = (in_rect_pos.y < 0.5) ? in_corner_radii.x : in_corner_radii.z;  // TL : BL
+    } else {
+        corner_radius = (in_rect_pos.y < 0.5) ? in_corner_radii.y : in_corner_radii.w;  // TR : BR
+    }
+    corner_radius = min(corner_radius, min(rect_half_size.x, rect_half_size.y));
+
+    float border_mix = 0.0;
+    if (in_border_width > 0.0) {
+        float border_sdf_s = rounded_box_sdf(
+            sdf_sample_pos,
+            rect_half_size - vec2(in_softness * 2.0) - in_border_width,
+            max(corner_radius - in_border_width, 0.0)
+        );
+        border_mix = smoothstep(0.0, 2.0 * in_softness, border_sdf_s);
     }
 
-    // Derivative-based anti-aliasing for smoother edges
-    float aa_range = fwidth(distance);
-    float outer_alpha = 1.0 - smoothstep(-aa_range, 0.0, distance);
+    float corner_sdf_t = 1.0;
+    if (corner_radius > 0.0 || in_softness > 0.75) {
+        float corner_sdf_s = rounded_box_sdf(
+            sdf_sample_pos,
+            rect_half_size - vec2(in_softness * 2.0),
+            corner_radius
+        );
+        corner_sdf_t = 1.0 - smoothstep(0.0, 2.0 * in_softness, corner_sdf_s);
+    }
 
-    float border_distance = distance + in_border_width;
+    vec4 base_color = mix(fill_color, in_border_color, border_mix);
 
     vec2 pixel_pos = in_rect_pos * in_rect_size;
     float dither_value = bayer4x4(pixel_pos);
 
-    if (in_border_width > 0.0 && border_distance > 0.0) {
-        float border_alpha = smoothstep(-aa_range, 0.0, border_distance);
-        vec3 color = in_border_color.rgb + vec3(dither_value);
-        out_color = vec4(color, in_border_color.a * outer_alpha * border_alpha);
-    } else {
-        // Per-fragment gamma-correct color interpolation
-        vec4 interpolated = bilinear_gradient(in_color_tl, in_color_tr, in_color_bl, in_color_br, in_rect_pos);
-        vec3 color = interpolated.rgb + vec3(dither_value);
-        out_color = vec4(color, interpolated.a * outer_alpha);
-    }
+    // Form final color
+    vec4 final_color = base_color;
+    final_color.rgb += vec3(dither_value);
+    final_color.a *= corner_sdf_t;
+
+    out_color = final_color;
 }

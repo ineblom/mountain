@@ -41,6 +41,7 @@ struct GFX_Rect_Instance {
   F4 corner_radii;
   F4 border_color;
   F1 border_width;
+  F1 softness;
 };
 
 #endif
@@ -414,6 +415,7 @@ Internal void gfx_init(Arena *arena) {
     {.location = 5, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, corner_radii)},
     {.location = 6, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, border_color)},
     {.location = 7, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, border_width)},
+    {.location = 8, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, softness)},
   };
 
   VkPipelineVertexInputStateCreateInfo vertex_input = {

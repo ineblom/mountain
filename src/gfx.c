@@ -4,6 +4,8 @@
 #include "vulkan.h"
 #endif
 
+#define MAX_RECTANGLE_COUNT 1024
+
 #if (CPU_ && TYP_)
 
 typedef struct GFX_Per_Frame GFX_Per_Frame;
@@ -62,6 +64,9 @@ L1 recycle_semaphores_count;
 VkSemaphore recycle_semaphores[16];
 
 GFX_Window *first_free_vk_window;
+
+I1 instance_count;
+void *rect_instances;
 
 #endif
 
@@ -160,6 +165,31 @@ F4 srgb_F4(F4 v) {
     srgb(v.z),
     srgb(v.w),
   };
+  return result;
+}
+
+F4 oklch(F1 l, F1 c, F1 h, F1 a) {
+  // Convert OKLCH to OKLab (polar to cartesian)
+  F1 h_rad = h * (3.14159265358979323846f / 180.0f);
+  F1 lab_a = c * cosf(h_rad);
+  F1 lab_b = c * sinf(h_rad);
+
+  // Convert OKLab to Linear RGB
+  F1 l_ = l + 0.3963377774f * lab_a + 0.2158037573f * lab_b;
+  F1 m_ = l - 0.1055613458f * lab_a - 0.0638541728f * lab_b;
+  F1 s_ = l - 0.0894841775f * lab_a - 1.2914855480f * lab_b;
+
+  F1 l3 = l_ * l_ * l_;
+  F1 m3 = m_ * m_ * m_;
+  F1 s3 = s_ * s_ * s_;
+
+  F4 result = {
+    +4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3,
+    -1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3,
+    -0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3,
+    a,
+  };
+
   return result;
 }
 
@@ -534,26 +564,10 @@ Internal void gfx_init(Arena *arena) {
 
   ////////////////////////////////
   //~ kti: Instance Buffer
-  F4 dark_red = srgb_F4((F4){0.2f, 0.016f, 0.016f, 1.0f});
-  F4 light_red = srgb_F4((F4){0.3f, 0.016f, 0.016f, 1.0f});
-
-  GFX_Rect_Instance instances[] = {
-    {
-      .rect = (F4){100.0f, 100.0f,
-                   300.0f, 500.0f},
-      .colors = {
-        dark_red, dark_red,
-        light_red, light_red,
-      },
-      .corner_radii = (F4){10.0f, 10.0f, 10.0f, 10.0f},
-      .border_color = light_red,
-      .border_width = 2,
-    },
-  };
 
   VkBufferCreateInfo instance_buffer_ci = {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-    .size = sizeof(instances),
+    .size = sizeof(GFX_Rect_Instance) * MAX_RECTANGLE_COUNT,
     .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
   };
@@ -586,12 +600,8 @@ Internal void gfx_init(Arena *arena) {
   result = vkBindBufferMemory(ramM.device, ramM.instance_buffer, ramM.instance_buffer_memory, 0);
   Assert(result == VK_SUCCESS);
 
-  void *data;
-  result = vkMapMemory(ramM.device, ramM.instance_buffer_memory, 0, sizeof(instances), 0, &data);
+  result = vkMapMemory(ramM.device, ramM.instance_buffer_memory, 0, instance_buffer_ci.size, 0, &ramM.rect_instances);
   Assert(result == VK_SUCCESS);
-  memcpy(data, instances, sizeof(instances));
-  vkUnmapMemory(ramM.device, ramM.instance_buffer_memory);
-
 }
 
 Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_Window *vkw) {
@@ -831,9 +841,21 @@ Internal void gfx_vk_transition_image_layout(
   vkCmdPipelineBarrier2(cmd, &dependency_info);
 }
 
-Internal void gfx_begin_frame(OS_Window *os_window, GFX_Window *vkw) { }
+Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) { }
 
-Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
+Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, I1 instance_count, GFX_Rect_Instance *instances) {
+  if (ramM.instance_count + instance_count > MAX_RECTANGLE_COUNT) {
+    instance_count = MAX_RECTANGLE_COUNT - ramM.instance_count;
+    if (instance_count == 0) {
+      printf("Max number of rectangle instances reached this frame.\n");
+    }
+  }
+
+  memmove(ramM.rect_instances, instances, instance_count * sizeof(GFX_Rect_Instance));
+  ramM.instance_count += instance_count;
+}
+
+Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   ////////////////////////////////
   //~ kti: Acquire image
 
@@ -967,11 +989,11 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   ////////////////////////////////
   //~ kti: Render
 
-  I1 instance_count = 1;
-
   VkDeviceSize offset = {0};
   vkCmdBindVertexBuffers(cmd, 0, 1, &ramM.instance_buffer, &offset);
-  vkCmdDraw(cmd, 6, instance_count, 0, 0);
+
+  vkCmdDraw(cmd, 6, ramM.instance_count, 0, 0);
+  ramM.instance_count = 0;
 
   ////////////////////////////////
   //~ kti: End Rendering
@@ -1031,5 +1053,6 @@ Internal void gfx_end_frame(OS_Window *os_window, GFX_Window *vkw) {
 }
 
 // TODO: Do we need to cleanup?
+// vkUnmapMemory(ramM.device, ramM.instance_buffer_memory);
 
 #endif

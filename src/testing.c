@@ -68,7 +68,7 @@ Internal void lane(Arena *arena) {
 		      },
 		      .corner_radii = (F4){10.0f, 10.0f, 10.0f, 10.0f},
 		      .border_color = border,
-		      .border_width = 2,
+		      .border_width = 1,
 		    },
 		  };
 

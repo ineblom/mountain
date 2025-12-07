@@ -654,14 +654,15 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
     pre_transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
   }
 
-  //- kti: FIFO is always supported. We use mailbox if the physical device supports it.
+  //- kti: FIFO is always supported. Use FIFO (vsync) to avoid coil whine from unlimited FPS.
   VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-  for EachIndex(i, vkw->present_mode_count) {
-    if (vkw->present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-      present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
-      break;
-    }
-  }
+  // Mailbox mode disabled to prevent coil whine from extremely high frame rates
+  // for EachIndex(i, vkw->present_mode_count) {
+  //   if (vkw->present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+  //     present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+  //     break;
+  //   }
+  // }
 
   VkSwapchainCreateInfoKHR swpachain_ci = {
     .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,

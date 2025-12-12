@@ -1,15 +1,15 @@
 #version 460
 
-layout(location = 0) in vec4 in_color_tl;
-layout(location = 1) in vec4 in_color_tr;
-layout(location = 2) in vec4 in_color_bl;
-layout(location = 3) in vec4 in_color_br;
+layout(location = 0) flat in vec4 in_color_tl;
+layout(location = 1) flat in vec4 in_color_tr;
+layout(location = 2) flat in vec4 in_color_bl;
+layout(location = 3) flat in vec4 in_color_br;
 layout(location = 4) in vec2 in_rect_pos;        // 0-1 position within rect
-layout(location = 5) in vec2 in_rect_size;       // width, height in pixels
-layout(location = 6) in vec4 in_corner_radii;    // TL, TR, BL, BR
-layout(location = 7) in vec4 in_border_color;
-layout(location = 8) in float in_border_width;
-layout(location = 9) in float in_softness;
+layout(location = 5) flat in vec2 in_rect_size;       // width, height in pixels
+layout(location = 6) flat in vec4 in_corner_radii;    // TL, TR, BL, BR
+layout(location = 7) flat in vec4 in_border_color;
+layout(location = 8) flat in float in_border_width;
+layout(location = 9) flat in float in_softness;
 
 layout(location = 0) out vec4 out_color;
 
@@ -32,71 +32,50 @@ float bayer4x4(vec2 pos) {
 const float PI = 3.14159265359;
 const float TWO_PI = 6.28318530718;
 
-// Interpolate hue taking the shortest path around the color wheel
 float interpolate_hue(float h1, float h2, float t) {
   float diff = h2 - h1;
-
-  // Wrap difference to [-PI, PI]
-  if (diff > PI) {
-    diff -= TWO_PI;
-  } else if (diff < -PI) {
-    diff += TWO_PI;
-  }
-
-  float result = h1 + diff * t;
-
-  // Wrap result to [0, TWO_PI]
-  if (result < 0.0) {
-    result += TWO_PI;
-  } else if (result >= TWO_PI) {
-    result -= TWO_PI;
-  }
-
-  return result;
+  diff = diff - TWO_PI * floor((diff + PI) / TWO_PI);
+  return h1 + diff * t;
 }
 
-// Bilinearly interpolate 4 OKLCH colors
 vec4 interpolate_oklch(vec4 tl, vec4 tr, vec4 bl, vec4 br, vec2 pos) {
-  // Interpolate top edge
-  float l_top = mix(tl.r, tr.r, pos.x);
-  float c_top = mix(tl.g, tr.g, pos.x);
-  float h_top = interpolate_hue(tl.b, tr.b, pos.x);
-  float a_top = mix(tl.a, tr.a, pos.x);
+  vec4 top = vec4(
+    mix(tl.r, tr.r, pos.x),
+    mix(tl.g, tr.g, pos.x),
+    interpolate_hue(tl.b, tr.b, pos.x),
+    mix(tl.a, tr.a, pos.x)
+  );
 
-  // Interpolate bottom edge
-  float l_bottom = mix(bl.r, br.r, pos.x);
-  float c_bottom = mix(bl.g, br.g, pos.x);
-  float h_bottom = interpolate_hue(bl.b, br.b, pos.x);
-  float a_bottom = mix(bl.a, br.a, pos.x);
+  vec4 bottom = vec4(
+    mix(bl.r, br.r, pos.x),
+    mix(bl.g, br.g, pos.x),
+    interpolate_hue(bl.b, br.b, pos.x),
+    mix(bl.a, br.a, pos.x)
+  );
 
-  // Interpolate vertically
-  float l_final = mix(l_top, l_bottom, pos.y);
-  float c_final = mix(c_top, c_bottom, pos.y);
-  float h_final = interpolate_hue(h_top, h_bottom, pos.y);
-  float a_final = mix(a_top, a_bottom, pos.y);
-
-  return vec4(l_final, c_final, h_final, a_final);
+  return vec4(
+    mix(top.r, bottom.r, pos.y),
+    mix(top.g, bottom.g, pos.y),
+    interpolate_hue(top.b, bottom.b, pos.y),
+    mix(top.a, bottom.a, pos.y)
+  );
 }
 
 vec4 oklch_to_linear_rgb(vec4 oklch) {
-  // OKLCH to Oklab
-  float L = oklch.r;
-  float a = oklch.g * cos(oklch.b);
-  float b = oklch.g * sin(oklch.b);
+  vec2 ab = oklch.g * vec2(cos(oklch.b), sin(oklch.b));
 
-  // Oklab to linear RGB
-  float l = L + 0.3963377774f * a + 0.2158037573f * b;
-  float m = L - 0.1055613458f * a - 0.0638541728f * b;
-  float s = L - 0.0894841775f * a - 1.2914855480f * b;
+  vec3 lms = vec3(
+    oklch.r + 0.3963377774 * ab.x + 0.2158037573 * ab.y,
+    oklch.r - 0.1055613458 * ab.x - 0.0638541728 * ab.y,
+    oklch.r - 0.0894841775 * ab.x - 1.2914855480 * ab.y
+  );
 
-  float l3 = l * l * l;
-  float m3 = m * m * m;
-  float s3 = s * s * s;
+  lms = lms * lms * lms;
 
   return vec4(
-    +4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3,
-    -1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3,
-    -0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3,
+    dot(lms, vec3(+4.0767416621, -3.3077115913, +0.2309699292)),
+    dot(lms, vec3(-1.2684380046, +2.6097574011, -0.3413193965)),
+    dot(lms, vec3(-0.0041960863, -0.7034186147, +1.7076147010)),
     oklch.a
   );
 }
@@ -105,7 +84,6 @@ void main() {
     vec2 rect_half_size = in_rect_size * 0.5;
     vec2 sdf_sample_pos = (2.0 * in_rect_pos - 1.0) * rect_half_size;
 
-    // Manually interpolate OKLCH colors with hue wrapping
     vec4 fill_color = interpolate_oklch(in_color_tl, in_color_tr, in_color_bl, in_color_br, in_rect_pos);
 
     float corner_radius;

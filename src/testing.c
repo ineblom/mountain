@@ -1,7 +1,5 @@
 #if  (CPU_ && RAM_)
 
-F1 x;
-
 #endif
 
 #if (CPU_ && ROM_)
@@ -31,6 +29,8 @@ Internal void lane(Arena *arena) {
 	while (running) {
 		L1 frame_begin_time = os_clock();
 
+		F1 time = (F1)(frame_begin_time/1000000ULL) / 1000.0f;
+
 		Temp_Arena scratch = scratch_begin(0, 0);
 
 		if (lane_idx() == 0) {
@@ -43,10 +43,6 @@ Internal void lane(Arena *arena) {
 		}
 		lane_sync_L1(&running, 0);
 
-		if (lane_idx() == 0) {
-			ramM.x += 100.0f * 1.0f/60.0f;
-		}
-
 		//- kti: Wait for all lanes to finish their work.
 		lane_sync();
 
@@ -54,11 +50,16 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 			gfx_window_begin_frame(window, gfx_window);
 
-		  F4 bg = srgb_F4((F4){0.1f, 0.1f, 0.1f, 1.0f});
+		  F4 bg = srgb_F4((F4){0.0f, 0.1f, 0.1f, 1.0f});
 
-		  F4 dark_red = oklch(0.191f, 0.029f, 25.0f, 1.0f);
-		  F4 light_red = oklch(0.1f, 0.5f, 20.0f, 1.0f);
+		  F4 top = oklch(0.671f, 0.270f, 197.0f, 1.0f);
+		  F4 bottom = oklch(0.645f, 0.205f, 18.0f, 1.0f);
 		  F4 border = oklch(0.933f, 0.063f, 25.0f, 1.0f);
+
+		  F1 height = 200.0f;
+		  F1 width = height*GOLDEN_RATIO;
+		  F1 x = (sinf(time)*0.5f+0.5f) * (window->width-width);
+		  F1 y = 100.0f;
 
 		  GFX_Rect_Instance instances[] = {
 		    {
@@ -70,12 +71,12 @@ Internal void lane(Arena *arena) {
 		    },
 		    {
 		      .rect = (F4){
-		      	ramM.x, 100.0f,
-	          300.0f*GOLDEN_RATIO, 300.0f
+		      	x, y,
+	          width, height
 	        },
 		      .colors = {
-		        dark_red, dark_red,
-		        light_red, light_red,
+		        top, top,
+		        bottom, bottom,
 		      },
 		      .corner_radii = (F4){10.0f, 10.0f, 10.0f, 10.0f},
 		      .border_color = border,

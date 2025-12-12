@@ -52,9 +52,9 @@ Internal void lane(Arena *arena) {
 
 		  F4 bg = oklch(0.181f, 0.028f, 252.0, 1.0f);
 
-		  F4 top    = oklch(.643, 0.241, 104, 1.0f);
-		  F4 bottom = oklch(0.632, 0.286, 337, 1.0f);
-		  F4 border = oklch(0.933f, 0.063f, 25.0f, 1.0f);
+		  F4 top    = oklch(0.4, 0.18, 30, 1.0f);
+		  F4 bottom = oklch(0.3f, 0.15f, 25.0f, 1.0f);
+		  F4 border = oklch(0.65, 0.22, 45, 1.0f);
 
 		  F1 height = 200.0f;
 		  F1 width = height*GOLDEN_RATIO;

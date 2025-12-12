@@ -84,7 +84,10 @@ void main() {
     vec2 rect_half_size = in_rect_size * 0.5;
     vec2 sdf_sample_pos = (2.0 * in_rect_pos - 1.0) * rect_half_size;
 
-    vec4 fill_color = interpolate_oklch(in_color_tl, in_color_tr, in_color_bl, in_color_br, in_rect_pos);
+    bool is_solid = all(equal(in_color_tl, in_color_tr)) &&
+                    all(equal(in_color_tl, in_color_bl)) &&
+                    all(equal(in_color_tl, in_color_br));
+    vec4 fill_color = is_solid ? in_color_tl : interpolate_oklch(in_color_tl, in_color_tr, in_color_bl, in_color_br, in_rect_pos);
 
     float corner_radius;
     if (in_rect_pos.x < 0.5) {

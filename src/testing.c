@@ -7,6 +7,7 @@
 Internal void lane(Arena *arena) {
 	OS_Window *window = 0;
 	GFX_Window *gfx_window = 0;
+	GFX_Texture *texture = 0;
 
 	////////////////////////////////
 	//~ kti: Initialization.
@@ -17,6 +18,12 @@ Internal void lane(Arena *arena) {
 
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
 		gfx_window = gfx_window_equip(arena, window);
+
+		I1 pixels[4] = {
+			0xFF00FF00, 0xFFFFFF00,
+			0xFFFFFFFF, 0xFF00FF00
+		};
+		texture = gfx_texture_create(arena, 2, 2, pixels);
 	}
 
 	lane_sync();
@@ -52,9 +59,11 @@ Internal void lane(Arena *arena) {
 
 		  F4 bg = oklch(0.181f, 0.028f, 252.0, 1.0f);
 
-		  F4 top    = oklch(0.4, 0.18, 30, 1.0f);
-		  F4 bottom = oklch(0.3f, 0.15f, 25.0f, 1.0f);
-		  F4 border = oklch(0.65, 0.22, 45, 1.0f);
+		  // F4 top    = oklch(0.4, 0.18, 30, 1.0f);
+		  // F4 bottom = oklch(0.3f, 0.15f, 25.0f, 1.0f);
+		  F4 top = oklch(1.0, 0.0, 0, 1.0f);
+		  F4 bottom = oklch(1.0, 0.0, 0, 1.0f);
+		  F4 border = oklch(1.00, 0.0, 0, 1.0f);
 
 		  F1 height = 200.0f;
 		  F1 width = height*GOLDEN_RATIO;
@@ -62,15 +71,23 @@ Internal void lane(Arena *arena) {
 		  F1 y = 100.0f;
 
 		  GFX_Rect_Instance instances[] = {
+		  	{
+		  		.dst_rect = (F4){
+		  			0, 0,
+		  			window->width, window->height,
+		  		},
+		  		.colors = {
+		  			bg, bg,
+		  			bg, bg,
+		  		},
+		  		.omit_texture = 1.0,
+		  	},
 		    {
-		      .rect = (F4){
-		      	0.0f, 0.0f,
-	          window->width, window->height
+		      .src_rect = (F4){
+		      	0, 0,
+	          2, 2
 	        },
-		      .colors = { bg, bg, bg, bg },
-		    },
-		    {
-		      .rect = (F4){
+		      .dst_rect = (F4){
 		      	x, y,
 	          width, height
 	        },
@@ -85,7 +102,7 @@ Internal void lane(Arena *arena) {
 		    },
 		  };
 
-			gfx_window_submit(window, gfx_window, ArrayCount(instances), instances);
+			gfx_window_submit(window, gfx_window, texture, ArrayCount(instances), instances);
 
 			gfx_window_end_frame(window, gfx_window);
 		}

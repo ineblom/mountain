@@ -36,12 +36,23 @@ struct GFX_Window {
 
 typedef struct GFX_Rect_Instance GFX_Rect_Instance;
 struct GFX_Rect_Instance {
-  F4 rect;
+  F4 dst_rect;
+  F4 src_rect;
   F4 colors[4];
   F4 corner_radii;
   F4 border_color;
   F1 border_width;
   F1 softness;
+  F1 omit_texture;
+};
+
+typedef struct GFX_Texture GFX_Texture;
+struct GFX_Texture {
+  VkImage image;
+  VkImageView image_view;
+  VkDeviceMemory memory;
+  I1 width;
+  I1 height;
 };
 
 #endif
@@ -68,6 +79,12 @@ GFX_Window *first_free_vk_window;
 
 I1 instance_count;
 void *rect_instances;
+
+VkSampler texture_sampler;
+VkDescriptorSetLayout descriptor_set_layout;
+GFX_Texture *current_texture;
+
+VkCommandPool upload_command_pool;
 
 #endif
 
@@ -135,7 +152,20 @@ void *rect_instances;
   X(vkCmdDraw) \
   X(vkCreateWaylandSurfaceKHR) \
   X(vkGetPhysicalDeviceWaylandPresentationSupportKHR) \
-  X(vkCmdPushConstants)
+  X(vkCmdPushConstants) \
+  X(vkCreateImage) \
+  X(vkGetImageMemoryRequirements) \
+  X(vkBindImageMemory) \
+  X(vkCreateSampler) \
+  X(vkCmdCopyBufferToImage) \
+  X(vkCreateDescriptorSetLayout) \
+  X(vkDestroyImage) \
+  X(vkDestroySampler) \
+  X(vkDestroyDescriptorSetLayout) \
+  X(vkDestroyBuffer) \
+  X(vkDestroyCommandPool) \
+  X(vkFreeMemory) \
+  X(vkGetDeviceProcAddr)
 
 #define VK_EXTENSION_FUNCTIONS \
   X(vkCreateDebugReportCallbackEXT) \
@@ -146,6 +176,8 @@ void *rect_instances;
 VK_CORE_FUNCTIONS
 VK_EXTENSION_FUNCTIONS
 #undef X
+
+Global PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR = 0;
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT object_type, uint64_t object, size_t location,
@@ -158,6 +190,63 @@ F4 oklch(F1 l, F1 c, F1 h, F1 alpha) {
   F1 h_rad = h * (PI / 180.0f);
   F4 result = { l, c, h_rad, alpha };
   return result;
+}
+
+Internal I1 gfx_find_memory_type(VkMemoryRequirements mem_reqs, VkMemoryPropertyFlags required_properties) {
+  VkPhysicalDeviceMemoryProperties mem_properties;
+  vkGetPhysicalDeviceMemoryProperties(ramM.physical_device, &mem_properties);
+
+  for (I1 i = 0; i < mem_properties.memoryTypeCount; i++) {
+    if ((mem_reqs.memoryTypeBits & (1 << i)) &&
+        (mem_properties.memoryTypes[i].propertyFlags & required_properties) == required_properties) {
+      return i;
+    }
+  }
+  Assert(0); // Memory type not found
+  return 0;
+}
+
+Internal void gfx_vk_transition_image_layout(
+  VkCommandBuffer cmd,
+  VkImage image,
+  VkImageLayout old_layout,
+  VkImageLayout new_layout,
+  VkAccessFlags2 src_access_mask,
+  VkAccessFlags2 dst_access_mask,
+  VkPipelineStageFlags2 src_stage,
+  VkPipelineStageFlags2 dst_stage) {
+  VkImageMemoryBarrier2 image_barrier = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+    .srcStageMask = src_stage,
+    .srcAccessMask = src_access_mask,
+    .dstStageMask = dst_stage,
+    .dstAccessMask = dst_access_mask,
+
+    .oldLayout = old_layout,
+    .newLayout = new_layout,
+
+    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+
+    .image = image,
+
+    .subresourceRange = {
+      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .baseMipLevel = 0,
+      .levelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+    },
+  };
+
+  VkDependencyInfo dependency_info = {
+    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+    .dependencyFlags = 0,
+    .imageMemoryBarrierCount = 1,
+    .pImageMemoryBarriers = &image_barrier,
+  };
+
+  vkCmdPipelineBarrier2(cmd, &dependency_info);
 }
 
 Internal void gfx_init(Arena *arena) {
@@ -330,7 +419,7 @@ Internal void gfx_init(Arena *arena) {
     .pQueuePriorities = queue_priorities,
   };
 
-  const char *device_extensions[] = { "VK_KHR_swapchain" };
+  const char *device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_push_descriptor" };
   VkDeviceCreateInfo device_info = {
     .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
     .pNext = &enable_device_features2,
@@ -350,16 +439,43 @@ Internal void gfx_init(Arena *arena) {
   vkGetDeviceQueue(ramM.device, ramM.present_queue_index, 0, &ramM.queue);
 
   ////////////////////////////////
+  //~ kti: Load Push Descriptor Function
+
+  vkCmdPushDescriptorSetKHR =
+    (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(ramM.device, "vkCmdPushDescriptorSetKHR");
+  Assert(vkCmdPushDescriptorSetKHR != 0);
+
+  ////////////////////////////////
   //~ kti: Pipeline
 
   VkPushConstantRange push_constants_range = {
-    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
     .offset = 0,
-    .size = sizeof(F1) * 2,
+    .size = sizeof(F1) * 4,
   };
+
+  VkDescriptorSetLayoutBinding bindings[] = {
+    {
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+    }
+  };
+
+  VkDescriptorSetLayoutCreateInfo descriptor_layout_ci = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+    .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+    .bindingCount = 1,
+    .pBindings = bindings,
+  };
+  result = vkCreateDescriptorSetLayout(ramM.device, &descriptor_layout_ci, 0, &ramM.descriptor_set_layout);
+  Assert(result == VK_SUCCESS);
 
   VkPipelineLayoutCreateInfo layout_ci = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    .setLayoutCount = 1,
+    .pSetLayouts = &ramM.descriptor_set_layout,
     .pushConstantRangeCount = 1,
     .pPushConstantRanges = &push_constants_range,
   };
@@ -373,15 +489,17 @@ Internal void gfx_init(Arena *arena) {
   };
 
   VkVertexInputAttributeDescription attribute_descriptions[] = {
-    {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, rect)},
-    {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[0])},
-    {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[1])},
-    {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[2])},
-    {.location = 4, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[3])},
-    {.location = 5, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, corner_radii)},
-    {.location = 6, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, border_color)},
-    {.location = 7, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, border_width)},
-    {.location = 8, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, softness)},
+    {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, dst_rect)},
+    {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, src_rect)},
+    {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[0])},
+    {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[1])},
+    {.location = 4, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[2])},
+    {.location = 5, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, colors[3])},
+    {.location = 6, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, corner_radii)},
+    {.location = 7, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Rect_Instance, border_color)},
+    {.location = 8, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, border_width)},
+    {.location = 9, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, softness)},
+    {.location = 10, .binding = 0, .format = VK_FORMAT_R32_SFLOAT,          .offset = offsetof(GFX_Rect_Instance, omit_texture)},
   };
 
   VkPipelineVertexInputStateCreateInfo vertex_input = {
@@ -548,19 +666,9 @@ Internal void gfx_init(Arena *arena) {
   VkMemoryAllocateInfo alloc_info = {
     .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
     .allocationSize  = memory_requirements.size,
+    .memoryTypeIndex = gfx_find_memory_type(memory_requirements,
+                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
   };
-
-  VkPhysicalDeviceMemoryProperties mem_properties = {};
-  vkGetPhysicalDeviceMemoryProperties(ramM.physical_device, &mem_properties);
-  for EachIndex(i, mem_properties.memoryTypeCount) {
-    if (memory_requirements.memoryTypeBits & (1 << i)) {
-      VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-      if ((mem_properties.memoryTypes[i].propertyFlags & properties) == properties) {
-        alloc_info.memoryTypeIndex = i;
-        break;
-      }
-    }
-  }
 
   result = vkAllocateMemory(ramM.device, &alloc_info, 0, &ramM.instance_buffer_memory);
   Assert(result == VK_SUCCESS);
@@ -570,6 +678,214 @@ Internal void gfx_init(Arena *arena) {
 
   result = vkMapMemory(ramM.device, ramM.instance_buffer_memory, 0, instance_buffer_ci.size, 0, &ramM.rect_instances);
   Assert(result == VK_SUCCESS);
+
+  ////////////////////////////////
+  //~ kti: Sampler
+
+  VkSamplerCreateInfo sampler_ci = {
+    .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+    .magFilter = VK_FILTER_LINEAR,
+    .minFilter = VK_FILTER_LINEAR,
+    .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .anisotropyEnable = VK_FALSE,
+    .maxAnisotropy = 1.0f,
+    .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+    .unnormalizedCoordinates = VK_FALSE,
+    .compareEnable = VK_FALSE,
+    .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+  };
+  result = vkCreateSampler(ramM.device, &sampler_ci, 0, &ramM.texture_sampler);
+  Assert(result == VK_SUCCESS);
+
+  ////////////////////////////////
+  //~ kti: Upload Command Pool
+
+  VkCommandPoolCreateInfo upload_pool_ci = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+    .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+    .queueFamilyIndex = ramM.present_queue_index,
+  };
+  result = vkCreateCommandPool(ramM.device, &upload_pool_ci, 0, &ramM.upload_command_pool);
+  Assert(result == VK_SUCCESS);
+}
+
+Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void *pixels) {
+  Assert(width > 0 && height > 0);
+
+  GFX_Texture *texture = push_array(arena, GFX_Texture, 1);
+
+  VkResult result;
+  L1 image_size = width * height * 4; // RGBA8
+
+  ////////////////////////////////
+  //~ kti: Create staging buffer
+
+  VkBuffer staging_buffer;
+  VkDeviceMemory staging_memory;
+
+  VkBufferCreateInfo staging_ci = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .size = image_size,
+    .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  result = vkCreateBuffer(ramM.device, &staging_ci, 0, &staging_buffer);
+  Assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements staging_mem_reqs;
+  vkGetBufferMemoryRequirements(ramM.device, staging_buffer, &staging_mem_reqs);
+
+  VkMemoryAllocateInfo staging_alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = staging_mem_reqs.size,
+    .memoryTypeIndex = gfx_find_memory_type(staging_mem_reqs,
+                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+  };
+  result = vkAllocateMemory(ramM.device, &staging_alloc_info, 0, &staging_memory);
+  Assert(result == VK_SUCCESS);
+
+  result = vkBindBufferMemory(ramM.device, staging_buffer, staging_memory, 0);
+  Assert(result == VK_SUCCESS);
+
+  void *staging_ptr;
+  result = vkMapMemory(ramM.device, staging_memory, 0, image_size, 0, &staging_ptr);
+  Assert(result == VK_SUCCESS);
+  memmove(staging_ptr, pixels, image_size);
+  vkUnmapMemory(ramM.device, staging_memory);
+
+  ////////////////////////////////
+  //~ kti: Create texture image
+
+  VkImageCreateInfo image_ci = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+    .imageType = VK_IMAGE_TYPE_2D,
+    .format = VK_FORMAT_R8G8B8A8_SRGB,
+    .extent = {width, height, 1},
+    .mipLevels = 1,
+    .arrayLayers = 1,
+    .samples = VK_SAMPLE_COUNT_1_BIT,
+    .tiling = VK_IMAGE_TILING_OPTIMAL,
+    .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+  result = vkCreateImage(ramM.device, &image_ci, 0, &texture->image);
+  Assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements image_mem_reqs;
+  vkGetImageMemoryRequirements(ramM.device, texture->image, &image_mem_reqs);
+
+  VkMemoryAllocateInfo image_alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = image_mem_reqs.size,
+    .memoryTypeIndex = gfx_find_memory_type(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+  };
+  result = vkAllocateMemory(ramM.device, &image_alloc_info, 0, &texture->memory);
+  Assert(result == VK_SUCCESS);
+
+  result = vkBindImageMemory(ramM.device, texture->image, texture->memory, 0);
+  Assert(result == VK_SUCCESS);
+
+  ////////////////////////////////
+  //~ kti: Upload via command buffer
+
+  VkCommandBuffer cmd;
+  VkCommandBufferAllocateInfo cmd_alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .commandPool = ramM.upload_command_pool,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandBufferCount = 1,
+  };
+  result = vkAllocateCommandBuffers(ramM.device, &cmd_alloc_info, &cmd);
+  Assert(result == VK_SUCCESS);
+
+  VkCommandBufferBeginInfo begin_info = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  result = vkBeginCommandBuffer(cmd, &begin_info);
+  Assert(result == VK_SUCCESS);
+
+  gfx_vk_transition_image_layout(cmd, texture->image,
+    VK_IMAGE_LAYOUT_UNDEFINED,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    0, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+    VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+
+  VkBufferImageCopy region = {
+    .bufferOffset = 0,
+    .bufferRowLength = 0,
+    .bufferImageHeight = 0,
+    .imageSubresource = {
+      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .mipLevel = 0,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+    },
+    .imageOffset = {0, 0, 0},
+    .imageExtent = {width, height, 1},
+  };
+  vkCmdCopyBufferToImage(cmd, staging_buffer, texture->image,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+  gfx_vk_transition_image_layout(cmd, texture->image,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+
+  result = vkEndCommandBuffer(cmd);
+  Assert(result == VK_SUCCESS);
+
+  VkSubmitInfo submit = {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 1,
+    .pCommandBuffers = &cmd,
+  };
+  result = vkQueueSubmit(ramM.queue, 1, &submit, VK_NULL_HANDLE);
+  Assert(result == VK_SUCCESS);
+
+  vkQueueWaitIdle(ramM.queue);
+
+  ////////////////////////////////
+  //~ kti: Cleanup staging resources
+
+  vkDestroyBuffer(ramM.device, staging_buffer, 0);
+  vkFreeMemory(ramM.device, staging_memory, 0);
+
+  // Reset command pool to free command buffer
+  vkResetCommandPool(ramM.device, ramM.upload_command_pool, 0);
+
+  ////////////////////////////////
+  //~ kti: Create image view
+
+  VkImageViewCreateInfo view_ci = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+    .image = texture->image,
+    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+    .format = VK_FORMAT_R8G8B8A8_SRGB,
+    .subresourceRange = {
+      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .baseMipLevel = 0,
+      .levelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+    },
+  };
+  result = vkCreateImageView(ramM.device, &view_ci, 0, &texture->image_view);
+  Assert(result == VK_SUCCESS);
+
+  ////////////////////////////////
+  //~ kti: Store dimensions
+
+  texture->width = width;
+  texture->height = height;
+
+  return texture;
 }
 
 Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_Window *vkw) {
@@ -766,52 +1082,9 @@ Internal void gfx_window_unequip(GFX_Window *window) {
   SLLStackPush(ramM.first_free_vk_window, window);
 }
 
-Internal void gfx_vk_transition_image_layout(
-  VkCommandBuffer cmd,
-  VkImage image,
-  VkImageLayout old_layout,
-  VkImageLayout new_layout,
-  VkAccessFlags2 src_access_mask,
-  VkAccessFlags2 dst_access_mask,
-  VkPipelineStageFlags2 src_stage,
-  VkPipelineStageFlags2 dst_stage) {
-  VkImageMemoryBarrier2 image_barrier = {
-    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-    .srcStageMask = src_stage,
-    .srcAccessMask = src_access_mask,
-    .dstStageMask = dst_stage,
-    .dstAccessMask = dst_access_mask,
-
-    .oldLayout = old_layout,
-    .newLayout = new_layout,
-
-    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-
-    .image = image,
-
-    .subresourceRange = {
-      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-      .baseMipLevel = 0,
-      .levelCount = 1,
-      .baseArrayLayer = 0,
-      .layerCount = 1,
-    },
-  };
-
-  VkDependencyInfo dependency_info = {
-    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-    .dependencyFlags = 0,
-    .imageMemoryBarrierCount = 1,
-    .pImageMemoryBarriers = &image_barrier,
-  };
-
-  vkCmdPipelineBarrier2(cmd, &dependency_info);
-}
-
 Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) { }
 
-Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, I1 instance_count, GFX_Rect_Instance *instances) {
+Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Texture *texture, I1 instance_count, GFX_Rect_Instance *instances) {
   if (ramM.instance_count + instance_count > MAX_RECTANGLE_COUNT) {
     instance_count = MAX_RECTANGLE_COUNT - ramM.instance_count;
     if (instance_count == 0) {
@@ -821,6 +1094,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, I1 instan
 
   memmove(ramM.rect_instances, instances, instance_count * sizeof(GFX_Rect_Instance));
   ramM.instance_count += instance_count;
+  ramM.current_texture = texture;
 }
 
 Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
@@ -951,11 +1225,29 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
   vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
-  F1 viewport_size[2] = { viewport.width, viewport.height };
-  vkCmdPushConstants(cmd, ramM.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport_size), viewport_size);
+  F1 push_data[4] = { viewport.width, viewport.height, (F1)ramM.current_texture->width, (F1)ramM.current_texture->height };
+  vkCmdPushConstants(cmd, ramM.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
 
   ////////////////////////////////
   //~ kti: Render
+
+  //- kti: Push descriptor for texture
+  VkDescriptorImageInfo image_info = {
+    .sampler = ramM.texture_sampler,
+    .imageView = ramM.current_texture->image_view,
+    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+
+  VkWriteDescriptorSet write = {
+    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    .dstBinding = 0,
+    .descriptorCount = 1,
+    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    .pImageInfo = &image_info,
+  };
+
+  vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+    ramM.pipeline_layout, 0, 1, &write);
 
   VkDeviceSize offset = {0};
   vkCmdBindVertexBuffers(cmd, 0, 1, &ramM.instance_buffer, &offset);

@@ -1,5 +1,7 @@
 #version 460
 
+layout(binding = 0, set = 0) uniform sampler2D u_texture;
+
 layout(location = 0) flat in vec4 in_color_tl;
 layout(location = 1) flat in vec4 in_color_tr;
 layout(location = 2) flat in vec4 in_color_bl;
@@ -10,6 +12,8 @@ layout(location = 6) flat in vec4 in_corner_radii;    // TL, TR, BL, BR
 layout(location = 7) flat in vec4 in_border_color;
 layout(location = 8) flat in float in_border_width;
 layout(location = 9) flat in float in_softness;
+layout(location = 10) in vec2 in_texture_uv;
+layout(location = 11) flat in float in_omit_texture;
 
 layout(location = 0) out vec4 out_color;
 
@@ -87,7 +91,14 @@ void main() {
     bool is_solid = all(equal(in_color_tl, in_color_tr)) &&
                     all(equal(in_color_tl, in_color_bl)) &&
                     all(equal(in_color_tl, in_color_br));
-    vec4 fill_color = is_solid ? in_color_tl : interpolate_oklch(in_color_tl, in_color_tr, in_color_bl, in_color_br, in_rect_pos);
+    vec4 fill_color_oklch = is_solid ? in_color_tl : interpolate_oklch(in_color_tl, in_color_tr, in_color_bl, in_color_br, in_rect_pos);
+    vec4 fill_color = oklch_to_linear_rgb(fill_color_oklch);
+
+    vec4 texture_sample = vec4(1);
+    if (in_omit_texture < 1.0) {
+        texture_sample = texture(u_texture, in_texture_uv);
+    }
+    fill_color = fill_color * texture_sample;
 
     float corner_radius;
     if (in_rect_pos.x < 0.5) {
@@ -117,14 +128,13 @@ void main() {
         corner_sdf_t = 1.0 - smoothstep(0.0, 2.0 * in_softness, corner_sdf_s);
     }
 
-    vec4 base_color = mix(fill_color, in_border_color, border_mix);
-
     vec2 pixel_pos = in_rect_pos * in_rect_size;
     float dither_value = bayer4x4(pixel_pos);
 
-    vec4 linear_color = oklch_to_linear_rgb(base_color);
-    linear_color.rgb += vec3(dither_value);
-    linear_color.a *= corner_sdf_t;
+    vec4 border_linear = oklch_to_linear_rgb(in_border_color);
+    vec4 base_color = mix(fill_color, border_linear, border_mix);
+    base_color.rgb += vec3(dither_value);
+    base_color.a *= corner_sdf_t;
 
-    out_color = linear_color;
+    out_color = base_color;
 }

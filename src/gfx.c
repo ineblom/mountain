@@ -277,10 +277,10 @@ Internal void gfx_init(Arena *arena) {
     .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT,
     .flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
     .pfnCallback = &debug_report_callback,
-    .pUserData = NULL,
+    .pUserData = 0,
   };
 
-  result = vkCreateDebugReportCallbackEXT(ramM.instance, &callback_ci, NULL, &ramM.vk_debug_callback);
+  result = vkCreateDebugReportCallbackEXT(ramM.instance, &callback_ci, 0, &ramM.vk_debug_callback);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
@@ -378,7 +378,7 @@ Internal void gfx_init(Arena *arena) {
     .ppEnabledExtensionNames = device_extensions,
   };
 
-  result = vkCreateDevice(ramM.physical_device, &device_info, NULL, &ramM.device);
+  result = vkCreateDevice(ramM.physical_device, &device_info, 0, &ramM.device);
   Assert(result == VK_SUCCESS);
 
   vkGetDeviceQueue(ramM.device, ramM.present_queue_index, 0, &ramM.queue);
@@ -656,15 +656,14 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
     pre_transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
   }
 
-  //- kti: FIFO is always supported. Use FIFO (vsync) to avoid coil whine from unlimited FPS.
+  //- kti: FIFO is always supported.
   VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-  // Mailbox mode disabled to prevent coil whine from extremely high frame rates
-  // for EachIndex(i, vkw->present_mode_count) {
-  //   if (vkw->present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-  //     present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
-  //     break;
-  //   }
-  // }
+  for EachIndex(i, vkw->present_mode_count) {
+    if (vkw->present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+      present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+      break;
+    }
+  }
 
   VkSwapchainCreateInfoKHR swpachain_ci = {
     .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -682,7 +681,7 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
     .clipped = VK_TRUE,
   };
 
-  VkResult result = vkCreateSwapchainKHR(ramM.device, &swpachain_ci, NULL, &vkw->swapchain);
+  VkResult result = vkCreateSwapchainKHR(ramM.device, &swpachain_ci, 0, &vkw->swapchain);
   Assert(result == VK_SUCCESS);
 
   vkw->swapchain_extent = surface_resolution;

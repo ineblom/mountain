@@ -353,10 +353,18 @@ Internal void os_barrier_wait(OS_Barrier *barrier) {
 }
 
 Internal L1 os_clock(void) {
-  struct timespec timespec = {0};
-  clock_gettime(CLOCK_MONOTONIC, &timespec);
-  L1 result = timespec.tv_sec * 1000000000 + timespec.tv_nsec;
+  struct timespec ts = {0};
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  L1 result = ts.tv_sec * 1000000000 + ts.tv_nsec;
   return result;
+}
+
+Internal void os_sleep(L1 time) {
+  struct timespec ts = {
+    .tv_sec = time / 1000000000L,
+    .tv_nsec = time % 1000000000L,
+  };
+  nanosleep(&ts, 0);
 }
 
 Internal void *os_library_open(String8 filename) {

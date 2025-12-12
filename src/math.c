@@ -8,6 +8,7 @@ F1 fabsf(F1);
 F1 powf(F1, F1);
 
 #define PI 3.141592653598979f
+#define GOLDEN_RATIO 1.61803398875f
 
 #endif
 

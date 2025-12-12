@@ -1,5 +1,7 @@
 #if  (CPU_ && RAM_)
 
+F1 x;
+
 #endif
 
 #if (CPU_ && ROM_)
@@ -27,6 +29,8 @@ Internal void lane(Arena *arena) {
 	//~ kti: Main loop
 
 	while (running) {
+		L1 frame_begin_time = os_clock();
+
 		Temp_Arena scratch = scratch_begin(0, 0);
 
 		if (lane_idx() == 0) {
@@ -37,9 +41,16 @@ Internal void lane(Arena *arena) {
 				}
 			}
 		}
-
 		lane_sync_L1(&running, 0);
 
+		if (lane_idx() == 0) {
+			ramM.x += 100.0f * 1.0f/60.0f;
+		}
+
+		//- kti: Wait for all lanes to finish their work.
+		lane_sync();
+
+		//- kti: Lane 0 renders the frame.
 		if (lane_idx() == 0) {
 			gfx_window_begin_frame(window, gfx_window);
 
@@ -59,8 +70,8 @@ Internal void lane(Arena *arena) {
 		    },
 		    {
 		      .rect = (F4){
-		      	100.0f, 100.0f,
-	          300.0f, 500.0f
+		      	ramM.x, 100.0f,
+	          300.0f*GOLDEN_RATIO, 300.0f
 	        },
 		      .colors = {
 		        dark_red, dark_red,
@@ -68,7 +79,8 @@ Internal void lane(Arena *arena) {
 		      },
 		      .corner_radii = (F4){10.0f, 10.0f, 10.0f, 10.0f},
 		      .border_color = border,
-		      .border_width = 1,
+		      .border_width = 1.0f,
+		      .softness = 1.0f,
 		    },
 		  };
 
@@ -78,8 +90,21 @@ Internal void lane(Arena *arena) {
 		}
 
 		scratch_end(scratch);
+
 		lane_sync();
+
+		L1 target_frame_time = 1000000000ULL / 60;
+		L1 frame_end_time = os_clock();
+		L1 frame_time = frame_end_time - frame_begin_time;
+		if (frame_time < target_frame_time) {
+			L1 remainder = target_frame_time - frame_time;
+			os_sleep(remainder);
+		}
+
+		// lane_sync();
 	}
+
+	lane_sync();
 
 	////////////////////////////////
 	//~ kti: Shutdown

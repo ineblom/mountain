@@ -14,13 +14,16 @@ layout(location = 6) in vec4 in_border_color;
 layout(location = 7) in float in_border_width;
 layout(location = 8) in float in_softness;
 
-layout(location = 0) out vec4 out_color;
-layout(location = 1) out vec2 out_rect_pos;
-layout(location = 2) out vec2 out_rect_size;
-layout(location = 3) out vec4 out_corner_radii;
-layout(location = 4) out vec4 out_border_color;
-layout(location = 5) out float out_border_width;
-layout(location = 6) out float out_softness;
+layout(location = 0) out vec4 out_color_tl;
+layout(location = 1) out vec4 out_color_tr;
+layout(location = 2) out vec4 out_color_bl;
+layout(location = 3) out vec4 out_color_br;
+layout(location = 4) out vec2 out_rect_pos;
+layout(location = 5) out vec2 out_rect_size;
+layout(location = 6) out vec4 out_corner_radii;
+layout(location = 7) out vec4 out_border_color;
+layout(location = 8) out float out_border_width;
+layout(location = 9) out float out_softness;
 
 void main() {
 	vec2 positions[6] = vec2[](
@@ -31,11 +34,6 @@ void main() {
 	   vec2(1, 1),
 	   vec2(0, 1)
 	);
-	vec4 colors[6] = vec4[](
-		in_color_tl, in_color_tr,
-		in_color_bl, in_color_tr,
-		in_color_br, in_color_bl
-	);
 
 	vec2 vertex_pos = positions[gl_VertexIndex];
 
@@ -44,7 +42,10 @@ void main() {
 
 	gl_Position = vec4(ndc_pos, 0, 1);
 
-	out_color = colors[gl_VertexIndex];
+	out_color_tl = in_color_tl;
+	out_color_tr = in_color_tr;
+	out_color_bl = in_color_bl;
+	out_color_br = in_color_br;
 
 	out_rect_pos = vertex_pos;
 	out_rect_size = in_rect.zw;

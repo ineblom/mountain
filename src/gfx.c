@@ -156,10 +156,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags
 
 F4 oklch(F1 l, F1 c, F1 h, F1 alpha) {
   F1 h_rad = h * (PI / 180.0f);
-  F1 a = c * cosf(h_rad);
-  F1 b = c * sinf(h_rad);
-
-  F4 result = { l, a, b, alpha };
+  F4 result = { l, c, h_rad, alpha };
   return result;
 }
 

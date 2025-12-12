@@ -50,10 +50,10 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 			gfx_window_begin_frame(window, gfx_window);
 
-		  F4 bg = srgb_F4((F4){0.0f, 0.1f, 0.1f, 1.0f});
+		  F4 bg = oklch(0.181f, 0.028f, 252.0, 1.0f);
 
-		  F4 top = oklch(0.671f, 0.270f, 197.0f, 1.0f);
-		  F4 bottom = oklch(0.645f, 0.205f, 18.0f, 1.0f);
+		  F4 top    = oklch(.643, 0.241, 104, 1.0f);
+		  F4 bottom = oklch(0.632, 0.286, 337, 1.0f);
 		  F4 border = oklch(0.933f, 0.063f, 25.0f, 1.0f);
 
 		  F1 height = 200.0f;

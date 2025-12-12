@@ -26,6 +26,23 @@ float bayer4x4(vec2 pos) {
     return bayer[y * 4 + x] / 255.0 - 0.5/255.0;
 }
 
+vec4 oklab_to_linear_rgb(vec4 color) {
+  float l = color.r + 0.3963377774f * color.g + 0.2158037573f * color.b;
+  float m = color.r - 0.1055613458f * color.g - 0.0638541728f * color.b;
+  float s = color.r - 0.0894841775f * color.g - 1.2914855480f * color.b;
+
+  float l3 = l * l * l;
+  float m3 = m * m * m;
+  float s3 = s * s * s;
+
+  return vec4(
+    +4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3,
+    -1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3,
+    -0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3,
+    color.a
+  );
+}
+
 void main() {
     vec2 rect_half_size = in_rect_size * 0.5;
     vec2 sdf_sample_pos = (2.0 * in_rect_pos - 1.0) * rect_half_size;
@@ -65,10 +82,9 @@ void main() {
     vec2 pixel_pos = in_rect_pos * in_rect_size;
     float dither_value = bayer4x4(pixel_pos);
 
-    // Form final color
-    vec4 final_color = base_color;
-    final_color.rgb += vec3(dither_value);
-    final_color.a *= corner_sdf_t;
+    vec4 linear_color = oklab_to_linear_rgb(base_color);
+    linear_color.rgb += vec3(dither_value);
+    linear_color.a *= corner_sdf_t;
 
-    out_color = final_color;
+    out_color = linear_color;
 }

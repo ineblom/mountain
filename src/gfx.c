@@ -154,43 +154,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags
   return VK_FALSE;
 }
 
-F1 srgb(F1 c) {
-  F1 result = c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
-  return result;
-}
+F4 oklch(F1 l, F1 c, F1 h, F1 alpha) {
+  F1 h_rad = h * (PI / 180.0f);
+  F1 a = c * cosf(h_rad);
+  F1 b = c * sinf(h_rad);
 
-F4 srgb_F4(F4 v) {
-  F4 result = {
-    srgb(v.x),
-    srgb(v.y),
-    srgb(v.z),
-    srgb(v.w),
-  };
-  return result;
-}
-
-F4 oklch(F1 l, F1 c, F1 h, F1 a) {
-  // Convert OKLCH to OKLab (polar to cartesian)
-  F1 h_rad = h * (3.14159265358979323846f / 180.0f);
-  F1 lab_a = c * cosf(h_rad);
-  F1 lab_b = c * sinf(h_rad);
-
-  // Convert OKLab to Linear RGB
-  F1 l_ = l + 0.3963377774f * lab_a + 0.2158037573f * lab_b;
-  F1 m_ = l - 0.1055613458f * lab_a - 0.0638541728f * lab_b;
-  F1 s_ = l - 0.0894841775f * lab_a - 1.2914855480f * lab_b;
-
-  F1 l3 = l_ * l_ * l_;
-  F1 m3 = m_ * m_ * m_;
-  F1 s3 = s_ * s_ * s_;
-
-  F4 result = {
-    +4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3,
-    -1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3,
-    -0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3,
-    a,
-  };
-
+  F4 result = { l, a, b, alpha };
   return result;
 }
 

@@ -21,3 +21,5 @@ A pile of C code. Used as a base environment for multiple projects.
 - `math.c` math operations.
 - `image.c` read/write, sample.
 - `rt.c` simple CPU ray tracer.
+- `gfx.c` Vulkan 1.3 graphics API abstraction.
+- `editor.c` 3D scene editor integrated with ray tracer.

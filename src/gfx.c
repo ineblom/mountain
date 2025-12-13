@@ -86,6 +86,8 @@ GFX_Texture *current_texture;
 
 VkCommandPool upload_command_pool;
 
+I1 image_idx;
+
 #endif
 
 #if (CPU_ && ROM_)
@@ -1082,22 +1084,7 @@ Internal void gfx_window_unequip(GFX_Window *window) {
   SLLStackPush(ramM.first_free_vk_window, window);
 }
 
-Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) { }
-
-Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Texture *texture, I1 instance_count, GFX_Rect_Instance *instances) {
-  if (ramM.instance_count + instance_count > MAX_RECTANGLE_COUNT) {
-    instance_count = MAX_RECTANGLE_COUNT - ramM.instance_count;
-    if (instance_count == 0) {
-      printf("Max number of rectangle instances reached this frame.\n");
-    }
-  }
-
-  memmove(ramM.rect_instances, instances, instance_count * sizeof(GFX_Rect_Instance));
-  ramM.instance_count += instance_count;
-  ramM.current_texture = texture;
-}
-
-Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
+Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   ////////////////////////////////
   //~ kti: Acquire image
 
@@ -1153,6 +1140,8 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   vkw->per_frame[image_idx].swapchain_acquire_semaphore = acquire_semaphore;
 
+  ramM.image_idx = image_idx;
+
   ////////////////////////////////
   //~ kti: Begin Rendering
 
@@ -1201,6 +1190,25 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   };
 
   vkCmdBeginRendering(cmd, &rendering_info);
+}
+
+Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Texture *texture, I1 instance_count, GFX_Rect_Instance *instances) {
+  if (ramM.instance_count + instance_count > MAX_RECTANGLE_COUNT) {
+    instance_count = MAX_RECTANGLE_COUNT - ramM.instance_count;
+    if (instance_count == 0) {
+      printf("Max number of rectangle instances reached this frame.\n");
+    }
+  }
+
+  //- kti: Move directly into GPU memory.
+  memmove(ramM.rect_instances, instances, instance_count * sizeof(GFX_Rect_Instance));
+  ramM.instance_count += instance_count;
+  ramM.current_texture = texture;
+}
+
+Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
+  I1 image_idx = ramM.image_idx;
+  VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ramM.pipeline);
 
@@ -1274,7 +1282,7 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   if (vkw->per_frame[image_idx].swapchain_release_semaphore == VK_NULL_HANDLE) {
     VkSemaphoreCreateInfo semaphore_ci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    result = vkCreateSemaphore(ramM.device, &semaphore_ci, 0, &vkw->per_frame[image_idx].swapchain_release_semaphore);
+    VkResult result = vkCreateSemaphore(ramM.device, &semaphore_ci, 0, &vkw->per_frame[image_idx].swapchain_release_semaphore);
     Assert(result == VK_SUCCESS);
   }
 
@@ -1289,7 +1297,7 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     .signalSemaphoreCount = 1,
     .pSignalSemaphores    = &vkw->per_frame[image_idx].swapchain_release_semaphore,
   };
-  result = vkQueueSubmit(ramM.queue, 1, &submit_info, vkw->per_frame[image_idx].queue_submit_fence);
+  VkResult result = vkQueueSubmit(ramM.queue, 1, &submit_info, vkw->per_frame[image_idx].queue_submit_fence);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////

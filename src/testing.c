@@ -59,8 +59,6 @@ Internal void lane(Arena *arena) {
 
 		  F4 bg = oklch(0.181f, 0.028f, 252.0, 1.0f);
 
-		  // F4 top    = oklch(0.4, 0.18, 30, 1.0f);
-		  // F4 bottom = oklch(0.3f, 0.15f, 25.0f, 1.0f);
 		  F4 top = oklch(1.0, 0.0, 0, 1.0f);
 		  F4 bottom = oklch(1.0, 0.0, 0, 1.0f);
 		  F4 border = oklch(1.00, 0.0, 0, 1.0f);
@@ -70,18 +68,7 @@ Internal void lane(Arena *arena) {
 		  F1 x = (sinf(time)*0.5f+0.5f) * (window->width-width);
 		  F1 y = 100.0f;
 
-		  GFX_Rect_Instance instances[] = {
-		  	{
-		  		.dst_rect = (F4){
-		  			0, 0,
-		  			window->width, window->height,
-		  		},
-		  		.colors = {
-		  			bg, bg,
-		  			bg, bg,
-		  		},
-		  		.omit_texture = 1.0,
-		  	},
+		  GFX_Rect_Instance first_instances[] = {
 		    {
 		      .src_rect = (F4){
 		      	0, 0,
@@ -100,9 +87,53 @@ Internal void lane(Arena *arena) {
 		      .border_width = 1.0f,
 		      .softness = 1.0f,
 		    },
+		    {
+		    	.dst_rect = (F4){
+		    		100.0f, 300.0f,
+		    		400.0f, 300.0f,
+		    	},
+		    	.colors = {
+		    		bg, bg,
+		    		bg, bg,
+		    	},
+		    	.omit_texture = 1.0f,
+		    }
+		  };
+		  GFX_Batch first_batch = {
+		  	.texture = texture,
+		  	.instances = first_instances,
+		  	.instance_count = ArrayCount(first_instances),
 		  };
 
-			gfx_window_submit(window, gfx_window, texture, ArrayCount(instances), instances);
+		  GFX_Rect_Instance second_instances[] = {
+		  	{
+		  		.dst_rect = (F4){
+		  			x, y+300.0f,
+		  			width, height
+		  		},
+		  		.colors = {
+		  			top, top,
+		  			bottom, bottom,
+		  		},
+		  		.omit_texture = 1.0f,
+		  	}
+		  };
+		  GFX_Batch second_batch = {
+		  	.clip_rect = (F4){
+		  		100.0f, 300.0f,
+			  	400.0f, 300.0f
+			  },
+		  	.instances = second_instances,
+		  	.instance_count = ArrayCount(second_instances),
+		  };
+		  first_batch.next = &second_batch;
+
+		  GFX_BatchList batches = {
+		  	.first = &first_batch,
+		  	.last = &second_batch,
+		  };
+
+			gfx_window_submit(window, gfx_window, batches);
 
 			gfx_window_end_frame(window, gfx_window);
 		}

@@ -1014,8 +1014,6 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
     SLLStackPop(gfx_state->first_free_window);
   }
 
-  // TODO: Memory leaks here. Alloc of surface formats, present modes, per frame data.
-
   ////////////////////////////////
   //~ kti: Surface
 
@@ -1115,6 +1113,10 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
 }
 
 Internal void gfx_window_unequip(GFX_Window *vkw) {
+  ////////////////////////////////
+  //~ kti: Destroy Per frame Resources
+
+  //- kti: Wait for all gpu work to finich for this window.
   Temp_Arena scratch = temp_arena_begin(gfx_state->arena);
   VkFence *fences = push_array(scratch.arena, VkFence, vkw->image_count);
   for EachIndex(i, vkw->image_count) {
@@ -1126,6 +1128,17 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   for EachIndex(i, vkw->image_count) {
     GFX_Per_Frame *frame = &vkw->per_frame[i];
 
+    if (frame->queue_submit_fence != VK_NULL_HANDLE) {
+      vkDestroyFence(gfx_state->device, frame->queue_submit_fence, 0);
+    }
+
+    if (frame->command_pool != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(gfx_state->device, frame->command_pool, 0);
+    }
+
+    vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
+
+    //- kti: Free instance buffers.
     if (frame->instance_buffer_memory != VK_NULL_HANDLE) {
       vkUnmapMemory(gfx_state->device, frame->instance_buffer_memory);
     }
@@ -1136,15 +1149,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
       vkFreeMemory(gfx_state->device, frame->instance_buffer_memory, 0);
     }
 
-    if (frame->command_pool != VK_NULL_HANDLE) {
-      vkResetCommandPool(gfx_state->device, frame->command_pool, 0);
-      vkDestroyCommandPool(gfx_state->device, frame->command_pool, 0);
-    }
-
-    if (frame->queue_submit_fence != VK_NULL_HANDLE) {
-      vkDestroyFence(gfx_state->device, frame->queue_submit_fence, 0);
-    }
-
+    //- kti: Recycle semaphores instead of destroying.
     if (frame->swapchain_acquire_semaphore != VK_NULL_HANDLE) {
       gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = frame->swapchain_acquire_semaphore;
       gfx_state->recycle_semaphores_count += 1;
@@ -1153,9 +1158,10 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
       gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = frame->swapchain_release_semaphore;
       gfx_state->recycle_semaphores_count += 1;
     }
-
-    vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
   }
+
+  ////////////////////////////////
+  //~ kti: Destroy Per Window Resources
 
   vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
   vkDestroySurfaceKHR(gfx_state->instance, vkw->surface, 0);

@@ -14,16 +14,18 @@ Internal void lane(Arena *arena) {
 
 	if (lane_idx() == 0) {
 
-		gfx_init(arena);
+		gfx_init();
 
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
-		gfx_window = gfx_window_equip(arena, window);
+		gfx_window = gfx_window_equip(window);
 
-		I1 pixels[4] = {
-			0xFF00FF00, 0xFFFFFF00,
-			0xFFFFFFFF, 0xFF00FF00
-		};
-		texture = gfx_texture_create(arena, 2, 2, pixels);
+		I1 pixels[256*256];
+		for EachIndex(y, 256) {
+			for EachIndex(x, 256) {
+				pixels[y*256+x] = x<<16 | y | 0xFF000000;
+			}
+		}
+		texture = gfx_tex2d_alloc(256, 256, pixels);
 	}
 
 	lane_sync();
@@ -72,7 +74,7 @@ Internal void lane(Arena *arena) {
 		    {
 		      .src_rect = (F4){
 		      	0, 0,
-	          2, 2
+	          texture->width, texture->height
 	        },
 		      .dst_rect = (F4){
 		      	x, y,
@@ -145,9 +147,18 @@ Internal void lane(Arena *arena) {
 		L1 target_frame_time = 1000000000ULL / 60;
 		L1 frame_end_time = os_clock();
 		L1 frame_time = frame_end_time - frame_begin_time;
+
+		// if (lane_idx() == 0) {
+		// 	F1 frame_time_ms = (F1)(frame_time / 1000ULL) / 1000.0f;
+		// 	printf("%.2fms\n", frame_time_ms);
+		// }
+
 		if (frame_time < target_frame_time) {
 			L1 remainder = target_frame_time - frame_time;
-			os_sleep(remainder);
+			if (remainder > 2000000ULL) {
+				os_sleep(remainder - 2000000ULL);
+			}
+			while (os_clock() - frame_begin_time < target_frame_time) {}
 		}
 
 		// lane_sync();
@@ -159,6 +170,7 @@ Internal void lane(Arena *arena) {
 	//~ kti: Shutdown
 
 	if (lane_idx() == 0) {
+		gfx_tex2d_free(texture);
 		gfx_window_unequip(gfx_window);
 		os_window_close(window);
 	}

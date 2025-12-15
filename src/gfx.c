@@ -2,115 +2,6 @@
 #define VK_NO_PROTOTYPES
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include "vulkan.h"
-#endif
-
-#define MAX_RECTANGLE_COUNT 1024
-
-#if (CPU_ && TYP_)
-
-typedef struct GFX_Per_Frame GFX_Per_Frame;
-struct GFX_Per_Frame {
-  VkFence queue_submit_fence;
-  VkCommandPool command_pool;
-  VkCommandBuffer command_buffer;
-  VkSemaphore swapchain_acquire_semaphore;
-  VkSemaphore swapchain_release_semaphore;
-
-  VkBuffer instance_buffer;
-  VkDeviceMemory instance_buffer_memory;
-  void *rect_instances;
-  L1 rect_instances_count;
-};
-
-typedef struct GFX_Window GFX_Window;
-struct GFX_Window {
-  GFX_Window *next;
-
-  VkSurfaceKHR surface;
-  I1 surface_format_count;
-  VkSurfaceFormatKHR *surface_formats;
-  I1 present_mode_count;
-  VkPresentModeKHR *present_modes;
-  VkSwapchainKHR swapchain;
-  VkExtent2D swapchain_extent;
-  I1 image_count;
-  VkImage *swapchain_images;
-  VkImageView *swapchain_image_views;
-  GFX_Per_Frame *per_frame;
-};
-
-typedef struct GFX_Rect_Instance GFX_Rect_Instance;
-struct GFX_Rect_Instance {
-  F4 dst_rect;
-  F4 src_rect;
-  F4 colors[4];
-  F4 corner_radii;
-  F4 border_color;
-  F1 border_width;
-  F1 softness;
-  F1 omit_texture;
-};
-
-typedef struct GFX_Texture GFX_Texture;
-struct GFX_Texture {
-  VkImage image;
-  VkImageView image_view;
-  VkDeviceMemory memory;
-  I1 width;
-  I1 height;
-};
-
-typedef struct GFX_Batch GFX_Batch;
-struct GFX_Batch {
-  GFX_Batch *next;
-
-  F4 clip_rect;
-  GFX_Texture *texture;
-
-  GFX_Rect_Instance *instances;
-  L1 instance_count;
-};
-
-typedef struct GFX_BatchList GFX_BatchList;
-struct GFX_BatchList {
-  GFX_Batch *first;
-  GFX_Batch *last;
-};
-
-#endif
-
-#if (CPU_ && RAM_)
-
-VkInstance instance;
-VkDebugReportCallbackEXT vk_debug_callback;
-VkPhysicalDevice physical_device;
-VkPhysicalDeviceProperties physical_device_properties;
-VkDevice device;
-VkQueue queue;
-L1 present_queue_index;
-VkPipelineLayout pipeline_layout;
-VkPipeline pipeline;
-
-L1 recycle_semaphores_count;
-VkSemaphore recycle_semaphores[16];
-
-GFX_Window *first_free_vk_window;
-
-VkSampler texture_sampler;
-VkDescriptorSetLayout descriptor_set_layout;
-
-VkCommandPool upload_command_pool;
-
-I1 image_idx;
-
-GFX_Texture *white_texture;
-
-#endif
-
-#if (CPU_ && ROM_)
-
-// Should every subsystem have its own arena. And not use the RAM system?
-// Instead we have a global gfx_state and the first time we call gfx_init it allocs.
 
 #define VK_CORE_FUNCTIONS \
   X(vkCreateInstance) \
@@ -184,6 +75,7 @@ GFX_Texture *white_texture;
   X(vkDestroyBuffer) \
   X(vkDestroyCommandPool) \
   X(vkFreeMemory) \
+  X(vkDestroyFence) \
   X(vkGetDeviceProcAddr)
 
 #define VK_EXTENSION_FUNCTIONS \
@@ -195,7 +87,116 @@ GFX_Texture *white_texture;
 VK_CORE_FUNCTIONS
 VK_EXTENSION_FUNCTIONS
 #undef X
+#endif
 
+#define MAX_RECTANGLE_COUNT 1024
+
+#if (CPU_ && TYP_)
+
+typedef struct GFX_Per_Frame GFX_Per_Frame;
+struct GFX_Per_Frame {
+  VkFence queue_submit_fence;
+  VkCommandPool command_pool;
+  VkCommandBuffer command_buffer;
+  VkSemaphore swapchain_acquire_semaphore;
+  VkSemaphore swapchain_release_semaphore;
+
+  VkBuffer instance_buffer;
+  VkDeviceMemory instance_buffer_memory;
+  void *rect_instances;
+  L1 rect_instances_count;
+};
+
+typedef struct GFX_Window GFX_Window;
+struct GFX_Window {
+  GFX_Window *next;
+
+  VkSurfaceKHR surface;
+  I1 surface_format_count;
+  VkSurfaceFormatKHR *surface_formats;
+  I1 present_mode_count;
+  VkPresentModeKHR *present_modes;
+  VkSwapchainKHR swapchain;
+  VkExtent2D swapchain_extent;
+  I1 image_count;
+  VkImage *swapchain_images;
+  VkImageView *swapchain_image_views;
+  GFX_Per_Frame *per_frame;
+};
+
+typedef struct GFX_Rect_Instance GFX_Rect_Instance;
+struct GFX_Rect_Instance {
+  F4 dst_rect;
+  F4 src_rect;
+  F4 colors[4];
+  F4 corner_radii;
+  F4 border_color;
+  F1 border_width;
+  F1 softness;
+  F1 omit_texture;
+};
+
+typedef struct GFX_Texture GFX_Texture;
+struct GFX_Texture {
+  GFX_Texture *next;
+
+  VkImage image;
+  VkImageView image_view;
+  VkDeviceMemory memory;
+  I1 width;
+  I1 height;
+};
+
+typedef struct GFX_Batch GFX_Batch;
+struct GFX_Batch {
+  GFX_Batch *next;
+
+  F4 clip_rect;
+  GFX_Texture *texture;
+
+  GFX_Rect_Instance *instances;
+  L1 instance_count;
+};
+
+typedef struct GFX_BatchList GFX_BatchList;
+struct GFX_BatchList {
+  GFX_Batch *first;
+  GFX_Batch *last;
+};
+
+typedef struct GFX_State GFX_State;
+struct GFX_State {
+  Arena *arena;
+
+  VkInstance instance;
+  VkDebugReportCallbackEXT vk_debug_callback;
+  VkPhysicalDevice physical_device;
+  VkPhysicalDeviceProperties physical_device_properties;
+  VkDevice device;
+  VkQueue queue;
+  L1 present_queue_index;
+  VkPipelineLayout pipeline_layout;
+  VkPipeline pipeline;
+
+  I1 image_idx;
+
+  L1 recycle_semaphores_count;
+  VkSemaphore recycle_semaphores[16];
+
+  GFX_Window *first_free_window;
+  GFX_Texture *first_free_texture;
+
+  VkSampler texture_sampler;
+  VkDescriptorSetLayout descriptor_set_layout;
+  VkCommandPool upload_command_pool;
+  GFX_Texture *white_texture;
+};
+
+#endif
+
+#if (CPU_ && ROM_)
+
+Global GFX_State *gfx_state = 0;
 Global PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR = 0;
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags,
@@ -213,7 +214,7 @@ F4 oklch(F1 l, F1 c, F1 h, F1 alpha) {
 
 Internal I1 gfx_find_memory_type(VkMemoryRequirements mem_reqs, VkMemoryPropertyFlags required_properties) {
   VkPhysicalDeviceMemoryProperties mem_properties;
-  vkGetPhysicalDeviceMemoryProperties(ramM.physical_device, &mem_properties);
+  vkGetPhysicalDeviceMemoryProperties(gfx_state->physical_device, &mem_properties);
 
   for (I1 i = 0; i < mem_properties.memoryTypeCount; i++) {
     if ((mem_reqs.memoryTypeBits & (1 << i)) &&
@@ -268,10 +269,15 @@ Internal void gfx_vk_transition_image_layout(
   vkCmdPipelineBarrier2(cmd, &dependency_info);
 }
 
-Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void *pixels) {
+Internal GFX_Texture *gfx_tex2d_alloc(I1 width, I1 height, void *pixels) {
   Assert(width > 0 && height > 0);
 
-  GFX_Texture *texture = push_array(arena, GFX_Texture, 1);
+  GFX_Texture *texture = gfx_state->first_free_texture;
+  if (texture == 0) {
+    texture = push_array(gfx_state->arena, GFX_Texture, 1);
+  } else {
+    SLLStackPop(gfx_state->first_free_window);
+  }
 
   VkResult result;
   L1 image_size = width * height * 4; // RGBA8
@@ -288,11 +294,11 @@ Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void
     .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
   };
-  result = vkCreateBuffer(ramM.device, &staging_ci, 0, &staging_buffer);
+  result = vkCreateBuffer(gfx_state->device, &staging_ci, 0, &staging_buffer);
   Assert(result == VK_SUCCESS);
 
   VkMemoryRequirements staging_mem_reqs;
-  vkGetBufferMemoryRequirements(ramM.device, staging_buffer, &staging_mem_reqs);
+  vkGetBufferMemoryRequirements(gfx_state->device, staging_buffer, &staging_mem_reqs);
 
   VkMemoryAllocateInfo staging_alloc_info = {
     .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -300,17 +306,17 @@ Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void
     .memoryTypeIndex = gfx_find_memory_type(staging_mem_reqs,
                                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
   };
-  result = vkAllocateMemory(ramM.device, &staging_alloc_info, 0, &staging_memory);
+  result = vkAllocateMemory(gfx_state->device, &staging_alloc_info, 0, &staging_memory);
   Assert(result == VK_SUCCESS);
 
-  result = vkBindBufferMemory(ramM.device, staging_buffer, staging_memory, 0);
+  result = vkBindBufferMemory(gfx_state->device, staging_buffer, staging_memory, 0);
   Assert(result == VK_SUCCESS);
 
   void *staging_ptr;
-  result = vkMapMemory(ramM.device, staging_memory, 0, image_size, 0, &staging_ptr);
+  result = vkMapMemory(gfx_state->device, staging_memory, 0, image_size, 0, &staging_ptr);
   Assert(result == VK_SUCCESS);
   memmove(staging_ptr, pixels, image_size);
-  vkUnmapMemory(ramM.device, staging_memory);
+  vkUnmapMemory(gfx_state->device, staging_memory);
 
   ////////////////////////////////
   //~ kti: Create texture image
@@ -328,21 +334,21 @@ Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
-  result = vkCreateImage(ramM.device, &image_ci, 0, &texture->image);
+  result = vkCreateImage(gfx_state->device, &image_ci, 0, &texture->image);
   Assert(result == VK_SUCCESS);
 
   VkMemoryRequirements image_mem_reqs;
-  vkGetImageMemoryRequirements(ramM.device, texture->image, &image_mem_reqs);
+  vkGetImageMemoryRequirements(gfx_state->device, texture->image, &image_mem_reqs);
 
   VkMemoryAllocateInfo image_alloc_info = {
     .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
     .allocationSize = image_mem_reqs.size,
     .memoryTypeIndex = gfx_find_memory_type(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
   };
-  result = vkAllocateMemory(ramM.device, &image_alloc_info, 0, &texture->memory);
+  result = vkAllocateMemory(gfx_state->device, &image_alloc_info, 0, &texture->memory);
   Assert(result == VK_SUCCESS);
 
-  result = vkBindImageMemory(ramM.device, texture->image, texture->memory, 0);
+  result = vkBindImageMemory(gfx_state->device, texture->image, texture->memory, 0);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
@@ -351,11 +357,11 @@ Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void
   VkCommandBuffer cmd;
   VkCommandBufferAllocateInfo cmd_alloc_info = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-    .commandPool = ramM.upload_command_pool,
+    .commandPool = gfx_state->upload_command_pool,
     .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
     .commandBufferCount = 1,
   };
-  result = vkAllocateCommandBuffers(ramM.device, &cmd_alloc_info, &cmd);
+  result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
   Assert(result == VK_SUCCESS);
 
   VkCommandBufferBeginInfo begin_info = {
@@ -403,19 +409,19 @@ Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void
     .commandBufferCount = 1,
     .pCommandBuffers = &cmd,
   };
-  result = vkQueueSubmit(ramM.queue, 1, &submit, VK_NULL_HANDLE);
+  result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
   Assert(result == VK_SUCCESS);
 
-  vkQueueWaitIdle(ramM.queue);
+  vkQueueWaitIdle(gfx_state->queue);
 
   ////////////////////////////////
   //~ kti: Cleanup staging resources
 
-  vkDestroyBuffer(ramM.device, staging_buffer, 0);
-  vkFreeMemory(ramM.device, staging_memory, 0);
+  vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
+  vkFreeMemory(gfx_state->device, staging_memory, 0);
 
   // Reset command pool to free command buffer
-  vkResetCommandPool(ramM.device, ramM.upload_command_pool, 0);
+  vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
 
   ////////////////////////////////
   //~ kti: Create image view
@@ -433,7 +439,7 @@ Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void
       .layerCount = 1,
     },
   };
-  result = vkCreateImageView(ramM.device, &view_ci, 0, &texture->image_view);
+  result = vkCreateImageView(gfx_state->device, &view_ci, 0, &texture->image_view);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
@@ -445,7 +451,20 @@ Internal GFX_Texture *gfx_texture_create(Arena *arena, I1 width, I1 height, void
   return texture;
 }
 
-Internal void gfx_init(Arena *arena) {
+Internal void gfx_tex2d_free(GFX_Texture *tex) {
+  vkDestroyImage(gfx_state->device, tex->image, 0);
+  vkDestroyImageView(gfx_state->device, tex->image_view, 0);
+  vkFreeMemory(gfx_state->device, tex->memory, 0);
+  tex->width = 0;
+  tex->height = 0;
+
+  SLLStackPush(gfx_state->first_free_texture, tex);
+}
+
+Internal void gfx_init() {
+  Arena *arena = arena_create(MiB(64));
+  gfx_state = push_array(arena, GFX_State, 1);
+  gfx_state->arena = arena;
 
   ////////////////////////////////
   //~ kti: Load Core Procedures
@@ -511,13 +530,13 @@ Internal void gfx_init(Arena *arena) {
     inst_info.ppEnabledLayerNames = layer_names;
   }
 
-  VkResult result = vkCreateInstance(&inst_info, 0, &ramM.instance);
+  VkResult result = vkCreateInstance(&inst_info, 0, &gfx_state->instance);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
   //~ kti: Load Extension Procedures
 
-#define X(name) *(void **)&name = vkGetInstanceProcAddr(ramM.instance, #name);
+#define X(name) *(void **)&name = vkGetInstanceProcAddr(gfx_state->instance, #name);
   VK_EXTENSION_FUNCTIONS
 #undef X
 
@@ -531,18 +550,18 @@ Internal void gfx_init(Arena *arena) {
     .pUserData = 0,
   };
 
-  result = vkCreateDebugReportCallbackEXT(ramM.instance, &callback_ci, 0, &ramM.vk_debug_callback);
+  result = vkCreateDebugReportCallbackEXT(gfx_state->instance, &callback_ci, 0, &gfx_state->vk_debug_callback);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
   //~ kti: Physical Device
 
   I1 device_count = 0;
-  vkEnumeratePhysicalDevices(ramM.instance, &device_count, 0);
+  vkEnumeratePhysicalDevices(gfx_state->instance, &device_count, 0);
   Assert(device_count > 0);
 
   VkPhysicalDevice *physical_devices = push_array(arena, VkPhysicalDevice, device_count);
-  vkEnumeratePhysicalDevices(ramM.instance, &device_count, physical_devices);
+  vkEnumeratePhysicalDevices(gfx_state->instance, &device_count, physical_devices);
 
   for EachIndex(i, device_count) {
     VkPhysicalDeviceProperties props = {0};
@@ -557,19 +576,19 @@ Internal void gfx_init(Arena *arena) {
       // VkBool32 supports_present = 0;
       // vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[i], j, )
       if (queue_family_properties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        ramM.physical_device = physical_devices[i];
-        ramM.physical_device_properties = props;
-        ramM.present_queue_index = j;
+        gfx_state->physical_device = physical_devices[i];
+        gfx_state->physical_device_properties = props;
+        gfx_state->present_queue_index = j;
         break;
       }
     }
 
-    if (ramM.physical_device) {
+    if (gfx_state->physical_device) {
       break;
     }
   }
 
-  Assert(ramM.physical_device);
+  Assert(gfx_state->physical_device);
 
   VkPhysicalDeviceFeatures2 query_device_features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
   VkPhysicalDeviceVulkan13Features query_vulkan13_features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
@@ -577,7 +596,7 @@ Internal void gfx_init(Arena *arena) {
   query_device_features2.pNext  = &query_vulkan13_features;
   query_vulkan13_features.pNext = &query_extended_dynamic_state_features;
 
-  vkGetPhysicalDeviceFeatures2(ramM.physical_device, &query_device_features2);
+  vkGetPhysicalDeviceFeatures2(gfx_state->physical_device, &query_device_features2);
 
   //- kti: Check if physical device supports Vulkan 1.3 features
   Assert(query_vulkan13_features.dynamicRendering);
@@ -610,7 +629,7 @@ Internal void gfx_init(Arena *arena) {
   float queue_priorities[] = { 1.0f };
   VkDeviceQueueCreateInfo queue_ci = {
     .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-    .queueFamilyIndex = ramM.present_queue_index,
+    .queueFamilyIndex = gfx_state->present_queue_index,
     .queueCount = 1,
     .pQueuePriorities = queue_priorities,
   };
@@ -629,16 +648,16 @@ Internal void gfx_init(Arena *arena) {
     .ppEnabledExtensionNames = device_extensions,
   };
 
-  result = vkCreateDevice(ramM.physical_device, &device_info, 0, &ramM.device);
+  result = vkCreateDevice(gfx_state->physical_device, &device_info, 0, &gfx_state->device);
   Assert(result == VK_SUCCESS);
 
-  vkGetDeviceQueue(ramM.device, ramM.present_queue_index, 0, &ramM.queue);
+  vkGetDeviceQueue(gfx_state->device, gfx_state->present_queue_index, 0, &gfx_state->queue);
 
   ////////////////////////////////
   //~ kti: Load Push Descriptor Function
 
   vkCmdPushDescriptorSetKHR =
-    (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(ramM.device, "vkCmdPushDescriptorSetKHR");
+    (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(gfx_state->device, "vkCmdPushDescriptorSetKHR");
   Assert(vkCmdPushDescriptorSetKHR != 0);
 
   ////////////////////////////////
@@ -665,17 +684,17 @@ Internal void gfx_init(Arena *arena) {
     .bindingCount = 1,
     .pBindings = bindings,
   };
-  result = vkCreateDescriptorSetLayout(ramM.device, &descriptor_layout_ci, 0, &ramM.descriptor_set_layout);
+  result = vkCreateDescriptorSetLayout(gfx_state->device, &descriptor_layout_ci, 0, &gfx_state->descriptor_set_layout);
   Assert(result == VK_SUCCESS);
 
   VkPipelineLayoutCreateInfo layout_ci = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
     .setLayoutCount = 1,
-    .pSetLayouts = &ramM.descriptor_set_layout,
+    .pSetLayouts = &gfx_state->descriptor_set_layout,
     .pushConstantRangeCount = 1,
     .pPushConstantRanges = &push_constants_range,
   };
-  result = vkCreatePipelineLayout(ramM.device, &layout_ci, 0, &ramM.pipeline_layout);
+  result = vkCreatePipelineLayout(gfx_state->device, &layout_ci, 0, &gfx_state->pipeline_layout);
   Assert(result == VK_SUCCESS);
 
   VkVertexInputBindingDescription binding_description = {
@@ -775,7 +794,7 @@ Internal void gfx_init(Arena *arena) {
   String8 frag_shader_code = os_read_entire_file(arena, Str8_("./shaders/shader.frag.spv"));
 
   Assert(vert_shader_code.len != 0);
-  Assert(frag_shader_code.len == 0);
+  Assert(frag_shader_code.len != 0);
 
   VkShaderModuleCreateInfo vert_shader_ci = {
     .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -790,9 +809,9 @@ Internal void gfx_init(Arena *arena) {
 
   VkShaderModule vert_shader, frag_shader;
 
-  result = vkCreateShaderModule(ramM.device, &vert_shader_ci, 0, &vert_shader);
+  result = vkCreateShaderModule(gfx_state->device, &vert_shader_ci, 0, &vert_shader);
   Assert(result == VK_SUCCESS);
-  result = vkCreateShaderModule(ramM.device, &frag_shader_ci, 0, &frag_shader);
+  result = vkCreateShaderModule(gfx_state->device, &frag_shader_ci, 0, &frag_shader);
   Assert(result == VK_SUCCESS);
 
   VkPipelineShaderStageCreateInfo shader_stages[] = {
@@ -830,15 +849,15 @@ Internal void gfx_init(Arena *arena) {
     .pDepthStencilState  = &depth_stencil,
     .pColorBlendState    = &blend,
     .pDynamicState       = &dynamic_state_ci,
-    .layout              = ramM.pipeline_layout,
+    .layout              = gfx_state->pipeline_layout,
     .renderPass          = VK_NULL_HANDLE,
     .subpass             = 0,
   };
 
-  result = vkCreateGraphicsPipelines(ramM.device, VK_NULL_HANDLE, 1, &pipeline_ci, 0, &ramM.pipeline);
+  result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &pipeline_ci, 0, &gfx_state->pipeline);
 
-  vkDestroyShaderModule(ramM.device, vert_shader, 0);
-  vkDestroyShaderModule(ramM.device, frag_shader, 0);
+  vkDestroyShaderModule(gfx_state->device, vert_shader, 0);
+  vkDestroyShaderModule(gfx_state->device, frag_shader, 0);
 
   ////////////////////////////////
   //~ kti: Sampler
@@ -857,7 +876,7 @@ Internal void gfx_init(Arena *arena) {
     .compareEnable = VK_FALSE,
     .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
   };
-  result = vkCreateSampler(ramM.device, &sampler_ci, 0, &ramM.texture_sampler);
+  result = vkCreateSampler(gfx_state->device, &sampler_ci, 0, &gfx_state->texture_sampler);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
@@ -866,28 +885,28 @@ Internal void gfx_init(Arena *arena) {
   VkCommandPoolCreateInfo upload_pool_ci = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
     .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-    .queueFamilyIndex = ramM.present_queue_index,
+    .queueFamilyIndex = gfx_state->present_queue_index,
   };
-  result = vkCreateCommandPool(ramM.device, &upload_pool_ci, 0, &ramM.upload_command_pool);
+  result = vkCreateCommandPool(gfx_state->device, &upload_pool_ci, 0, &gfx_state->upload_command_pool);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
   //~ kti: White Texture
 
   I1 white = 0xFFFFFFFF;
-  ramM.white_texture = gfx_texture_create(arena, 1, 1, &white);
+  gfx_state->white_texture = gfx_tex2d_alloc(1, 1, &white);
 }
 
-Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_Window *vkw) {
-  vkDeviceWaitIdle(ramM.device);
+Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
+  vkDeviceWaitIdle(gfx_state->device);
 
   //- kti: Destroy old resources (if they exist).
   if (vkw->swapchain != VK_NULL_HANDLE) {
-    vkDestroySwapchainKHR(ramM.device, vkw->swapchain, 0);
+    vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
     vkw->swapchain = VK_NULL_HANDLE;
   }
   for EachIndex(i, vkw->image_count) {
-    vkDestroyImageView(ramM.device, vkw->swapchain_image_views[i], 0);
+    vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
   }
 
   //- kti: Our pipeline uses BGRA_SRGB so we force it. Not optimal.
@@ -908,7 +927,7 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
   VkColorSpaceKHR color_space = vkw->surface_formats[0].colorSpace;
 
   VkSurfaceCapabilitiesKHR surface_capabilities = {0};
-  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ramM.physical_device, vkw->surface, &surface_capabilities);
+  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gfx_state->physical_device, vkw->surface, &surface_capabilities);
 
   I1 desired_image_count = 2;
   if (desired_image_count < surface_capabilities.minImageCount) {
@@ -953,7 +972,7 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
     .clipped = VK_TRUE,
   };
 
-  VkResult result = vkCreateSwapchainKHR(ramM.device, &swpachain_ci, 0, &vkw->swapchain);
+  VkResult result = vkCreateSwapchainKHR(gfx_state->device, &swpachain_ci, 0, &vkw->swapchain);
   Assert(result == VK_SUCCESS);
 
   vkw->swapchain_extent = surface_resolution;
@@ -962,17 +981,14 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
   //~ kti: Image Views
 
   I1 prev_image_count = vkw->image_count;
-  vkGetSwapchainImagesKHR(ramM.device, vkw->swapchain, &vkw->image_count, 0);
+  vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, 0);
   if (prev_image_count == 0) {
-    vkw->swapchain_images = push_array(arena, VkImage, vkw->image_count);
+    vkw->swapchain_images = push_array(gfx_state->arena, VkImage, vkw->image_count);
+    vkw->swapchain_image_views = push_array(gfx_state->arena, VkImageView, vkw->image_count);
   } else if (prev_image_count != vkw->image_count) {
     Assert(0);
   }
-  vkGetSwapchainImagesKHR(ramM.device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
-
-  if (prev_image_count == 0) {
-    vkw->swapchain_image_views = push_array(arena, VkImageView, vkw->image_count);
-  }
+  vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
 
   for EachIndex(i, vkw->image_count) {
     VkImageViewCreateInfo image_view_ci = {
@@ -986,17 +1002,19 @@ Internal void gfx_vk_recreate_swapchain(Arena *arena, OS_Window *os_window, GFX_
       .subresourceRange.baseArrayLayer = 0,
       .subresourceRange.layerCount = 1,
     };
-    vkCreateImageView(ramM.device, &image_view_ci, 0, &vkw->swapchain_image_views[i]);
+    vkCreateImageView(gfx_state->device, &image_view_ci, 0, &vkw->swapchain_image_views[i]);
   }
 }
 
-Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
-  GFX_Window *vkw = ramM.first_free_vk_window;
+Internal GFX_Window *gfx_window_equip(OS_Window *window) {
+  GFX_Window *vkw = gfx_state->first_free_window;
   if (vkw == 0) {
-    vkw = push_array(arena, GFX_Window, 1);
+    vkw = push_array(gfx_state->arena, GFX_Window, 1);
   } else {
-    SLLStackPop(ramM.first_free_vk_window);
+    SLLStackPop(gfx_state->first_free_window);
   }
+
+  // TODO: Memory leaks here. Alloc of surface formats, present modes, per frame data.
 
   ////////////////////////////////
   //~ kti: Surface
@@ -1006,29 +1024,29 @@ Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
     .display = ramM.display,
     .surface = window->surface,
   };
-  VkResult result = vkCreateWaylandSurfaceKHR(ramM.instance, &surface_ci, 0, &vkw->surface);
+  VkResult result = vkCreateWaylandSurfaceKHR(gfx_state->instance, &surface_ci, 0, &vkw->surface);
   Assert(result == VK_SUCCESS);
 
-  VkBool32 supports = vkGetPhysicalDeviceWaylandPresentationSupportKHR(ramM.physical_device, ramM.present_queue_index, ramM.display);
+  VkBool32 supports = vkGetPhysicalDeviceWaylandPresentationSupportKHR(gfx_state->physical_device, gfx_state->present_queue_index, ramM.display);
   Assert(supports);
 
-  vkGetPhysicalDeviceSurfaceFormatsKHR(ramM.physical_device, vkw->surface, &vkw->surface_format_count, 0);
-  vkw->surface_formats = push_array(arena, VkSurfaceFormatKHR, vkw->surface_format_count);
-  vkGetPhysicalDeviceSurfaceFormatsKHR(ramM.physical_device, vkw->surface, &vkw->surface_format_count, vkw->surface_formats);
+  vkGetPhysicalDeviceSurfaceFormatsKHR(gfx_state->physical_device, vkw->surface, &vkw->surface_format_count, 0);
+  vkw->surface_formats = push_array(gfx_state->arena, VkSurfaceFormatKHR, vkw->surface_format_count);
+  vkGetPhysicalDeviceSurfaceFormatsKHR(gfx_state->physical_device, vkw->surface, &vkw->surface_format_count, vkw->surface_formats);
 
-  vkGetPhysicalDeviceSurfacePresentModesKHR(ramM.physical_device, vkw->surface, &vkw->present_mode_count, 0);
-  vkw->present_modes = push_array(arena, VkPresentModeKHR, vkw->present_mode_count);
-  vkGetPhysicalDeviceSurfacePresentModesKHR(ramM.physical_device, vkw->surface, &vkw->present_mode_count, vkw->present_modes);
+  vkGetPhysicalDeviceSurfacePresentModesKHR(gfx_state->physical_device, vkw->surface, &vkw->present_mode_count, 0);
+  vkw->present_modes = push_array(gfx_state->arena, VkPresentModeKHR, vkw->present_mode_count);
+  vkGetPhysicalDeviceSurfacePresentModesKHR(gfx_state->physical_device, vkw->surface, &vkw->present_mode_count, vkw->present_modes);
 
   ////////////////////////////////
   //~ kti: Swapchain
 
-  gfx_vk_recreate_swapchain(arena, window, vkw);
+  gfx_vk_recreate_swapchain(window, vkw);
 
   ////////////////////////////////
   //~ kti: Per Frame Data
 
-  vkw->per_frame = push_array(arena, GFX_Per_Frame, vkw->image_count);
+  vkw->per_frame = push_array(gfx_state->arena, GFX_Per_Frame, vkw->image_count);
 
   for EachIndex(i, vkw->image_count) {
     GFX_Per_Frame *frame = &vkw->per_frame[i];
@@ -1039,7 +1057,7 @@ Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
       .flags = VK_FENCE_CREATE_SIGNALED_BIT,
     };
-    result = vkCreateFence(ramM.device, &fence_ci, 0, &frame->queue_submit_fence);
+    result = vkCreateFence(gfx_state->device, &fence_ci, 0, &frame->queue_submit_fence);
     Assert(result == VK_SUCCESS);
 
     //- kti: Command Buffer
@@ -1047,10 +1065,10 @@ Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
     VkCommandPoolCreateInfo command_pool_ci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-      .queueFamilyIndex = ramM.present_queue_index,
+      .queueFamilyIndex = gfx_state->present_queue_index,
     };
 
-    result = vkCreateCommandPool(ramM.device, &command_pool_ci, 0, &frame->command_pool);
+    result = vkCreateCommandPool(gfx_state->device, &command_pool_ci, 0, &frame->command_pool);
     Assert(result == VK_SUCCESS);
 
     VkCommandBufferAllocateInfo command_buffer_alloc_info = {
@@ -1060,7 +1078,7 @@ Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
       .commandBufferCount = 1,
     };
 
-    result = vkAllocateCommandBuffers(ramM.device, &command_buffer_alloc_info, &frame->command_buffer);
+    result = vkAllocateCommandBuffers(gfx_state->device, &command_buffer_alloc_info, &frame->command_buffer);
     Assert(result == VK_SUCCESS);
 
     //- kti: Instance Buffer
@@ -1071,11 +1089,11 @@ Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
       .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
-    result = vkCreateBuffer(ramM.device, &instance_buffer_ci, 0, &frame->instance_buffer);
+    result = vkCreateBuffer(gfx_state->device, &instance_buffer_ci, 0, &frame->instance_buffer);
     Assert(result == VK_SUCCESS);
 
     VkMemoryRequirements memory_requirements = {0};
-    vkGetBufferMemoryRequirements(ramM.device, frame->instance_buffer, &memory_requirements);
+    vkGetBufferMemoryRequirements(gfx_state->device, frame->instance_buffer, &memory_requirements);
 
     VkMemoryAllocateInfo alloc_info = {
       .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -1083,26 +1101,66 @@ Internal GFX_Window *gfx_window_equip(Arena *arena, OS_Window *window) {
       .memoryTypeIndex = gfx_find_memory_type(memory_requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
     };
 
-    result = vkAllocateMemory(ramM.device, &alloc_info, 0, &frame->instance_buffer_memory);
+    result = vkAllocateMemory(gfx_state->device, &alloc_info, 0, &frame->instance_buffer_memory);
     Assert(result == VK_SUCCESS);
 
-    result = vkBindBufferMemory(ramM.device, frame->instance_buffer, frame->instance_buffer_memory, 0);
+    result = vkBindBufferMemory(gfx_state->device, frame->instance_buffer, frame->instance_buffer_memory, 0);
     Assert(result == VK_SUCCESS);
 
-    result = vkMapMemory(ramM.device, frame->instance_buffer_memory, 0, instance_buffer_ci.size, 0, &frame->rect_instances);
+    result = vkMapMemory(gfx_state->device, frame->instance_buffer_memory, 0, instance_buffer_ci.size, 0, &frame->rect_instances);
     Assert(result == VK_SUCCESS);
   }
 
   return vkw;
 }
 
-Internal void gfx_window_unequip(GFX_Window *window) {
-  // TODO: Destroy everything.
+Internal void gfx_window_unequip(GFX_Window *vkw) {
+  Temp_Arena scratch = temp_arena_begin(gfx_state->arena);
+  VkFence *fences = push_array(scratch.arena, VkFence, vkw->image_count);
+  for EachIndex(i, vkw->image_count) {
+    fences[i] = vkw->per_frame[i].queue_submit_fence;
+  }
+  vkWaitForFences(gfx_state->device, vkw->image_count, fences, VK_TRUE, L1_MAX);
+  temp_arena_end(scratch);
 
-  vkDestroySwapchainKHR(ramM.device, window->swapchain, 0);
-  vkDestroySurfaceKHR(ramM.instance, window->surface, 0);
+  for EachIndex(i, vkw->image_count) {
+    GFX_Per_Frame *frame = &vkw->per_frame[i];
 
-  SLLStackPush(ramM.first_free_vk_window, window);
+    if (frame->instance_buffer_memory != VK_NULL_HANDLE) {
+      vkUnmapMemory(gfx_state->device, frame->instance_buffer_memory);
+    }
+    if (frame->instance_buffer != VK_NULL_HANDLE) {
+      vkDestroyBuffer(gfx_state->device, frame->instance_buffer, 0);
+    }
+    if (frame->instance_buffer_memory != VK_NULL_HANDLE) {
+      vkFreeMemory(gfx_state->device, frame->instance_buffer_memory, 0);
+    }
+
+    if (frame->command_pool != VK_NULL_HANDLE) {
+      vkResetCommandPool(gfx_state->device, frame->command_pool, 0);
+      vkDestroyCommandPool(gfx_state->device, frame->command_pool, 0);
+    }
+
+    if (frame->queue_submit_fence != VK_NULL_HANDLE) {
+      vkDestroyFence(gfx_state->device, frame->queue_submit_fence, 0);
+    }
+
+    if (frame->swapchain_acquire_semaphore != VK_NULL_HANDLE) {
+      gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = frame->swapchain_acquire_semaphore;
+      gfx_state->recycle_semaphores_count += 1;
+    }
+    if (frame->swapchain_release_semaphore != VK_NULL_HANDLE) {
+      gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = frame->swapchain_release_semaphore;
+      gfx_state->recycle_semaphores_count += 1;
+    }
+
+    vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
+  }
+
+  vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
+  vkDestroySurfaceKHR(gfx_state->instance, vkw->surface, 0);
+
+  SLLStackPush(gfx_state->first_free_window, vkw);
 }
 
 Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
@@ -1111,27 +1169,27 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   //- kti: Check for window resize.
   if (os_window->width != vkw->swapchain_extent.width || os_window->height != vkw->swapchain_extent.height) {
-    gfx_vk_recreate_swapchain(0, os_window, vkw);
+    gfx_vk_recreate_swapchain(os_window, vkw);
   }
 
   //- kti: Grab a sempahore.
   VkSemaphore acquire_semaphore;
-  if (ramM.recycle_semaphores_count == 0) {
+  if (gfx_state->recycle_semaphores_count == 0) {
     VkSemaphoreCreateInfo semaphore_ci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    VkResult result = vkCreateSemaphore(ramM.device, &semaphore_ci, 0, &acquire_semaphore);
+    VkResult result = vkCreateSemaphore(gfx_state->device, &semaphore_ci, 0, &acquire_semaphore);
     Assert(result == VK_SUCCESS);
   } else {
-    acquire_semaphore = ramM.recycle_semaphores[ramM.recycle_semaphores_count - 1];
-    ramM.recycle_semaphores_count -= 1;
+    acquire_semaphore = gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count - 1];
+    gfx_state->recycle_semaphores_count -= 1;
   }
 
   //- kti: Grab the next image.
   I1 image_idx = 0;
   VkResult img_acquire_result = VK_RESULT_MAX_ENUM;
   for EachIndex(try, 2) {
-    img_acquire_result = vkAcquireNextImageKHR(ramM.device, vkw->swapchain, L1_MAX, acquire_semaphore, VK_NULL_HANDLE, &image_idx);
+    img_acquire_result = vkAcquireNextImageKHR(gfx_state->device, vkw->swapchain, L1_MAX, acquire_semaphore, VK_NULL_HANDLE, &image_idx);
     if (img_acquire_result == VK_SUBOPTIMAL_KHR || img_acquire_result == VK_ERROR_OUT_OF_DATE_KHR) {
-      gfx_vk_recreate_swapchain(0, os_window, vkw);
+      gfx_vk_recreate_swapchain(os_window, vkw);
     } else {
       break;
     }
@@ -1139,30 +1197,30 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   if (img_acquire_result != VK_SUCCESS) {
     // - kti: Recycle the semaphore we never used.
-    Assert(ramM.recycle_semaphores_count < ArrayCount(ramM.recycle_semaphores));
-    ramM.recycle_semaphores[ramM.recycle_semaphores_count] = acquire_semaphore;
-    ramM.recycle_semaphores_count += 1;
+    Assert(gfx_state->recycle_semaphores_count < ArrayCount(gfx_state->recycle_semaphores));
+    gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = acquire_semaphore;
+    gfx_state->recycle_semaphores_count += 1;
 
-    vkQueueWaitIdle(ramM.queue);
+    vkQueueWaitIdle(gfx_state->queue);
     return;
   }
 
   //- kti: Wait for previous work submitted to this image is complete.
-  vkWaitForFences(ramM.device, 1, &vkw->per_frame[image_idx].queue_submit_fence, VK_TRUE, L1_MAX);
-  vkResetFences(ramM.device, 1, &vkw->per_frame[image_idx].queue_submit_fence);
+  vkWaitForFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence, VK_TRUE, L1_MAX);
+  vkResetFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence);
 
-  vkResetCommandPool(ramM.device, vkw->per_frame[image_idx].command_pool, 0);
+  vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, 0);
 
   //- kti: Recycle old semaphore
   VkSemaphore old_semaphore = vkw->per_frame[image_idx].swapchain_acquire_semaphore;
   if (old_semaphore != VK_NULL_HANDLE) {
-    ramM.recycle_semaphores[ramM.recycle_semaphores_count] = old_semaphore;
-    ramM.recycle_semaphores_count += 1;
+    gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = old_semaphore;
+    gfx_state->recycle_semaphores_count += 1;
   }
 
   vkw->per_frame[image_idx].swapchain_acquire_semaphore = acquire_semaphore;
 
-  ramM.image_idx = image_idx;
+  gfx_state->image_idx = image_idx;
 
   ////////////////////////////////
   //~ kti: Begin Rendering
@@ -1213,7 +1271,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   vkCmdBeginRendering(cmd, &rendering_info);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ramM.pipeline);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline);
 
   VkViewport viewport = {
     .width = vkw->swapchain_extent.width,
@@ -1232,7 +1290,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 }
 
 Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_BatchList batches) {
-  I1 image_idx = ramM.image_idx;
+  I1 image_idx = gfx_state->image_idx;
   VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
   VkBuffer instance_buffer = vkw->per_frame[image_idx].instance_buffer;
   GFX_Rect_Instance *rect_instances = (GFX_Rect_Instance *)vkw->per_frame[image_idx].rect_instances;
@@ -1249,7 +1307,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
 
     GFX_Texture *texture = batch->texture;
     if (texture == 0) {
-      texture = ramM.white_texture;
+      texture = gfx_state->white_texture;
     }
 
     VkRect2D scissor = {
@@ -1272,7 +1330,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     VkDescriptorImageInfo image_info = {
-      .sampler = ramM.texture_sampler,
+      .sampler = gfx_state->texture_sampler,
       .imageView = texture->image_view,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
@@ -1285,13 +1343,13 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
       .pImageInfo = &image_info,
     };
 
-    vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ramM.pipeline_layout, 0, 1, &write);
+    vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline_layout, 0, 1, &write);
 
     F1 push_data[4] = {
       vkw->swapchain_extent.width, vkw->swapchain_extent.height,
       (F1)texture->width, (F1)texture->height
     };
-    vkCmdPushConstants(cmd, ramM.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
+    vkCmdPushConstants(cmd, gfx_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
 
     memmove(rect_instances + rect_instances_count, batch->instances, batch->instance_count*sizeof(GFX_Rect_Instance));
 
@@ -1305,7 +1363,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
 }
 
 Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
-  I1 image_idx = ramM.image_idx;
+  I1 image_idx = gfx_state->image_idx;
   VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
 
   ////////////////////////////////
@@ -1327,7 +1385,7 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   if (vkw->per_frame[image_idx].swapchain_release_semaphore == VK_NULL_HANDLE) {
     VkSemaphoreCreateInfo semaphore_ci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    VkResult result = vkCreateSemaphore(ramM.device, &semaphore_ci, 0, &vkw->per_frame[image_idx].swapchain_release_semaphore);
+    VkResult result = vkCreateSemaphore(gfx_state->device, &semaphore_ci, 0, &vkw->per_frame[image_idx].swapchain_release_semaphore);
     Assert(result == VK_SUCCESS);
   }
 
@@ -1342,7 +1400,7 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     .signalSemaphoreCount = 1,
     .pSignalSemaphores    = &vkw->per_frame[image_idx].swapchain_release_semaphore,
   };
-  VkResult result = vkQueueSubmit(ramM.queue, 1, &submit_info, vkw->per_frame[image_idx].queue_submit_fence);
+  VkResult result = vkQueueSubmit(gfx_state->queue, 1, &submit_info, vkw->per_frame[image_idx].queue_submit_fence);
   Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
@@ -1356,10 +1414,10 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     .pSwapchains        = &vkw->swapchain,
     .pImageIndices      = &image_idx,
   };
-  result = vkQueuePresentKHR(ramM.queue, &present_info);
+  result = vkQueuePresentKHR(gfx_state->queue, &present_info);
 
   if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
-    gfx_vk_recreate_swapchain(0, os_window, vkw);
+    gfx_vk_recreate_swapchain(os_window, vkw);
   } else if (result != VK_SUCCESS) {
     printf("Failed to present swapchain image.\n");
   }

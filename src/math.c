@@ -1,14 +1,14 @@
 
 #if (CPU_) && (TYP_)
 
-F1 sqrtf(F1);
-F1 sinf(F1);
-F1 cosf(F1);
-F1 fabsf(F1);
-F1 powf(F1, F1);
-
 #define PI 3.141592653598979f
 #define GOLDEN_RATIO 1.61803398875f
+
+typedef struct Random_State Random_State;
+struct Random_State {
+	L1 state;
+	L1 inc;
+};
 
 #endif
 
@@ -116,5 +116,26 @@ Internal F1 ray_aabb_intersect(F3 ray_origin, F3 ray_direction, F3 aabb_min, F3 
 
 	return t_min;
 }
+
+Inline I1 rand_pcg(Random_State *rng) {
+	L1 oldstate = rng->state;
+  rng->state = oldstate * 6364136223846793005ULL + (rng->inc|1);
+  I1 xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
+  I1 rot = oldstate >> 59u;
+  I1 result = (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+  return result;
+}
+
+Inline F1 random_unilateral(Random_State *rng) {
+	F1 result = F1_(rand_pcg(rng)) / F1_(I1_MAX);
+	return result;
+}
+
+Inline F1 random_bilateral(Random_State *rng) {
+	F1 result = -1 + 2 * random_unilateral(rng);
+	return result;
+}
+
+
 
 #endif

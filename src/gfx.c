@@ -89,7 +89,7 @@ VK_EXTENSION_FUNCTIONS
 #undef X
 #endif
 
-#define MAX_RECTANGLE_COUNT 1024
+#define MAX_RECTANGLE_COUNT 8192
 
 #if (CPU_ && TYP_)
 
@@ -453,8 +453,11 @@ Internal GFX_Texture *gfx_tex2d_alloc(I1 width, I1 height, void *pixels) {
 }
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {
-  vkDestroyImage(gfx_state->device, tex->image, 0);
+  // TODO: Validation error when texture is in use by descriptor set.
+  // How do we fix this?
+
   vkDestroyImageView(gfx_state->device, tex->image_view, 0);
+  vkDestroyImage(gfx_state->device, tex->image, 0);
   vkFreeMemory(gfx_state->device, tex->memory, 0);
   tex->width = 0;
   tex->height = 0;

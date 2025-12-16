@@ -42,6 +42,7 @@ Inline void lane_sync_L1(L1 *ptr, L1 src_lane_idx) {
   }
   lane_sync();
   ptr[0] = ramR->sync_L1_val;
+  lane_sync();
 }
 
 Internal Range lane_range_for_section(L1 section_idx, L1 section_count, L1 count) {

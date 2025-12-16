@@ -1,4 +1,14 @@
+#if (CPU_ && DEF_)
+
+#define OBJ_COUNT 4096
+#define OBJ_W 20.0f
+#define OBJ_H 20.0f
+
+#endif
+
 #if  (CPU_ && RAM_)
+
+F4 objs[OBJ_COUNT];
 
 #endif
 
@@ -26,6 +36,24 @@ Internal void lane(Arena *arena) {
 			}
 		}
 		texture = gfx_tex2d_alloc(256, 256, pixels);
+
+		//- kti: Objects
+
+		Random_State rng = {
+			.state = lane_idx() * 10000,
+		};
+
+		for EachIndex(i, OBJ_COUNT) {
+			F1 speed = 100.0f + random_unilateral(&rng)*50.0f;
+			F1 angle = random_unilateral(&rng) * PI;
+			F4 obj = {
+				random_unilateral(&rng)*window->width,
+				random_unilateral(&rng)*window->height,
+				cosf(angle)*speed,
+				sinf(angle)*speed,
+			};
+			ramM.objs[i] = obj;
+		}
 	}
 
 	lane_sync();
@@ -51,6 +79,34 @@ Internal void lane(Arena *arena) {
 			}
 		}
 		lane_sync_L1(&running, 0);
+		lane_sync_L1((void *)&window, 0);
+
+		Range rng = lane_range(OBJ_COUNT);
+		for EachInRange(i, rng) {
+			F4 obj = ramM.objs[i];
+			obj.x += obj.z * 1/60.0f;
+			obj.y += obj.w * 1/60.0f;
+
+			if (obj.x < 0.0f) {
+				obj.x = 0.0f;
+				obj.z = fabsf(obj.z);
+			}
+			if (obj.x+OBJ_W > window->width) {
+				obj.x = window->width - OBJ_W;
+				obj.z = -fabsf(obj.z);
+			}
+
+			if (obj.y < 0.0f) {
+				obj.y = 0.0f;
+				obj.w = fabsf(obj.w);
+			}
+			if (obj.y+OBJ_H > window->height) {
+				obj.y = window->height - OBJ_H;
+				obj.w = -fabsf(obj.w);
+			}
+
+			ramM.objs[i] = obj;
+		}
 
 		//- kti: Wait for all lanes to finish their work.
 		lane_sync();
@@ -65,76 +121,40 @@ Internal void lane(Arena *arena) {
 		  F4 bottom = oklch(1.0, 0.0, 0, 1.0f);
 		  F4 border = oklch(1.00, 0.0, 0, 1.0f);
 
-		  F1 height = 200.0f;
-		  F1 width = height*GOLDEN_RATIO;
-		  F1 x = (sinf(time)*0.5f+0.5f) * (window->width-width);
-		  F1 y = 100.0f;
+		  GFX_Rect_Instance instances[OBJ_COUNT];
+		  for EachIndex(i, OBJ_COUNT) {
+		  	F4 obj = ramM.objs[i];
+		  	F1 corner = 0.0f;
 
-		  GFX_Rect_Instance first_instances[] = {
-		    {
+		    instances[i] = (GFX_Rect_Instance){
 		      .src_rect = (F4){
 		      	0, 0,
 	          texture->width, texture->height
 	        },
 		      .dst_rect = (F4){
-		      	x, y,
-	          width, height
+		      	obj.x, obj.y,
+	          OBJ_W, OBJ_H
 	        },
 		      .colors = {
 		        top, top,
 		        bottom, bottom,
 		      },
-		      .corner_radii = (F4){10.0f, 10.0f, 10.0f, 10.0f},
+		      .corner_radii = (F4){corner, corner, corner, corner},
 		      .border_color = border,
 		      .border_width = 1.0f,
 		      .softness = 1.0f,
-		    },
-		    {
-		    	.dst_rect = (F4){
-		    		100.0f, 300.0f,
-		    		400.0f, 300.0f,
-		    	},
-		    	.colors = {
-		    		bg, bg,
-		    		bg, bg,
-		    	},
-		    	.omit_texture = 1.0f,
-		    }
-		  };
+		    };
+		  }
+
 		  GFX_Batch first_batch = {
 		  	.texture = texture,
-		  	.instances = first_instances,
-		  	.instance_count = ArrayCount(first_instances),
+		  	.instances = instances,
+		  	.instance_count = ArrayCount(instances),
 		  };
-
-		  GFX_Rect_Instance second_instances[] = {
-		  	{
-		  		.dst_rect = (F4){
-		  			x, y+300.0f,
-		  			width, height
-		  		},
-		  		.colors = {
-		  			top, top,
-		  			bottom, bottom,
-		  		},
-		  		.omit_texture = 1.0f,
-		  	}
-		  };
-		  GFX_Batch second_batch = {
-		  	.clip_rect = (F4){
-		  		100.0f, 300.0f,
-			  	400.0f, 300.0f
-			  },
-		  	.instances = second_instances,
-		  	.instance_count = ArrayCount(second_instances),
-		  };
-		  first_batch.next = &second_batch;
-
 		  GFX_BatchList batches = {
 		  	.first = &first_batch,
-		  	.last = &second_batch,
+		  	.last = &first_batch,
 		  };
-
 			gfx_window_submit(window, gfx_window, batches);
 
 			gfx_window_end_frame(window, gfx_window);
@@ -147,11 +167,6 @@ Internal void lane(Arena *arena) {
 		L1 target_frame_time = 1000000000ULL / 60;
 		L1 frame_end_time = os_clock();
 		L1 frame_time = frame_end_time - frame_begin_time;
-
-		// if (lane_idx() == 0) {
-		// 	F1 frame_time_ms = (F1)(frame_time / 1000ULL) / 1000.0f;
-		// 	printf("%.2fms\n", frame_time_ms);
-		// }
 
 		if (frame_time < target_frame_time) {
 			L1 remainder = target_frame_time - frame_time;
@@ -170,8 +185,8 @@ Internal void lane(Arena *arena) {
 	//~ kti: Shutdown
 
 	if (lane_idx() == 0) {
-		gfx_tex2d_free(texture);
 		gfx_window_unequip(gfx_window);
+		gfx_tex2d_free(texture);
 		os_window_close(window);
 	}
 }

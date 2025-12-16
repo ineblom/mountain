@@ -98,39 +98,13 @@ L1 total_memory_usage;
 
 #if (CPU_ && ROM_)
 
-typedef struct RT_Random_State RT_Random_State;
-struct RT_Random_State {
-	L1 state;
-	L1 inc;
-};
-
-// TODO: Take as parameter to rand_pcg
-ThreadLocal RT_Random_State rng;
-
-Inline I1 rand_pcg() {
-	L1 oldstate = rng.state;
-  rng.state = oldstate * 6364136223846793005ULL + (rng.inc|1);
-  I1 xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
-  I1 rot = oldstate >> 59u;
-  I1 result = (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
-  return result;
-}
-
-Inline F1 random_unilateral(void) {
-	F1 result = F1_(rand_pcg()) / F1_(I1_MAX);
-	return result;
-}
-
-Inline F1 random_bilateral(void) {
-	F1 result = -1 + 2 * random_unilateral();
-	return result;
-}
+ThreadLocal Random_State *rng;
 
 Inline F3 sample_cosine_hemisphere(F3 n) {
   F1 x, y;
   do {
-    x = 2.0f * random_unilateral() - 1.0f;
-    y = 2.0f * random_unilateral() - 1.0f;
+    x = 2.0f * random_unilateral(rng) - 1.0f;
+    y = 2.0f * random_unilateral(rng) - 1.0f;
   } while (x*x + y*y > 1.0f);
 
   F1 z = sqrtf(1.0f - x*x - y*y);
@@ -170,8 +144,8 @@ Inline F1 G_Smith(F1 NoV, F1 NoL, F1 alpha) {
 }
 
 Inline F3 sample_GGX_half(F3 n, float alpha) {
-  F1 r1 = random_unilateral();
-  F1 r2 = random_unilateral();
+  F1 r1 = random_unilateral(rng);
+  F1 r2 = random_unilateral(rng);
 
   F1 phi = 2.0f * PI * r1;
   F1 cosTheta = sqrtf( (1.0f - r2) / (1.0f + (alpha*alpha - 1.0f) * r2) );
@@ -315,7 +289,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
 			F3 f0 = F3_lerp((F3){0.04f,0.04f,0.04f}, metallic, mat.base_color);
 
 			F1 specular_prob = 0.5f; // keep constant; MIS handles weighting
-			if (random_unilateral() < specular_prob) {
+			if (random_unilateral(rng) < specular_prob) {
 				F3 v = -ray_direction;
 				F3 h = sample_GGX_half(next_normal, alpha);
 				F3 l = F3_reflect(-v, h);
@@ -494,14 +468,14 @@ Internal void trace_scene(Arena *arena, RT_Scene scene) {
 			F3 color = {};
 			F1 contrib = 1.0f / F1_(scene.rays_per_pixel);
 			for EachIndex(ray_index, scene.rays_per_pixel) {
-				F1 off_x  = film_x + random_bilateral()*half_pixel_w;
-				F1 off_y  = film_y + random_bilateral()*half_pixel_h;
+				F1 off_x  = film_x + random_bilateral(rng)*half_pixel_w;
+				F1 off_y  = film_y + random_bilateral(rng)*half_pixel_h;
 				F3 film_p = film_center +
 										off_x*half_film_w*camera_x +
 										off_y*half_film_h*camera_y;
 
-				F1 r = scene.camera.aperture_radius * sqrtf(random_unilateral());
-				F1 theta = 2.0f * PI * random_unilateral();
+				F1 r = scene.camera.aperture_radius * sqrtf(random_unilateral(rng));
+				F1 theta = 2.0f * PI * random_unilateral(rng);
 				F3 aperture_offset = r * cosf(theta) * camera_x + r * sinf(theta) * camera_y;
 				F3 ray_origin = camera_p + aperture_offset;
 

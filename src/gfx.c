@@ -276,7 +276,8 @@ Internal GFX_Texture *gfx_tex2d_alloc(I1 width, I1 height, void *pixels) {
   if (texture == 0) {
     texture = push_array(gfx_state->arena, GFX_Texture, 1);
   } else {
-    SLLStackPop(gfx_state->first_free_window);
+    SLLStackPop(gfx_state->first_free_texture);
+    MemoryZeroStruct(texture);
   }
 
   VkResult result;
@@ -1012,6 +1013,7 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
     vkw = push_array(gfx_state->arena, GFX_Window, 1);
   } else {
     SLLStackPop(gfx_state->first_free_window);
+    MemoryZeroStruct(vkw);
   }
 
   ////////////////////////////////

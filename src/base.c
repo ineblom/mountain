@@ -118,6 +118,11 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 #define AlignPow2(x,b) (((x) + (b) - 1)&(~((b) - 1)))
 
 ////////////////////////////////
+//~ kti: Memory
+#define MemoryZero(p, s) memset((p), 0, (s))
+#define MemoryZeroStruct(p) MemoryZero((p), sizeof(*(p)))
+
+////////////////////////////////
 //~ kti: Linked List Building Macros
 
 //- kti: linked list macro helpers

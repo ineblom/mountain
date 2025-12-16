@@ -18,6 +18,10 @@ Internal void lane(Arena *arena) {
 	OS_Window *window = 0;
 	GFX_Window *gfx_window = 0;
 	GFX_Texture *texture = 0;
+	L1 frame_count = 0;
+	L1 total_frame_time = 0;
+	L1 min_frame_time = L1_MAX;
+	L1 max_frame_time = 0;
 
 	////////////////////////////////
 	//~ kti: Initialization.
@@ -167,6 +171,23 @@ Internal void lane(Arena *arena) {
 		L1 target_frame_time = 1000000000ULL / 60;
 		L1 frame_end_time = os_clock();
 		L1 frame_time = frame_end_time - frame_begin_time;
+
+		if (lane_idx() == 0) {
+			frame_count += 1;
+			total_frame_time += frame_time;
+			min_frame_time = Min(min_frame_time, frame_time);
+			max_frame_time = Max(max_frame_time, frame_time);
+
+			if (frame_count % 60 == 0) {
+				F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
+	      F1 min_ms = min_frame_time / 1000000.0f;
+	      F1 max_ms = max_frame_time / 1000000.0f;
+	      printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, 1000.0f/avg_ms);
+	      total_frame_time = 0;
+	      min_frame_time = UINT64_MAX;
+	      max_frame_time = 0;
+			}
+		}
 
 		if (frame_time < target_frame_time) {
 			L1 remainder = target_frame_time - frame_time;

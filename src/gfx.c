@@ -1121,7 +1121,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   ////////////////////////////////
   //~ kti: Destroy Per frame Resources
 
-  //- kti: Wait for all gpu work to finich for this window.
+  //- kti: Wait for all GPU work to finich for this window.
   Temp_Arena scratch = temp_arena_begin(gfx_state->arena);
   VkFence *fences = push_array(scratch.arena, VkFence, vkw->image_count);
   for EachIndex(i, vkw->image_count) {
@@ -1130,6 +1130,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   vkWaitForFences(gfx_state->device, vkw->image_count, fences, VK_TRUE, L1_MAX);
   temp_arena_end(scratch);
 
+  //- kti: Free per frame resources.
   for EachIndex(i, vkw->image_count) {
     GFX_Per_Frame *frame = &vkw->per_frame[i];
 
@@ -1206,6 +1207,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     }
   }
 
+  //- kti: If grabbing image failed we return early.
   if (img_acquire_result != VK_SUCCESS) {
     // - kti: Recycle the semaphore we never used.
     Assert(gfx_state->recycle_semaphores_count < ArrayCount(gfx_state->recycle_semaphores));
@@ -1220,18 +1222,17 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   vkWaitForFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence, VK_TRUE, L1_MAX);
   vkResetFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence);
 
-  vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, 0);
-
-  //- kti: Recycle old semaphore
+  //- kti: Recycle old semaphore and store new one.
   VkSemaphore old_semaphore = vkw->per_frame[image_idx].swapchain_acquire_semaphore;
   if (old_semaphore != VK_NULL_HANDLE) {
     gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = old_semaphore;
     gfx_state->recycle_semaphores_count += 1;
   }
-
   vkw->per_frame[image_idx].swapchain_acquire_semaphore = acquire_semaphore;
 
   gfx_state->image_idx = image_idx;
+
+  vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, 0);
 
   ////////////////////////////////
   //~ kti: Begin Rendering
@@ -1311,16 +1312,14 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
   vkCmdBindVertexBuffers(cmd, 0, 1, &instance_buffer, &offset);
 
   for (GFX_Batch *batch = batches.first; batch != 0; batch = batch->next) {
+    // NOTE(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
+    // Alternatively we could allocate a buffer that could contain the entire batch. This would allow for "infinite" rectangle counts.
     if (rect_instances_count + batch->instance_count > MAX_RECTANGLE_COUNT) {
       printf("Max number of rectangle instances reached for frame. Skipping batch.\n");
       continue;
     }
 
-    GFX_Texture *texture = batch->texture;
-    if (texture == 0) {
-      texture = gfx_state->white_texture;
-    }
-
+    //- kti: Clip
     VkRect2D scissor = {
       .offset = {
         .x = 0,
@@ -1340,12 +1339,16 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
     }
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
+    //- kti: Texture
+    GFX_Texture *texture = batch->texture;
+    if (texture == 0) {
+      texture = gfx_state->white_texture;
+    }
     VkDescriptorImageInfo image_info = {
       .sampler = gfx_state->texture_sampler,
       .imageView = texture->image_view,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
-
     VkWriteDescriptorSet write = {
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
       .dstBinding = 0,
@@ -1353,17 +1356,17 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
       .pImageInfo = &image_info,
     };
-
     vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline_layout, 0, 1, &write);
 
+    //- kti: Push Constants
     F1 push_data[4] = {
       vkw->swapchain_extent.width, vkw->swapchain_extent.height,
       (F1)texture->width, (F1)texture->height
     };
     vkCmdPushConstants(cmd, gfx_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
 
+    //- kti: Draw
     memmove(rect_instances + rect_instances_count, batch->instances, batch->instance_count*sizeof(GFX_Rect_Instance));
-
     vkCmdDraw(cmd, 6, batch->instance_count, 0, rect_instances_count);
 
     rect_instances_count += batch->instance_count;

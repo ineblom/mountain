@@ -26,10 +26,9 @@ Internal void lane(Arena *arena) {
 		gfx_init();
     fp_init();
 
-    font = fp_font_open(Str8_("/usr/share/fonts/NerdFonts/ttf/TerminessNerdFont-Regular.ttf"));
-    FP_Raster_Result raster = fp_raster(arena, font, 8.0f, Str8_("Hejsan"));
-		printf("Raster complete: %dx%d advance: %f\n",
-				raster.atlas_dim.x, raster.atlas_dim.y, raster.advance);
+    // font = fp_font_open(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
+    font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
+    FP_Raster_Result raster = fp_raster(arena, font, 32.0f, Str8_("Känn på den!"));
 
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
 		gfx_window = gfx_window_equip(window);

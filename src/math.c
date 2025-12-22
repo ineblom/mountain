@@ -14,6 +14,8 @@ struct Random_State {
 
 #if (CPU_) && (ROM_)
 
+#define abs_SL1(x) llabs(x)
+
 Inline F1 F1_clamp01(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
 Inline F1 F1_saturate(F1 x) { return F1_clamp01(x); }
 

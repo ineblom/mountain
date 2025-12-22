@@ -44,7 +44,7 @@ Inline Image image_alloc(Arena *arena, I1 width, I1 height, I1 bytes_per_pixel) 
 	image.width  = width;
 	image.height = height;
 	image.bytes_per_pixel = bytes_per_pixel;
-	image.pixels = arena_push(arena, image_pixels_size(image), Max(8, bytes_per_pixel));
+	image.pixels = arena_push(arena, image_pixels_size(image), Max(8, bytes_per_pixel), 1);
 	return image;
 }
 

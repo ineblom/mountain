@@ -15,9 +15,10 @@ F4 objs[OBJ_COUNT];
 #if (CPU_ && ROM_)
 
 Internal void lane(Arena *arena) {
-	OS_Window *window = 0;
-	GFX_Window *gfx_window = 0;
-	GFX_Texture *texture = 0;
+  OS_Window *window = 0;
+  GFX_Window *gfx_window = 0;
+  GFX_Texture *texture = 0;
+  FP_Font font = {0};
 	L1 frame_count = 0;
 	L1 total_frame_time = 0;
 	L1 min_frame_time = L1_MAX;
@@ -29,6 +30,9 @@ Internal void lane(Arena *arena) {
 	if (lane_idx() == 0) {
 
 		gfx_init();
+    fp_init();
+
+    font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
 
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
 		gfx_window = gfx_window_equip(window);
@@ -67,7 +71,7 @@ Internal void lane(Arena *arena) {
 	////////////////////////////////
 	//~ kti: Main loop
 
-	while (running) {
+  while (running) {
 		L1 frame_begin_time = os_clock();
 
 		F1 time = (F1)(frame_begin_time/1000000ULL) / 1000.0f;
@@ -85,6 +89,7 @@ Internal void lane(Arena *arena) {
 		lane_sync_L1(&running, 0);
 		lane_sync_L1((void *)&window, 0);
 
+    //- kti: update all objects
 		Range rng = lane_range(OBJ_COUNT);
 		for EachInRange(i, rng) {
 			F4 obj = ramM.objs[i];
@@ -206,6 +211,7 @@ Internal void lane(Arena *arena) {
 	//~ kti: Shutdown
 
 	if (lane_idx() == 0) {
+    fp_font_close(font);
 		gfx_window_unequip(gfx_window);
 		gfx_tex2d_free(texture);
 		os_window_close(window);

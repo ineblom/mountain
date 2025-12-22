@@ -61,7 +61,10 @@ NoInline void WrmEnd(void) { Crash(1); }
 
 #endif
 
-// Modules
+////////////////////////////////
+// kti: Modules
+
+//- kti: Core
 #include "arena.c"
 #include "strings.c"
 #include "os.c"
@@ -69,7 +72,12 @@ NoInline void WrmEnd(void) { Crash(1); }
 #include "math.c"
 #include "image.c"
 #include "gfx.c"
-// #define RT_APP
-#include "rt.c"
-// #include "editor.c"
+#include "font_provider.c"
+
+//- kti: App
 #include "testing.c"
+
+// #define RT_APP
+// #include "rt.c"
+
+// #include "editor.c"

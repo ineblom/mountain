@@ -1,4 +1,3 @@
-
 #if (CPU_ && TYP_)
 typedef struct LaneCtx LaneCtx;
 struct LaneCtx {
@@ -15,6 +14,9 @@ struct Range {
 };
 
 Internal void lane(Arena *);
+
+Inline Temp_Arena scratch_begin(Arena **conflicts, L1 count);
+Inline void scratch_end(Temp_Arena temp);
 #endif
 
 #if (CPU_ && RAM_)
@@ -32,9 +34,6 @@ Global ThreadLocal LaneCtx *lane_ctx;
 #define lane_from_task_idx(idx) ((idx) % lane_ctx->lane_count)
 #define lane_sync() os_barrier_wait(lane_ctx->barrier)
 #define lane_range(count) lane_range_for_section(lane_idx(), lane_count(), count)
-
-#define scratch_begin(conflicts, count) temp_arena_begin(lane_get_scratch_arena(conflicts, count))
-#define scratch_end(temp) temp_arena_end(temp)
 
 Inline void lane_sync_L1(L1 *ptr, L1 src_lane_idx) {
   if (lane_idx() == src_lane_idx) {
@@ -78,6 +77,15 @@ Internal Arena *lane_get_scratch_arena(Arena **conflicts, L1 count) {
   }
 
   return result;
+}
+
+Inline Temp_Arena scratch_begin(Arena **conflicts, L1 count) {
+  Temp_Arena result = temp_arena_begin(lane_get_scratch_arena(conflicts, count));
+  return result;
+} 
+
+Inline void scratch_end(Temp_Arena temp) {
+  temp_arena_end(temp);
 }
 
 Internal void *lane_thread_entrypoint(void *arg) {

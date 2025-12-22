@@ -265,14 +265,15 @@ OS_Event *last_event;
 #if (CPU_ && ROM_)
 
 Internal String8 os_read_entire_file(Arena *arena, String8 filename) {
-  Assert(filename.len < MAX_FILENAME_LEN);
-  char cstr_filename[MAX_FILENAME_LEN] = {0};
-  memmove(cstr_filename, filename.str, filename.len);
+  Temp_Arena scratch = scratch_begin(0, 0);
+  String8 cstr_filename = push_str8_copy(scratch.arena, filename);
 
-  I1 file = open(cstr_filename, O_RDONLY);
+  I1 file = open((CString)cstr_filename.str, O_RDONLY);
   if (LtSI1(file, 0)) {
     return (String8){0};
   }
+
+  scratch_end(scratch);
 
   L1 size = lseek(file, 0, SEEK_END);
   lseek(file, 0, SEEK_SET);
@@ -287,18 +288,20 @@ Internal String8 os_read_entire_file(Arena *arena, String8 filename) {
     .str = buffer,
     .len = size,
   };
+
   return result;
 }
 
 Internal L1 os_write_entire_file(String8 filename, void *data, L1 data_size) {
-  Assert(filename.len < MAX_FILENAME_LEN);
-  char cstr_filename[MAX_FILENAME_LEN] = {0};
-  memmove(cstr_filename, filename.str, filename.len);
+  Temp_Arena scratch = scratch_begin(0, 0);
+  String8 cstr_filename = push_str8_copy(scratch.arena, filename);
 
-  I1 file = open(cstr_filename, O_CREAT | O_WRONLY, 0666);
+  I1 file = open((CString)cstr_filename.str, O_CREAT | O_WRONLY, 0666);
   if (LtSI1(file, 0)) {
     return 0;
   }
+  
+  scratch_end(scratch);
 
   L1 bytes_written = write(file, data, data_size);
   close(file);
@@ -368,21 +371,23 @@ Internal void os_sleep(L1 time) {
 }
 
 Internal void *os_library_open(String8 filename) {
-  Assert(filename.len < MAX_FILENAME_LEN);
-  char cstr_filename[MAX_FILENAME_LEN] = {0};
-  memmove(cstr_filename, filename.str, filename.len);
+  Temp_Arena scratch = scratch_begin(0, 0);
+  String8 cstr_filename = push_str8_copy(scratch.arena, filename);
 
-  void *handle = dlopen(cstr_filename, RTLD_LAZY|RTLD_LOCAL);
+  void *handle = dlopen((CString)cstr_filename.str, RTLD_LAZY|RTLD_LOCAL);
+
+  scratch_end(scratch);
 
   return handle;
 }
 
 Internal VoidProc *os_library_load_proc(void *lib, String8 name) {
-  Assert(name.len < MAX_FILENAME_LEN);
-  char cstr_name[MAX_FILENAME_LEN] = {0};
-  memmove(cstr_name, name.str, name.len);
+  Temp_Arena scratch = scratch_begin(0, 0);
+  String8 cstr_name = push_str8_copy(scratch.arena, name);
 
-  VoidProc *proc = dlsym(lib, cstr_name);
+  VoidProc *proc = dlsym(lib, (CString)cstr_name.str);
+
+  scratch_end(scratch);
 
   return proc;
 }
@@ -806,10 +811,10 @@ Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 hei
   xdg_toplevel_add_listener(result->xdg_toplevel, &result->xdg_toplevel_listener, (void *)result);
 
   //- kti: Use max filename length as a reasonable title length limit.
-  Assert(title.len < MAX_FILENAME_LEN);
-  char cstr_title[MAX_FILENAME_LEN] = {0};
-  memmove(cstr_title, title.str, title.len);
-  xdg_toplevel_set_title(result->xdg_toplevel, cstr_title);
+  Temp_Arena scratch = scratch_begin(0, 0);
+  String8 cstr_title = push_str8_copy(scratch.arena, title);
+  xdg_toplevel_set_title(result->xdg_toplevel, (CString)cstr_title.str);
+  scratch_end(scratch);
 
   wl_surface_commit(result->surface);
 

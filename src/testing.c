@@ -1,14 +1,8 @@
 #if (CPU_ && DEF_)
 
-#define OBJ_COUNT 4096
-#define OBJ_W 20.0f
-#define OBJ_H 20.0f
-
 #endif
 
 #if  (CPU_ && RAM_)
-
-F4 objs[OBJ_COUNT];
 
 #endif
 
@@ -32,36 +26,15 @@ Internal void lane(Arena *arena) {
 		gfx_init();
     fp_init();
 
-    font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
+    font = fp_font_open(Str8_("/usr/share/fonts/NerdFonts/ttf/TerminessNerdFont-Regular.ttf"));
+    FP_Raster_Result raster = fp_raster(arena, font, 8.0f, Str8_("Hejsan"));
+		printf("Raster complete: %dx%d advance: %f\n",
+				raster.atlas_dim.x, raster.atlas_dim.y, raster.advance);
 
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
 		gfx_window = gfx_window_equip(window);
 
-		I1 pixels[256*256];
-		for EachIndex(y, 256) {
-			for EachIndex(x, 256) {
-				pixels[y*256+x] = x<<16 | y | 0xFF000000;
-			}
-		}
-		texture = gfx_tex2d_alloc(256, 256, pixels);
-
-		//- kti: Objects
-
-		Random_State rng = {
-			.state = lane_idx() * 10000,
-		};
-
-		for EachIndex(i, OBJ_COUNT) {
-			F1 speed = 100.0f + random_unilateral(&rng)*50.0f;
-			F1 angle = random_unilateral(&rng) * PI;
-			F4 obj = {
-				random_unilateral(&rng)*window->width,
-				random_unilateral(&rng)*window->height,
-				cosf(angle)*speed,
-				sinf(angle)*speed,
-			};
-			ramM.objs[i] = obj;
-		}
+		texture = gfx_tex2d_alloc(raster.atlas_dim.x, raster.atlas_dim.y, raster.atlas);
 	}
 
 	lane_sync();
@@ -89,34 +62,6 @@ Internal void lane(Arena *arena) {
 		lane_sync_L1(&running, 0);
 		lane_sync_L1((void *)&window, 0);
 
-    //- kti: update all objects
-		Range rng = lane_range(OBJ_COUNT);
-		for EachInRange(i, rng) {
-			F4 obj = ramM.objs[i];
-			obj.x += obj.z * 1/60.0f;
-			obj.y += obj.w * 1/60.0f;
-
-			if (obj.x < 0.0f) {
-				obj.x = 0.0f;
-				obj.z = fabsf(obj.z);
-			}
-			if (obj.x+OBJ_W > window->width) {
-				obj.x = window->width - OBJ_W;
-				obj.z = -fabsf(obj.z);
-			}
-
-			if (obj.y < 0.0f) {
-				obj.y = 0.0f;
-				obj.w = fabsf(obj.w);
-			}
-			if (obj.y+OBJ_H > window->height) {
-				obj.y = window->height - OBJ_H;
-				obj.w = -fabsf(obj.w);
-			}
-
-			ramM.objs[i] = obj;
-		}
-
 		//- kti: Wait for all lanes to finish their work.
 		lane_sync();
 
@@ -126,34 +71,24 @@ Internal void lane(Arena *arena) {
 
 		  F4 bg = oklch(0.181f, 0.028f, 252.0, 1.0f);
 
-		  F4 top = oklch(1.0, 0.0, 0, 1.0f);
-		  F4 bottom = oklch(1.0, 0.0, 0, 1.0f);
-		  F4 border = oklch(1.00, 0.0, 0, 1.0f);
+		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
 
-		  GFX_Rect_Instance instances[OBJ_COUNT];
-		  for EachIndex(i, OBJ_COUNT) {
-		  	F4 obj = ramM.objs[i];
-		  	F1 corner = 0.0f;
-
-		    instances[i] = (GFX_Rect_Instance){
-		      .src_rect = (F4){
-		      	0, 0,
-	          texture->width, texture->height
-	        },
-		      .dst_rect = (F4){
-		      	obj.x, obj.y,
-	          OBJ_W, OBJ_H
-	        },
-		      .colors = {
-		        top, top,
-		        bottom, bottom,
-		      },
-		      .corner_radii = (F4){corner, corner, corner, corner},
-		      .border_color = border,
-		      .border_width = 1.0f,
-		      .softness = 1.0f,
-		    };
-		  }
+		  GFX_Rect_Instance instances[] = {
+				{
+					.dst_rect = {
+						100, 100,
+						texture->width, texture->height
+					},
+					.src_rect = {
+						0, 0,
+						texture->width, texture->height
+					},
+					.colors = {
+						white, white,
+						white, white,
+					},
+				}
+			};
 
 		  GFX_Batch first_batch = {
 		  	.texture = texture,

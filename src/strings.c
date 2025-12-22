@@ -118,9 +118,8 @@ Internal String8 push_str8_copy(Arena *arena, String8 str) {
 ////////////////////////////////
 //~ kti: UTF-8 Decode
 
-// TODO: Simplify
-Internal Unicode_Decode utf8_decode(B1 *str, L1 max) {
-  LocalPersist B1 utf8_class[32] =
+Internal Unicode_Decode utf8_decode(B1 *str, L1 cap) {
+  LocalPersist B1 length[] =
   {
     1,1,1,1,
     1,1,1,1,
@@ -131,52 +130,27 @@ Internal Unicode_Decode utf8_decode(B1 *str, L1 max) {
     2,2,2,2,
     3,3,
     4,
-    5,
+    0,
   };
+  LocalPersist B1 first_byte_mask[] = { 0, 0x7F, 0x1F, 0x0F, 0x07 };
+  LocalPersist B1 final_shift[] = { 0, 18, 12, 6, 0 };
 
   Unicode_Decode result = { 1, I1_MAX };
-  B1 byte = str[0];
-  B1 byte_class = utf8_class[byte >> 3];
-  switch (byte_class) {
-    case 1: {
-      result.codepoint = byte;
-    } break;
-    case 2: {
-      if (1 < max) {
-        B1 cont_byte = str[1];
-        if (utf8_class[cont_byte >> 3] == 0) {
-          result.codepoint = (byte & bitmask5) << 6;
-          result.codepoint |= (cont_byte & bitmask6);
-          result.inc = 2;
-        }
+  if (cap > 0) {
+    B1 byte = str[0];
+    B1 l = length[byte >> 3];
+    if (l > 0 && l <= cap) {
+      I1 cp = (byte & first_byte_mask[l]) << 18;
+      switch (l) {
+        case 4: cp |= ((str[3] & 0x3F) << 0);
+        case 3: cp |= ((str[2] & 0x3F) << 6);
+        case 2: cp |= ((str[1] & 0x3F) << 12);
+        default: cp >>= final_shift[l];
       }
-    } break;
-    case 3: {
-      if (2 < max) {
-        B1 cont_byte[2] = { str[1], str[2] };
-        if (utf8_class[cont_byte[0] >> 3] == 0 &&
-            utf8_class[cont_byte[1] >> 3] == 0) {
-          result.codepoint = (byte & bitmask4) << 12;
-          result.codepoint |= (cont_byte[0] & bitmask6) << 6;
-          result.codepoint |= (cont_byte[1] & bitmask6);
-          result.inc = 3;
-        }
-      }
-    } break;
-    case 4: {
-      if (3 < max) {
-        B1 cont_byte[3] = { str[1], str[2], str[3]};
-        if (utf8_class[cont_byte[0] >> 3] == 0 &&
-            utf8_class[cont_byte[1] >> 3] == 0 &&
-            utf8_class[cont_byte[2] >> 3] == 0) {
-          result.codepoint = (byte & bitmask3) << 18;
-          result.codepoint |= (cont_byte[0] & bitmask6) << 12;
-          result.codepoint |= (cont_byte[1] & bitmask6) << 6;
-          result.codepoint |= (cont_byte[2] & bitmask6);
-          result.inc = 4;
-        }
-      }
-    } break;
+
+      result.codepoint = cp;
+      result.inc = l;
+    }
   }
   return result;
 }
@@ -184,7 +158,7 @@ Internal Unicode_Decode utf8_decode(B1 *str, L1 max) {
 ////////////////////////////////
 //~ kti: String 32
 
-Internal String32 str32_from_8(Arena *arena, String8 in) {
+Internal String32 str32_from_str8(Arena *arena, String8 in) {
   String32 result = {};
   if (in.len > 0) {
     L1 cap = in.len;

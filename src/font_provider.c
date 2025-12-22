@@ -10,6 +10,13 @@ struct FP_Font {
   FT_Face face;
 };
 
+typedef struct FP_Raster_Result FP_Raster_Result;
+struct FP_Raster_Result {
+	SW2 atlas_dim;
+	B1 *atlas;
+	F1 advance;
+};
+
 typedef struct FP_State FP_State;
 struct FP_State {
   Arena *arena;
@@ -52,7 +59,9 @@ Internal void fp_font_close(FP_Font font) {
   }
 }
 
-Internal void fp_raster(Arena *arena, FP_Font font, F1 size, String8 string) {
+Internal FP_Raster_Result fp_raster(Arena *arena, FP_Font font, F1 size, String8 string) {
+	FP_Raster_Result result = {0};
+	
   Temp_Arena scratch = scratch_begin(&arena, 1);
 
   //- kti: Unpack font
@@ -63,8 +72,50 @@ Internal void fp_raster(Arena *arena, FP_Font font, F1 size, String8 string) {
   SL1 height = face->size->metrics.height >> 6;
 
   //- kti: Unpack string
+  String32 string32 = str32_from_str8(scratch.arena, string);
 
+  //- kti: Measure
+  SI1 total_width = 0;
+  for EachIndex(i, string32.len) {
+    FT_Load_Char(face, string32.str[i], FT_LOAD_RENDER);
+    total_width += face->glyph->advance.x >> 6;
+  }
+
+  //- kti: Allocate & fill atlas w/rasterization
+  SW2 dim = { (SW1)total_width+1, height+1 };
+  L1 atlas_size = dim.x * dim.y * 4;
+  B1 *atlas = push_array(arena, B1, atlas_size);
+  SI1 baseline = ascent;
+  SI1 atlas_write_x = 0;
+  for EachIndex(i, string32.len) {
+    FT_Load_Char(face, string32.str[i], FT_LOAD_RENDER);
+
+		FT_Bitmap *bmp = &face->glyph->bitmap;
+		SI1 top = face->glyph->bitmap_top;
+		SI1 left = face->glyph->bitmap_left;
+
+		for (SI1 row = 0; row < (SI1)bmp->rows; row += 1) {
+			SI1 y = baseline - top + row;
+			for (SI1 col = 0; col < (SI1)bmp->width; col += 1) {
+				SI1 x = atlas_write_x + left + col;
+				L1 off = (y*dim.x + x)*4;
+				if (off+4 < atlas_size) {
+					atlas[off+0] = 255;
+					atlas[off+1] = 255;
+					atlas[off+2] = 255;
+					atlas[off+3] = bmp->buffer[row*bmp->pitch + col];
+				}
+			}
+		}
+		atlas_write_x += (face->glyph->advance.x >> 6);
+  }
+
+	result.atlas_dim = dim;
+	result.atlas = atlas;
+	result.advance = (F1)total_width;
   scratch_end(scratch);
+
+	return result;
 }
 
 #endif

@@ -66,7 +66,11 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Font font, F1 size, String8
 
   //- kti: Unpack font
   FT_Face face = font.face;
-  FT_Set_Pixel_Sizes(face, 0, (FT_UInt)((96.0f/72.0f) * size));
+	if (face->num_fixed_sizes > 0) {
+		Assert(FT_Select_Size(face, 0) == 0);
+	} else {
+		Assert(FT_Set_Pixel_Sizes(face, 0, (FT_UInt)((96.0f/72.0f) * size)) == 0);
+	}
   SL1 ascent = face->size->metrics.ascender >> 6;
   SL1 descent = abs_SL1(face->size->metrics.descender >> 6);
   SL1 height = face->size->metrics.height >> 6;
@@ -98,12 +102,22 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Font font, F1 size, String8
 			SI1 y = baseline - top + row;
 			for (SI1 col = 0; col < (SI1)bmp->width; col += 1) {
 				SI1 x = atlas_write_x + left + col;
-				L1 off = (y*dim.x + x)*4;
-				if (off+4 < atlas_size) {
+				if (x >= 0 && x < dim.x && y >= 0 && y < dim.y) {
+					B1 alpha = 0;
+
+					if (bmp->pixel_mode == FT_PIXEL_MODE_MONO) {
+						B1 byte = bmp->buffer[row*bmp->pitch + (col >> 3)];
+						B1 bit = (byte >> (7 - (col & 7))) & 1;
+						alpha = bit ? 255 : 0;
+					} else {
+						alpha = bmp->buffer[row*bmp->pitch + col];
+					}
+
+					L1 off = (y*dim.x + x)*4;
 					atlas[off+0] = 255;
 					atlas[off+1] = 255;
 					atlas[off+2] = 255;
-					atlas[off+3] = bmp->buffer[row*bmp->pitch + col];
+					atlas[off+3] = alpha;
 				}
 			}
 		}

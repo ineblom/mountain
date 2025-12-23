@@ -5,8 +5,8 @@
 
 #if (CPU_ && TYP_)
 
-typedef struct FP_Font FP_Font;
-struct FP_Font {
+typedef struct FP_Handle FP_Handle;
+struct FP_Handle {
   FT_Face face;
 };
 
@@ -39,6 +39,16 @@ struct FP_State {
 
 Global FP_State *fp_state = 0;
 
+Inline FP_Handle fp_handle_zero(void) {
+	FP_Handle result = {0};
+	return result;
+}
+
+Inline I1 fp_handle_match(FP_Handle a, FP_Handle b) {
+	I1 result = (a.face == b.face);
+	return result;
+}
+
 Internal void fp_init(void) {
   Arena *arena = arena_create(MiB(64));
   fp_state = push_array(arena, FP_State, 1);
@@ -48,7 +58,7 @@ Internal void fp_init(void) {
   Assert(err == 0);
 }
 
-Internal FP_Font fp_font_open(String8 path) {
+Internal FP_Handle fp_font_open(String8 path) {
   Temp_Arena scratch = scratch_begin(0, 0);
   String8 path_copy = push_str8_copy(scratch.arena, path);
   FT_Face face;
@@ -56,19 +66,19 @@ Internal FP_Font fp_font_open(String8 path) {
   Assert(err == 0);
   scratch_end(scratch);
 
-  FP_Font result = {
+  FP_Handle result = {
     .face = face,
   };
   return result;
 }
 
-Internal void fp_font_close(FP_Font font) {
+Internal void fp_font_close(FP_Handle font) {
   if (font.face != 0) {
     FT_Done_Face(font.face);
   }
 }
 
-Internal FP_Metrics fp_metrics_from_font(FP_Font font) {
+Internal FP_Metrics fp_metrics_from_font(FP_Handle font) {
 	FP_Metrics result = {0};
 	if (font.face != 0) {
 		result.design_units_per_em = (F1)(font.face->units_per_EM);
@@ -80,7 +90,7 @@ Internal FP_Metrics fp_metrics_from_font(FP_Font font) {
 	return result;
 }
 
-Internal FP_Raster_Result fp_raster(Arena *arena, FP_Font font, F1 size, String8 string) {
+Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, String8 string) {
 	FP_Raster_Result result = {0};
 	
   Temp_Arena scratch = scratch_begin(&arena, 1);

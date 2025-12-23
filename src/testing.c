@@ -8,7 +8,7 @@ Internal void lane(Arena *arena) {
   OS_Window *window = 0;
   GFX_Window *gfx_window = 0;
   GFX_Texture *texture = 0;
-  FP_Font font = {0};
+  FP_Handle font = {0};
 	L1 frame_count = 0;
 	L1 total_frame_time = 0;
 	L1 min_frame_time = L1_MAX;

@@ -18,9 +18,9 @@ struct FC_Tag {
 
 typedef struct FC_Font_Hash_Node FC_Font_Hash_Node;
 struct FC_Font_Hash_Node {
-	FC_Font_Hash_Node *next_hash;
+	FC_Font_Hash_Node *hash_next;
 	FC_Tag tag;
-	FP_Font font;
+	FP_Handle handle;
 	FP_Metrics metrics;
 	String8 path;
 };
@@ -52,6 +52,31 @@ Internal FC_Tag fc_tag_from_path(String8 path) {
 	memmove(&result, &xxhash, sizeof(result));
 
 	result.l1[1] |= 1llu << 63;
+
+	L1 slot_idx = result.l1[1] % fc_state->font_hash_table_size;
+
+	FC_Font_Hash_Node *existing_node = 0;
+	for (FC_Font_Hash_Node *n = fc_state->font_hash_table[slot_idx].first; n != 0; n = n->hash_next) {
+		if (memcmp(&result, &n->tag, sizeof(FC_Tag)) == 0) {
+			existing_node = n;
+			break;
+		}
+	}
+
+	if (existing_node == 0) {
+		FP_Handle handle = fp_font_open(path);
+		FC_Font_Hash_Slot *slot = &fc_state->font_hash_table[slot_idx];
+		existing_node = push_array(fc_state->arena, FC_Font_Hash_Node, 1);
+		existing_node->tag = result;
+		existing_node->handle = handle;
+		existing_node->metrics = fp_metrics_from_font(handle);
+		existing_node->path = push_str8_copy(fc_state->arena, path);
+		SLLQueuePush_N(slot->first, slot->last, existing_node, hash_next);
+	}
+
+	if (fp_handle_match(existing_node->handle, fp_handle_zero())) {
+		memset(&result, 0, sizeof(FC_Tag));
+	}
 
 	return result;
 }

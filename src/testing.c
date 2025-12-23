@@ -28,7 +28,7 @@ Internal void lane(Arena *arena) {
 
     // font = fp_font_open(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
     font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
-    FP_Raster_Result raster = fp_raster(arena, font, 32.0f, Str8_("Känn på den!"));
+    FP_Raster_Result raster = fp_raster(arena, font, 0.0f, Str8_("Testing..."));
 
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
 		gfx_window = gfx_window_equip(window);
@@ -68,11 +68,21 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 			gfx_window_begin_frame(window, gfx_window);
 
-		  F4 bg = oklch(0.181f, 0.028f, 252.0, 1.0f);
-
 		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
+		  F4 bg = oklch(0.186f, 0.027f, 343.0f, 1.0f);
 
 		  GFX_Rect_Instance instances[] = {
+				{
+					.dst_rect = {
+						0, 0,
+						window->width, window->height
+					},
+					.colors = {
+						bg, bg,
+						bg, bg,
+					},
+					.omit_texture = 1.0f,
+				},
 				{
 					.dst_rect = {
 						100, 100,

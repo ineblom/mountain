@@ -15,6 +15,7 @@
 #include <dlfcn.h>
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
+#include <poll.h>
 
 #define MAX_FILENAME_LEN 256
 
@@ -845,7 +846,18 @@ Internal OS_Event *os_poll_events(Arena *arena) {
     wl_display_dispatch_pending(ramR->display);
   }
   wl_display_flush(ramR->display);
-  wl_display_read_events(ramR->display);
+  
+  struct pollfd pfd = {
+    .fd = wl_display_get_fd(ramR->display),
+    .events = POLLIN,
+  };
+
+  if (poll(&pfd, 1, 0) > 0) {
+    wl_display_read_events(ramR->display);
+  } else {
+    wl_display_cancel_read(ramR->display);
+  }
+  
   wl_display_dispatch_pending(ramR->display);
 
   return ramR->first_event;

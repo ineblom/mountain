@@ -1232,7 +1232,8 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   gfx_state->image_idx = image_idx;
 
-  vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, 0);
+	// TODO(kti): Look into whether or not we need to release resources.
+  vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 
   ////////////////////////////////
   //~ kti: Begin Rendering

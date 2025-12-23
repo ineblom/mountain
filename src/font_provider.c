@@ -17,6 +17,15 @@ struct FP_Raster_Result {
 	F1 advance;
 };
 
+typedef struct FP_Metrics FP_Metrics;
+struct FP_Metrics {
+	F1 design_units_per_em;
+	F1 ascent;
+	F1 descent;
+	F1 line_gap;
+	F1 capital_height;
+};
+
 typedef struct FP_State FP_State;
 struct FP_State {
   Arena *arena;
@@ -30,7 +39,7 @@ struct FP_State {
 
 Global FP_State *fp_state = 0;
 
-Internal void fp_init() {
+Internal void fp_init(void) {
   Arena *arena = arena_create(MiB(64));
   fp_state = push_array(arena, FP_State, 1);
   fp_state->arena = arena;
@@ -57,6 +66,18 @@ Internal void fp_font_close(FP_Font font) {
   if (font.face != 0) {
     FT_Done_Face(font.face);
   }
+}
+
+Internal FP_Metrics fp_metrics_from_font(FP_Font font) {
+	FP_Metrics result = {0};
+	if (font.face != 0) {
+		result.design_units_per_em = (F1)(font.face->units_per_EM);
+		result.ascent              = (F1)font.face->ascender;
+		result.descent             = -(F1)font.face->descender;
+		result.line_gap            = (F1)(font.face->height - font.face->ascender + font.face->descender);
+		result.capital_height      = (F1)(font.face->ascender);
+	}
+	return result;
 }
 
 Internal FP_Raster_Result fp_raster(Arena *arena, FP_Font font, F1 size, String8 string) {

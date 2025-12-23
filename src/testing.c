@@ -1,7 +1,3 @@
-#if (CPU_ && DEF_)
-
-#endif
-
 #if  (CPU_ && RAM_)
 
 #endif
@@ -25,8 +21,9 @@ Internal void lane(Arena *arena) {
 
 		gfx_init();
     fp_init();
+		fc_init();
 
-    // font = fp_font_open(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
+    fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
     font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
     FP_Raster_Result raster = fp_raster(arena, font, 0.0f, Str8_("Testing..."));
 

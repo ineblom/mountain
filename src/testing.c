@@ -9,6 +9,7 @@ Internal void lane(Arena *arena) {
   GFX_Window *gfx_window = 0;
   GFX_Texture *texture = 0;
   FP_Handle font = {0};
+
 	L1 frame_count = 0;
 	L1 total_frame_time = 0;
 	L1 min_frame_time = L1_MAX;
@@ -18,18 +19,21 @@ Internal void lane(Arena *arena) {
 	//~ kti: Initialization.
 
 	if (lane_idx() == 0) {
-
+		//- kti: System init.
 		gfx_init();
     fp_init();
 		fc_init();
 
-    fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
-    font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
-    FP_Raster_Result raster = fp_raster(arena, font, 0.0f, Str8_("Testing..."));
-
+		//- kti: Window
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
 		gfx_window = gfx_window_equip(window);
 
+		//- kti: Font cache
+    FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
+
+		//- kti: Raw font provider usage.
+    font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
+    FP_Raster_Result raster = fp_raster(arena, font, 0.0f, Str8_("Testing..."));
 		texture = gfx_tex2d_alloc(raster.atlas_dim.x, raster.atlas_dim.y, raster.atlas);
 	}
 

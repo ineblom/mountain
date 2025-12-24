@@ -14,7 +14,11 @@ struct Random_State {
 
 #if (CPU_) && (ROM_)
 
+// TODO: Rename functions to fit action_type format.
+
 #define abs_SL1(x) llabs(x)
+#define floor_F1(x) floorf(x)
+#define ceil_F1(x) ceilf(x)
 
 Inline F1 F1_clamp01(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
 Inline F1 F1_saturate(F1 x) { return F1_clamp01(x); }

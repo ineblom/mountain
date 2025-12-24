@@ -50,6 +50,10 @@ Inline void arena_pop(Arena *arena, L1 amount) {
   arena_pop_to(arena, new_pos);
 }
 
+Inline void arena_clear(Arena *arena) {
+	arena_pop_to(arena, 0);
+}
+
 Internal void *arena_push(Arena *arena, L1 size, L1 align, I1 zero) {
   L1 aligned_pos = AlignPow2(arena->pos, align);
 

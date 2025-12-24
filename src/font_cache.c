@@ -39,6 +39,28 @@ struct FC_Font_HT_Slot {
 	FC_Font_HT_Node *last;
 };
 
+typedef struct FC_Raster_Info FC_Raster_Info;
+struct FC_Raster_Info {
+	SW4 subrect;
+	SW2 raster_dim;
+	W1 atlas_num;
+	F1 advance;
+};
+
+typedef struct FC_Raster_Info_HT_Node FC_Raster_Info_HT_Node;
+struct FC_Raster_Info_HT_Node {
+	FC_Raster_Info_HT_Node *hash_next;
+	FC_Raster_Info_HT_Node *hash_prev;
+	L1 hash;
+	FC_Raster_Info info;
+};
+
+typedef struct FC_Raster_Info_HT_Slot FC_Raster_Info_HT_Slot;
+struct FC_Raster_Info_HT_Slot {
+	FC_Raster_Info_HT_Node *first;
+	FC_Raster_Info_HT_Node *last;
+};
+
 typedef struct FC_Style_Raster_HT_Node FC_Style_Raster_HT_Node;
 struct FC_Style_Raster_HT_Node {
 	FC_Style_Raster_HT_Node *hash_next;
@@ -50,6 +72,9 @@ struct FC_Style_Raster_HT_Node {
 	F1 descent;
 	F1 column_width;
 
+	FC_Raster_Info *utf8_length1_direct_map;
+	L1 raster_info_hash_table_size;
+	FC_Raster_Info_HT_Slot *raster_info_hash_table;
 };
 
 typedef struct FC_Style_Raster_HT_Slot FC_Style_Raster_HT_Slot;
@@ -160,7 +185,7 @@ Internal FC_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size) {
 	return result;
 }
 
-Internal void fc_font_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string) {
+Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 size) {
 	D1 size_d1 = (D1)size;
 	L1 buffer[] = {
 		tag.l1[0],
@@ -182,10 +207,24 @@ Internal void fc_font_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 
 	}
 
 	if (style_raster_node == 0) {
+		FC_Metrics metrics = fc_metrics_from_tag_size(tag, size);
 		style_raster_node = push_array(fc_state->raster_arena, FC_Style_Raster_HT_Node, 1);
 		style_raster_node->style_hash = style_hash;
+		style_raster_node->ascent = metrics.ascent;
+		style_raster_node->descent = metrics.descent;
+		style_raster_node->utf8_length1_direct_map = push_array(fc_state->raster_arena, FC_Raster_Info, 256);
+		style_raster_node->raster_info_hash_table_size = 1024;
+		style_raster_node->raster_info_hash_table = push_array(fc_state->raster_arena, FC_Raster_Info_HT_Slot, style_raster_node->raster_info_hash_table_size);
 		DLLPushBack_NP(slot->first, slot->last, style_raster_node, hash_next, hash_prev);
 	}
+
+	return style_raster_node;
+}
+
+Internal void fc_font_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string) {
+	FC_Style_Raster_HT_Node *style_raster_node = fc_style_raster_from_tag_size(tag, size);
+
+	// TODO: Setup run cache (if needed)
 }
 
 #endif

@@ -20,8 +20,10 @@ typedef long long SL1; typedef unsigned long long L1;
 typedef float     F3 __attribute__((ext_vector_type(3)));
 typedef float     F4 __attribute__((ext_vector_type(4)));
 
-typedef unsigned short     W2  __attribute__((ext_vector_type(3)));
-typedef short              SW2 __attribute__((ext_vector_type(3)));
+typedef unsigned short     W2  __attribute__((ext_vector_type(2)));
+typedef unsigned short     W4  __attribute__((ext_vector_type(4)));
+typedef short              SW2 __attribute__((ext_vector_type(2)));
+typedef short              SW4 __attribute__((ext_vector_type(4)));
 
 typedef void VoidProc(void);
 

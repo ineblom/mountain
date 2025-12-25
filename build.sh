@@ -6,7 +6,7 @@ INC="-I/usr/include/freetype2"
 LIB="-lm -lwayland-client -lwayland-cursor -lfreetype"
 
 cd src
-clang $WARN $DEFS $INC $LIB -O3 -march=native build.c -o ../m
+clang $WARN $DEFS $INC $LIB -g -march=native build.c -o ../m
 BUILD_STATUS=$?
 cd ..
 

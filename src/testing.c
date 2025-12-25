@@ -7,8 +7,7 @@
 Internal void lane(Arena *arena) {
   OS_Window *window = 0;
   GFX_Window *gfx_window = 0;
-  GFX_Texture *texture = 0;
-  FP_Handle font = {0};
+	FC_Run run = {0};
 
 	L1 frame_count = 0;
 	L1 total_frame_time = 0;
@@ -29,13 +28,8 @@ Internal void lane(Arena *arena) {
 		gfx_window = gfx_window_equip(window);
 
 		//- kti: Font cache
-    // FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
-		// FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, Str8_("Hejsan!"));
-
-		//- kti: Raw font provider usage.
-    font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
-    FP_Raster_Result raster = fp_raster(arena, font, 0.0f, Str8_("Testing..."));
-		texture = gfx_tex2d_alloc(GFX_TEXTURE_USAGE__STATIC, raster.atlas_dim.x, raster.atlas_dim.y, raster.atlas);
+    FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
+		run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, Str8_("Hejsan!"));
 	}
 
 	lane_sync();
@@ -73,6 +67,7 @@ Internal void lane(Arena *arena) {
 		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
 		  F4 bg = oklch(0.186f, 0.027f, 343.0f, 1.0f);
 
+			GFX_Texture *texture = run.pieces.v[0].texture;
 		  GFX_Rect_Instance instances[] = {
 				{
 					.dst_rect = {
@@ -87,7 +82,7 @@ Internal void lane(Arena *arena) {
 				},
 				{
 					.dst_rect = {
-						100, 100,
+						0, 0,
 						texture->width, texture->height
 					},
 					.src_rect = {
@@ -157,9 +152,7 @@ Internal void lane(Arena *arena) {
 	//~ kti: Shutdown
 
 	if (lane_idx() == 0) {
-    fp_font_close(font);
 		gfx_window_unequip(gfx_window);
-		gfx_tex2d_free(texture);
 		os_window_close(window);
 	}
 }

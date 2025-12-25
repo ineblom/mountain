@@ -17,6 +17,7 @@ typedef short     SW1; typedef unsigned short     W1;
 typedef int       SI1; typedef unsigned int       I1;
 typedef long long SL1; typedef unsigned long long L1;
 
+typedef float     F2 __attribute__((ext_vector_type(2)));
 typedef float     F3 __attribute__((ext_vector_type(3)));
 typedef float     F4 __attribute__((ext_vector_type(4)));
 

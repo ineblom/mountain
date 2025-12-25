@@ -24,6 +24,34 @@ struct FC_Metrics {
   F1 capital_height;
 };
 
+typedef struct FC_Raster_Info FC_Raster_Info;
+struct FC_Raster_Info {
+	SW4 subrect;
+	SW2 raster_dim;
+	W1 atlas_num;
+	F1 advance;
+};
+
+typedef struct FC_Piece FC_Piece;
+struct FC_Piece {
+	GFX_Texture *texture;
+	SW4 subrect;
+	SW2 offset;
+	F1 advance;
+	W1 decode_size;
+};
+
+typedef struct FC_Run FC_Run;
+struct FC_Run {
+	L1 piece_count;
+	FC_Piece *pieces;
+	F2 dim;
+	F1 ascent;
+	F1 descent;
+};
+
+//- kti: Font Hash Table
+
 typedef struct FC_Font_HT_Node FC_Font_HT_Node;
 struct FC_Font_HT_Node {
 	FC_Font_HT_Node *hash_next;
@@ -39,13 +67,22 @@ struct FC_Font_HT_Slot {
 	FC_Font_HT_Node *last;
 };
 
-typedef struct FC_Raster_Info FC_Raster_Info;
-struct FC_Raster_Info {
-	SW4 subrect;
-	SW2 raster_dim;
-	W1 atlas_num;
-	F1 advance;
+//- kti: Run Table
+
+typedef struct FC_Run_Cache_Node FC_Run_Cache_Node;
+struct FC_Run_Cache_Node {
+	FC_Run_Cache_Node *next;
+	String8 string;
+	FC_Run run;
 };
+
+typedef struct FC_Run_Cache_Slot FC_Run_Cache_Slot;
+struct FC_Run_Cache_Slot {
+	FC_Run_Cache_Node *first;
+	FC_Run_Cache_Node *last;
+};
+
+//- kti: Raster Info Hash Table
 
 typedef struct FC_Raster_Info_HT_Node FC_Raster_Info_HT_Node;
 struct FC_Raster_Info_HT_Node {
@@ -61,6 +98,8 @@ struct FC_Raster_Info_HT_Slot {
 	FC_Raster_Info_HT_Node *last;
 };
 
+//- kti: Style Raster Hash Table
+
 typedef struct FC_Style_Raster_HT_Node FC_Style_Raster_HT_Node;
 struct FC_Style_Raster_HT_Node {
 	FC_Style_Raster_HT_Node *hash_next;
@@ -75,6 +114,10 @@ struct FC_Style_Raster_HT_Node {
 	FC_Raster_Info *utf8_length1_direct_map;
 	L1 raster_info_hash_table_size;
 	FC_Raster_Info_HT_Slot *raster_info_hash_table;
+
+	L1 run_cache_size;
+	FC_Run_Cache_Slot *run_cache;
+	L1 run_cache_frame_index;
 };
 
 typedef struct FC_Style_Raster_HT_Slot FC_Style_Raster_HT_Slot;
@@ -83,16 +126,21 @@ struct FC_Style_Raster_HT_Slot {
 	FC_Style_Raster_HT_Node *last;
 };
 
+//- kti: State
+
 typedef struct FC_State FC_State;
 struct FC_State {
 	Arena *arena;
 	Arena *raster_arena;
+	Arena *frame_arena;
 
 	L1 font_hash_table_size;
 	FC_Font_HT_Slot *font_hash_table;
 
 	L1 style_raster_hash_table_size;
 	FC_Style_Raster_HT_Slot *style_raster_hash_table;
+
+	L1 frame_index;
 };
 
 #endif
@@ -112,9 +160,15 @@ Internal void fc_init(void) {
 	fc_state = push_array(arena, FC_State, 1);
 	fc_state->arena = arena;
 	fc_state->raster_arena = arena_create(MiB(64));
+	fc_state->frame_arena = arena_create(MiB(64));
 	fc_state->font_hash_table_size = 64;
 	fc_state->font_hash_table = push_array(arena, FC_Font_HT_Slot, fc_state->font_hash_table_size);
 	fc_reset();
+}
+
+Internal void fc_frame(void) {
+	fc_state->frame_index += 1;
+	arena_clear(fc_state->frame_arena);
 }
 
 Internal FC_Tag fc_tag_from_path(String8 path) {
@@ -221,10 +275,41 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
 	return style_raster_node;
 }
 
-Internal void fc_font_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string) {
+Internal FC_Run fc_font_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string) {
 	FC_Style_Raster_HT_Node *style_raster_node = fc_style_raster_from_tag_size(tag, size);
 
-	// TODO: Setup run cache (if needed)
+	//- kti: Create run cache if on new frame.
+	if (style_raster_node->run_cache_frame_index != fc_state->frame_index) {
+		style_raster_node->run_cache_size = 1024;
+		style_raster_node->run_cache = push_array(fc_state->frame_arena, FC_Run_Cache_Slot, style_raster_node->run_cache_size);
+		style_raster_node->run_cache_frame_index = fc_state->frame_index;
+	}
+
+	//- kti: Unpack run params.
+	L1 run_hash = XXH3_64bits_withSeed(string.str, string.len, 42069);
+	L1 run_cache_slot_idx = run_hash % style_raster_node->run_cache_size;
+	FC_Run_Cache_Slot *run_slot = &style_raster_node->run_cache[run_cache_slot_idx];
+
+	//- kti: Check cache for existing run node for this string.
+	FC_Run_Cache_Node *run_node = 0;
+	for (FC_Run_Cache_Node *n = run_slot->first; n != 0; n = n->next) {
+		if (str8_match(n->string, string)) {
+			run_node = n;
+			break;
+		}
+	}
+
+	FC_Run run = {0};
+	if (run != 0) {
+		//- kti: Run is in cache, we can return that.
+		run = run_node->run;
+	} else {
+		//- kti: Cache miss.
+		
+
+	}
+
+	return run;
 }
 
 #endif

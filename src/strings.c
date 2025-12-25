@@ -115,6 +115,16 @@ Internal String8 push_str8_copy(Arena *arena, String8 str) {
   return new;
 }
 
+Internal I1 str8_match(String8 a, String8 b) {
+	L1 result = 0;
+
+	if (a.len == b.len) {
+		result = (memcmp(a.str, b.str, a.len) == 0);
+	}
+
+	return result;
+}
+
 ////////////////////////////////
 //~ kti: UTF-8 Decode
 

@@ -17,6 +17,7 @@ struct Random_State {
 // TODO: Rename functions to fit action_type format.
 
 #define abs_SL1(x) llabs(x)
+#define mod_F1(x, y) fmodf(x, y)
 #define floor_F1(x) floorf(x)
 #define ceil_F1(x) ceilf(x)
 

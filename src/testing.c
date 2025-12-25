@@ -29,12 +29,13 @@ Internal void lane(Arena *arena) {
 		gfx_window = gfx_window_equip(window);
 
 		//- kti: Font cache
-    FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
+    // FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
+		// FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, Str8_("Hejsan!"));
 
 		//- kti: Raw font provider usage.
     font = fp_font_open(Str8_("/usr/share/fonts/terminus/ter-u32n.otb"));
     FP_Raster_Result raster = fp_raster(arena, font, 0.0f, Str8_("Testing..."));
-		texture = gfx_tex2d_alloc(raster.atlas_dim.x, raster.atlas_dim.y, raster.atlas);
+		texture = gfx_tex2d_alloc(GFX_TEXTURE_USAGE__STATIC, raster.atlas_dim.x, raster.atlas_dim.y, raster.atlas);
 	}
 
 	lane_sync();

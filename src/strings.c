@@ -125,6 +125,15 @@ Internal I1 str8_match(String8 a, String8 b) {
 	return result;
 }
 
+Internal String8 str8_substr(String8 str, L1 min, L1 max) {
+	String8 result = str;
+	min = Min(min, str.len);
+	max = Min(max, str.len);
+	result.str += min;
+	result.len = max - min;
+	return result;
+}
+
 ////////////////////////////////
 //~ kti: UTF-8 Decode
 

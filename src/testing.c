@@ -63,15 +63,18 @@ Internal void lane(Arena *arena) {
 			dr_begin_frame();
 
 			FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
-			FC_Run run = fc_run_from_string(noto_tag, 12.0f, 0.0f, 100.0f, Str8_("Hejsan!"));
 
 			DR_Bucket *bucket = dr_bucket_make();
 			dr_push_bucket(bucket);
 
 			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
-			GFX_Rect_Instance *inst = dr_rect((F4){100.0f, 100.0f, 200.0f, 100.0f}, green, 10.0f, 1.0f);
-			inst->border_width = 1.0f;
-			inst->border_color = white;
+			dr_rect((F4){100.0f, 100.0f, 200.0f, 100.0f}, green, 0.0f, 0.0f);
+
+			FC_Run run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Hejsan!"));
+			dr_run(run, (F2){100.0f, 200.0f}, white);
+
+			run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Google Noto Sans"));
+			dr_run(run, (F2){100.0f, 260.0f}, white);
 
 			dr_submit_bucket(window, gfx_window, bucket);
 

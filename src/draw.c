@@ -56,7 +56,7 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
 		GFX_Batch *batch = bucket->batches.last;
 		if (batch == 0 || batch->instance_count >= batch->instance_cap) {
 			batch = push_array(dr_state->arena, GFX_Batch, 1);
-			batch->instance_cap = 512;
+			batch->instance_cap = 256;
 			batch->instances = push_array(dr_state->arena, GFX_Rect_Instance, batch->instance_cap);
 			SLLQueuePush(bucket->batches.first, bucket->batches.last, batch);
 		}
@@ -68,7 +68,6 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
 			.dst_rect = dst,
 			.colors = { color, color, color, color },
 			.corner_radii = (F4){corner_radius, corner_radius, corner_radius, corner_radius},
-			// .border_width = border_width,
 			.softness = edge_softness,
 			.omit_texture = 1.0f,
 		};
@@ -76,6 +75,51 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
 
 	ProfEnd();
 	return result;
+}
+
+Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 color, F1 corner_radius, F1 edge_softness) {
+	ProfFuncBegin();
+
+	GFX_Rect_Instance *result = 0;
+
+	DR_Bucket *bucket = dr_state->top_bucket;
+	if (bucket != 0) {
+		GFX_Batch *batch = bucket->batches.last;
+		if (batch == 0 || batch->instance_count >= batch->instance_cap || (batch->texture != 0 && batch->texture != texture)) {
+			batch = push_array(dr_state->arena, GFX_Batch, 1);
+			batch->instance_cap = 256;
+			batch->instances = push_array(dr_state->arena, GFX_Rect_Instance, batch->instance_cap);
+			SLLQueuePush(bucket->batches.first, bucket->batches.last, batch);
+		}
+
+		batch->texture = texture;
+
+		result = &batch->instances[batch->instance_count];
+		batch->instance_count += 1;
+
+		*result = (GFX_Rect_Instance){
+			.dst_rect = dst,
+			.src_rect = src,
+			.colors = { color, color, color, color },
+			.corner_radii = (F4){corner_radius, corner_radius, corner_radius, corner_radius},
+			.softness = edge_softness,
+		};
+	}
+
+	ProfEnd();
+	return result;
+}
+
+Internal void dr_run(FC_Run run, F2 pos, F4 color) {
+	for EachIndex(i, run.pieces.count) {
+		FC_Piece *piece = &run.pieces.v[i];
+		SW4 subrect = piece->subrect;
+		SW2 offset = piece->offset;
+
+		dr_img((F4){pos.x+offset.x, pos.y+offset.y, subrect.z, subrect.w}, (F4){subrect.x, subrect.y, subrect.z, subrect.w}, piece->texture, color, 0.0f, 0.0f);
+
+		pos.x += piece->advance;
+	}
 }
 
 Internal void dr_submit_bucket(OS_Window *window, GFX_Window *gfx_window, DR_Bucket *bucket) {

@@ -7,7 +7,7 @@
 Internal void lane(Arena *arena) {
   OS_Window *window = 0;
   GFX_Window *gfx_window = 0;
-	FC_Run run = {0};
+	FC_Tag noto_tag = {0};
 
 	L1 frame_count = 0;
 	L1 total_frame_time = 0;
@@ -28,8 +28,7 @@ Internal void lane(Arena *arena) {
 		gfx_window = gfx_window_equip(window);
 
 		//- kti: Font cache
-    FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
-		run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, Str8_("Hejsan!"));
+    noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
 	}
 
 	lane_sync();
@@ -62,44 +61,70 @@ Internal void lane(Arena *arena) {
 
 		//- kti: Lane 0 renders the frame.
 		if (lane_idx() == 0) {
+			fc_frame();
 			gfx_window_begin_frame(window, gfx_window);
 
 		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
 		  F4 bg = oklch(0.186f, 0.027f, 343.0f, 1.0f);
+		  F4 blue = oklch(0.425f, 0.152f, 152.0f, 1.0f);
 
-			GFX_Texture *texture = run.pieces.v[0].texture;
-		  GFX_Rect_Instance instances[] = {
-				{
-					.dst_rect = {
-						0, 0,
-						window->width, window->height
-					},
-					.colors = {
-						bg, bg,
-						bg, bg,
-					},
-					.omit_texture = 1.0f,
+
+			FC_Run run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Gå iväg!"));
+			run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Gå iväg!"));
+
+			L1 instance_count = 0;
+		  GFX_Rect_Instance instances[16];
+
+			instances[instance_count] = (GFX_Rect_Instance){
+				.dst_rect = {
+					0, 0,
+					window->width, window->height
 				},
-				{
+				.colors = {
+					bg, bg,
+					bg, bg,
+				},
+				.omit_texture = 1.0f,
+			};
+			instance_count += 1;
+
+			F2 cursor = {100.0f, 100.0f};
+			instances[instance_count] = (GFX_Rect_Instance){
+				.dst_rect = {
+					cursor.x, cursor.y - (run.ascent+run.descent),
+					run.dim.x, run.dim.y
+				},
+				.colors = {
+					blue, blue,
+					blue, blue,
+				},
+				.omit_texture = 1.0f,
+			};
+			instance_count += 1;
+			
+			GFX_Texture *texture = run.pieces.v[0].texture;
+			for EachIndex(i, run.pieces.count) {
+				SW4 subrect = run.pieces.v[i].subrect;
+				SW2 offset = run.pieces.v[i].offset;
+				instances[instance_count]	= (GFX_Rect_Instance){
 					.dst_rect = {
-						0, 0,
-						texture->width, texture->height
+						cursor.x+offset.x, cursor.y+offset.y,
+						subrect.z, subrect.w
 					},
 					.src_rect = {
-						0, 0,
-						texture->width, texture->height
+						subrect.x, subrect.y,
+						subrect.z, subrect.w
 					},
-					.colors = {
-						white, white,
-						white, white,
-					},
-				}
-			};
+					.colors = { white, white, white, white },
+				};
+				instance_count += 1;
+				cursor.x += run.pieces.v[i].advance;
+			}
 
 		  GFX_Batch first_batch = {
 		  	.texture = texture,
 		  	.instances = instances,
-		  	.instance_count = ArrayCount(instances),
+		  	.instance_count = instance_count,
 		  };
 		  GFX_BatchList batches = {
 		  	.first = &first_batch,

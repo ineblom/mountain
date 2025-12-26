@@ -598,7 +598,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 						if (atlas != 0) {
 							SW2 needed_dimensions = {raster.atlas_dim.x + 2, raster.atlas_dim.y + 2};
 							chosen_atlas_region = fc_atlas_region_alloc(fc_state->raster_arena, atlas, needed_dimensions);
-							if (chosen_atlas_region.x != chosen_atlas_region.z) {
+							if (chosen_atlas_region.z != 0 && chosen_atlas_region.w != 0) {
 								chosen_atlas = atlas;
 								chosen_atlas_num = (SW1)num_atlases;
 								break;

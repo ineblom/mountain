@@ -7,7 +7,6 @@
 Internal void lane(Arena *arena) {
   OS_Window *window = 0;
   GFX_Window *gfx_window = 0;
-	FC_Tag noto_tag = {0};
 
 	L1 frame_count = 0;
 	L1 total_frame_time = 0;
@@ -26,9 +25,6 @@ Internal void lane(Arena *arena) {
 		//- kti: Window
 		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
 		gfx_window = gfx_window_equip(window);
-
-		//- kti: Font cache
-    noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
 	}
 
 	lane_sync();
@@ -68,9 +64,8 @@ Internal void lane(Arena *arena) {
 		  F4 bg = oklch(0.186f, 0.027f, 343.0f, 1.0f);
 		  F4 blue = oklch(0.425f, 0.152f, 152.0f, 1.0f);
 
-
-			FC_Run run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Gå iväg!"));
-			run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Gå iväg!"));
+			FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
+			FC_Run run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Hejsan!"));
 
 			L1 instance_count = 0;
 		  GFX_Rect_Instance instances[16];

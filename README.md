@@ -22,4 +22,6 @@ A pile of C code. Used as a base environment for multiple projects.
 - `image.c` read/write, sample.
 - `rt.c` simple CPU ray tracer.
 - `gfx.c` Vulkan 1.3 graphics API abstraction.
+- `font_provider.c` FreeType abstraction for rasterizing fonts.
+- `font_cache.c` Immediate mode API that heavily caches outputs from font provider.
 - `editor.c` 3D scene editor integrated with ray tracer.

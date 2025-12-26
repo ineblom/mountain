@@ -33,6 +33,8 @@ Internal void dr_pop_bucket(void) {
 }
 
 Internal void dr_begin_frame(void) {
+	ProfFuncBegin();
+
 	if (dr_state == 0) {
 		Arena *arena = arena_create(MiB(64));
 		dr_state = push_array(arena, DR_State, 1);
@@ -40,9 +42,13 @@ Internal void dr_begin_frame(void) {
 		dr_state->arena_frame_start_pos = arena_pos(arena);
 	}
 	arena_pop_to(dr_state->arena, dr_state->arena_frame_start_pos);
+
+	ProfEnd();
 }
 
 Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_softness) {
+	ProfFuncBegin();
+
 	GFX_Rect_Instance *result = 0;
 
 	DR_Bucket *bucket = dr_state->top_bucket;
@@ -68,11 +74,14 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
 		};
 	}
 
+	ProfEnd();
 	return result;
 }
 
 Internal void dr_submit_bucket(OS_Window *window, GFX_Window *gfx_window, DR_Bucket *bucket) {
+	ProfFuncBegin();
 	gfx_window_submit(window, gfx_window, bucket->batches);
+	ProfEnd();
 }
 
 // Internal void dr_run(FC_Run run, F2 pos) {

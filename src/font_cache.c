@@ -458,6 +458,8 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
 }
 
 Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string) {
+	ProfFuncBegin();
+
 	FC_Style_Raster_HT_Node *style_raster_node = fc_style_raster_from_tag_size(tag, size);
 
 	//- kti: Create run cache if on new frame.
@@ -701,6 +703,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 		run_node->run = run;
 	}
 
+	ProfEnd();
 	return run;
 }
 

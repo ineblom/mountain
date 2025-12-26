@@ -134,7 +134,7 @@ Inline I1 rand_pcg(Random_State *rng) {
 }
 
 Inline F1 random_unilateral(Random_State *rng) {
-	F1 result = F1_(rand_pcg(rng)) / F1_(I1_MAX);
+	F1 result = (F1)rand_pcg(rng) / (F1)I1_MAX;
 	return result;
 }
 

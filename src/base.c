@@ -36,31 +36,22 @@ typedef void VoidProc(void);
 #define I1_MAX 0xFFFFFFFF
 #define L1_MAX 0xFFFFFFFFFFFFFFFF
 
-#define F1_(x)  ((F1) (x))
-#define D1_(x)  ((D1) (x))
-#define SB1_(x) ((SB1)(x))
-#define B1_(x)  ((B1) (x))
-#define SW1_(x) ((SW1)(x))
-#define W1_(x)  ((W1) (x))
-#define SI1_(x) ((SI1)(x))
-#define I1_(x)  ((I1) (x))
-#define SL1_(x) ((SL1)(x))
-#define L1_(x)  ((L1) (x))
-
-Inline I1 GeSI1(I1 a, I1 b) { return SI1_(a) >= SI1_(b); }
-Inline I1 GeSL1(L1 a, L1 b) { return SL1_(a) >= SL1_(b); }
-Inline I1 GtSI1(I1 a, I1 b) { return SI1_(a) >  SI1_(b); }
-Inline I1 GtSL1(L1 a, L1 b) { return SL1_(a) >  SL1_(b); }
-Inline I1 LeSI1(I1 a, I1 b) { return SI1_(a) <= SI1_(b); }
-Inline I1 LeSL1(L1 a, L1 b) { return SL1_(a) <= SL1_(b); }
-Inline I1 LtSI1(I1 a, I1 b) { return SI1_(a) <  SI1_(b); }
-Inline I1 LtSL1(L1 a, L1 b) { return SL1_(a) <  SL1_(b); }
+Inline I1 GeSI1(I1 a, I1 b) { return (SI1)a >= (SI1)b; }
+Inline I1 GeSL1(L1 a, L1 b) { return (SL1)a >= (SL1)b; }
+Inline I1 GtSI1(I1 a, I1 b) { return (SI1)a >  (SI1)b; }
+Inline I1 GtSL1(L1 a, L1 b) { return (SL1)a >  (SL1)b; }
+Inline I1 LeSI1(I1 a, I1 b) { return (SI1)a <= (SI1)b; }
+Inline I1 LeSL1(L1 a, L1 b) { return (SL1)a <= (SL1)b; }
+Inline I1 LtSI1(I1 a, I1 b) { return (SI1)a <  (SI1)b; }
+Inline I1 LtSL1(L1 a, L1 b) { return (SL1)a <  (SL1)b; }
 
 Inline void BarC(void) { asm volatile("":::"memory"); } // Complier Barrier
 Inline void BarM(void) { __builtin_ia32_mfence(); }     // Memory Barrier
 Inline void BarR(void) { __builtin_ia32_lfence();}      // Read Barrier
 Inline void BarW(void) { __builtin_ia32_sfence();}      // Write Barrier
 
+// TODO(kti): Use rdtsc for faster clock query.
+// https://github.com/colrdavidson/spall-web/blob/master/examples/manual_tracing/advanced_threads_example_linux.c
 /*Inline I1 ClockI1(void) {
 	I1 aa, dd;
 	asm volatile("rdtsc":"=a"(aa),"=d"(dd));

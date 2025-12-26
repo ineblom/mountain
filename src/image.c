@@ -58,9 +58,9 @@ Inline L1 image_xy_to_index(Image image, L1 x, L1 y) {
 }
 
 Inline F3 I1_to_F3(I1 pixel) {
-	F1 r = F1_((pixel >> 16) & 0xFF);
-	F1 g = F1_((pixel >> 8) & 0xFF);
-	F1 b = F1_(pixel & 0xFF);
+	F1 r = (F1)((pixel >> 16) & 0xFF);
+	F1 g = (F1)((pixel >> 8) & 0xFF);
+	F1 b = (F1)(pixel & 0xFF);
 	F3 result = {r/255.0f,g/255.0f,b/255.0f};
 	return result;
 }
@@ -71,16 +71,16 @@ Inline F3 image_sample_bilinear_F3(Image image, F1 u, F1 v) {
 	u = F1_clamp01(u);
 	v = F1_clamp01(v);
 
-	F1 tex_x = u * F1_(image.width-1);
-	F1 tex_y = v * F1_(image.height-1);
+	F1 tex_x = u * (F1)(image.width-1);
+	F1 tex_y = v * (F1)(image.height-1);
 
-	L1 x0 = L1_(tex_x);
-	L1 y0 = L1_(tex_y);
+	L1 x0 = (L1)tex_x;
+	L1 y0 = (L1)tex_y;
 	L1 x1 = Min(x0+1, image.width-1);
 	L1 y1 = Min(y0+1, image.height-1);
 
-	F1 fx = tex_x - F1_(x0);
-	F1 fy = tex_y - F1_(y0);
+	F1 fx = tex_x - (F1)x0;
+	F1 fy = tex_y - (F1)y0;
 
 	F3 *p = (F3 *)image.pixels;
 	F3 c00 = p[x0+y0*image.width];
@@ -101,16 +101,16 @@ Inline F3 image_sample_bilinear_I1_to_F3(Image image, F1 u, F1 v) {
 	u = F1_clamp01(u);
 	v = F1_clamp01(v);
 
-	F1 tex_x = u * F1_(image.width-1);
-	F1 tex_y = v * F1_(image.height-1);
+	F1 tex_x = u * (F1)(image.width-1);
+	F1 tex_y = v * (F1)(image.height-1);
 
-	L1 x0 = L1_(tex_x);
-	L1 y0 = L1_(tex_y);
+	L1 x0 = (L1)tex_x;
+	L1 y0 = (L1)tex_y;
 	L1 x1 = Min(x0+1, image.width-1);
 	L1 y1 = Min(y0+1, image.height-1);
 
-	F1 fx = tex_x - F1_(x0);
-	F1 fy = tex_y - F1_(y0);
+	F1 fx = tex_x - (F1)x0;
+	F1 fy = tex_y - (F1)y0;
 
 	I1 *p = (I1 *)image.pixels;
 	I1 c00 = p[x0+y0*image.width];
@@ -178,8 +178,8 @@ Internal void image_write_to_file(Image image, String8 filename) {
  	header.file_size      = sizeof(Bitmap_Header) + pixels_size;
 	header.bitmap_offset  = sizeof(Bitmap_Header);
 	header.size           = 40;
-	header.width          = SI1_(image.width);
-	header.height         = SI1_(image.height);
+	header.width          = (SI1)image.width;
+	header.height         = (SI1)image.height;
 	header.planes         = 1;
 	header.bits_per_pixel = 32;
 	header.compression    = 0;

@@ -1553,6 +1553,8 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
 }
 
 Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
+	ProfFuncBegin();
+
   I1 image_idx = gfx_state->image_idx;
   VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
 
@@ -1611,6 +1613,8 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   } else if (result != VK_SUCCESS) {
     printf("Failed to present swapchain image.\n");
   }
+
+	ProfEnd();
 }
 
 #endif

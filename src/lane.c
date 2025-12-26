@@ -31,12 +31,16 @@ Global ThreadLocal LaneCtx *lane_ctx = 0;
 #define lane_range(count) lane_range_for_section(lane_idx(), lane_count(), count)
 
 Inline void lane_sync_L1(L1 *ptr, L1 src_lane_idx) {
+	ProfFuncBegin();
+
   if (lane_idx() == src_lane_idx) {
     sync_L1_val = ptr[0];
   }
   lane_sync();
   ptr[0] = sync_L1_val;
 	lane_sync();
+
+	ProfEnd();
 }
 
 Internal Range lane_range_for_section(L1 section_idx, L1 section_count, L1 count) {

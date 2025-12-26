@@ -50,14 +50,11 @@ Internal void lane(Arena *arena) {
 		}
 		lane_sync_L1(&running, 0);
 
-		//- kti: Wait for all lanes to finish their work.
-		// lane_sync();
-
 		//- kti: Lane 0 renders the frame.
 		if (lane_idx() == 0) {
 		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
 		  F4 bg = oklch(0.186f, 0.027f, 343.0f, 1.0f);
-		  F4 green = oklch(0.425f, 0.152f, 152.0f, 1.0f);
+		  F4 blue = oklch(0.425f, 0.152f, 252.0f, 1.0f);
 
 			fc_frame();
 			gfx_window_begin_frame(window, gfx_window);
@@ -69,7 +66,7 @@ Internal void lane(Arena *arena) {
 			dr_push_bucket(bucket);
 
 			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
-			dr_rect((F4){100.0f, 100.0f, 200.0f, 100.0f}, green, 0.0f, 0.0f);
+			dr_rect((F4){100.0f, 100.0f, 200.0f, 100.0f}, blue, 0.0f, 0.0f);
 
 			FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
 			dr_run(run, (F2){0.0f, run.ascent}, white);
@@ -83,8 +80,6 @@ Internal void lane(Arena *arena) {
 
 		ProfEnd();
 		ProfFlush();
-
-		lane_sync();
 
 		//- kti: Calculate time spent and sleep until target frame time is met.
 		L1 target_frame_time = 1000000000ULL / 60;
@@ -116,6 +111,8 @@ Internal void lane(Arena *arena) {
 			}
 			while (os_clock() - frame_begin_time < target_frame_time) {}
 		}
+
+		lane_sync();
 	}
 
 	////////////////////////////////

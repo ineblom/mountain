@@ -359,14 +359,17 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
 }
 
 Internal SI2 fc_vertex_from_corner(I1 corner) {
-	Assert(corner < 4);
-	SI2 vertices[4] = {
-		{0, 0}, // tl
-		{1, 0}, // tr
-		{1, 1}, // br
-		{0, 1}, // bl
+	LocalPersist SI2 vertices[4] = {
+		{0, 0},
+		{1, 0},
+		{1, 1},
+		{0, 1},
 	};
-	return vertices[corner];
+	SI2 result = {0};
+	if (corner < 4) {
+		result = vertices[corner];
+	}
+	return result;
 }
 
 Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_size) {
@@ -641,8 +644,8 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 				scratch_end(scratch);
 			}
 
-			//- kti: push piece for this raster portion.
 			if (info != 0) {
+				//- kti: Find atlas.
 				FC_Atlas *atlas = 0;
 				if (info->subrect.z != 0 && info->subrect.w != 0) {
 					L1 atlas_num = 0;
@@ -659,6 +662,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 					advance = floor_F1(tab_size_px) - mod_F1(floor_F1(base_align_px), floor_F1(tab_size_px));
 				}
 
+				//- kti: Create piece.
 				FC_Piece *piece = fc_piece_chunk_list_push_new(fc_state->frame_arena, &piece_chunks, string.len);
 				piece->texture = atlas ? atlas->texture : 0;
 				piece->subrect = (SW4){

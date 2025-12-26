@@ -89,6 +89,8 @@ VK_EXTENSION_FUNCTIONS
 #undef X
 #endif
 
+// TODO(kti): Find a way to avoid this.
+// Dynamically allocate new buffers if needed.
 #define MAX_RECTANGLE_COUNT 8192
 
 #if (CPU_ && TYP_)
@@ -165,11 +167,12 @@ struct GFX_Batch {
   GFX_Texture *texture;
 
   GFX_Rect_Instance *instances;
+	L1 instance_cap;
   L1 instance_count;
 };
 
-typedef struct GFX_BatchList GFX_BatchList;
-struct GFX_BatchList {
+typedef struct GFX_Batch_List GFX_Batch_List;
+struct GFX_Batch_List {
   GFX_Batch *first;
   GFX_Batch *last;
 };
@@ -1465,7 +1468,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   vkw->per_frame[image_idx].rect_instances_count = 0;
 }
 
-Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_BatchList batches) {
+Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch_List batches) {
   I1 image_idx = gfx_state->image_idx;
   VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
   VkBuffer instance_buffer = vkw->per_frame[image_idx].instance_buffer;

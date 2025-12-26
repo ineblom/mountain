@@ -239,6 +239,7 @@ Internal FC_Piece *fc_piece_chunk_list_push_new(Arena *arena, FC_Piece_Chunk_Lis
 	FC_Piece *result = node->v + node->count;
 	node->count += 1;
 	list->total_piece_count += 1;
+
 	return result;
 }
 
@@ -255,6 +256,8 @@ Internal FC_Piece_Array fc_piece_array_from_chunk_list(Arena *arena, FC_Piece_Ch
 }
 
 Internal FC_Tag fc_tag_from_path(String8 path) {
+	ProfFuncBegin();
+
 	FC_Tag result = {0};
 
 	//- kti: Get a hash from the path.
@@ -290,6 +293,7 @@ Internal FC_Tag fc_tag_from_path(String8 path) {
 		MemoryZeroStruct(&result);
 	}
 
+	ProfEnd();
 	return result;
 }
 
@@ -323,6 +327,8 @@ Internal FC_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size) {
 }
 
 Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 size) {
+	ProfFuncBegin();
+
 	D1 size_d1 = (D1)size;
 	L1 buffer[] = {
 		tag.l1[0],
@@ -355,6 +361,7 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
 		DLLPushBack_NP(slot->first, slot->last, style_raster_node, hash_next, hash_prev);
 	}
 
+	ProfEnd();
 	return style_raster_node;
 }
 
@@ -373,6 +380,8 @@ Internal SI2 fc_vertex_from_corner(I1 corner) {
 }
 
 Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_size) {
+	ProfFuncBegin();
+
 	SW2 region_p = {0};
 	SW2 region_s = {0};
 	I1 node_corner = I1_MAX;
@@ -452,6 +461,8 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
 			}
 		}
 	}
+
+	ProfEnd();
 
 	SW4 result = {region_p.x, region_p.y, region_s.x, region_s.y};
 	return result;

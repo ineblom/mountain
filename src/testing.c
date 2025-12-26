@@ -14,7 +14,7 @@ Internal void lane(Arena *arena) {
 
 	if (lane_idx() == 0) {
 		//- kti: System init.
-		prof_init();
+		ProfInit();
 		gfx_init();
     fp_init();
 		fc_init();
@@ -50,7 +50,7 @@ Internal void lane(Arena *arena) {
 		lane_sync_L1(&running, 0);
 
 		//- kti: Wait for all lanes to finish their work.
-		lane_sync();
+		// lane_sync();
 
 		//- kti: Lane 0 renders the frame.
 		if (lane_idx() == 0) {
@@ -69,7 +69,9 @@ Internal void lane(Arena *arena) {
 			dr_push_bucket(bucket);
 
 			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
-			dr_rect((F4){100.0f, 100.0f, 100.0f, 100.0f}, green, 10.0f, 1.0f);
+			GFX_Rect_Instance *inst = dr_rect((F4){100.0f, 100.0f, 200.0f, 100.0f}, green, 10.0f, 1.0f);
+			inst->border_width = 1.0f;
+			inst->border_color = white;
 
 			dr_submit_bucket(window, gfx_window, bucket);
 
@@ -79,7 +81,7 @@ Internal void lane(Arena *arena) {
 		scratch_end(scratch);
 
 		ProfEnd();
-		spall_buffer_flush(&spall_ctx, &spall_buffer);
+		ProfFlush();
 
 		lane_sync();
 
@@ -112,14 +114,10 @@ Internal void lane(Arena *arena) {
 			}
 			while (os_clock() - frame_begin_time < target_frame_time) {}
 		}
-
-		// lane_sync();
 	}
 
 	////////////////////////////////
 	//~ kti: Shutdown
-
-	spall_buffer_quit(&spall_ctx, &spall_buffer);
 
 	lane_sync();
 
@@ -127,7 +125,7 @@ Internal void lane(Arena *arena) {
 		gfx_window_unequip(gfx_window);
 		os_window_close(window);
 
-		spall_quit(&spall_ctx);
+		ProfShutdown();
 	}
 }
 

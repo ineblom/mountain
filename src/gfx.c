@@ -287,6 +287,7 @@ Internal void gfx_vk_transition_image_layout(
 
 Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 height, void *pixels) {
   Assert(width > 0 && height > 0);
+	ProfFuncBegin();
 
   GFX_Texture *texture = gfx_state->first_free_texture;
   if (texture == 0) {
@@ -482,6 +483,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
 		}
 	}
 
+	ProfEnd();
   return texture;
 }
 
@@ -490,6 +492,7 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 	Assert(region.x >= 0 && region.y >= 0);
 	Assert(region.x + region.z <= tex->width);
 	Assert(region.y + region.w <= tex->height);
+	ProfFuncBegin();
 
 	VkResult result;
 	L1 region_size = region.z * region.w * 4; // RGBA8
@@ -609,6 +612,8 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 		vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
 		vkFreeMemory(gfx_state->device, staging_memory, 0);
 	}
+
+	ProfEnd();
 }
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {
@@ -1342,6 +1347,8 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
 }
 
 Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
+	ProfFuncBegin();
+
   ////////////////////////////////
   //~ kti: Acquire image
 
@@ -1466,6 +1473,8 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
   vkw->per_frame[image_idx].rect_instances_count = 0;
+
+	ProfEnd();
 }
 
 Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch_List batches) {

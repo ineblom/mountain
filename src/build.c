@@ -63,6 +63,9 @@ NoInline void WrmEnd(void) { Crash(1); }
 ////////////////////////////////
 // kti: Modules
 
+//- kti: Config
+#define PROF_ENABLED 0
+
 //- kti: Core
 #include "arena.c"
 #include "strings.c"

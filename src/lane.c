@@ -19,15 +19,10 @@ Inline Temp_Arena scratch_begin(Arena **conflicts, L1 count);
 Inline void scratch_end(Temp_Arena temp);
 #endif
 
-#if (CPU_ && RAM_)
-
-L1 sync_L1_val;
-
-#endif
-
 #if (CPU_ && ROM_)
 
-Global ThreadLocal LaneCtx *lane_ctx;
+Global L1 sync_L1_val = 0;
+Global ThreadLocal LaneCtx *lane_ctx = 0;
 
 #define lane_idx() (lane_ctx->lane_idx)
 #define lane_count() (lane_ctx->lane_count)
@@ -37,11 +32,11 @@ Global ThreadLocal LaneCtx *lane_ctx;
 
 Inline void lane_sync_L1(L1 *ptr, L1 src_lane_idx) {
   if (lane_idx() == src_lane_idx) {
-    ramR->sync_L1_val = ptr[0];
+    sync_L1_val = ptr[0];
   }
   lane_sync();
-  ptr[0] = ramR->sync_L1_val;
-  lane_sync();
+  ptr[0] = sync_L1_val;
+	lane_sync();
 }
 
 Internal Range lane_range_for_section(L1 section_idx, L1 section_count, L1 count) {

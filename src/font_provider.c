@@ -59,6 +59,8 @@ Internal void fp_init(void) {
 }
 
 Internal FP_Handle fp_font_open(String8 path) {
+	ProfFuncBegin();
+
   Temp_Arena scratch = scratch_begin(0, 0);
   String8 path_copy = push_str8_copy(scratch.arena, path);
   FT_Face face;
@@ -69,6 +71,7 @@ Internal FP_Handle fp_font_open(String8 path) {
   FP_Handle result = {
     .face = face,
   };
+	ProfEnd();
   return result;
 }
 
@@ -91,6 +94,8 @@ Internal FP_Metrics fp_metrics_from_font(FP_Handle font) {
 }
 
 Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, String8 string) {
+	ProfFuncBegin();
+
 	FP_Raster_Result result = {0};
 	
   Temp_Arena scratch = scratch_begin(&arena, 1);
@@ -160,6 +165,7 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
 	result.advance = (F1)total_width;
   scratch_end(scratch);
 
+	ProfEnd();
 	return result;
 }
 

@@ -8,6 +8,7 @@ Internal void lane(Arena *arena) {
 	L1 total_frame_time = 0;
 	L1 min_frame_time = L1_MAX;
 	L1 max_frame_time = 0;
+	F1 fps = 0.0f;
 
 	////////////////////////////////
 	//~ kti: Initialization.
@@ -70,11 +71,8 @@ Internal void lane(Arena *arena) {
 			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
 			dr_rect((F4){100.0f, 100.0f, 200.0f, 100.0f}, green, 0.0f, 0.0f);
 
-			FC_Run run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Hejsan!"));
-			dr_run(run, (F2){100.0f, 200.0f}, white);
-
-			run = fc_run_from_string(noto_tag, 32.0f, 0.0f, 100.0f, Str8_("Google Noto Sans"));
-			dr_run(run, (F2){100.0f, 260.0f}, white);
+			FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
+			dr_run(run, (F2){0.0f, run.ascent}, white);
 
 			dr_submit_bucket(window, gfx_window, bucket);
 
@@ -103,7 +101,8 @@ Internal void lane(Arena *arena) {
 				F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
 	      F1 min_ms = min_frame_time / 1000000.0f;
 	      F1 max_ms = max_frame_time / 1000000.0f;
-	      printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, 1000.0f/avg_ms);
+				fps = 1000.0f/avg_ms;
+	      printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
 	      total_frame_time = 0;
 	      min_frame_time = UINT64_MAX;
 	      max_frame_time = 0;

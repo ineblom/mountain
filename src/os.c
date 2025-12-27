@@ -231,39 +231,42 @@ enum {
   OS_KEY_COUNT,
 };
 
-#endif
+typedef struct OS_GFX_State OS_GFX_State;
+struct OS_GFX_State {
+	Arena *arena;
 
-#if (CPU_ && RAM_)
+	OS_Window *hovered_window;
+	OS_Window *first_window;
 
-OS_Window *hovered_window;
-OS_Window *first_window;
+	struct wl_display *display;
 
-struct wl_display *display;
+	struct wl_compositor *compositor;
+	struct wl_shm *shm;
+	struct xdg_wm_base *xdg_wm_base;
 
-struct wl_compositor *compositor;
-struct wl_shm *shm;
-struct xdg_wm_base *xdg_wm_base;
+	struct wl_seat *seat;
+	struct wl_pointer *pointer;
+	struct wl_keyboard *keyboard;
 
-struct wl_seat *seat;
-struct wl_pointer *pointer;
-struct wl_keyboard *keyboard;
+	struct wl_cursor_theme *cursor_theme;
+	struct wl_cursor *default_cursor;
+	struct wl_surface *cursor_surface;
 
-struct wl_cursor_theme *cursor_theme;
-struct wl_cursor *default_cursor;
-struct wl_surface *cursor_surface;
+	struct xdg_wm_base_listener xdg_wm_base_listener;
+	struct wl_seat_listener seat_listener;
+	struct wl_pointer_listener pointer_listener;
+	struct wl_keyboard_listener keyboard_listener;
 
-struct xdg_wm_base_listener xdg_wm_base_listener;
-struct wl_seat_listener seat_listener;
-struct wl_pointer_listener pointer_listener;
-struct wl_keyboard_listener keyboard_listener;
-
-Arena *event_arena;
-OS_Event *first_event;
-OS_Event *last_event;
+	Arena *event_arena;
+	OS_Event *first_event;
+	OS_Event *last_event;
+};
 
 #endif
 
 #if (CPU_ && ROM_)
+
+Global OS_GFX_State *os_gfx_state = 0;
 
 Internal String8 os_read_entire_file(Arena *arena, String8 filename) {
   Temp_Arena scratch = scratch_begin(0, 0);
@@ -524,24 +527,24 @@ Internal I1 os_key_from_wl_key(I1 wl_key) {
 }
 
 Internal void os_push_event(OS_Event event) {
-  OS_Event *new_event = push_array(ramR->event_arena, OS_Event, 1);
+  OS_Event *new_event = push_array(os_gfx_state->event_arena, OS_Event, 1);
   new_event[0] = event;
 
-  DLLPushBack(ramR->first_event, ramR->last_event, new_event);
+  DLLPushBack(os_gfx_state->first_event, os_gfx_state->last_event, new_event);
 }
 
 Internal void registry_global_handler(void *data, struct wl_registry *registry,
                                       I1 name, CString interface, I1 version) {
   if (cstr_compare(interface, wl_compositor_interface.name)) {
-    ramR->compositor =
+    os_gfx_state->compositor =
         wl_registry_bind(registry, name, &wl_compositor_interface, 4);
   } else if (cstr_compare(interface, wl_shm_interface.name)) {
-    ramR->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+    os_gfx_state->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
   } else if (cstr_compare(interface, xdg_wm_base_interface.name)) {
-    ramR->xdg_wm_base =
+    os_gfx_state->xdg_wm_base =
         wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
   } else if (cstr_compare(interface, wl_seat_interface.name)) {
-    ramR->seat = wl_registry_bind(registry, name, &wl_seat_interface, 5);
+    os_gfx_state->seat = wl_registry_bind(registry, name, &wl_seat_interface, 5);
   }
 }
 
@@ -592,12 +595,12 @@ Internal void xdg_toplevel_close_handler(void *data,
 Internal void seat_capabilities_handler(void *data, struct wl_seat *seat,
                                         I1 capabilities) {
   if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
-    ramR->pointer = wl_seat_get_pointer(seat);
-    wl_pointer_add_listener(ramR->pointer, &ramR->pointer_listener, 0);
+    os_gfx_state->pointer = wl_seat_get_pointer(seat);
+    wl_pointer_add_listener(os_gfx_state->pointer, &os_gfx_state->pointer_listener, 0);
   }
   if (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) {
-    ramR->keyboard = wl_seat_get_keyboard(seat);
-    wl_keyboard_add_listener(ramR->keyboard, &ramR->keyboard_listener, 0);
+    os_gfx_state->keyboard = wl_seat_get_keyboard(seat);
+    wl_keyboard_add_listener(os_gfx_state->keyboard, &os_gfx_state->keyboard_listener, 0);
   }
 }
 
@@ -609,30 +612,30 @@ Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer,
                                     wl_fixed_t surface_x,
                                     wl_fixed_t surface_y) {
   OS_Window *window = 0;
-  for (OS_Window *it = ramR->first_window; it != 0; it = it->next) {
+  for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next) {
     if (surface == it->surface) {
       window = it;
       break;
     }
   }
 
-  ramR->hovered_window = window;
+  os_gfx_state->hovered_window = window;
 
   // Set the cursor to default pointer
-  if (ramR->default_cursor && ramR->cursor_surface) {
-    struct wl_cursor_image *image = ramR->default_cursor->images[0];
+  if (os_gfx_state->default_cursor && os_gfx_state->cursor_surface) {
+    struct wl_cursor_image *image = os_gfx_state->default_cursor->images[0];
     struct wl_buffer *buffer = wl_cursor_image_get_buffer(image);
-    wl_pointer_set_cursor(pointer, serial, ramR->cursor_surface,
+    wl_pointer_set_cursor(pointer, serial, os_gfx_state->cursor_surface,
                           image->hotspot_x, image->hotspot_y);
-    wl_surface_attach(ramR->cursor_surface, buffer, 0, 0);
-    wl_surface_damage(ramR->cursor_surface, 0, 0, image->width, image->height);
-    wl_surface_commit(ramR->cursor_surface);
+    wl_surface_attach(os_gfx_state->cursor_surface, buffer, 0, 0);
+    wl_surface_damage(os_gfx_state->cursor_surface, 0, 0, image->width, image->height);
+    wl_surface_commit(os_gfx_state->cursor_surface);
   }
 }
 
 Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer,
                                     I1 serial, struct wl_surface *surface) {
-  ramR->hovered_window = 0;
+  os_gfx_state->hovered_window = 0;
 }
 
 Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer,
@@ -738,12 +741,16 @@ Internal void keyboard_repeat_info_handler(void *data,
                                            struct wl_keyboard *keyboard,
                                            SI1 rate, SI1 delay) {}
 
-Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 height) {
-  if (ramR->first_window == 0) {
-    ramR->display = wl_display_connect(0);
-    Assert(ramR->display != 0);
+Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
+  if (os_gfx_state == 0) {
+		Arena *arena = arena_create(MiB(64));
+		os_gfx_state = push_array(arena, OS_GFX_State, 1);
+		os_gfx_state->arena = arena;
 
-    struct wl_registry *registry = wl_display_get_registry(ramR->display);
+    os_gfx_state->display = wl_display_connect(0);
+    Assert(os_gfx_state->display != 0);
+
+    struct wl_registry *registry = wl_display_get_registry(os_gfx_state->display);
     Assert(registry != 0);
 
     struct wl_registry_listener registry_listener = {
@@ -751,54 +758,54 @@ Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 hei
         .global_remove = registry_global_remove_handler,
     };
     wl_registry_add_listener(registry, &registry_listener, 0);
-    wl_display_roundtrip(ramR->display);
-    Assert(ramR->compositor != 0);
-    Assert(ramR->xdg_wm_base != 0);
-    Assert(ramR->seat != 0);
+    wl_display_roundtrip(os_gfx_state->display);
+    Assert(os_gfx_state->compositor != 0);
+    Assert(os_gfx_state->xdg_wm_base != 0);
+    Assert(os_gfx_state->seat != 0);
 
-    ramR->xdg_wm_base_listener.ping = xdg_wm_base_ping_handler;
-    xdg_wm_base_add_listener(ramR->xdg_wm_base, &ramR->xdg_wm_base_listener, 0);
+    os_gfx_state->xdg_wm_base_listener.ping = xdg_wm_base_ping_handler;
+    xdg_wm_base_add_listener(os_gfx_state->xdg_wm_base, &os_gfx_state->xdg_wm_base_listener, 0);
 
-    ramR->seat_listener.capabilities = seat_capabilities_handler;
-    ramR->seat_listener.name = seat_name_handler;
-    wl_seat_add_listener(ramR->seat, &ramR->seat_listener, 0);
+    os_gfx_state->seat_listener.capabilities = seat_capabilities_handler;
+    os_gfx_state->seat_listener.name = seat_name_handler;
+    wl_seat_add_listener(os_gfx_state->seat, &os_gfx_state->seat_listener, 0);
 
-    ramR->pointer_listener.enter = pointer_enter_handler;
-    ramR->pointer_listener.leave = pointer_leave_handler;
-    ramR->pointer_listener.motion = pointer_motion_handler;
-    ramR->pointer_listener.button = pointer_button_handler;
-    ramR->pointer_listener.axis = pointer_axis_handler;
-    ramR->pointer_listener.frame = pointer_frame_handler;
-    ramR->pointer_listener.axis_source = pointer_axis_source_handler;
-    ramR->pointer_listener.axis_stop = pointer_axis_stop_handler;
-    ramR->pointer_listener.axis_discrete = pointer_axis_discrete_handler;
+    os_gfx_state->pointer_listener.enter = pointer_enter_handler;
+    os_gfx_state->pointer_listener.leave = pointer_leave_handler;
+    os_gfx_state->pointer_listener.motion = pointer_motion_handler;
+    os_gfx_state->pointer_listener.button = pointer_button_handler;
+    os_gfx_state->pointer_listener.axis = pointer_axis_handler;
+    os_gfx_state->pointer_listener.frame = pointer_frame_handler;
+    os_gfx_state->pointer_listener.axis_source = pointer_axis_source_handler;
+    os_gfx_state->pointer_listener.axis_stop = pointer_axis_stop_handler;
+    os_gfx_state->pointer_listener.axis_discrete = pointer_axis_discrete_handler;
 
-    ramR->keyboard_listener.keymap = keyboard_keymap_handler;
-    ramR->keyboard_listener.enter = keyboard_enter_handler;
-    ramR->keyboard_listener.leave = keyboard_leave_handler;
-    ramR->keyboard_listener.key = keyboard_key_handler;
-    ramR->keyboard_listener.modifiers = keyboard_modifiers_handler;
-    ramR->keyboard_listener.repeat_info = keyboard_repeat_info_handler;
+    os_gfx_state->keyboard_listener.keymap = keyboard_keymap_handler;
+    os_gfx_state->keyboard_listener.enter = keyboard_enter_handler;
+    os_gfx_state->keyboard_listener.leave = keyboard_leave_handler;
+    os_gfx_state->keyboard_listener.key = keyboard_key_handler;
+    os_gfx_state->keyboard_listener.modifiers = keyboard_modifiers_handler;
+    os_gfx_state->keyboard_listener.repeat_info = keyboard_repeat_info_handler;
 
-    wl_display_roundtrip(ramR->display);
+    wl_display_roundtrip(os_gfx_state->display);
 
     // Initialize cursor theme and default cursor
-    ramR->cursor_theme = wl_cursor_theme_load(0, 24, ramR->shm);
-    if (ramR->cursor_theme) {
-      ramR->default_cursor = wl_cursor_theme_get_cursor(ramR->cursor_theme, "default");
-      if (!ramR->default_cursor) {
-        ramR->default_cursor = wl_cursor_theme_get_cursor(ramR->cursor_theme, "left_ptr");
+    os_gfx_state->cursor_theme = wl_cursor_theme_load(0, 24, os_gfx_state->shm);
+    if (os_gfx_state->cursor_theme) {
+      os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "default");
+      if (!os_gfx_state->default_cursor) {
+        os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "left_ptr");
       }
-      ramR->cursor_surface = wl_compositor_create_surface(ramR->compositor);
+      os_gfx_state->cursor_surface = wl_compositor_create_surface(os_gfx_state->compositor);
     }
   }
 
-  OS_Window *result = push_array(arena, OS_Window, 1);
+  OS_Window *result = push_array(os_gfx_state->arena, OS_Window, 1);
 
-  result->surface = wl_compositor_create_surface(ramR->compositor);
+  result->surface = wl_compositor_create_surface(os_gfx_state->compositor);
   Assert(result->surface != 0);
 
-  result->xdg_surface = xdg_wm_base_get_xdg_surface(ramR->xdg_wm_base, result->surface);
+  result->xdg_surface = xdg_wm_base_get_xdg_surface(os_gfx_state->xdg_wm_base, result->surface);
   Assert(result->xdg_surface);
 
   result->xdg_surface_listener.configure = xdg_surface_configure_handler;
@@ -820,47 +827,47 @@ Internal OS_Window *os_window_open(Arena *arena, String8 title, I1 width, I1 hei
   wl_surface_commit(result->surface);
 
   while (!result->configured) {
-    wl_display_dispatch(ramR->display);
+    wl_display_dispatch(os_gfx_state->display);
   }
 
   result->width = width;
   result->height = height;
 
-  result->next = ramR->first_window;
-  if (ramR->first_window != 0) {
-    ramR->first_window->prev = result;
+  result->next = os_gfx_state->first_window;
+  if (os_gfx_state->first_window != 0) {
+    os_gfx_state->first_window->prev = result;
   }
-  ramR->first_window = result;
+  os_gfx_state->first_window = result;
 
   return result;
 }
 
 Internal OS_Event *os_poll_events(Arena *arena) {
-  Assert(ramR->first_window != 0);
+  Assert(os_gfx_state->first_window != 0);
 
-  ramR->event_arena = arena;
-  ramR->first_event = 0;
-  ramR->last_event = 0;
+  os_gfx_state->event_arena = arena;
+  os_gfx_state->first_event = 0;
+  os_gfx_state->last_event = 0;
 
-  while (wl_display_prepare_read(ramR->display) != 0) {
-    wl_display_dispatch_pending(ramR->display);
+  while (wl_display_prepare_read(os_gfx_state->display) != 0) {
+    wl_display_dispatch_pending(os_gfx_state->display);
   }
-  wl_display_flush(ramR->display);
+  wl_display_flush(os_gfx_state->display);
   
   struct pollfd pfd = {
-    .fd = wl_display_get_fd(ramR->display),
+    .fd = wl_display_get_fd(os_gfx_state->display),
     .events = POLLIN,
   };
 
   if (poll(&pfd, 1, 0) > 0) {
-    wl_display_read_events(ramR->display);
+    wl_display_read_events(os_gfx_state->display);
   } else {
-    wl_display_cancel_read(ramR->display);
+    wl_display_cancel_read(os_gfx_state->display);
   }
   
-  wl_display_dispatch_pending(ramR->display);
+  wl_display_dispatch_pending(os_gfx_state->display);
 
-  return ramR->first_event;
+  return os_gfx_state->first_event;
 }
 
 Internal void os_window_close(OS_Window *window) {
@@ -868,22 +875,22 @@ Internal void os_window_close(OS_Window *window) {
   xdg_surface_destroy(window->xdg_surface);
   wl_surface_destroy(window->surface);
 
-  if (ramR->first_window == window && window->next == 0) {
-    if (ramR->cursor_surface)
-      wl_surface_destroy(ramR->cursor_surface);
-    if (ramR->cursor_theme)
-      wl_cursor_theme_destroy(ramR->cursor_theme);
-    if (ramR->pointer)
-      wl_pointer_destroy(ramR->pointer);
-    if (ramR->keyboard)
-      wl_keyboard_destroy(ramR->keyboard);
-    if (ramR->seat)
-      wl_seat_destroy(ramR->seat);
-    if (ramR->shm)
-      wl_shm_destroy(ramR->shm);
+  if (os_gfx_state->first_window == window && window->next == 0) {
+    if (os_gfx_state->cursor_surface)
+      wl_surface_destroy(os_gfx_state->cursor_surface);
+    if (os_gfx_state->cursor_theme)
+      wl_cursor_theme_destroy(os_gfx_state->cursor_theme);
+    if (os_gfx_state->pointer)
+      wl_pointer_destroy(os_gfx_state->pointer);
+    if (os_gfx_state->keyboard)
+      wl_keyboard_destroy(os_gfx_state->keyboard);
+    if (os_gfx_state->seat)
+      wl_seat_destroy(os_gfx_state->seat);
+    if (os_gfx_state->shm)
+      wl_shm_destroy(os_gfx_state->shm);
 
-    xdg_wm_base_destroy(ramR->xdg_wm_base);
-    wl_display_disconnect(ramR->display);
+    xdg_wm_base_destroy(os_gfx_state->xdg_wm_base);
+    wl_display_disconnect(os_gfx_state->display);
   }
 
   if (window->prev != 0) {
@@ -892,8 +899,8 @@ Internal void os_window_close(OS_Window *window) {
   if (window->next != 0) {
     window->next->prev = window->prev;
   }
-  if (window == ramR->first_window) {
-    ramR->first_window = window->next;
+  if (window == os_gfx_state->first_window) {
+    os_gfx_state->first_window = window->next;
   }
 }
 

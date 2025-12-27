@@ -110,7 +110,7 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
 	return result;
 }
 
-Internal void dr_run(FC_Run run, F2 pos, F4 color) {
+Internal void dr_text_run(FC_Run run, F2 pos, F4 color) {
 	for EachIndex(i, run.pieces.count) {
 		FC_Piece *piece = &run.pieces.v[i];
 		SW4 subrect = piece->subrect;
@@ -127,26 +127,5 @@ Internal void dr_submit_bucket(OS_Window *window, GFX_Window *gfx_window, DR_Buc
 	gfx_window_submit(window, gfx_window, bucket->batches);
 	ProfEnd();
 }
-
-// Internal void dr_run(FC_Run run, F2 pos) {
-// 	for EachIndex(i, run.pieces.count) {
-// 		SW4 subrect = run.pieces.v[i].subrect;
-// 		SW2 offset = run.pieces.v[i].offset;
-// 		instances[instance_count]	= (GFX_Rect_Instance){
-// 			.dst_rect = {
-// 				pos.x+offset.x, pos.y+offset.y,
-// 				subrect.z, subrect.w
-// 			},
-// 			.src_rect = {
-// 				subrect.x, subrect.y,
-// 				subrect.z, subrect.w
-// 			},
-// 			.colors = { white, white, white, white },
-// 		};
-// 		instance_count += 1;
-// 		pos.x += run.pieces.v[i].advance;
-// 	}
-// }
-
 
 #endif

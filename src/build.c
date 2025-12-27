@@ -14,7 +14,6 @@
 #if CPU_
 # define DEF_ 0
 # define TYP_ 0
-# define RAM_ 0
 # define ROM_ 0
 #endif
 
@@ -34,21 +33,6 @@
 # include __FILE__
 # undef TYP_
 # define TYP_ 0
-
-# undef RAM_
-# define RAM_ 1
-
-typedef struct {
-  #include __FILE__
-  Align(64) L1 end[1024*1024/8];
-} RamT;
-
-Global Align(64) RamT ramM;
-# define ramR (&ramM)
-# define ramV (&ramM)
-
-# undef RAM_
-# define RAM_ 0
 
 # undef ROM_
 # define ROM_ 1

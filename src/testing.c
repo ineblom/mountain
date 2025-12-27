@@ -21,7 +21,7 @@ Internal void lane(Arena *arena) {
 		fc_init();
 
 		//- kti: Window
-		window = os_window_open(arena, Str8_("Testing"), 1280, 720);
+		window = os_window_open(Str8_("Testing"), 1280, 720);
 		gfx_window = gfx_window_equip(window);
 	}
 
@@ -66,10 +66,10 @@ Internal void lane(Arena *arena) {
 			dr_push_bucket(bucket);
 
 			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
-			dr_rect((F4){100.0f, 100.0f, 200.0f, 100.0f}, blue, 0.0f, 0.0f);
+			dr_rect((F4){sinf(time)*300.0f+400.0f, 100.0f, 100.0f, 100.0f}, blue, 0.0f, 0.0f);
 
 			FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
-			dr_run(run, (F2){0.0f, run.ascent}, white);
+			dr_text_run(run, (F2){0.0f, run.ascent}, white);
 
 			dr_submit_bucket(window, gfx_window, bucket);
 

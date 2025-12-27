@@ -1195,13 +1195,13 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
 
   VkWaylandSurfaceCreateInfoKHR surface_ci = {
     .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
-    .display = ramM.display,
+    .display = os_gfx_state->display,
     .surface = window->surface,
   };
   VkResult result = vkCreateWaylandSurfaceKHR(gfx_state->instance, &surface_ci, 0, &vkw->surface);
   Assert(result == VK_SUCCESS);
 
-  VkBool32 supports = vkGetPhysicalDeviceWaylandPresentationSupportKHR(gfx_state->physical_device, gfx_state->present_queue_index, ramM.display);
+  VkBool32 supports = vkGetPhysicalDeviceWaylandPresentationSupportKHR(gfx_state->physical_device, gfx_state->present_queue_index, os_gfx_state->display);
   Assert(supports);
 
   vkGetPhysicalDeviceSurfaceFormatsKHR(gfx_state->physical_device, vkw->surface, &vkw->surface_format_count, 0);

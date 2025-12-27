@@ -114,7 +114,7 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
 		//- kti: Unpack string
 		String32 string32 = str32_from_str8(scratch.arena, string);
 
-		//- kti: Measure
+		//- kti: Render & Measure
 		SI1 total_width = 0;
 		for EachIndex(i, string32.len) {
 			FT_Load_Char(face, string32.str[i], FT_LOAD_RENDER);
@@ -128,8 +128,6 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
 		SI1 baseline = ascent;
 		SI1 atlas_write_x = 0;
 		for EachIndex(i, string32.len) {
-			FT_Load_Char(face, string32.str[i], FT_LOAD_RENDER);
-
 			FT_Bitmap *bmp = &face->glyph->bitmap;
 			SI1 top = face->glyph->bitmap_top;
 			SI1 left = face->glyph->bitmap_left;

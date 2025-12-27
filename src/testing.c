@@ -54,7 +54,6 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
 		  F4 bg = oklch(0.186f, 0.027f, 343.0f, 1.0f);
-		  F4 blue = oklch(0.425f, 0.152f, 252.0f, 1.0f);
 
 			fc_frame();
 			gfx_window_begin_frame(window, gfx_window);
@@ -66,7 +65,21 @@ Internal void lane(Arena *arena) {
 			dr_push_bucket(bucket);
 
 			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
-			dr_rect((F4){sinf(time)*300.0f+400.0f, 100.0f, 100.0f, 100.0f}, blue, 0.0f, 0.0f);
+
+			F1 s = 25.0f;
+			F1 r = window->height*0.5f - s*2.0f;
+			L1 count = 200;
+			for EachIndex(idx, count) {
+				F1 i = (F1)idx/(F1)count;
+
+				F1 x = sinf((i+time*0.1f)*PI*2) *r + (window->width)/2.0f;
+
+				F1 y = cosf((i*(sinf(time*0.50f)*0.5f+0.5f))*PI*2) *r + (window->height)/2.0f;
+
+				F1 l = (sinf(i*PI*2)*0.5f+0.5f) * 0.6f + 0.4f;
+				F4 color = oklch(l, 0.2, 0, 1.0f);
+				dr_rect((F4){x-s*0.5f, y-s*0.5f, s, s}, color, 0.0f, 0.0f);
+			}
 
 			FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
 			dr_text_run(run, (F2){0.0f, run.ascent}, white);

@@ -1,9 +1,18 @@
 #if (CPU_ && TYP_)
 
+typedef struct DR_Clip_Node DR_Clip_Node;
+struct DR_Clip_Node {
+	DR_Clip_Node *next;
+	F4 rect;
+};
+
 typedef struct DR_Bucket DR_Bucket;
 struct DR_Bucket {
 	DR_Bucket *next;
 	GFX_Batch_List batches;
+	DR_Clip_Node *top_clip;
+	L1 stack_gen;
+	L1 last_cmd_stack_gen;
 };
 
 typedef struct DR_State DR_State;
@@ -17,10 +26,30 @@ struct DR_State {
 
 #if (CPU_ && ROM_)
 
+Global DR_Clip_Node dr_nil_clip_node = {0, (F4){0}};
 Global DR_State *dr_state;
+
+Internal void dr_push_clip(F4 rect) {
+	DR_Bucket *bucket = dr_state->top_bucket;
+	if (bucket != 0) {
+		DR_Clip_Node *node = push_array(dr_state->arena, DR_Clip_Node, 1);
+		node->rect = rect;
+		SLLStackPush(bucket->top_clip, node);
+		bucket->stack_gen += 1;
+	}
+}
+
+Internal void dr_pop_clip(void) {
+	DR_Bucket *bucket = dr_state->top_bucket;
+	if (bucket != 0) {
+		SLLStackPop(bucket->top_clip);
+		bucket->stack_gen += 1;
+	}
+}
 
 Internal DR_Bucket *dr_bucket_make(void) {
 	DR_Bucket *bucket = push_array(dr_state->arena, DR_Bucket, 1);
+	bucket->top_clip = &dr_nil_clip_node;
 	return bucket;
 }
 
@@ -54,15 +83,25 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
 	DR_Bucket *bucket = dr_state->top_bucket;
 	if (bucket != 0) {
 		GFX_Batch *batch = bucket->batches.last;
-		if (batch == 0 || batch->instance_count >= batch->instance_cap) {
+
+		I1 out_of_space = 0;
+		I1 stack_requires_new_batch = 0;
+		if (batch) {
+			out_of_space = batch->instance_count >= batch->instance_cap;
+			stack_requires_new_batch = bucket->stack_gen != bucket->last_cmd_stack_gen;
+		}
+
+		if (batch == 0 || out_of_space || stack_requires_new_batch) {
 			batch = push_array(dr_state->arena, GFX_Batch, 1);
 			batch->instance_cap = 256;
 			batch->instances = push_array(dr_state->arena, GFX_Rect_Instance, batch->instance_cap);
+			batch->clip_rect = bucket->top_clip->rect;
 			SLLQueuePush(bucket->batches.first, bucket->batches.last, batch);
 		}
 
 		result = &batch->instances[batch->instance_count];
 		batch->instance_count += 1;
+		bucket->last_cmd_stack_gen = bucket->stack_gen;
 
 		*result = (GFX_Rect_Instance){
 			.dst_rect = dst,
@@ -85,10 +124,21 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
 	DR_Bucket *bucket = dr_state->top_bucket;
 	if (bucket != 0) {
 		GFX_Batch *batch = bucket->batches.last;
-		if (batch == 0 || batch->instance_count >= batch->instance_cap || (batch->texture != 0 && batch->texture != texture)) {
+
+		I1 out_of_space = 0;
+		I1 texture_requires_new_batch = 0;
+		I1 stack_requires_new_batch = 0;
+		if (batch) {
+			out_of_space = batch->instance_count >= batch->instance_cap;
+			texture_requires_new_batch = batch->texture != 0 && batch->texture != texture;
+			stack_requires_new_batch = bucket->stack_gen != bucket->last_cmd_stack_gen;
+		}
+
+		if (batch == 0 || out_of_space || texture_requires_new_batch || stack_requires_new_batch) {
 			batch = push_array(dr_state->arena, GFX_Batch, 1);
 			batch->instance_cap = 256;
 			batch->instances = push_array(dr_state->arena, GFX_Rect_Instance, batch->instance_cap);
+			batch->clip_rect = bucket->top_clip->rect;
 			SLLQueuePush(bucket->batches.first, bucket->batches.last, batch);
 		}
 
@@ -96,6 +146,7 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
 
 		result = &batch->instances[batch->instance_count];
 		batch->instance_count += 1;
+		bucket->last_cmd_stack_gen = bucket->stack_gen;
 
 		*result = (GFX_Rect_Instance){
 			.dst_rect = dst,

@@ -1,5 +1,12 @@
 #if (CPU_ && TYP_)
 
+#define UI_Build_Stacks \
+	X(Fixed_X, fixed_x); \
+	X(Fixed_Y, fixed_y); \
+	X(Fixed_Width, fixed_width); \
+	X(Fixed_Height, fixed_height);
+
+
 #define X(x, name) \
 	typedef struct UI_##x##_Node UI_##x##_Node; \
 	struct UI_##x##_Node { UI_##x##_Node *next; F1 value; }; \
@@ -8,11 +15,7 @@
 	Internal void ui_push_##name(F1 value); \
 	Internal void ui_set_next_##name(F1 value);
 
-X(Fixed_X, fixed_x);
-X(Fixed_Y, fixed_y);
-X(Fixed_Width, fixed_width);
-X(Fixed_Height, fixed_height);
-
+UI_Build_Stacks;
 #undef X
 
 typedef struct UI_Key UI_Key;
@@ -208,13 +211,14 @@ Internal Arena *ui_build_arena(void) {
 	Internal void ui_set_next_##name(F1 value) { \
 		ui_push_##name(value); \
 		ui_state->name##_stack.auto_pop = 1; \
+	} \
+	Internal void ui_pop_##name() { \
+		UI_##x##_Node *popped_node = ui_state->name##_stack.top; \
+		SLLStackPop(ui_state->name##_stack.top); \
+		SLLStackPush(ui_state->name##_stack.free, popped_node); \
 	}
 
-X(Fixed_X, fixed_x);
-X(Fixed_Y, fixed_y);
-X(Fixed_Width, fixed_width);
-X(Fixed_Height, fixed_height);
-
+UI_Build_Stacks;
 #undef X
 
 Internal UI_Key ui_key_zero(void) {
@@ -244,6 +248,8 @@ Internal void ui_init(void) {
 	ui_state->build_arenas[1] = arena_create(MiB(64));
 	ui_state->box_table_size = 4096;
 	ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
+
+	// TODO: Init stack nils.
 }
 
 Internal I1 ui_box_is_nil(UI_Box *box) {
@@ -280,6 +286,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 }
 
 Internal void ui_begin_build(OS_Window *window) {
+	// TODO: Reset stacks.
 	ui_state->root = &ui_nil_box;
 	ui_state->last_build_box_count = ui_state->build_box_count;
 	ui_state->build_box_count = 0;

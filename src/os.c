@@ -61,6 +61,8 @@ enum {
   OS_EVENT_TYPE_COUNT,
 };
 
+typedef I1 OS_Modifier_Flags;
+
 enum {
   OS_MODIFIER_FLAG__CTRL  = (1<<0),
   OS_MODIFIER_FLAG__SHIFT = (1<<1),

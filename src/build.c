@@ -62,6 +62,7 @@ NoInline void WrmEnd(void) { Crash(1); }
 #include "draw.c"
 #include "font_provider.c"
 #include "font_cache.c"
+#include "ui.c"
 
 //- kti: App
 #include "testing.c"

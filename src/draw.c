@@ -27,7 +27,7 @@ struct DR_State {
 #if (CPU_ && ROM_)
 
 Global DR_Clip_Node dr_nil_clip_node = {0, (F4){0}};
-Global DR_State *dr_state;
+Global DR_State *dr_state = 0;
 
 Internal void dr_push_clip(F4 rect) {
 	DR_Bucket *bucket = dr_state->top_bucket;

@@ -19,6 +19,7 @@ Internal void lane(Arena *arena) {
 		gfx_init();
     fp_init();
 		fc_init();
+		ui_init();
 
 		//- kti: Window
 		window = os_window_open(Str8_("Testing"), 1280, 720);
@@ -50,6 +51,13 @@ Internal void lane(Arena *arena) {
 		}
 		lane_sync_L1(&running, 0);
 
+		//- kti: UI
+		if (lane_idx() == 0) {
+			ui_begin_build(window);
+
+			ui_end_build();
+		}
+
 		//- kti: Lane 0 renders the frame.
 		if (lane_idx() == 0) {
 		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
@@ -64,8 +72,10 @@ Internal void lane(Arena *arena) {
 			DR_Bucket *bucket = dr_bucket_make();
 			dr_push_bucket(bucket);
 
+			// kti: bg
 			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
 
+			// kti: fps counter
 			FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
 			dr_text_run(run, (F2){0.0f, run.ascent}, white);
 

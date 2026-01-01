@@ -1,22 +1,39 @@
 #if (CPU_ && TYP_)
 
-#define UI_Build_Stacks \
-	X(Fixed_X, fixed_x); \
-	X(Fixed_Y, fixed_y); \
-	X(Fixed_Width, fixed_width); \
-	X(Fixed_Height, fixed_height);
+enum {
+	UI_AXIS__X,
+	UI_AXIS__Y,
+	UI_AXIS_COUNT,
+};
 
+enum {
+	UI_STACK__PARENT,
+	UI_STACK__FIXED_X,
+	UI_STACK__FIXED_Y,
+	UI_STACK__FIXED_WIDTH,
+	UI_STACK__FIXED_HEIGHT,
+	UI_STACK__PREF_WIDTH,
+	UI_STACK__PREF_HEIGHT,
+	UI_STACK__MIN_WIDTH,
+	UI_STACK__MIN_HEIGHT,
+	UI_STACK__CHILD_LAYOUT_AXIS,
 
-#define X(x, name) \
-	typedef struct UI_##x##_Node UI_##x##_Node; \
-	struct UI_##x##_Node { UI_##x##_Node *next; F1 value; }; \
-	typedef struct UI_##x##_Stack UI_##x##_Stack; \
-	struct UI_##x##_Stack { UI_##x##_Node *top; UI_##x##_Node *free; I1 auto_pop; }; \
-	Internal void ui_push_##name(F1 value); \
-	Internal void ui_set_next_##name(F1 value);
+	UI_STACK_COUNT,
+};
 
-UI_Build_Stacks;
-#undef X
+typedef struct UI_Stack_Node UI_Stack_Node;
+struct UI_Stack_Node {
+	UI_Stack_Node *next;
+	L1 value[2];
+	// TODO: Have separate type for nodes that require more storage..
+};
+
+typedef struct UI_Stack UI_Stack;
+struct UI_Stack {
+	UI_Stack_Node *top;
+	UI_Stack_Node *free;
+	I1 auto_pop;
+};
 
 typedef struct UI_Key UI_Key;
 struct UI_Key {
@@ -51,6 +68,10 @@ enum {
 	UI_BOX_FLAG__HOT_ANIMATION    = (1<<7),
 	UI_BOX_FLAG__ACTIVE_ANIMATION = (1<<8),
 	UI_BOX_FLAG__DISABLED         = (1<<9),
+	UI_BOX_FLAG__FLOATING_X       = (1<<10),
+	UI_BOX_FLAG__FLOATING_Y       = (1<<11),
+	UI_BOX_FLAG__FIXED_WIDTH      = (1<<12),
+	UI_BOX_FLAG__FIXED_HEIGHT     = (1<<13),
 };
 
 typedef struct UI_Box UI_Box;
@@ -63,13 +84,20 @@ struct UI_Box {
 	UI_Box *next;
 	UI_Box *prev;
 	UI_Box *parent;
+	L1 child_count;
 
 	UI_Key key;
 	UI_Box_Flags flags;
 	String8 string;
 	F2 fixed_pos;
 	F2 fixed_size;
-	UI_Size pref_size[2];
+	F2 min_size;
+	UI_Size pref_size[UI_AXIS_COUNT];
+	I1 child_layout_axis;
+	L1 first_touch_build_index;
+	L1 last_touch_build_index;
+
+	DR_Bucket *draw_bucket;
 	F4 background_color;
 	F4 text_color;
 	F4 border_color;
@@ -171,10 +199,8 @@ struct UI_State {
 	UI_Key hot_box_key;
 	UI_Key active_box_key;
 
-	UI_Fixed_X_Stack fixed_x_stack;
-	UI_Fixed_Y_Stack fixed_y_stack;
-	UI_Fixed_Width_Stack fixed_width_stack;
-	UI_Fixed_Height_Stack fixed_height_stack;
+	UI_Stack_Node stack_nils[UI_STACK_COUNT];
+	UI_Stack stacks[UI_STACK_COUNT];
 };
 
 #endif
@@ -194,32 +220,66 @@ Global UI_Box ui_nil_box = {
 
 Global UI_State *ui_state = 0;
 
+Inline UI_Size ui_px(F1 value, F1 strictness) {
+	UI_Size result = {
+		.kind = UI_SIZE_KIND__PIXELS,
+		.value = value,
+		.strictness = strictness,
+	};
+	return result;
+}
+
 Internal Arena *ui_build_arena(void) {
 	Arena *arena = ui_state->build_arenas[ui_state->build_index%ArrayCount(ui_state->build_arenas)];
 	return arena;
 }
 
-#define X(x, name) \
-	Internal void ui_push_##name(F1 value) { \
-		UI_##x##_Node *node = ui_state->name##_stack.free; \
-		if (node != 0) { SLLStackPop(ui_state->name##_stack.free); } \
-		else { node = push_array(ui_build_arena(), UI_##x##_Node, 1); } \
-		SLLStackPush(ui_state->name##_stack.top, node); \
-		node->value = value; \
-		ui_state->name##_stack.auto_pop = 0; \
+#define X(stack_idx, T, name) \
+	Internal void ui_push_##name(T value) { \
+		UI_Stack *stack = &ui_state->stacks[stack_idx]; \
+		UI_Stack_Node *node = stack->free; \
+		if (node == 0) { node = push_array(ui_build_arena(), UI_Stack_Node, 1); } \
+		else { SLLStackPop(stack->free); } \
+		memmove(&node->value, &value, sizeof(value)); \
 	} \
-	Internal void ui_set_next_##name(F1 value) { \
+	Internal void ui_pop_##name(void) { \
+		UI_Stack *stack = &ui_state->stacks[stack_idx]; \
+		UI_Stack_Node *popped_node = stack->top; \
+		if (popped_node != &ui_state->stack_nils[stack_idx]) { \
+			SLLStackPop(stack->top); \
+			SLLStackPush(stack->free, popped_node); \
+			stack->auto_pop = 0; \
+		} \
+	} \
+	Internal void ui_set_next_##name(T value) { \
 		ui_push_##name(value); \
-		ui_state->name##_stack.auto_pop = 1; \
+		ui_state->stacks[stack_idx].auto_pop = 1; \
 	} \
-	Internal void ui_pop_##name() { \
-		UI_##x##_Node *popped_node = ui_state->name##_stack.top; \
-		SLLStackPop(ui_state->name##_stack.top); \
-		SLLStackPush(ui_state->name##_stack.free, popped_node); \
+	Internal T ui_top_##name(void) { \
+		T result = *(T *)&ui_state->stacks[stack_idx].top->value; \
+		return result; \
 	}
 
-UI_Build_Stacks;
+X(UI_STACK__PARENT,            UI_Box *, parent);
+X(UI_STACK__FIXED_X,           F1,       fixed_x);
+X(UI_STACK__FIXED_Y,           F1,       fixed_y);
+X(UI_STACK__FIXED_WIDTH,       F1,       fixed_width);
+X(UI_STACK__FIXED_HEIGHT,      F1,       fixed_height);
+X(UI_STACK__PREF_WIDTH,        UI_Size,  pref_width);
+X(UI_STACK__PREF_HEIGHT,       UI_Size,  pref_height);
+X(UI_STACK__MIN_WIDTH,         F1,       min_width);
+X(UI_STACK__MIN_HEIGHT,        F1,       min_height);
+X(UI_STACK__CHILD_LAYOUT_AXIS, I1,       child_layout_axis);
+
 #undef X
+
+Internal void ui_reset_stack(void) {
+	for EachIndex(i, UI_STACK_COUNT) {
+		ui_state->stacks[i].top = &ui_state->stack_nils[i];
+		ui_state->stacks[i].free = 0;
+		ui_state->stacks[i].auto_pop = 0;
+	}
+}
 
 Internal UI_Key ui_key_zero(void) {
 	UI_Key result = {0};
@@ -249,7 +309,10 @@ Internal void ui_init(void) {
 	ui_state->box_table_size = 4096;
 	ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
 
-	// TODO: Init stack nils.
+	UI_Size default_width = ui_px(250.0f, 1.0f);
+	UI_Size default_height = ui_px(30.0f, 1.0f);
+	memmove(&ui_state->stack_nils[UI_STACK__PREF_WIDTH].value,  &default_width,  sizeof(UI_Size));
+	memmove(&ui_state->stack_nils[UI_STACK__PREF_HEIGHT].value, &default_height, sizeof(UI_Size));
 }
 
 Internal I1 ui_box_is_nil(UI_Box *box) {
@@ -273,10 +336,123 @@ Internal UI_Box *ui_box_from_key(UI_Key key) {
 	return result;
 }
 
-Internal UI_Box *ui_build_box_from_string(UI_Box_Flags flags, String8 string) {
-	UI_Box *result = 0;
+Internal UI_Key ui_active_seed_key(void) {
+	UI_Box *keyed_ancestor = &ui_nil_box;
+	for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
+		if (!ui_key_match(p->key, ui_key_zero())) {
+			keyed_ancestor = p;
+			break;
+		}
+	}
+	return keyed_ancestor->key;
+}
 
-	return result;
+Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
+	ui_state->build_box_count = 0;
+
+	UI_Box *parent = ui_top_parent();
+
+	UI_Box *box = ui_box_from_key(key);
+	I1 box_first_frame = ui_box_is_nil(box);
+	I1 last_flags = box->flags;
+
+	//- kti: zero key and create new on key duplicate.
+	if (!box_first_frame && box->last_touch_build_index == ui_state->build_index) {
+		box = &ui_nil_box;
+		key = ui_key_zero();
+		box_first_frame = 1;
+	}
+
+	// NOTE(kti): Transient = box lasts for 1 build only.
+	I1 box_is_transient = ui_key_match(key, ui_key_zero());
+
+	//- kti: Allocate box if needed.
+	if (box_first_frame) {
+		box = !box_is_transient ? ui_state->first_free_box : 0;
+		if (ui_box_is_nil(box)) {
+			box = push_array_no_zero(box_is_transient ? ui_build_arena() : ui_state->arena, UI_Box, 1);
+		} else {
+			SLLStackPop(ui_state->first_free_box);
+		}
+		MemoryZeroStruct(box);
+	}
+
+	//- kti: Zero per frame state.
+	box->first = box->last = box->next = box->prev = box->parent = &ui_nil_box;
+	box->child_count = 0;
+	box->flags = 0;
+	MemoryZeroArray(box->pref_size);
+	box->draw_bucket = 0;
+
+	//- kti: Add to persistent table.
+	if (box_first_frame && !box_is_transient) {
+		UI_Box_HT_Slot *slot = &ui_state->box_table[key.l1[0] % ui_state->box_table_size];
+		DLLInsert_NPZ(&ui_nil_box, slot->first, slot->last, slot->last, box, hash_next, hash_prev);
+	}
+
+	//- kti: Add to per-frame tree structure.
+	if (!ui_box_is_nil(parent)) {
+		DLLPushBack_NPZ(&ui_nil_box, parent->first, parent->last, box, next, prev);
+		parent->child_count += 1;
+		box->parent = parent;
+	}
+
+	//- kti: Fill box
+	box->key = key;
+	box->flags = flags; // TODO: Flags & Omit flags stack.
+	if (box_first_frame) {
+		box->first_touch_build_index = ui_state->build_index;
+	}
+	box->last_touch_build_index = ui_state->build_index;
+
+	UI_Stack *stacks = ui_state->stacks;
+	UI_Stack_Node *nils = ui_state->stack_nils;
+
+	if (stacks[UI_STACK__FIXED_X].top == nils+UI_STACK__FIXED_X) {
+		box->flags |= UI_BOX_FLAG__FLOATING_X;
+		box->fixed_pos.x = ui_top_fixed_x();
+	}
+	if (stacks[UI_STACK__FIXED_Y].top == nils+UI_STACK__FIXED_Y) {
+		box->flags |= UI_BOX_FLAG__FLOATING_Y;
+		box->fixed_pos.x = ui_top_fixed_y();
+	}
+
+	if (stacks[UI_STACK__FIXED_WIDTH].top == nils+UI_STACK__FIXED_WIDTH) {
+		box->flags |= UI_BOX_FLAG__FIXED_WIDTH;
+		box->fixed_size.x = ui_top_fixed_width();
+	} else {
+		box->pref_size[UI_AXIS__X] = ui_top_pref_width();
+	}
+	if (stacks[UI_STACK__FIXED_HEIGHT].top == nils+UI_STACK__FIXED_HEIGHT) {
+		box->flags |= UI_BOX_FLAG__FIXED_HEIGHT;
+		box->fixed_size.y = ui_top_fixed_height();
+	} else {
+		box->pref_size[UI_AXIS__Y] = ui_top_pref_height();
+	}
+
+	box->min_size.x = ui_top_min_width();
+	box->min_size.y = ui_top_min_height();
+	box->child_layout_axis = ui_top_child_layout_axis();
+
+	return box;
+}
+
+Internal UI_Box *ui_build_box_from_string(UI_Box_Flags flags, String8 string) {
+	UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
+	UI_Box *box = ui_build_box_from_key(flags, key);
+	// TODO: if draw text flag equip display string.
+	return box;
+}
+
+Internal UI_Box *ui_build_box_from_stringf(UI_Box_Flags flags, CString fmt, ...) {
+	Temp_Arena scratch = scratch_begin(0, 0);
+	va_list args;
+	va_start(args, fmt);
+	String8 string = str8fv(scratch.arena, fmt, args);
+	va_end(args);
+	UI_Box *box = ui_build_box_from_string(flags, string);
+	scratch_end(scratch);
+	return box;
 }
 
 Internal UI_Signal ui_signal_from_box(UI_Box *box) {
@@ -286,7 +462,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 }
 
 Internal void ui_begin_build(OS_Window *window) {
-	// TODO: Reset stacks.
+	ui_reset_stack();
 	ui_state->root = &ui_nil_box;
 	ui_state->last_build_box_count = ui_state->build_box_count;
 	ui_state->build_box_count = 0;
@@ -296,8 +472,12 @@ Internal void ui_begin_build(OS_Window *window) {
 	// This sets the active box key to the external key.
 	// Handling the user interacting with something outside this ui system.
 
-	// TODO: Build root.
-	
+	ui_set_next_fixed_width(window->width);
+	ui_set_next_fixed_height(window->height);
+	ui_set_next_child_layout_axis(UI_AXIS__X);
+	UI_Box *root = ui_build_box_from_stringf(0, "%llu", (L1)window);
+	ui_push_parent(root);
+	ui_state->root = root;
 	
 	//- kti: Reset hot key if we don't have an active box.
 	if (ui_key_match(ui_state->active_box_key, ui_key_zero())) {
@@ -322,7 +502,8 @@ Internal void ui_begin_build(OS_Window *window) {
 }
 
 Internal void ui_end_build(void) {
-
+	ui_state->build_index += 1;
+	arena_clear(ui_build_arena());
 }
 
 Internal UI_Signal ui_button(String8 string) {

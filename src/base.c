@@ -122,6 +122,7 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 //~ kti: Memory
 #define MemoryZero(p, s) memset((p), 0, (s))
 #define MemoryZeroStruct(p) MemoryZero((p), sizeof(*(p)))
+#define MemoryZeroArray(a) MemoryZero((a), sizeof(*(a))*ArrayCount(a))
 
 ////////////////////////////////
 //~ kti: Linked List Building Macros

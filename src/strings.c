@@ -9,6 +9,19 @@ struct String8 {
   L1 len;
 };
 
+typedef struct String8_Node String8_Node;
+struct String8_Node {
+	String8_Node *next;
+	String8_Node *prev;
+	String8 value;
+};
+
+typedef struct String8_List String8_List;
+struct String8_List {
+	String8_Node *first;
+	String8_Node *last;
+};
+
 typedef struct String16 String16;
 struct String16 {
   W1 *str;

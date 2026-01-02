@@ -1,0 +1,11 @@
+Parent,            parent,            UI_Box *, &ui_nil_box
+Fixed_X,           fixed_x,           F1,       0.0f
+Fixed_Y,           fixed_y,           F1,       0.0f
+Fixed_Width,       fixed_width,       F1,       0.0f
+Fixed_Height,      fixed_height,      F1,       0.0f
+Pref_Width,        pref_width,        UI_Size,  `ui_px(250.0f, 1.0f)`
+Pref_Height,       pref_height,       UI_Size,  `ui_px(30.0f, 1.0f)`
+Min_Width,         min_width,         F1,       0.0f
+Min_Height,        min_height,        F1,       0.0f
+Child_Layout_Axis, child_layout_axis, I1,       0.0f
+Background_Color,  background_color,  F4,       (F4){0.0f}

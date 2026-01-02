@@ -6,35 +6,6 @@ enum {
 	UI_AXIS_COUNT,
 };
 
-enum {
-	UI_STACK__PARENT,
-	UI_STACK__FIXED_X,
-	UI_STACK__FIXED_Y,
-	UI_STACK__FIXED_WIDTH,
-	UI_STACK__FIXED_HEIGHT,
-	UI_STACK__PREF_WIDTH,
-	UI_STACK__PREF_HEIGHT,
-	UI_STACK__MIN_WIDTH,
-	UI_STACK__MIN_HEIGHT,
-	UI_STACK__CHILD_LAYOUT_AXIS,
-
-	UI_STACK_COUNT,
-};
-
-typedef struct UI_Stack_Node UI_Stack_Node;
-struct UI_Stack_Node {
-	UI_Stack_Node *next;
-	L1 value[2];
-	// TODO: Have separate type for nodes that require more storage..
-};
-
-typedef struct UI_Stack UI_Stack;
-struct UI_Stack {
-	UI_Stack_Node *top;
-	UI_Stack_Node *free;
-	I1 auto_pop;
-};
-
 typedef struct UI_Key UI_Key;
 struct UI_Key {
 	L1 l1[1];
@@ -179,6 +150,8 @@ struct UI_Signal {
 	UI_Signal_Flags flags;
 };
 
+#include "ui.meta.h"
+
 typedef struct UI_State UI_State;
 struct UI_State {
 	Arena *arena;
@@ -199,8 +172,7 @@ struct UI_State {
 	UI_Key hot_box_key;
 	UI_Key active_box_key;
 
-	UI_Stack_Node stack_nils[UI_STACK_COUNT];
-	UI_Stack stacks[UI_STACK_COUNT];
+	UIStacks;
 };
 
 #endif
@@ -234,51 +206,9 @@ Internal Arena *ui_build_arena(void) {
 	return arena;
 }
 
-#define X(stack_idx, T, name) \
-	Internal void ui_push_##name(T value) { \
-		UI_Stack *stack = &ui_state->stacks[stack_idx]; \
-		UI_Stack_Node *node = stack->free; \
-		if (node == 0) { node = push_array(ui_build_arena(), UI_Stack_Node, 1); } \
-		else { SLLStackPop(stack->free); } \
-		memmove(&node->value, &value, sizeof(value)); \
-	} \
-	Internal void ui_pop_##name(void) { \
-		UI_Stack *stack = &ui_state->stacks[stack_idx]; \
-		UI_Stack_Node *popped_node = stack->top; \
-		if (popped_node != &ui_state->stack_nils[stack_idx]) { \
-			SLLStackPop(stack->top); \
-			SLLStackPush(stack->free, popped_node); \
-			stack->auto_pop = 0; \
-		} \
-	} \
-	Internal void ui_set_next_##name(T value) { \
-		ui_push_##name(value); \
-		ui_state->stacks[stack_idx].auto_pop = 1; \
-	} \
-	Internal T ui_top_##name(void) { \
-		T result = *(T *)&ui_state->stacks[stack_idx].top->value; \
-		return result; \
-	}
-
-X(UI_STACK__PARENT,            UI_Box *, parent);
-X(UI_STACK__FIXED_X,           F1,       fixed_x);
-X(UI_STACK__FIXED_Y,           F1,       fixed_y);
-X(UI_STACK__FIXED_WIDTH,       F1,       fixed_width);
-X(UI_STACK__FIXED_HEIGHT,      F1,       fixed_height);
-X(UI_STACK__PREF_WIDTH,        UI_Size,  pref_width);
-X(UI_STACK__PREF_HEIGHT,       UI_Size,  pref_height);
-X(UI_STACK__MIN_WIDTH,         F1,       min_width);
-X(UI_STACK__MIN_HEIGHT,        F1,       min_height);
-X(UI_STACK__CHILD_LAYOUT_AXIS, I1,       child_layout_axis);
-
-#undef X
+#include "ui.meta.c"
 
 Internal void ui_reset_stack(void) {
-	for EachIndex(i, UI_STACK_COUNT) {
-		ui_state->stacks[i].top = &ui_state->stack_nils[i];
-		ui_state->stacks[i].free = 0;
-		ui_state->stacks[i].auto_pop = 0;
-	}
 }
 
 Internal UI_Key ui_key_zero(void) {
@@ -309,10 +239,6 @@ Internal void ui_init(void) {
 	ui_state->box_table_size = 4096;
 	ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
 
-	UI_Size default_width = ui_px(250.0f, 1.0f);
-	UI_Size default_height = ui_px(30.0f, 1.0f);
-	memmove(&ui_state->stack_nils[UI_STACK__PREF_WIDTH].value,  &default_width,  sizeof(UI_Size));
-	memmove(&ui_state->stack_nils[UI_STACK__PREF_HEIGHT].value, &default_height, sizeof(UI_Size));
 }
 
 Internal I1 ui_box_is_nil(UI_Box *box) {
@@ -405,25 +331,22 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	}
 	box->last_touch_build_index = ui_state->build_index;
 
-	UI_Stack *stacks = ui_state->stacks;
-	UI_Stack_Node *nils = ui_state->stack_nils;
-
-	if (stacks[UI_STACK__FIXED_X].top == nils+UI_STACK__FIXED_X) {
+	if (ui_state->fixed_x_stack.top == &ui_state->nil_fixed_x) {
 		box->flags |= UI_BOX_FLAG__FLOATING_X;
 		box->fixed_pos.x = ui_top_fixed_x();
 	}
-	if (stacks[UI_STACK__FIXED_Y].top == nils+UI_STACK__FIXED_Y) {
+	if (ui_state->fixed_y_stack.top == &ui_state->nil_fixed_y) {
 		box->flags |= UI_BOX_FLAG__FLOATING_Y;
 		box->fixed_pos.x = ui_top_fixed_y();
 	}
 
-	if (stacks[UI_STACK__FIXED_WIDTH].top == nils+UI_STACK__FIXED_WIDTH) {
+	if (ui_state->fixed_width_stack.top == &ui_state->nil_fixed_width) {
 		box->flags |= UI_BOX_FLAG__FIXED_WIDTH;
 		box->fixed_size.x = ui_top_fixed_width();
 	} else {
 		box->pref_size[UI_AXIS__X] = ui_top_pref_width();
 	}
-	if (stacks[UI_STACK__FIXED_HEIGHT].top == nils+UI_STACK__FIXED_HEIGHT) {
+	if (ui_state->fixed_height_stack.top == &ui_state->nil_fixed_height) {
 		box->flags |= UI_BOX_FLAG__FIXED_HEIGHT;
 		box->fixed_size.y = ui_top_fixed_height();
 	} else {

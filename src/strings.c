@@ -20,6 +20,7 @@ typedef struct String8_List String8_List;
 struct String8_List {
 	String8_Node *first;
 	String8_Node *last;
+	L1 total_length;
 };
 
 typedef struct String16 String16;
@@ -146,6 +147,37 @@ Internal String8 str8_substr(String8 str, L1 min, L1 max) {
 	result.len = max - min;
 	return result;
 }
+
+Internal String8_Node *str8_list_push(Arena *arena, String8_List *list, String8 str) {
+	String8_Node *node = push_array(arena, String8_Node, 1);
+	node->value = str;
+	DLLPushBack(list->first, list->last, node);
+	list->total_length += str.len;
+	return node;
+}
+
+Internal String8_Node *str8_list_pushf(Arena *arena, String8_List *list, CString fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  String8 string = str8fv(arena, fmt, args);
+  va_end(args);
+
+	String8_Node *node = str8_list_push(arena, list, string);
+	return node;
+}
+
+Internal String8 str8_list_join(Arena *arena, String8_List *list) {
+	String8 result = {0};
+
+	result.str = push_array(arena, B1, list->total_length);
+	for (String8_Node *n = list->first; n != 0; n = n->next) {
+		memmove(result.str+result.len, n->value.str, n->value.len);
+		result.len += n->value.len;
+	}
+
+	return result;
+}
+
 
 ////////////////////////////////
 //~ kti: UTF-8 Decode

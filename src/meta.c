@@ -137,8 +137,9 @@ Internal void lane(Arena *arena) {
 	String8_List stacks_strings = {0};
 	String8_List reset_stacks_strings = {0};
 
-	String8 stacks_macro_def = Str8_("#define UIStacks \\\n");
-	String8 reset_stacks_macro_def = Str8_("#define UIResetStacks \\\n");
+	String8 stacks_macro_def = Str8_("#define UIStacks struct {\\\n");
+	String8 stacks_macro_end = Str8_("}\n");
+	String8 reset_stacks_macro_def = Str8_("#define UIResetStacks() \\\n");
 	if (lane_idx() == 0) {
 		str8_list_push(scratch.arena, &stacks_strings, stacks_macro_def);
 		str8_list_push(scratch.arena, &reset_stacks_strings, reset_stacks_macro_def);
@@ -192,21 +193,31 @@ Internal %4$s ui_top_%3$s(void) {
 )", node_type.str, stack_type.str, name.str, type.str);
 
 			String8 generated_stack = str8f(scratch.arena,
-					"%2$s %3$s_stack;\\\n"
-					"%1$s nil_%3$s; \\\n",
+					"	%2$s %3$s_stack;\\\n"
+					"	%1$s nil_%3$s; \\\n",
+					node_type.str, stack_type.str, name.str, type.str);
+
+			String8 generated_reset_stack = str8f(scratch.arena,
+					"	ui_state->%3$s_stack.top = &ui_state->nil_%3$s; ui_state->%3$s_stack.free = 0; ui_state->%3$s_stack.auto_pop = 0;\\\n",
 					node_type.str, stack_type.str, name.str, type.str);
 
 			str8_list_push(scratch.arena, &header_strings, generated_header);
 			str8_list_push(scratch.arena, &impl_strings, generated_impl);
 			str8_list_push(scratch.arena, &stacks_strings, generated_stack);
+			str8_list_push(scratch.arena, &reset_stacks_strings, generated_reset_stack);
 		}
+	}
+
+	if (lane_idx() == lane_count()-1) {
+		str8_list_push(scratch.arena, &stacks_strings, stacks_macro_end);
 	}
 
 	String8 header_result = str8_list_join(arena, &header_strings);
 	String8 impl_result = str8_list_join(arena, &impl_strings);
 	String8 stacks_result = str8_list_join(arena, &stacks_strings);
+	String8 reset_stacks_result = str8_list_join(arena, &reset_stacks_strings);
 
-	atomic_add_L1(&final_header_length, header_result.len+stacks_result.len);
+	atomic_add_L1(&final_header_length, header_result.len+stacks_result.len+reset_stacks_result.len);
 	atomic_add_L1(&final_impl_length, impl_result.len);
 
 	scratch_end(scratch);
@@ -251,6 +262,14 @@ Internal %4$s ui_top_%3$s(void) {
 	}
 	lane_sync();
 
+	//- kti: Write UIResetStacks macro.
+	for EachIndex(i, lane_count()) {
+		if (i == lane_idx()) {
+			memmove(final_header.str+final_header.len, reset_stacks_result.str, reset_stacks_result.len);
+			final_header.len += reset_stacks_result.len;
+		}
+		lane_sync();
+	}
 
 	lane_sync();
 

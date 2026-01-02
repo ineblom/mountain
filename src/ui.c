@@ -208,9 +208,6 @@ Internal Arena *ui_build_arena(void) {
 
 #include "ui.meta.c"
 
-Internal void ui_reset_stack(void) {
-}
-
 Internal UI_Key ui_key_zero(void) {
 	UI_Key result = {0};
 	return result;
@@ -385,7 +382,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 }
 
 Internal void ui_begin_build(OS_Window *window) {
-	ui_reset_stack();
+	UIResetStacks();
 	ui_state->root = &ui_nil_box;
 	ui_state->last_build_box_count = ui_state->build_box_count;
 	ui_state->build_box_count = 0;

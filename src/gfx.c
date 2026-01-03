@@ -489,13 +489,13 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
 
 Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) {
 	Assert(pixels != 0);
-	Assert(region.x >= 0 && region.y >= 0);
-	Assert(region.x + region.z <= tex->width);
-	Assert(region.y + region.w <= tex->height);
+	Assert(region[0] >= 0 && region[1] >= 0);
+	Assert(region[0] + region[2] <= tex->width);
+	Assert(region[1] + region[3] <= tex->height);
 	ProfFuncBegin();
 
 	VkResult result;
-	L1 region_size = region.z * region.w * 4; // RGBA8
+	L1 region_size = region[2] * region[3] * 4; // RGBA8
 
 	VkBuffer staging_buffer;
 	VkDeviceMemory staging_memory;
@@ -577,8 +577,8 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 			.baseArrayLayer = 0,
 			.layerCount = 1,
 		},
-		.imageOffset = {region.x, region.y, 0},
-		.imageExtent = {region.z, region.w, 1},
+		.imageOffset = {region[0], region[1], 0},
+		.imageExtent = {region[2], region[3], 1},
 	};
 	vkCmdCopyBufferToImage(cmd, staging_buffer, tex->image,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
@@ -1506,12 +1506,12 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
         .height = vkw->swapchain_extent.height,
       },
     };
-    if (batch->clip_rect.x != 0.0f || batch->clip_rect.y != 0.0f ||
-        batch->clip_rect.z != 0.0f || batch->clip_rect.w != 0.0f) {
-      scissor.offset.x = batch->clip_rect.x;
-      scissor.offset.y = batch->clip_rect.y;
-      scissor.extent.width = batch->clip_rect.z;
-      scissor.extent.height = batch->clip_rect.w;
+    if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
+        batch->clip_rect[2] != 0.0f || batch->clip_rect[3] != 0.0f) {
+      scissor.offset.x = batch->clip_rect[0];
+      scissor.offset.y = batch->clip_rect[1];
+      scissor.extent.width = batch->clip_rect[2];
+      scissor.extent.height = batch->clip_rect[3];
     }
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 

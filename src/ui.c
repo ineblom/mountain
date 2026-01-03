@@ -68,14 +68,14 @@ struct UI_Box {
 	L1 first_touch_build_index;
 	L1 last_touch_build_index;
 
-	DR_Bucket *draw_bucket;
-	F4 background_color;
-	F4 text_color;
-	F4 border_color;
 	FC_Tag font;
 	F1 font_size;
 	F1 tab_size;
 	F1 corner_radii[4];
+	F4 background_color;
+	F4 text_color;
+	F4 border_color;
+	DR_Bucket *draw_bucket;
 
 	F1 hot_t;
 	F1 active_t;
@@ -235,7 +235,7 @@ Internal void ui_init(void) {
 	ui_state->build_arenas[1] = arena_create(MiB(64));
 	ui_state->box_table_size = 4096;
 	ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
-
+	UIInitStackNils();
 }
 
 Internal I1 ui_box_is_nil(UI_Box *box) {
@@ -271,7 +271,7 @@ Internal UI_Key ui_active_seed_key(void) {
 }
 
 Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
-	ui_state->build_box_count = 0;
+	ui_state->build_box_count += 1;
 
 	UI_Box *parent = ui_top_parent();
 
@@ -328,31 +328,44 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	}
 	box->last_touch_build_index = ui_state->build_index;
 
-	if (ui_state->fixed_x_stack.top == &ui_state->nil_fixed_x) {
+	if (ui_state->fixed_x_stack.top != &ui_state->nil_fixed_x) {
 		box->flags |= UI_BOX_FLAG__FLOATING_X;
-		box->fixed_pos.x = ui_top_fixed_x();
+		box->fixed_pos[0] = ui_top_fixed_x();
 	}
-	if (ui_state->fixed_y_stack.top == &ui_state->nil_fixed_y) {
+	if (ui_state->fixed_y_stack.top != &ui_state->nil_fixed_y) {
 		box->flags |= UI_BOX_FLAG__FLOATING_Y;
-		box->fixed_pos.x = ui_top_fixed_y();
+		box->fixed_pos[1] = ui_top_fixed_y();
 	}
 
-	if (ui_state->fixed_width_stack.top == &ui_state->nil_fixed_width) {
+	if (ui_state->fixed_width_stack.top != &ui_state->nil_fixed_width) {
 		box->flags |= UI_BOX_FLAG__FIXED_WIDTH;
-		box->fixed_size.x = ui_top_fixed_width();
+		box->fixed_size[0] = ui_top_fixed_width();
 	} else {
 		box->pref_size[UI_AXIS__X] = ui_top_pref_width();
 	}
-	if (ui_state->fixed_height_stack.top == &ui_state->nil_fixed_height) {
+	if (ui_state->fixed_height_stack.top != &ui_state->nil_fixed_height) {
 		box->flags |= UI_BOX_FLAG__FIXED_HEIGHT;
-		box->fixed_size.y = ui_top_fixed_height();
+		box->fixed_size[1] = ui_top_fixed_height();
 	} else {
 		box->pref_size[UI_AXIS__Y] = ui_top_pref_height();
 	}
 
-	box->min_size.x = ui_top_min_width();
-	box->min_size.y = ui_top_min_height();
+	box->min_size[0] = ui_top_min_width();
+	box->min_size[1] = ui_top_min_height();
 	box->child_layout_axis = ui_top_child_layout_axis();
+	box->tab_size = ui_top_tab_size();
+	box->font = ui_top_font();
+	box->font_size = ui_top_font_size();
+
+	if (flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
+		box->background_color = ui_top_background_color();
+	}
+
+	if (flags & UI_BOX_FLAG__DRAW_TEXT) {
+		box->text_color = ui_top_text_color();
+	}
+
+	UIAutoPopStacks();
 
 	return box;
 }

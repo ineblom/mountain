@@ -31,7 +31,7 @@ Inline F1 F1_sign(F1 a) {
 }
 
 Inline F1 F3_dot(F3 a, F3 b) {
-	F1 result = a.x*b.x + a.y*b.y + a.z*b.z;
+	F1 result = a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 	return result;
 }
 
@@ -51,11 +51,11 @@ Inline F3 F3_normalize(F3 v) {
 }
 
 Inline F3 F3_cross(F3 a, F3 b) {
-	F3 result;
+	F3 result = {0};
 
-	result.x = a.y*b.z - a.z*b.y;
-	result.y = a.z*b.x - a.x*b.z;
-	result.z = a.x*b.y - a.y*b.x;
+	result[0] = a[1]*b[2] - a[2]*b[1];
+	result[1] = a[2]*b[0] - a[0]*b[2];
+	result[2] = a[0]*b[1] - a[1]*b[0];
 
 	return result;
 }
@@ -66,29 +66,29 @@ Inline F3 F3_lerp(F3 a, F1 t, F3 b) {
 }
 
 Inline F3 F3_abs(F3 v) {
-	F3 result = { fabsf(v.x), fabsf(v.y), fabsf(v.z) };
+	F3 result = { fabsf(v[0]), fabsf(v[1]), fabsf(v[2]) };
 	return result;
 }
 
 Inline F3 F3_clamp01(F3 v) {
 	F3 result= {
-		F1_clamp01(v.x),
-		F1_clamp01(v.y),
-		F1_clamp01(v.z)
+		F1_clamp01(v[0]),
+		F1_clamp01(v[1]),
+		F1_clamp01(v[2])
 	};
 	return result;
 }
 
 Inline F1 F3_luminance(F3 v) {
-	F1 result = 0.2126f*v.x + 0.7152f*v.y + 0.0722f*v.z;
+	F1 result = 0.2126f*v[0] + 0.7152f*v[1] + 0.0722f*v[2];
 	return result;
 }
 
 Inline F3 F3_pow(F3 v, F1 exp) {
 	F3 result = {
-		powf(v.x, exp),
-		powf(v.y, exp),
-		powf(v.z, exp)
+		powf(v[0], exp),
+		powf(v[1], exp),
+		powf(v[2], exp)
 	};
 	return result;
 }
@@ -99,12 +99,12 @@ Inline F3 F3_reflect(F3 v, F3 normal) {
 }
 
 Internal F1 ray_aabb_intersect(F3 ray_origin, F3 ray_direction, F3 aabb_min, F3 aabb_max) {
-	F1 t_min = (aabb_min.x - ray_origin.x) / ray_direction.x;
-	F1 t_max = (aabb_max.x - ray_origin.x) / ray_direction.x;
+	F1 t_min = (aabb_min[0] - ray_origin[0]) / ray_direction[0];
+	F1 t_max = (aabb_max[0] - ray_origin[0]) / ray_direction[0];
 	if (t_min > t_max) Swap(t_min, t_max);
 
-	F1 ty_min = (aabb_min.y - ray_origin.y) / ray_direction.y;
-	F1 ty_max = (aabb_max.y - ray_origin.y) / ray_direction.y;
+	F1 ty_min = (aabb_min[1] - ray_origin[1]) / ray_direction[1];
+	F1 ty_max = (aabb_max[1] - ray_origin[1]) / ray_direction[1];
 	if (ty_min > ty_max) Swap(ty_min, ty_max);
 
 	t_min = Max(t_min, ty_min);
@@ -112,8 +112,8 @@ Internal F1 ray_aabb_intersect(F3 ray_origin, F3 ray_direction, F3 aabb_min, F3 
 
 	if (t_min > t_max) return 0.0f;
 
-	F1 tz_min = (aabb_min.z - ray_origin.z) / ray_direction.z;
-	F1 tz_max = (aabb_max.z - ray_origin.z) / ray_direction.z;
+	F1 tz_min = (aabb_min[2] - ray_origin[2]) / ray_direction[2];
+	F1 tz_max = (aabb_max[2] - ray_origin[2]) / ray_direction[2];
 	if (tz_min > tz_max) Swap(tz_min, tz_max);
 
 	t_min = Max(t_min, tz_min);

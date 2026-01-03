@@ -55,6 +55,10 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 			ui_begin_build(window);
 
+			if (ui_button(Str8_("Press Me")).flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+				printf("pressed!\n");
+			}
+
 			ui_end_build();
 		}
 

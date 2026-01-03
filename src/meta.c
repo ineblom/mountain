@@ -136,13 +136,19 @@ Internal void lane(Arena *arena) {
 	String8_List impl_strings = {0};
 	String8_List stacks_strings = {0};
 	String8_List reset_stacks_strings = {0};
+	String8_List init_nil_stacks_strings = {0};
+	String8_List auto_pop_stacks_strings = {0};
 
 	String8 stacks_macro_def = Str8_("#define UIStacks struct {\\\n");
-	String8 stacks_macro_end = Str8_("}\n");
-	String8 reset_stacks_macro_def = Str8_("#define UIResetStacks() \\\n");
+	String8 reset_stacks_macro_def = Str8_("#define UIResetStacks() {\\\n");
+	String8 init_nil_stacks_macro_def = Str8_("#define UIInitStackNils() {\\\n");
+	String8 auto_pop_stacks_macro_def = Str8_("#define UIAutoPopStacks() {\\\n");
+	String8 macro_end = Str8_("}\n");
 	if (lane_idx() == 0) {
 		str8_list_push(scratch.arena, &stacks_strings, stacks_macro_def);
 		str8_list_push(scratch.arena, &reset_stacks_strings, reset_stacks_macro_def);
+		str8_list_push(scratch.arena, &init_nil_stacks_strings, init_nil_stacks_macro_def);
+		str8_list_push(scratch.arena, &auto_pop_stacks_strings, auto_pop_stacks_macro_def);
 	}
 
 	for (Line *line = lines.first; line != 0; line = line->next) {
@@ -153,7 +159,7 @@ Internal void lane(Arena *arena) {
 			String8 type = push_str8_copy(scratch.arena, line->params[2]);
 			String8 default_value = push_str8_copy(scratch.arena, line->params[3]);
 
-			String8 generated_header = str8f(scratch.arena, R"(
+			String8 header = str8f(scratch.arena, R"(
 typedef struct %1$s %1$s;
 struct %1$s { %1$s *next; %4$s value; };
 typedef struct %2$s %2$s;
@@ -164,7 +170,7 @@ Internal void ui_set_next_%3$s(%4$s value);
 Internal %4$s ui_top_%3$s(void);
 )", node_type.str, stack_type.str, name.str, type.str);
 
-			String8 generated_impl = str8f(scratch.arena, R"(
+			String8 impl = str8f(scratch.arena, R"(
 Internal void ui_push_%3$s(%4$s value) {
 	%2$s *stack = &ui_state->%3$s_stack;
 	%1$s *node = stack->free;
@@ -192,32 +198,46 @@ Internal %4$s ui_top_%3$s(void) {
 }
 )", node_type.str, stack_type.str, name.str, type.str);
 
-			String8 generated_stack = str8f(scratch.arena,
+			String8 stack = str8f(scratch.arena,
 					"	%2$s %3$s_stack;\\\n"
 					"	%1$s nil_%3$s; \\\n",
 					node_type.str, stack_type.str, name.str, type.str);
 
-			String8 generated_reset_stack = str8f(scratch.arena,
+			String8 reset_stack = str8f(scratch.arena,
 					"	ui_state->%3$s_stack.top = &ui_state->nil_%3$s; ui_state->%3$s_stack.free = 0; ui_state->%3$s_stack.auto_pop = 0;\\\n",
 					node_type.str, stack_type.str, name.str, type.str);
 
-			str8_list_push(scratch.arena, &header_strings, generated_header);
-			str8_list_push(scratch.arena, &impl_strings, generated_impl);
-			str8_list_push(scratch.arena, &stacks_strings, generated_stack);
-			str8_list_push(scratch.arena, &reset_stacks_strings, generated_reset_stack);
+			String8 init_nil_stack = str8f(scratch.arena,
+					"	ui_state->nil_%3$s.value = %5$s;\\\n",
+					node_type.str, stack_type.str, name.str, type.str, default_value.str);
+
+			String8 auto_ppo_stack = str8f(scratch.arena,
+					"	if (ui_state->%3$s_stack.auto_pop) { ui_pop_%3$s(); ui_state->%3$s_stack.auto_pop = 0; }\\\n",
+					node_type.str, stack_type.str, name.str, type.str);
+
+			str8_list_push(scratch.arena, &header_strings, header);
+			str8_list_push(scratch.arena, &impl_strings, impl);
+			str8_list_push(scratch.arena, &stacks_strings, stack);
+			str8_list_push(scratch.arena, &reset_stacks_strings, reset_stack);
+			str8_list_push(scratch.arena, &init_nil_stacks_strings, init_nil_stack);
 		}
 	}
 
 	if (lane_idx() == lane_count()-1) {
-		str8_list_push(scratch.arena, &stacks_strings, stacks_macro_end);
+		str8_list_push(scratch.arena, &stacks_strings, macro_end);
+		str8_list_push(scratch.arena, &reset_stacks_strings, macro_end);
+		str8_list_push(scratch.arena, &init_nil_stacks_strings, macro_end);
+		str8_list_push(scratch.arena, &auto_pop_stacks_strings, macro_end);
 	}
 
 	String8 header_result = str8_list_join(arena, &header_strings);
 	String8 impl_result = str8_list_join(arena, &impl_strings);
 	String8 stacks_result = str8_list_join(arena, &stacks_strings);
 	String8 reset_stacks_result = str8_list_join(arena, &reset_stacks_strings);
+	String8 init_nil_stacks_result = str8_list_join(arena, &init_nil_stacks_strings);
+	String8 auto_pop_stacks_result = str8_list_join(arena, &auto_pop_stacks_strings);
 
-	atomic_add_L1(&final_header_length, header_result.len+stacks_result.len+reset_stacks_result.len);
+	atomic_add_L1(&final_header_length, header_result.len+stacks_result.len+reset_stacks_result.len+init_nil_stacks_result.len+auto_pop_stacks_result.len);
 	atomic_add_L1(&final_impl_length, impl_result.len);
 
 	scratch_end(scratch);
@@ -267,6 +287,24 @@ Internal %4$s ui_top_%3$s(void) {
 		if (i == lane_idx()) {
 			memmove(final_header.str+final_header.len, reset_stacks_result.str, reset_stacks_result.len);
 			final_header.len += reset_stacks_result.len;
+		}
+		lane_sync();
+	}
+
+	//- kti: Write UIInitNil macro.
+	for EachIndex(i, lane_count()) {
+		if (i == lane_idx()) {
+			memmove(final_header.str+final_header.len, init_nil_stacks_result.str, init_nil_stacks_result.len);
+			final_header.len += init_nil_stacks_result.len;
+		}
+		lane_sync();
+	}
+
+	//- kti: Write UIAutoPopStacks macro.
+	for EachIndex(i, lane_count()) {
+		if (i == lane_idx()) {
+			memmove(final_header.str+final_header.len, auto_pop_stacks_result.str, auto_pop_stacks_result.len);
+			final_header.len += auto_pop_stacks_result.len;
 		}
 		lane_sync();
 	}

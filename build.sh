@@ -1,32 +1,35 @@
 #!/bin/sh
 
+COMPILER="gcc"
 WARN="-Wall -Wno-unused-function -Wno-unused-variable"
 DEFS="-DCPU_=1 -DDEV_=1"
 INC="-I/usr/include/freetype2"
 LIB="-lm -lwayland-client -lwayland-cursor -lfreetype"
-OPT="-g -march=native"
+OPT="-g" # -march=native
 
 cd src
-clang $WARN $DEFS $INC $LIB $OPT -DMETA_APP=1 build.c -o ../meta
+$COMPILER $WARN $DEFS $INC $LIB $OPT -DMETA_APP=1 build.c -o ../meta
 BUILD_STATUS=$?
 cd ..
 
 if [ $BUILD_STATUS -eq 0 ]; then
 	echo META build successful, running...
-	./meta
+	# ./meta
 else
 	echo META build failed
 	exit
 fi
 
+echo "Meta program done."
+
 cd src
-clang $WARN $DEFS $INC $LIB $OPT build.c -o ../m
+$COMPILER $WARN $DEFS $INC $LIB $OPT build.c -o ../m
 BUILD_STATUS=$?
 cd ..
 
 if [ $BUILD_STATUS -eq 0 ]; then
 	echo Build successful, running...
-	./m
+	# ./m
 else
 	echo Build failed
 fi

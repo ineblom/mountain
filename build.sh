@@ -14,7 +14,7 @@ cd ..
 
 if [ $BUILD_STATUS -eq 0 ]; then
 	echo META build successful, running...
-	# ./meta
+	./meta
 else
 	echo META build failed
 	exit
@@ -29,7 +29,7 @@ cd ..
 
 if [ $BUILD_STATUS -eq 0 ]; then
 	echo Build successful, running...
-	# ./m
+	./m
 else
 	echo Build failed
 fi

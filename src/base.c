@@ -12,10 +12,16 @@
 
 typedef float     F1;
 typedef double    D1;
-typedef char      SB1; typedef unsigned char      B1;
-typedef short     SW1; typedef unsigned short     W1;
-typedef int       SI1; typedef unsigned int       I1;
-typedef long long SL1; typedef unsigned long long L1;
+
+typedef char      SB1; 
+typedef short     SW1; 
+typedef int       SI1; 
+typedef long long SL1; 
+
+typedef unsigned char      B1;
+typedef unsigned short     W1;
+typedef unsigned int       I1;
+typedef unsigned long long L1;
 
 #ifdef __clang__
 #define VEC_TYPE(x, T) __attribute__((ext_vector_type(x)))

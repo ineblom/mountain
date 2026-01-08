@@ -14,43 +14,41 @@ struct Random_State {
 
 #if (CPU_) && (ROM_)
 
-// TODO: Rename functions to fit action_type format.
-
 #define abs_SL1(x) llabs(x)
 #define mod_F1(x, y) fmodf(x, y)
 #define floor_F1(x) floorf(x)
 #define ceil_F1(x) ceilf(x)
 
-Inline F1 F1_clamp01(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
-Inline F1 F1_saturate(F1 x) { return F1_clamp01(x); }
+Inline F1 clamp01_F1(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
+Inline F1 saturate_F(F1 x) { return clamp01_F1(x); }
 
-Inline F1 F1_sign(F1 a) {
+Inline F1 sign_F1(F1 a) {
 	F1 result = -1.0f;
 	if (a > 0.0f) result = 1.0f;
 	return result;
 }
 
-Inline F1 F3_dot(F3 a, F3 b) {
+Inline F1 dot_F3(F3 a, F3 b) {
 	F1 result = a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 	return result;
 }
 
-Inline F1 F3_length_sq(F3 v) {
-	F1 result = F3_dot(v, v);
+Inline F1 length_sq_F3(F3 v) {
+	F1 result = dot_F3(v, v);
 	return result;
 }
 
-Inline F1 F3_length(F3 v) {
-	F1 result = sqrtf(F3_length_sq(v));
+Inline F1 length_F3(F3 v) {
+	F1 result = sqrtf(length_sq_F3(v));
 	return result;
 }
 
-Inline F3 F3_normalize(F3 v) {
-	F3 result = v * (1.0f / F3_length(v));
+Inline F3 normalize_F3(F3 v) {
+	F3 result = v * (1.0f / length_F3(v));
 	return result;
 }
 
-Inline F3 F3_cross(F3 a, F3 b) {
+Inline F3 cross_F3(F3 a, F3 b) {
 	F3 result = {0};
 
 	result[0] = a[1]*b[2] - a[2]*b[1];
@@ -60,31 +58,31 @@ Inline F3 F3_cross(F3 a, F3 b) {
 	return result;
 }
 
-Inline F3 F3_lerp(F3 a, F1 t, F3 b) {
+Inline F3 lerp_F3(F3 a, F1 t, F3 b) {
 	F3 result = a * (1-t) + b*t;
 	return result;
 }
 
-Inline F3 F3_abs(F3 v) {
+Inline F3 abs_F3(F3 v) {
 	F3 result = { fabsf(v[0]), fabsf(v[1]), fabsf(v[2]) };
 	return result;
 }
 
-Inline F3 F3_clamp01(F3 v) {
+Inline F3 clamp01_F3(F3 v) {
 	F3 result= {
-		F1_clamp01(v[0]),
-		F1_clamp01(v[1]),
-		F1_clamp01(v[2])
+		clamp01_F1(v[0]),
+		clamp01_F1(v[1]),
+		clamp01_F1(v[2])
 	};
 	return result;
 }
 
-Inline F1 F3_luminance(F3 v) {
+Inline F1 luminance_F3(F3 v) {
 	F1 result = 0.2126f*v[0] + 0.7152f*v[1] + 0.0722f*v[2];
 	return result;
 }
 
-Inline F3 F3_pow(F3 v, F1 exp) {
+Inline F3 pow_F3(F3 v, F1 exp) {
 	F3 result = {
 		powf(v[0], exp),
 		powf(v[1], exp),
@@ -93,8 +91,8 @@ Inline F3 F3_pow(F3 v, F1 exp) {
 	return result;
 }
 
-Inline F3 F3_reflect(F3 v, F3 normal) {
-	F3 result = v - 2*F3_dot(v, normal) * normal;
+Inline F3 reflect_F3(F3 v, F3 normal) {
+	F3 result = v - 2*dot_F3(v, normal) * normal;
 	return result;
 }
 
@@ -142,7 +140,5 @@ Inline F1 random_bilateral(Random_State *rng) {
 	F1 result = -1 + 2 * random_unilateral(rng);
 	return result;
 }
-
-
 
 #endif

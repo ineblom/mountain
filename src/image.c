@@ -68,8 +68,8 @@ Inline F3 I1_to_F3(I1 pixel) {
 Inline F3 image_sample_bilinear_F3(Image image, F1 u, F1 v) {
 	Assert(image.bytes_per_pixel == sizeof(F3));
 
-	u = F1_clamp01(u);
-	v = F1_clamp01(v);
+	u = clamp01_F1(u);
+	v = clamp01_F1(v);
 
 	F1 tex_x = u * (F1)(image.width-1);
 	F1 tex_y = v * (F1)(image.height-1);
@@ -88,9 +88,9 @@ Inline F3 image_sample_bilinear_F3(Image image, F1 u, F1 v) {
 	F3 c01 = p[x0+y1*image.width];
 	F3 c11 = p[x1+y1*image.width];
 
-	F3 top_row = F3_lerp(c00, fx, c10);
-	F3 bot_row = F3_lerp(c01, fx, c11);
-	F3 result  = F3_lerp(top_row, fy, bot_row);
+	F3 top_row = lerp_F3(c00, fx, c10);
+	F3 bot_row = lerp_F3(c01, fx, c11);
+	F3 result  = lerp_F3(top_row, fy, bot_row);
 
 	return result;
 }
@@ -98,8 +98,8 @@ Inline F3 image_sample_bilinear_F3(Image image, F1 u, F1 v) {
 Inline F3 image_sample_bilinear_I1_to_F3(Image image, F1 u, F1 v) {
 	Assert(image.bytes_per_pixel == sizeof(I1));
 
-	u = F1_clamp01(u);
-	v = F1_clamp01(v);
+	u = clamp01_F1(u);
+	v = clamp01_F1(v);
 
 	F1 tex_x = u * (F1)(image.width-1);
 	F1 tex_y = v * (F1)(image.height-1);
@@ -123,9 +123,9 @@ Inline F3 image_sample_bilinear_I1_to_F3(Image image, F1 u, F1 v) {
 	F3 c01rgb = I1_to_F3(c01);
 	F3 c11rgb = I1_to_F3(c11);
 
-	F3 top_row = F3_lerp(c00rgb,  fx, c10rgb);
-	F3 bot_row = F3_lerp(c01rgb,  fx, c11rgb);
-	F3 result  = F3_lerp(top_row, fy, bot_row);
+	F3 top_row = lerp_F3(c00rgb,  fx, c10rgb);
+	F3 bot_row = lerp_F3(c01rgb,  fx, c11rgb);
+	F3 result  = lerp_F3(top_row, fy, bot_row);
 
 	return result;
 }

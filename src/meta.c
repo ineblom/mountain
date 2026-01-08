@@ -159,7 +159,7 @@ Internal void lane(Arena *arena) {
 			String8 type = push_str8_copy(scratch.arena, line->params[2]);
 			String8 default_value = push_str8_copy(scratch.arena, line->params[3]);
 
-			String8 header = str8f(scratch.arena, R"(
+			str8_list_pushf(scratch.arena, &header_strings, R"(
 typedef struct %1$s %1$s;
 struct %1$s { %1$s *next; %4$s value; };
 typedef struct %2$s %2$s;
@@ -170,7 +170,7 @@ Internal void ui_set_next_%3$s(%4$s value);
 Internal %4$s ui_top_%3$s(void);
 )", node_type.str, stack_type.str, name.str, type.str);
 
-			String8 impl = str8f(scratch.arena, R"(
+			str8_list_pushf(scratch.arena, &impl_strings, R"(
 Internal void ui_push_%3$s(%4$s value) {
 	%2$s *stack = &ui_state->%3$s_stack;
 	%1$s *node = stack->free;
@@ -191,35 +191,29 @@ Internal void ui_pop_%3$s(void) {
 }
 Internal void ui_set_next_%3$s(%4$s value) {
 	ui_push_%3$s(value);
-	ui_state->%3$s_stack.auto_pop = 0;
+	ui_state->%3$s_stack.auto_pop = 1;
 }
 Internal %4$s ui_top_%3$s(void) {
 	return ui_state->%3$s_stack.top->value;
 }
 )", node_type.str, stack_type.str, name.str, type.str);
 
-			String8 stack = str8f(scratch.arena,
+			str8_list_pushf(scratch.arena, &stacks_strings,
 					"	%2$s %3$s_stack;\\\n"
 					"	%1$s nil_%3$s; \\\n",
 					node_type.str, stack_type.str, name.str, type.str);
 
-			String8 reset_stack = str8f(scratch.arena,
+			str8_list_pushf(scratch.arena, &reset_stacks_strings,
 					"	ui_state->%3$s_stack.top = &ui_state->nil_%3$s; ui_state->%3$s_stack.free = 0; ui_state->%3$s_stack.auto_pop = 0;\\\n",
 					node_type.str, stack_type.str, name.str, type.str);
 
-			String8 init_nil_stack = str8f(scratch.arena,
+			str8_list_pushf(scratch.arena, &init_nil_stacks_strings,
 					"	ui_state->nil_%3$s.value = %5$s;\\\n",
 					node_type.str, stack_type.str, name.str, type.str, default_value.str);
 
-			String8 auto_ppo_stack = str8f(scratch.arena,
+			str8_list_pushf(scratch.arena, &auto_pop_stacks_strings,
 					"	if (ui_state->%3$s_stack.auto_pop) { ui_pop_%3$s(); ui_state->%3$s_stack.auto_pop = 0; }\\\n",
 					node_type.str, stack_type.str, name.str, type.str);
-
-			str8_list_push(scratch.arena, &header_strings, header);
-			str8_list_push(scratch.arena, &impl_strings, impl);
-			str8_list_push(scratch.arena, &stacks_strings, stack);
-			str8_list_push(scratch.arena, &reset_stacks_strings, reset_stack);
-			str8_list_push(scratch.arena, &init_nil_stacks_strings, init_nil_stack);
 		}
 	}
 

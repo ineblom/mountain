@@ -221,7 +221,8 @@ Internal I1 ui_key_match(UI_Key a, UI_Key b) {
 Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string) {
 	UI_Key result = {0};
 	if (string.len != 0) {
-		result.l1[0] = XXH3_64bits_withSeed(string.str, string.len, seed_key.l1[0]);
+		meow_u128 hash = MeowHash(MeowDefaultSeed, string.len, string.str);
+		result.l1[0] = MeowU64From(hash, 0) ^ seed_key.l1[0];
 	}
 	return result;
 }

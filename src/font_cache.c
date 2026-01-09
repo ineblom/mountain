@@ -1,11 +1,6 @@
 #if (CPU_ && DEF_)
 
-// TODO: Pull out XXH3_128bits to reduce complie time. 
-# if !defined(XXH_IMPLEMENTATION)
-#  define XXH_IMPLEMENTATION
-#  define XXH_STATIC_LINKING_ONLY
-#  include "xxhash.h"
-# endif
+# include "meow_hash_x64_aesni.h"
 
 #endif
 
@@ -261,8 +256,9 @@ Internal FC_Tag fc_tag_from_path(String8 path) {
 	FC_Tag result = {0};
 
 	//- kti: Get a hash from the path.
-	XXH128_hash_t xxhash = XXH3_128bits(path.str, path.len);
-	memmove(&result, &xxhash, sizeof(result));
+	meow_u128 hash = MeowHash(MeowDefaultSeed, path.len, path.str);
+	result.l1[0] = MeowU64From(hash, 0);
+	result.l1[1] = MeowU64From(hash, 1);
 
 	//- kti: Find the slot for this path.
 	L1 slot_idx = result.l1[1] % fc_state->font_hash_table_size;
@@ -335,7 +331,8 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
 		tag.l1[1],
 		*(L1 *)&size_d1,
 	};
-	L1 style_hash = XXH3_64bits_withSeed(buffer, sizeof(buffer), 69420);
+	meow_u128 hash = MeowHash(MeowDefaultSeed, sizeof(buffer), buffer);
+	L1 style_hash = MeowU64From(hash, 0);
 
 	L1 slot_idx = style_hash % fc_state->style_raster_hash_table_size;
 	FC_Style_Raster_HT_Slot *slot = &fc_state->style_raster_hash_table[slot_idx];
@@ -481,7 +478,8 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 	}
 
 	//- kti: Unpack run params.
-	L1 run_hash = XXH3_64bits_withSeed(string.str, string.len, 42069);
+	meow_u128 hash = MeowHash(MeowDefaultSeed, string.len, string.str);
+	L1 run_hash = MeowU64From(hash, 0);
 	L1 run_cache_slot_idx = run_hash % style_raster_node->run_cache_size;
 	FC_Run_Cache_Slot *run_slot = &style_raster_node->run_cache[run_cache_slot_idx];
 
@@ -549,7 +547,8 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 
 			// kii: slower path for other glyphs.
 			if (piece_substring.len > 1) {
-				piece_hash = XXH3_64bits_withSeed(piece_substring.str, piece_substring.len, 133769);
+				meow_u128 hash = MeowHash(MeowDefaultSeed, piece_substring.len, piece_substring.str);
+				piece_hash = MeowU64From(hash, 0);
 				L1 slot_idx = piece_hash%style_raster_node->raster_info_hash_table_size;
 				FC_Raster_Info_HT_Slot *slot = &style_raster_node->raster_info_hash_table[slot_idx];
 				for (FC_Raster_Info_HT_Node *n = slot->first; n != 0; n = n->hash_next) {

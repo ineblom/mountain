@@ -130,6 +130,13 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 #define AlignOf(T) __alignof(T)
 #define AlignPow2(x,b) (((x) + (b) - 1)&(~((b) - 1)))
 
+#define IntFromPtr(ptr) ((L1)(ptr))
+
+#define Member(T,m)                 (((T*)0)->m)
+#define OffsetOf(T,m)               IntFromPtr(&Member(T,m))
+#define MemberFromOffset(T,ptr,off) (T)((((B1*)ptr)+(off)))
+#define CastFromMember(T,m,ptr)     (T*)(((B1*)ptr) - OffsetOf(T,m))
+
 ////////////////////////////////
 //~ kti: Memory
 #define MemoryZero(p, s) memset((p), 0, (s))

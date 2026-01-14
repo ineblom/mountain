@@ -1,5 +1,7 @@
 #if (CPU_ && TYP_)
 
+typedef I1 UI_Axis;
+
 enum {
 	UI_AXIS__X,
 	UI_AXIS__Y,
@@ -64,7 +66,7 @@ struct UI_Box {
 	F2 fixed_size;
 	F2 min_size;
 	UI_Size pref_size[UI_AXIS_COUNT];
-	I1 child_layout_axis;
+	UI_Axis child_layout_axis;
 	L1 first_touch_build_index;
 	L1 last_touch_build_index;
 
@@ -76,9 +78,18 @@ struct UI_Box {
 	F4 text_color;
 	F4 border_color;
 	DR_Bucket *draw_bucket;
+	F1 text_padding;
+	DR_FRun_List display_fruns;
 
 	F1 hot_t;
 	F1 active_t;
+};
+
+typedef struct UI_Box_Rec UI_Box_Rec;
+struct UI_Box_Rec {
+	L1 push_count;
+	L1 pop_count;
+	UI_Box *next;
 };
 
 typedef struct UI_Box_Node UI_Box_Node;
@@ -435,7 +446,139 @@ Internal void ui_begin_build(OS_Window *window) {
 	}
 }
 
+Internal UI_Box_Rec ui_box_rec_df(UI_Box *box, UI_Box *root, L1 sib_member_off, L1 child_member_off) {
+	UI_Box_Rec result = {0};
+	result.next = &ui_nil_box;
+	if (!ui_box_is_nil(*MemberFromOffset(UI_Box **, box, child_member_off))) {
+		result.next = *MemberFromOffset(UI_Box **, box, child_member_off);
+		result.push_count = 1;
+	}
+	else for (UI_Box *p = box; !ui_box_is_nil(p) && p != root; p = p->parent) {
+		if (!ui_box_is_nil(*MemberFromOffset(UI_Box **, p, sib_member_off))) {
+			result.next = *MemberFromOffset(UI_Box **, p, sib_member_off);
+			break;
+		}
+		result.pop_count += 1;
+	}
+
+	return result;
+}
+
+#define ui_box_rec_df_pre(box, root) ui_box_rec_df(box, root, OffsetOf(UI_Box, next), OffsetOf(UI_Box, first))
+#define ui_box_rec_df_post(box, root) ui_box_rec_df(box, root, OffsetOf(UI_Box, prev), OffsetOf(UI_Box, last))
+
+Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, UI_Axis axis) {
+	for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next) {
+		switch (b->pref_size[axis].kind) {
+			default: {} break;
+			case UI_SIZE_KIND__PIXELS: {
+				b->fixed_size[axis] = b->pref_size[axis].value;
+			} break;
+			case UI_SIZE_KIND__TEXT_CONTENT: {
+				F1 padding = b->pref_size[axis].value;
+				F1 text_size = b->display_fruns.dim[0];
+				b->fixed_size[axis] = padding + text_size + b->text_padding * 2;
+			} break;
+		}
+	}
+}
+
+Internal void ui_calc_sizes_upwards_dependent__in_place(UI_Box *root, UI_Axis axis) {
+	for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next) {
+		switch (b->pref_size[axis].kind) {
+			default: {} break;
+			case UI_SIZE_KIND__PERCENT_OF_PARENT: {
+				UI_Box *fixed_parent = &ui_nil_box;
+				for (UI_Box *p = b->parent; !ui_box_is_nil(p); p = p->parent) {
+					if (p->flags & (UI_BOX_FLAG__FIXED_WIDTH<<axis) ||
+							p->pref_size[axis].kind == UI_SIZE_KIND__PIXELS ||
+							p->pref_size[axis].kind == UI_SIZE_KIND__TEXT_CONTENT ||
+							p->pref_size[axis].kind == UI_SIZE_KIND__PERCENT_OF_PARENT) {
+						fixed_parent = p;
+						break;
+					}
+				}
+
+				F1 size = fixed_parent->fixed_size[axis] * b->pref_size[axis].value;
+				b->fixed_size[axis] = size;
+
+			} break;
+		}
+	}
+}
+
+Internal void ui_calc_sizes_downwards_dependent__in_place(UI_Box *root, UI_Axis axis) {
+	UI_Box_Rec rec = {0};
+	for (UI_Box *box = root; !ui_box_is_nil(box); box = rec.next) {
+		rec = ui_box_rec_df_pre(box, root);
+
+		L1 pop_idx = 0;
+		for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent, pop_idx += 1) {
+			if (b->pref_size[axis].kind == UI_SIZE_KIND__CHILDREN_SUM) {
+				F1 sum = 0;
+				for (UI_Box *child = b->first; !ui_box_is_nil(child); child = child->next) {
+					if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
+						if (axis == b->child_layout_axis) {
+							sum += child->fixed_size[axis];
+						} else {
+							sum = Max(sum, child->fixed_size[axis]);
+						}
+					}
+				}
+				b->fixed_size[axis] = sum;
+			}
+		}
+	}
+}
+
+Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, UI_Axis axis) {
+
+}
+
+Internal void ui_layout_position__in_place(UI_Box *root, UI_Axis axis) {
+
+}
+
+Internal void ui_layout_root(UI_Box *root, UI_Axis axis) {
+	ui_calc_sizes_standalone__in_place(root, axis);
+	ui_calc_sizes_upwards_dependent__in_place(root, axis);
+	ui_calc_sizes_downwards_dependent__in_place(root, axis);
+	ui_layout_enforce_constraints__in_place(root, axis);
+	ui_layout_position__in_place(root, axis);
+}
+
+Internal void ui_print_tree(UI_Box *box, L1 depth) {
+	for EachIndex(i, depth) {
+		printf(" ");
+	}
+	printf("%llu (%.2fx%.2f)\n", box->key.l1[0], box->fixed_size[0], box->fixed_size[1]);
+
+	for (UI_Box *c = box->first; !ui_box_is_nil(c); c = c->next) {
+		ui_print_tree(c, depth + 1);
+	}
+}
+
 Internal void ui_end_build(void) {
+	//- kti: Prune untouched or transient boxes.
+	for EachIndex(slot_idx, ui_state->box_table_size) {
+		UI_Box_HT_Slot *slot = &ui_state->box_table[slot_idx];
+		for (UI_Box *box = slot->first; !ui_box_is_nil(box); box = box->hash_next) {
+			if (box->last_touch_build_index < ui_state->build_index ||
+					ui_key_match(box->key, ui_key_zero())) {
+				DLLRemove_NPZ(&ui_nil_box, slot->first, slot->last, box, hash_next, hash_prev);
+				SLLStackPush(ui_state->first_free_box, box);
+			}
+		}
+	}
+
+	for EachIndex(axis, UI_AXIS_COUNT) {
+		ui_layout_root(ui_state->root, axis);
+	}
+
+	if (ui_state->build_index == 0) {
+		ui_print_tree(ui_state->root, 0);
+	}
+
 	ui_state->build_index += 1;
 	arena_clear(ui_build_arena());
 }

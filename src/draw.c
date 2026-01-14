@@ -1,5 +1,27 @@
 #if (CPU_ && TYP_)
 
+typedef struct DR_FRun DR_FRun;
+struct DR_FRun {
+	FC_Run run;
+	F4 color;
+	F1 underline_thickness;
+	F1 strikethrough_thickness;
+};
+
+typedef struct DR_FRun_Node DR_FRun_Node;
+struct DR_FRun_Node {
+	DR_FRun_Node *next;
+	DR_FRun value;
+};
+
+typedef struct DR_FRun_List DR_FRun_List;
+struct DR_FRun_List {
+	DR_FRun_Node *first;
+	DR_FRun_Node *last;
+	L1 node_count;
+	F2 dim;
+};
+
 typedef struct DR_Clip_Node DR_Clip_Node;
 struct DR_Clip_Node {
 	DR_Clip_Node *next;

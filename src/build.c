@@ -59,9 +59,9 @@ NoInline void WrmEnd(void) { Crash(1); }
 #include "math.c"
 #include "image.c"
 #include "gfx.c"
-#include "draw.c"
 #include "font_provider.c"
 #include "font_cache.c"
+#include "draw.c"
 
 #if META_APP
 #include "meta.c"

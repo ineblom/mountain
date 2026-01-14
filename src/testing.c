@@ -17,7 +17,7 @@ Internal void lane(Arena *arena) {
 		//- kti: System init.
 		ProfInit();
 		gfx_init();
-    fp_init();
+		fp_init();
 		fc_init();
 		ui_init();
 
@@ -55,9 +55,26 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 			ui_begin_build(window);
 
-			if (ui_button(Str8_("Press Me")).flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-				printf("pressed!\n");
-			}
+			UI_Box *b1 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("left container"));
+			b1->pref_size[UI_AXIS__X] = (UI_Size){ .kind = UI_SIZE_KIND__PERCENT_OF_PARENT, .value = 0.5f };
+			b1->pref_size[UI_AXIS__Y] = (UI_Size){ .kind = UI_SIZE_KIND__PERCENT_OF_PARENT, .value = 1.0f };
+
+			ui_set_next_child_layout_axis(UI_AXIS__Y);
+			UI_Box *b2 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("other container"));
+			b2->pref_size[UI_AXIS__X] = (UI_Size){ .kind = UI_SIZE_KIND__CHILDREN_SUM };
+			b2->pref_size[UI_AXIS__Y] = (UI_Size){ .kind = UI_SIZE_KIND__CHILDREN_SUM };
+
+			ui_push_parent(b2);
+
+			ui_set_next_fixed_width(200);
+			ui_set_next_fixed_height(100);
+			UI_Box *b3 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Hejsan!"));
+
+			ui_set_next_fixed_width(100);
+			ui_set_next_fixed_height(30);
+			UI_Box *b4 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("VA!"));
+
+			ui_pop_parent();
 
 			ui_end_build();
 		}

@@ -45,6 +45,10 @@ enum {
 	UI_BOX_FLAG__FLOATING_Y       = (1<<11),
 	UI_BOX_FLAG__FIXED_WIDTH      = (1<<12),
 	UI_BOX_FLAG__FIXED_HEIGHT     = (1<<13),
+	UI_BOX_FLAG__ALLOW_OVERFLOW_X = (1<<14),
+	UI_BOX_FLAG__ALLOW_OVERFLOW_Y = (1<<15),
+	UI_BOX_FLAG__SKIP_VIEW_OFF_X  = (1<<16),
+	UI_BOX_FLAG__SKIP_VIEW_OFF_Y  = (1<<17),
 };
 
 typedef struct UI_Box UI_Box;
@@ -65,6 +69,9 @@ struct UI_Box {
 	F2 fixed_pos;
 	F2 fixed_size;
 	F2 min_size;
+	F2 view_off;
+	F2 view_bounds;
+	F4 rect;
 	UI_Size pref_size[UI_AXIS_COUNT];
 	UI_Axis child_layout_axis;
 	L1 first_touch_build_index;
@@ -532,11 +539,98 @@ Internal void ui_calc_sizes_downwards_dependent__in_place(UI_Box *root, UI_Axis 
 }
 
 Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, UI_Axis axis) {
+	Temp_Arena scratch = scratch_begin(0, 0);
 
+	for (UI_Box *box = root; !ui_box_is_nil(box); box = ui_box_rec_df_pre(box, root).next) {
+
+		//- kti: Non layout axis
+		if (axis != box->child_layout_axis && !(box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X << axis))) {
+			F1 allowed_size = box->fixed_size[axis];
+			for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
+				if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
+					F1 child_size = child->fixed_size[axis];
+					F1 violation = child_size - allowed_size;
+					F1 max_fixup = child_size;
+					F1 fixup = Clamp(0, violation, max_fixup);
+					child->fixed_size[axis] -= fixup;
+				}
+			}
+		}
+
+		//- kti: Layout axis
+		if (axis == box->child_layout_axis && !(box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X<<axis))) {
+			F1 total_allowed_size = box->fixed_size[axis];
+			F1 total_size = 0;
+			F1 total_weighted_size = 0;
+			for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
+				if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
+					total_size += child->fixed_size[axis];
+					total_weighted_size += child->fixed_size[axis] * (1-child->pref_size[axis].strictness);
+				}
+			}
+
+			F1 violation = total_size - total_allowed_size;
+			if (violation > 0 && total_weighted_size > 0) {
+				for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
+					if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
+						F1 fixup_size_this_child = child->fixed_size[axis] * (1 - child->pref_size[axis].strictness);
+						fixup_size_this_child = ClampBot(0, fixup_size_this_child);
+
+						F1 fixup_pct = (violation / total_weighted_size);
+						fixup_pct = Clamp(0, fixup_pct, 1);
+
+						child->fixed_size[axis] -= fixup_size_this_child * fixup_pct;
+					}
+				}
+			}
+		}
+
+		//- kti: fixup upwards-relative sizes
+		if (box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X<<axis)) {
+			for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
+				if (child->pref_size[axis].kind == UI_SIZE_KIND__PERCENT_OF_PARENT) {
+					child->fixed_size[axis] = box->fixed_size[axis] * child->pref_size[axis].value;
+				}
+			}
+		}
+
+		//- kti: enforce clamps
+		for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
+			child->fixed_size[axis] = ClampBot(child->min_size[axis], child->fixed_size[axis]);
+		}
+	}
+
+	scratch_end(scratch);
 }
 
 Internal void ui_layout_position__in_place(UI_Box *root, UI_Axis axis) {
+	for (UI_Box *box = root; !ui_box_is_nil(box); box = ui_box_rec_df_pre(box, root).next) {
+		F1 layout_position = 0;
 
+		F1 bounds = 0;
+		for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
+			if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
+				child->fixed_pos[axis] = layout_position;
+				if (box->child_layout_axis == axis) {
+					layout_position += child->fixed_size[axis];
+					bounds += child->fixed_size[axis];
+				} else {
+					bounds = Max(bounds, child->fixed_size[axis]);
+				}
+			}
+
+			// TODO: Should rects be xy,wh or xy,xy?
+			child->rect[axis] = box->rect[axis] + child->fixed_pos[axis] - !(child->flags&(UI_BOX_FLAG__SKIP_VIEW_OFF_X<<axis))*floorf(box->view_off[axis]);
+			child->rect[2+axis] = child->fixed_size[axis];
+
+			child->rect[0] = floorf(child->rect[0]);
+			child->rect[1] = floorf(child->rect[1]);
+			child->rect[2] = floorf(child->rect[2]);
+			child->rect[3] = floorf(child->rect[3]);
+		}
+
+		box->view_bounds[axis] = bounds;
+	}
 }
 
 Internal void ui_layout_root(UI_Box *root, UI_Axis axis) {
@@ -551,7 +645,7 @@ Internal void ui_print_tree(UI_Box *box, L1 depth) {
 	for EachIndex(i, depth) {
 		printf(" ");
 	}
-	printf("%llu (%.2fx%.2f)\n", box->key.l1[0], box->fixed_size[0], box->fixed_size[1]);
+	printf("%llu (%.2f %.2f - %.2fx%.2f)\n", box->key.l1[0], box->rect[0], box->rect[1], box->rect[2], box->rect[3]);
 
 	for (UI_Box *c = box->first; !ui_box_is_nil(c); c = c->next) {
 		ui_print_tree(c, depth + 1);

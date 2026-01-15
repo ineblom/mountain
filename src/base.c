@@ -116,6 +116,9 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 
 #define Min(a, b) ((a) < (b) ? (a) : (b))
 #define Max(a, b) ((a) > (b) ? (a) : (b))
+#define ClampTop(a, x) Min(a, x)
+#define ClampBot(x, b) Max(x, b)
+#define Clamp(a, x, b) (((x)<(a))?(a):((x)>(b))?(b):(x))
 
 #define Crash(x) __builtin_trap()
 #define StaticAssert(x) _Static_assert(x, "")

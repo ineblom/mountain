@@ -55,10 +55,14 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 			ui_begin_build(window);
 
+			FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
+			ui_push_font(noto_tag);
+
 			UI_Box *b1 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("left container"));
 			b1->pref_size[UI_AXIS__X] = (UI_Size){ .kind = UI_SIZE_KIND__PERCENT_OF_PARENT, .value = 0.5f };
 			b1->pref_size[UI_AXIS__Y] = (UI_Size){ .kind = UI_SIZE_KIND__PERCENT_OF_PARENT, .value = 1.0f };
 
+			ui_set_next_background_color(oklch(0.4f, 1.0f, 0.0f, 1.0f));
 			ui_set_next_child_layout_axis(UI_AXIS__Y);
 			UI_Box *b2 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("other container"));
 			b2->pref_size[UI_AXIS__X] = (UI_Size){ .kind = UI_SIZE_KIND__CHILDREN_SUM };
@@ -66,21 +70,12 @@ Internal void lane(Arena *arena) {
 
 			ui_push_parent(b2);
 
-			ui_set_next_fixed_width(200);
-			ui_set_next_fixed_height(100);
-			UI_Box *b3 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Hejsan!"));
-
-			ui_set_next_fixed_width(100);
-			ui_set_next_fixed_height(30);
-			UI_Box *b4 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("VA!"));
+			ui_button(Str8_("Hejsan!"));
 
 			ui_pop_parent();
 
 			ui_end_build();
-		}
 
-		//- kti: Lane 0 renders the frame.
-		if (lane_idx() == 0) {
 		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
 		  F4 bg = oklch(0.186f, 0.027f, 343.0f, 1.0f);
 
@@ -88,15 +83,30 @@ Internal void lane(Arena *arena) {
 			gfx_window_begin_frame(window, gfx_window);
 			dr_begin_frame();
 
-			FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
-
 			DR_Bucket *bucket = dr_bucket_make();
 			dr_push_bucket(bucket);
 
-			// kti: bg
+			//- kti: bg
 			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
 
-			// kti: fps counter
+			//- kti: ui
+			for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
+				UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
+
+				if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
+					dr_rect(box->rect, box->background_color, 0.0f, 0.0f);
+				}
+
+				if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
+					for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
+						dr_text_run(n->value.run, (F2){box->rect[0], box->rect[1]+box->rect[3]}, box->text_color);
+					}
+				}
+
+				box = rec.next;
+			}
+
+			//- kti: fps counter
 			FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
 			dr_text_run(run, (F2){0.0f, run.ascent}, white);
 

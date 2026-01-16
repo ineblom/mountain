@@ -1,5 +1,34 @@
 #if (CPU_ && TYP_)
 
+typedef struct DR_FStr_Params DR_FStr_Params;
+struct DR_FStr_Params {
+	FC_Tag font;
+	F4 color;
+	F1 size;
+	F1 underline_thickness;
+	F1 strikethrough_thickness;
+};
+
+typedef struct DR_FStr DR_FStr;
+struct DR_FStr {
+	String8 string;
+	DR_FStr_Params params;
+};
+
+typedef struct DR_FStr_Node DR_FStr_Node;
+struct DR_FStr_Node {
+	DR_FStr_Node *next;
+	DR_FStr value;
+};
+
+typedef struct DR_FStr_List DR_FStr_List;
+struct DR_FStr_List {
+	DR_FStr_Node *first;
+	DR_FStr_Node *last;
+	L1 node_count;
+	L1 total_len;
+};
+
 typedef struct DR_FRun DR_FRun;
 struct DR_FRun {
 	FC_Run run;
@@ -204,6 +233,44 @@ Internal void dr_submit_bucket(OS_Window *window, GFX_Window *gfx_window, DR_Buc
 	ProfFuncBegin();
 	gfx_window_submit(window, gfx_window, bucket->batches);
 	ProfEnd();
+}
+
+Internal void dr_fstrs_push(Arena *arena, DR_FStr_List *list, DR_FStr *fstr) {
+	DR_FStr_Node *node = push_array_no_zero(arena, DR_FStr_Node, 1);
+	memmove(&node->value, fstr, sizeof(DR_FStr));
+	SLLQueuePush(list->first, list->last, node);
+	list->node_count += 1;
+	list->total_len += fstr->string.len;
+}
+
+Internal DR_FStr_List dr_fstrs_copy(Arena *arena, DR_FStr_List *src) {
+	DR_FStr_List dst = {0};
+	for (DR_FStr_Node *src_n = src->first; src_n != 0; src_n = src_n->next) {
+		DR_FStr fstr = src_n->value;
+		fstr.string = push_str8_copy(arena, fstr.string);
+		dr_fstrs_push(arena, &dst, &fstr);
+	}
+	return dst;
+}
+
+Internal DR_FRun_List dr_fruns_from_fstrs(Arena *arena, F1 tab_size, DR_FStr_List *src) {
+	DR_FRun_List dst = {0};
+
+	F1 base_align_px = 0;
+	for (DR_FStr_Node *n = src->first; n != 0; n = n->next) {
+		DR_FRun_Node *dst_n = push_array(arena, DR_FRun_Node, 1);
+		dst_n->value.run = fc_run_from_string(n->value.params.font, n->value.params.size, base_align_px, tab_size, n->value.string);
+		dst_n->value.color = n->value.params.color;
+		dst_n->value.underline_thickness = n->value.params.underline_thickness;
+		dst_n->value.strikethrough_thickness = n->value.params.strikethrough_thickness;
+		SLLQueuePush(dst.first, dst.last, dst_n);
+		dst.node_count += 1;
+		dst.dim[0] += dst_n->value.run.dim[0];
+		dst.dim[1] = Max(dst.dim[1], dst_n->value.run.dim[1]);
+		base_align_px += dst_n->value.run.dim[0];
+	}
+
+	return dst;
 }
 
 #endif

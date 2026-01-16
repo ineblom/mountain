@@ -12,4 +12,8 @@ Tab_Size,          tab_size,          F1,       24.0f*4.0f
 Font,              font,              FC_Tag,   (FC_Tag){0}
 Font_Size,         font_size,         F1,       16.0f
 Background_Color,  background_color,  F4,       `(F4){0.0f, 0.0f, 0.0f, 1.0f}`
-Text_Color,        text_color,        F4,       `(F4){1.0f, 1.0f, 1.0f, 1.0f}`
+Text_Color,        text_color,        F4,       `oklch(1.0f, 0.0f, 0.0f, 1.0f)`
+TL_Corner_Radius,  tl_corner_radius,  F1,       0.0f
+TR_Corner_Radius,  tr_corner_radius,  F1,       0.0f
+BL_Corner_Radius,  bl_corner_radius,  F1,       0.0f
+BR_Corner_Radius,  br_corner_radius,  F1,       0.0f

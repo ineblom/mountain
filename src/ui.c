@@ -31,24 +31,27 @@ struct UI_Size {
 
 typedef L1 UI_Box_Flags;
 enum {
-	UI_BOX_FLAG__CLICKABLE        = (1<<0),
-	UI_BOX_FLAG__VIEW_SCROLL      = (1<<1),
-	UI_BOX_FLAG__DRAW_TEXT        = (1<<2),
-	UI_BOX_FLAG__DRAW_BORDER      = (1<<3),
-	UI_BOX_FLAG__DRAW_BACKGROUND  = (1<<4),
-	UI_BOX_FLAG__DRAW_DROP_SHADOW = (1<<5),
-	UI_BOX_FLAG__CLIP             = (1<<6),
-	UI_BOX_FLAG__HOT_ANIMATION    = (1<<7),
-	UI_BOX_FLAG__ACTIVE_ANIMATION = (1<<8),
-	UI_BOX_FLAG__DISABLED         = (1<<9),
-	UI_BOX_FLAG__FLOATING_X       = (1<<10),
-	UI_BOX_FLAG__FLOATING_Y       = (1<<11),
-	UI_BOX_FLAG__FIXED_WIDTH      = (1<<12),
-	UI_BOX_FLAG__FIXED_HEIGHT     = (1<<13),
-	UI_BOX_FLAG__ALLOW_OVERFLOW_X = (1<<14),
-	UI_BOX_FLAG__ALLOW_OVERFLOW_Y = (1<<15),
-	UI_BOX_FLAG__SKIP_VIEW_OFF_X  = (1<<16),
-	UI_BOX_FLAG__SKIP_VIEW_OFF_Y  = (1<<17),
+	UI_BOX_FLAG__CLICKABLE                = (1<<0),
+	UI_BOX_FLAG__VIEW_SCROLL              = (1<<1),
+	UI_BOX_FLAG__DRAW_TEXT                = (1<<2),
+	UI_BOX_FLAG__DRAW_BORDER              = (1<<3),
+	UI_BOX_FLAG__DRAW_BACKGROUND          = (1<<4),
+	UI_BOX_FLAG__DRAW_DROP_SHADOW         = (1<<5),
+	UI_BOX_FLAG__CLIP                     = (1<<6),
+	UI_BOX_FLAG__HOT_ANIMATION            = (1<<7),
+	UI_BOX_FLAG__ACTIVE_ANIMATION         = (1<<8),
+	UI_BOX_FLAG__DISABLED                 = (1<<9),
+	UI_BOX_FLAG__FLOATING_X               = (1<<10),
+	UI_BOX_FLAG__FLOATING_Y               = (1<<11),
+	UI_BOX_FLAG__FIXED_WIDTH              = (1<<12),
+	UI_BOX_FLAG__FIXED_HEIGHT             = (1<<13),
+	UI_BOX_FLAG__ALLOW_OVERFLOW_X         = (1<<14),
+	UI_BOX_FLAG__ALLOW_OVERFLOW_Y         = (1<<15),
+	UI_BOX_FLAG__SKIP_VIEW_OFF_X          = (1<<16),
+	UI_BOX_FLAG__SKIP_VIEW_OFF_Y          = (1<<17),
+	UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT = (1<<18),
+	UI_BOX_FLAG__HAS_DISPLAY_STRING       = (1<<19),
+	UI_BOX_FLAG__DISABLE_ID_STRING        = (1<<20),
 };
 
 typedef struct UI_Box UI_Box;
@@ -84,9 +87,9 @@ struct UI_Box {
 	F4 background_color;
 	F4 text_color;
 	F4 border_color;
-	DR_Bucket *draw_bucket;
 	F1 text_padding;
 	DR_FRun_List display_fruns;
+	DR_FStr_List display_fstrs;
 
 	F1 hot_t;
 	F1 active_t;
@@ -236,6 +239,19 @@ Internal I1 ui_key_match(UI_Key a, UI_Key b) {
 	return result;
 }
 
+Internal String8 ui_display_part_from_key_string(String8 key) {
+	L1 end = key.len;
+
+	for EachIndex(i, key.len-1) {
+		if (key.str[i] == '#' && key.str[i+1] == '#') {
+			end = i;
+			break;
+		}
+	}
+
+	return str8_substr(key, 0, end);
+}
+
 Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string) {
 	UI_Key result = {0};
 	if (string.len != 0) {
@@ -324,7 +340,6 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	box->child_count = 0;
 	box->flags = 0;
 	MemoryZeroArray(box->pref_size);
-	box->draw_bucket = 0;
 
 	//- kti: Add to persistent table.
 	if (box_first_frame && !box_is_transient) {
@@ -375,6 +390,10 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	box->tab_size = ui_top_tab_size();
 	box->font = ui_top_font();
 	box->font_size = ui_top_font_size();
+	box->corner_radii[0] = ui_top_tl_corner_radius();
+	box->corner_radii[1] = ui_top_tr_corner_radius();
+	box->corner_radii[2] = ui_top_bl_corner_radius();
+	box->corner_radii[3] = ui_top_br_corner_radius();
 
 	if (flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
 		box->background_color = ui_top_background_color();
@@ -389,10 +408,34 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	return box;
 }
 
+Internal String8 ui_box_display_string(UI_Box *box) {
+	String8 result = box->string;
+	if (!(box->flags & UI_BOX_FLAG__DISABLE_ID_STRING)) {
+		result = ui_display_part_from_key_string(result);
+	}
+	return result;
+}
+
+Internal void ui_box_equip_display_string(UI_Box *box, String8 string) {
+	box->string = push_str8_copy(ui_build_arena(), string);
+	box->flags |= UI_BOX_FLAG__HAS_DISPLAY_STRING;
+	F4 text_color = box->text_color;
+	if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
+		String8 display_string = ui_box_display_string(box);
+		DR_FStr_Node fstr_n = {0, {display_string, {box->font, text_color, box->font_size, 0, 0}}};
+		DR_FStr_List fstrs = {&fstr_n, &fstr_n, 1};
+		box->display_fstrs = dr_fstrs_copy(ui_build_arena(), &fstrs);
+		box->display_fruns = dr_fruns_from_fstrs(ui_build_arena(), box->tab_size, &box->display_fstrs);
+	}
+}
+
+
 Internal UI_Box *ui_build_box_from_string(UI_Box_Flags flags, String8 string) {
 	UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 	UI_Box *box = ui_build_box_from_key(flags, key);
-	// TODO: if draw text flag equip display string.
+	if (flags & UI_BOX_FLAG__DRAW_TEXT) {
+		ui_box_equip_display_string(box, string);
+	}
 	return box;
 }
 
@@ -669,6 +712,35 @@ Internal void ui_end_build(void) {
 		ui_layout_root(ui_state->root, axis);
 	}
 
+	for EachIndex(slot_idx, ui_state->box_table_size) {
+		for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next) {
+			if (box->flags & UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT) {
+				for (UI_Box *b = box; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, box).next) {
+					if (floorf(b->rect[0]) <= floorf(box->rect[0]) &&
+							floorf(b->rect[1]) <= floorf(box->rect[1])) {
+						b->corner_radii[0] = box->corner_radii[0];
+					}
+					if (floorf(b->rect[0]+b->rect[2]) >= floorf(box->rect[0]+box->rect[2]) &&
+							floorf(b->rect[1]) <= floorf(box->rect[1])) {
+						b->corner_radii[1] = box->corner_radii[1];
+					}
+					if (floorf(b->rect[0]) <= floorf(box->rect[0]) &&
+							floorf(b->rect[1]+b->rect[3]) >= floorf(box->rect[1]+box->rect[3])) {
+						b->corner_radii[2] = box->corner_radii[2];
+					}
+					if (floorf(b->rect[0]+b->rect[2]) >= floorf(box->rect[0]+box->rect[2]) &&
+							floorf(b->rect[1]+b->rect[3]) >= floorf(box->rect[1]+box->rect[3])) {
+						b->corner_radii[2] = box->corner_radii[2];
+					}
+				}
+				box->first->corner_radii[0] = box->corner_radii[0];
+				box->first->corner_radii[1] = box->corner_radii[1];
+				box->last->corner_radii[2] = box->corner_radii[2];
+				box->last->corner_radii[3] = box->corner_radii[3];
+			}
+		}
+	}
+
 	if (ui_state->build_index == 0) {
 		ui_print_tree(ui_state->root, 0);
 	}
@@ -688,6 +760,10 @@ Internal UI_Signal ui_button(String8 string) {
 			string);
 	UI_Signal signal = ui_signal_from_box(box);
 	return signal;
+}
+
+Internal UI_Box *ui_root(void) {
+	return ui_state->root;
 }
 
 #endif

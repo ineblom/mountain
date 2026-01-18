@@ -526,7 +526,7 @@ Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, UI_Axis axis) {
 			} break;
 			case UI_SIZE_KIND__TEXT_CONTENT: {
 				F1 padding = b->pref_size[axis].value;
-				F1 text_size = b->display_fruns.dim[0];
+				F1 text_size = b->display_fruns.dim[axis];
 				b->fixed_size[axis] = padding + text_size + b->text_padding * 2;
 			} break;
 		}
@@ -748,6 +748,21 @@ Internal void ui_end_build(void) {
 	ui_state->build_index += 1;
 	arena_clear(ui_build_arena());
 }
+
+Internal UI_Size ui_size(UI_Size_Kind kind, F1 value, F1 strictness) {
+	UI_Size result = {
+		.kind = kind,
+		.value = value,
+		.strictness = strictness,
+	};
+	return result;
+}
+
+#define ui_px(value, strictness) ui_size(UI_SIZE_KIND__PIXELS, value, strictness)
+#define ui_em(value, strictness) ui_size(UI_SIZE_KIND__PIXELS, (value)*ui_top_font_size(), strictness)
+#define ui_text_dim(padding, strictness) ui_size(UI_SIZE_KIND__TEXT_CONTENT, padding, strictness)
+#define ui_pct(value, strictness) ui_size(UI_SIZE_KIND__PERCENT_OF_PARENT, value, strictness)
+#define ui_children_sum(strictness) ui_size(UI_SIZE_KIND__CHILDREN_SUM, 0.0f, strictness)
 
 Internal UI_Signal ui_button(String8 string) {
 	UI_Box *box = ui_build_box_from_string(

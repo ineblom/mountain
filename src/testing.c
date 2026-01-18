@@ -58,18 +58,20 @@ Internal void lane(Arena *arena) {
 			FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
 			ui_push_font(noto_tag);
 
+			ui_set_next_pref_width(ui_pct(0.5f, 1.0f));
+			ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
 			UI_Box *b1 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("left container"));
-			b1->pref_size[UI_AXIS__X] = (UI_Size){ .kind = UI_SIZE_KIND__PERCENT_OF_PARENT, .value = 0.5f };
-			b1->pref_size[UI_AXIS__Y] = (UI_Size){ .kind = UI_SIZE_KIND__PERCENT_OF_PARENT, .value = 1.0f };
 
-			ui_set_next_background_color(oklch(0.4f, 1.0f, 0.0f, 1.0f));
+			ui_set_next_pref_width(ui_children_sum(1.0f));
+			ui_set_next_pref_height(ui_children_sum(1.0f));
 			ui_set_next_child_layout_axis(UI_AXIS__Y);
-			UI_Box *b2 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("other container"));
-			b2->pref_size[UI_AXIS__X] = (UI_Size){ .kind = UI_SIZE_KIND__CHILDREN_SUM };
-			b2->pref_size[UI_AXIS__Y] = (UI_Size){ .kind = UI_SIZE_KIND__CHILDREN_SUM };
+			UI_Box *b2 = ui_build_box_from_string(0, Str8_("other container"));
 
 			ui_push_parent(b2);
 
+			ui_set_next_pref_width(ui_text_dim(10.0f, 1.0f));
+			ui_set_next_pref_height(ui_em(1.8f, 1.0f));
+			ui_set_next_background_color(oklch(0.4f, 1.0f, 0.0f, 1.0f));
 			ui_button(Str8_("Hejsan!"));
 
 			ui_pop_parent();
@@ -99,7 +101,7 @@ Internal void lane(Arena *arena) {
 
 				if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
 					for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
-						dr_text_run(n->value.run, (F2){box->rect[0], box->rect[1]+box->rect[3]}, box->text_color);
+						dr_text_run(n->value.run, (F2){box->rect[0], box->rect[1]+n->value.run.ascent}, box->text_color);
 					}
 				}
 

@@ -690,6 +690,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 				base_align_px += advance;
 				dim[0] += piece->advance;
 				dim[1] = Max(dim[1], info->raster_dim[1]);
+				// dim[1] = style_raster_node->ascent + style_raster_node->descent;
 			}
 		}
 

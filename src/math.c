@@ -17,6 +17,7 @@ struct Random_State {
 #define abs_SL1(x) llabs(x)
 #define mod_F1(x, y) fmodf(x, y)
 #define floor_F1(x) floorf(x)
+#define round_F1(x) roundf(x)
 #define ceil_F1(x) ceilf(x)
 
 Inline F1 clamp01_F1(F1 x) { return Min(Max(x, 0.0f), 1.0f); }

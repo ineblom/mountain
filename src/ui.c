@@ -8,6 +8,15 @@ enum {
 	UI_AXIS_COUNT,
 };
 
+typedef I1 UI_Text_Align;
+enum {
+	UI_TEXT_ALIGN__LEFT = 0,
+	UI_TEXT_ALIGN__RIGHT,
+	UI_TEXT_ALIGN__CENTER,
+
+	UI_TEXT_ALIGN_COUNT,
+};
+
 typedef struct UI_Key UI_Key;
 struct UI_Key {
 	L1 l1[1];
@@ -83,6 +92,7 @@ struct UI_Box {
 	FC_Tag font;
 	F1 font_size;
 	F1 tab_size;
+	UI_Text_Align text_align;
 	F1 corner_radii[4];
 	F4 background_color;
 	F4 text_color;
@@ -388,6 +398,7 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	box->min_size[1] = ui_top_min_height();
 	box->child_layout_axis = ui_top_child_layout_axis();
 	box->tab_size = ui_top_tab_size();
+	box->text_align = ui_top_text_align();
 	box->font = ui_top_font();
 	box->font_size = ui_top_font_size();
 	box->corner_radii[0] = ui_top_tl_corner_radius();
@@ -747,6 +758,44 @@ Internal void ui_end_build(void) {
 
 	ui_state->build_index += 1;
 	arena_clear(ui_build_arena());
+}
+
+Internal F2 ui_box_text_pos(UI_Box *box) {
+	F2 result = {0};
+	FC_Tag font = box->font;
+	F1 font_size = box->font_size;
+	FC_Metrics font_metrics = fc_metrics_from_tag_size(font, font_size);
+	result[1] = floor_F1((box->rect[1]+box->rect[3]*0.5f) + font_metrics.ascent*0.5f - font_metrics.descent*0.5f);
+	switch (box->text_align) {
+		default:
+		case UI_TEXT_ALIGN__LEFT: {
+			result[0] = box->rect[0] + box->text_padding;
+		} break;
+		case UI_TEXT_ALIGN__CENTER: {
+			F2 text_dim = box->display_fruns.dim;
+			result[0] = round_F1(box->rect[0]+box->rect[2]*0.5f - text_dim[0]*0.5f);
+			result[0] = ClampBot(result[0], box->rect[0]);
+		} break;
+		case UI_TEXT_ALIGN__RIGHT: {
+			F2 text_dim = box->display_fruns.dim;
+			result[0] = round_F1(box->rect[0]+box->rect[2] - text_dim[0] - box->text_padding);
+			result[0] = ClampBot(result[0], box->rect[0]);
+		} break;
+	}
+	result[0] = floor_F1(result[0]);
+	return result;
+}
+
+Internal void ui_set_next_pref_size(UI_Axis axis, UI_Size size) {
+	(axis == UI_AXIS__X ? ui_set_next_pref_width : ui_set_next_pref_height)(size);
+}
+
+Internal UI_Signal ui_spacer(UI_Size size) {
+	UI_Box *parent = ui_top_parent();
+	ui_set_next_pref_size(parent->child_layout_axis, size);
+	UI_Box *box = ui_build_box_from_key(0, ui_key_zero());
+	UI_Signal signal = ui_signal_from_box(box);
+	return signal;
 }
 
 Internal UI_Size ui_size(UI_Size_Kind kind, F1 value, F1 strictness) {

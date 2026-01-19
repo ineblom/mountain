@@ -69,9 +69,12 @@ Internal void lane(Arena *arena) {
 
 			ui_push_parent(b2);
 
+			ui_spacer(ui_em(1.8f, 1.0f));
+
 			ui_set_next_pref_width(ui_text_dim(10.0f, 1.0f));
 			ui_set_next_pref_height(ui_em(1.8f, 1.0f));
 			ui_set_next_background_color(oklch(0.4f, 1.0f, 0.0f, 1.0f));
+			ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
 			ui_button(Str8_("Hejsan!"));
 
 			ui_pop_parent();
@@ -101,7 +104,8 @@ Internal void lane(Arena *arena) {
 
 				if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
 					for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
-						dr_text_run(n->value.run, (F2){box->rect[0], box->rect[1]+n->value.run.ascent}, box->text_color);
+						F2 pos = ui_box_text_pos(box);
+						dr_text_run(n->value.run, pos, box->text_color);
 					}
 				}
 

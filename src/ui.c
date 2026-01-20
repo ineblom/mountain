@@ -674,13 +674,13 @@ Internal void ui_layout_position__in_place(UI_Box *root, UI_Axis axis) {
 			}
 
 			// TODO: Should rects be xy,wh or xy,xy?
-			child->rect[axis] = box->rect[axis] + child->fixed_pos[axis] - !(child->flags&(UI_BOX_FLAG__SKIP_VIEW_OFF_X<<axis))*floorf(box->view_off[axis]);
+			child->rect[axis] = box->rect[axis] + child->fixed_pos[axis] - !(child->flags&(UI_BOX_FLAG__SKIP_VIEW_OFF_X<<axis))*floor_F1(box->view_off[axis]);
 			child->rect[2+axis] = child->fixed_size[axis];
 
-			child->rect[0] = floorf(child->rect[0]);
-			child->rect[1] = floorf(child->rect[1]);
-			child->rect[2] = floorf(child->rect[2]);
-			child->rect[3] = floorf(child->rect[3]);
+			child->rect[0] = floor_F1(child->rect[0]);
+			child->rect[1] = floor_F1(child->rect[1]);
+			child->rect[2] = floor_F1(child->rect[2]);
+			child->rect[3] = floor_F1(child->rect[3]);
 		}
 
 		box->view_bounds[axis] = bounds;
@@ -727,20 +727,20 @@ Internal void ui_end_build(void) {
 		for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next) {
 			if (box->flags & UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT) {
 				for (UI_Box *b = box; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, box).next) {
-					if (floorf(b->rect[0]) <= floorf(box->rect[0]) &&
-							floorf(b->rect[1]) <= floorf(box->rect[1])) {
+					if (floor_F1(b->rect[0]) <= floor_F1(box->rect[0]) &&
+							floor_F1(b->rect[1]) <= floor_F1(box->rect[1])) {
 						b->corner_radii[0] = box->corner_radii[0];
 					}
-					if (floorf(b->rect[0]+b->rect[2]) >= floorf(box->rect[0]+box->rect[2]) &&
-							floorf(b->rect[1]) <= floorf(box->rect[1])) {
+					if (floor_F1(b->rect[0]+b->rect[2]) >= floor_F1(box->rect[0]+box->rect[2]) &&
+							floor_F1(b->rect[1]) <= floor_F1(box->rect[1])) {
 						b->corner_radii[1] = box->corner_radii[1];
 					}
-					if (floorf(b->rect[0]) <= floorf(box->rect[0]) &&
-							floorf(b->rect[1]+b->rect[3]) >= floorf(box->rect[1]+box->rect[3])) {
+					if (floor_F1(b->rect[0]) <= floor_F1(box->rect[0]) &&
+							floor_F1(b->rect[1]+b->rect[3]) >= floor_F1(box->rect[1]+box->rect[3])) {
 						b->corner_radii[2] = box->corner_radii[2];
 					}
-					if (floorf(b->rect[0]+b->rect[2]) >= floorf(box->rect[0]+box->rect[2]) &&
-							floorf(b->rect[1]+b->rect[3]) >= floorf(box->rect[1]+box->rect[3])) {
+					if (floor_F1(b->rect[0]+b->rect[2]) >= floor_F1(box->rect[0]+box->rect[2]) &&
+							floor_F1(b->rect[1]+b->rect[3]) >= floor_F1(box->rect[1]+box->rect[3])) {
 						b->corner_radii[2] = box->corner_radii[2];
 					}
 				}

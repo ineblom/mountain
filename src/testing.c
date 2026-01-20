@@ -58,27 +58,33 @@ Internal void lane(Arena *arena) {
 			FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
 			ui_push_font(noto_tag);
 
-			ui_set_next_pref_width(ui_pct(0.5f, 1.0f));
-			ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
-			UI_Box *b1 = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("left container"));
-
-			ui_set_next_pref_width(ui_children_sum(1.0f));
+			ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
 			ui_set_next_pref_height(ui_children_sum(1.0f));
 			ui_set_next_child_layout_axis(UI_AXIS__Y);
-			UI_Box *b2 = ui_build_box_from_string(0, Str8_("other container"));
-
-			ui_push_parent(b2);
+			UI_Box *b1 = ui_build_box_from_string(0, Str8_("container"));
+			ui_push_parent(b1);
 
 			ui_spacer(ui_em(1.8f, 1.0f));
 
-			ui_set_next_pref_width(ui_text_dim(10.0f, 1.0f));
-			ui_set_next_pref_height(ui_em(1.8f, 1.0f));
-			ui_set_next_background_color(oklch(0.4f, 1.0f, 0.0f, 1.0f));
-			ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-			ui_button(Str8_("Hejsan!"));
+			ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
+			ui_set_next_pref_height(ui_children_sum(1.0f));
+			ui_set_next_child_layout_axis(UI_AXIS__X);
+			UI_Box *row = ui_build_box_from_string(0, Str8_("button row"));
+			ui_push_parent(row); {
+				ui_spacer(ui_pct(1.0f, 0.0f));
+
+				ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
+				ui_set_next_pref_height(ui_em(2.0f, 1.0f));
+				ui_set_next_border_color(oklch(0.933f, 0.063f, 25.0f, 1.0f));
+				ui_set_next_background_color(oklch(0.435f, 0.151f, 25.0f, 1.0f));
+				ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
+				ui_set_next_corner_radius(5.0f);
+				ui_button(Str8_("Press me"));
+
+				ui_spacer(ui_pct(1.0f, 0.0f));
+			} ui_pop_parent();
 
 			ui_pop_parent();
-
 			ui_end_build();
 
 		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
@@ -99,7 +105,16 @@ Internal void lane(Arena *arena) {
 				UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
 
 				if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
-					dr_rect(box->rect, box->background_color, 0.0f, 0.0f);
+					GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, 1.0f);
+					inst->corner_radii = box->corner_radii;
+				}
+
+				if (box->flags & UI_BOX_FLAG__DRAW_BORDER) {
+					F4 border_rect = (F4){box->rect[0]-1, box->rect[1]-1, box->rect[2]+2, box->rect[3]+2};
+					GFX_Rect_Instance *inst = dr_rect(box->rect, (F4){0.0f}, 0.0f, 1.0f);
+					inst->corner_radii = box->corner_radii;
+					inst->border_width = 1.0f;
+					inst->border_color = box->border_color;
 				}
 
 				if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {

@@ -93,7 +93,7 @@ struct UI_Box {
 	F1 font_size;
 	F1 tab_size;
 	UI_Text_Align text_align;
-	F1 corner_radii[4];
+	F4 corner_radii;
 	F4 background_color;
 	F4 text_color;
 	F4 border_color;
@@ -409,9 +409,11 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	if (flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
 		box->background_color = ui_top_background_color();
 	}
-
 	if (flags & UI_BOX_FLAG__DRAW_TEXT) {
 		box->text_color = ui_top_text_color();
+	}
+	if (flags & UI_BOX_FLAG__DRAW_BORDER) {
+		box->border_color = ui_top_border_color();
 	}
 
 	UIAutoPopStacks();
@@ -784,6 +786,27 @@ Internal F2 ui_box_text_pos(UI_Box *box) {
 	}
 	result[0] = floor_F1(result[0]);
 	return result;
+}
+
+Internal void ui_push_corner_radius(F1 v) {
+	ui_push_tl_corner_radius(v);
+	ui_push_tr_corner_radius(v);
+	ui_push_bl_corner_radius(v);
+	ui_push_br_corner_radius(v);
+}
+
+Internal void ui_set_next_corner_radius(F1 v) {
+	ui_set_next_tl_corner_radius(v);
+	ui_set_next_tr_corner_radius(v);
+	ui_set_next_bl_corner_radius(v);
+	ui_set_next_br_corner_radius(v);
+}
+
+Internal void ui_pop_corner_radius(void) {
+	ui_pop_tl_corner_radius();
+	ui_pop_tr_corner_radius();
+	ui_pop_bl_corner_radius();
+	ui_pop_br_corner_radius();
 }
 
 Internal void ui_set_next_pref_size(UI_Axis axis, UI_Size size) {

@@ -142,4 +142,15 @@ Inline F1 random_bilateral(Random_State *rng) {
 	return result;
 }
 
+Inline F4 intersect_rects(F4 a, F4 b) {
+	F4 result = {0};
+
+	result[0] = Max(a[0], b[0]);
+	result[1] = Max(a[1], b[1]);
+	result[2] = Min(a[0]+a[2], b[0]+b[2]) - result[0];
+	result[3] = Min(a[1]+a[3], b[1]+b[3]) - result[1];
+
+	return result;
+}
+
 #endif

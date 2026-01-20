@@ -109,20 +109,42 @@ Internal void lane(Arena *arena) {
 					inst->corner_radii = box->corner_radii;
 				}
 
-				if (box->flags & UI_BOX_FLAG__DRAW_BORDER) {
-					F4 border_rect = (F4){box->rect[0]-1, box->rect[1]-1, box->rect[2]+2, box->rect[3]+2};
-					GFX_Rect_Instance *inst = dr_rect(box->rect, (F4){0.0f}, 0.0f, 1.0f);
-					inst->corner_radii = box->corner_radii;
-					inst->border_width = 1.0f;
-					inst->border_color = box->border_color;
-				}
-
 				if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
 					for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
 						F2 pos = ui_box_text_pos(box);
 						dr_text_run(n->value.run, pos, box->text_color);
 					}
 				}
+
+				if (box->flags & UI_BOX_FLAG__CLIP) {
+					F4 top_clip = dr_top_clip();
+					F4 new_clip = (F4){box->rect[0]+1, box->rect[1]+1, box->rect[2]-2, box->rect[3]-2};
+					if (top_clip[2] != 0 || top_clip[3] != 0) {
+						new_clip = intersect_rects(new_clip, top_clip);
+					}
+					dr_push_clip(new_clip);
+				}
+
+			  L1 pop_idx = 0;
+				for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent) {
+					pop_idx += 1;
+					if (b == box && rec.push_count != 0) {
+						continue;
+					}
+
+					if (b->flags & UI_BOX_FLAG__CLIP) {
+						dr_pop_clip();
+					}
+
+					if (b->flags & UI_BOX_FLAG__DRAW_BORDER) {
+						F4 border_rect = (F4){b->rect[0]-1, b->rect[1]-1, b->rect[2]+2, b->rect[3]+2};
+						GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, 1.0f);
+						inst->corner_radii = b->corner_radii;
+						inst->border_width = 1.0f;
+						inst->border_color = b->border_color;
+					}
+				}
+
 
 				box = rec.next;
 			}

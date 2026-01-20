@@ -1507,7 +1507,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
       },
     };
     if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
-        batch->clip_rect[2] != 0.0f || batch->clip_rect[3] != 0.0f) {
+        batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
       scissor.offset.x = batch->clip_rect[0];
       scissor.offset.y = batch->clip_rect[1];
       scissor.extent.width = batch->clip_rect[2];

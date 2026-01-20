@@ -92,10 +92,19 @@ Internal void dr_push_clip(F4 rect) {
 
 Internal void dr_pop_clip(void) {
 	DR_Bucket *bucket = dr_state->top_bucket;
-	if (bucket != 0) {
+	if (bucket != 0 && bucket->top_clip != &dr_nil_clip_node) {
 		SLLStackPop(bucket->top_clip);
 		bucket->stack_gen += 1;
 	}
+}
+
+Internal F4 dr_top_clip(void) {
+	F4 result = (F4){0};
+	DR_Bucket *bucket = dr_state->top_bucket;
+	if (bucket != 0) {
+		result = bucket->top_clip->rect;
+	}
+	return result;
 }
 
 Internal DR_Bucket *dr_bucket_make(void) {

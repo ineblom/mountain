@@ -41,9 +41,10 @@ Internal void lane(Arena *arena) {
 
 		Temp_Arena scratch = scratch_begin(0, 0);
 
+		OS_Event_List events = {0};
 		if (lane_idx() == 0) {
-			OS_Event *first_event = os_poll_events(scratch.arena);
-			for (OS_Event *e = first_event; e != 0; e = e->next) {
+			events = os_poll_events(scratch.arena);
+			for (OS_Event *e = events.first; e != 0; e = e->next) {
 				if (e->type == OS_EVENT_TYPE__WINDOW_CLOSE) {
 					running = 0;
 				}
@@ -53,7 +54,7 @@ Internal void lane(Arena *arena) {
 
 		//- kti: UI
 		if (lane_idx() == 0) {
-			ui_begin_build(window);
+			ui_begin_build(window, events);
 
 			FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
 			ui_push_font(noto_tag);

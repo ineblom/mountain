@@ -81,6 +81,13 @@ struct OS_Event {
   D1 x, y;
 };
 
+typedef struct OS_Event_List OS_Event_List;
+struct OS_Event_List {
+	OS_Event *first;
+	OS_Event *last;
+	L1 count;
+};
+
 Internal void *os_reserve(L1);
 Internal void os_commit(void *, L1);
 Internal void os_release(void *, L1);
@@ -260,8 +267,7 @@ struct OS_GFX_State {
 	struct wl_keyboard_listener keyboard_listener;
 
 	Arena *event_arena;
-	OS_Event *first_event;
-	OS_Event *last_event;
+	OS_Event_List events;
 };
 
 #endif
@@ -532,7 +538,8 @@ Internal void os_push_event(OS_Event event) {
   OS_Event *new_event = push_array(os_gfx_state->event_arena, OS_Event, 1);
   new_event[0] = event;
 
-  DLLPushBack(os_gfx_state->first_event, os_gfx_state->last_event, new_event);
+  DLLPushBack(os_gfx_state->events.first, os_gfx_state->events.last, new_event);
+	os_gfx_state->events.count += 1;
 }
 
 Internal void registry_global_handler(void *data, struct wl_registry *registry,
@@ -644,7 +651,7 @@ Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer,
                                      I1 time, wl_fixed_t surface_x,
                                      wl_fixed_t surface_y) {
   OS_Event event = {
-    .timestamp_ns = time * 1000000,
+    .timestamp_ns = (L1)time * 1000000LLU,
     .type = OS_EVENT_TYPE__MOUSE_MOVE,
     .x = wl_fixed_to_double(surface_x),
     .y = wl_fixed_to_double(surface_y),
@@ -669,7 +676,7 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer,
 
   if (key != OS_KEY__NULL) {
     OS_Event event = {
-      .timestamp_ns = time * 1000000,
+      .timestamp_ns = (L1)time * 1000000LLU,
       .type = ((state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE),
       .key = key,
     };
@@ -680,7 +687,7 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer,
 Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer,
                                    I1 time, I1 axis, wl_fixed_t value) {
   OS_Event event = {
-    .timestamp_ns = time * 1000000,
+    .timestamp_ns = (L1)time * 1000000LLU,
     .type = OS_EVENT_TYPE__SCROLL,
   };
   if (axis == 0) {
@@ -725,7 +732,7 @@ Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard,
   I1 os_key = os_key_from_wl_key(key);
   if (os_key != OS_KEY__NULL) {
     OS_Event event = {
-      .timestamp_ns = time * 1000000,
+      .timestamp_ns = (L1)time * 1000000LLU,
       .type = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE,
       .key = os_key,
     };
@@ -844,12 +851,13 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   return result;
 }
 
-Internal OS_Event *os_poll_events(Arena *arena) {
+Internal OS_Event_List os_poll_events(Arena *arena) {
   Assert(os_gfx_state->first_window != 0);
 
   os_gfx_state->event_arena = arena;
-  os_gfx_state->first_event = 0;
-  os_gfx_state->last_event = 0;
+  os_gfx_state->events.first = 0;
+  os_gfx_state->events.last = 0;
+	os_gfx_state->events.count = 0;
 
   while (wl_display_prepare_read(os_gfx_state->display) != 0) {
     wl_display_dispatch_pending(os_gfx_state->display);
@@ -869,7 +877,7 @@ Internal OS_Event *os_poll_events(Arena *arena) {
   
   wl_display_dispatch_pending(os_gfx_state->display);
 
-  return os_gfx_state->first_event;
+  return os_gfx_state->events;
 }
 
 Internal void os_window_close(OS_Window *window) {
@@ -904,6 +912,10 @@ Internal void os_window_close(OS_Window *window) {
   if (window == os_gfx_state->first_window) {
     os_gfx_state->first_window = window->next;
   }
+}
+
+Internal OS_Window *os_hovered_window(void) {
+	return os_gfx_state->hovered_window;
 }
 
 #endif

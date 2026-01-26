@@ -199,6 +199,8 @@ struct UI_State {
 	L1 build_box_count;
 	L1 last_build_box_count;
 	OS_Window *window;
+	F2 mouse;
+	L1 last_time_mouse_moved;
 
 	UI_Key hot_box_key;
 	UI_Key active_box_key;
@@ -469,12 +471,27 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 	return result;
 }
 
-Internal void ui_begin_build(OS_Window *window) {
+Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	UIResetStacks();
 	ui_state->root = &ui_nil_box;
 	ui_state->last_build_box_count = ui_state->build_box_count;
 	ui_state->build_box_count = 0;
 	ui_state->window = window;
+
+	for (OS_Event *e = events.last; e != 0; e = e->prev) {
+		if (e->type == OS_EVENT_TYPE__MOUSE_MOVE) {
+			ui_state->mouse[0] = e->x;
+			ui_state->mouse[1] = e->y;
+			ui_state->last_time_mouse_moved = e->timestamp_ns;
+			break;
+		}
+	}
+
+	L1 now = os_clock();
+	if (os_hovered_window() != window || now-ui_state->last_time_mouse_moved > 500000000) {
+		ui_state->mouse[0] = -100.0f;
+		ui_state->mouse[1] = -100.0f;
+	}
 
 	// TODO: Detect external press & holds
 	// This sets the active box key to the external key.

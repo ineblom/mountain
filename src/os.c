@@ -17,8 +17,6 @@
 #include <sys/sysinfo.h>
 #include <poll.h>
 
-#define MAX_FILENAME_LEN 256
-
 #endif
 
 #if (CPU_ && TYP_)
@@ -78,6 +76,7 @@ struct OS_Event {
   I1 type;
   I1 key;
   I1 modifiers;
+	// TODO: Are ints or doubles better here?
   D1 x, y;
 };
 
@@ -275,6 +274,7 @@ struct OS_GFX_State {
 	OS_Event_List events;
 
 	B1 key_states[OS_KEY_COUNT];
+	D1 mouse_x, mouse_y;
 };
 
 #endif
@@ -541,9 +541,26 @@ Internal I1 os_key_from_wl_key(I1 wl_key) {
   return result;
 }
 
+Internal OS_Modifier_Flags os_get_modifiers(void) {
+	OS_Modifier_Flags result = 0;
+
+	if (os_gfx_state->key_states[OS_KEY__CTRL]) {
+		result |= OS_MODIFIER_FLAG__CTRL;
+	}
+	if (os_gfx_state->key_states[OS_KEY__SHIFT]) {
+		result |= OS_MODIFIER_FLAG__SHIFT;
+	}
+	if (os_gfx_state->key_states[OS_KEY__ALT]) {
+		result |= OS_MODIFIER_FLAG__ALT;
+	}
+	
+	return result;
+}
+
 Internal void os_push_event(OS_Event event) {
   OS_Event *new_event = push_array(os_gfx_state->event_arena, OS_Event, 1);
   new_event[0] = event;
+	new_event->modifiers = os_get_modifiers();
 
   DLLPushBack(os_gfx_state->events.first, os_gfx_state->events.last, new_event);
 	os_gfx_state->events.count += 1;
@@ -657,13 +674,19 @@ Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer,
 Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer,
                                      I1 time, wl_fixed_t surface_x,
                                      wl_fixed_t surface_y) {
+	D1 x = wl_fixed_to_double(surface_x);
+	D1 y = wl_fixed_to_double(surface_y);
+
   OS_Event event = {
     .timestamp_ns = (L1)time * 1000000LLU,
     .type = OS_EVENT_TYPE__MOUSE_MOVE,
-    .x = wl_fixed_to_double(surface_x),
-    .y = wl_fixed_to_double(surface_y),
+    .x = x,
+    .y = y,
   };
   os_push_event(event);
+
+	os_gfx_state->mouse_x = x;
+	os_gfx_state->mouse_y = y;
 }
 
 Internal void pointer_button_handler(void *data, struct wl_pointer *pointer,
@@ -687,6 +710,8 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer,
       .timestamp_ns = (L1)time * 1000000LLU,
       .type = type,
       .key = key,
+			.x = os_gfx_state->mouse_x,
+			.y = os_gfx_state->mouse_y,
     };
     os_push_event(event);
 
@@ -938,6 +963,21 @@ Internal I1 os_key_is_down(L1 key) {
 		result = os_gfx_state->key_states[key];
 	}
 
+	return result;
+}
+
+Internal D1 os_mouse_x(void) {
+	D1 result = os_gfx_state->mouse_x;
+	return result;
+}
+
+Internal D1 os_mouse_y(void) {
+	D1 result = os_gfx_state->mouse_y;
+	return result;
+}
+
+Internal F2 os_mouse_pos(void) {
+	F2 result = {os_gfx_state->mouse_x, os_gfx_state->mouse_y};
 	return result;
 }
 

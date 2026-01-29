@@ -153,4 +153,17 @@ Inline F4 intersect_rects(F4 a, F4 b) {
 	return result;
 }
 
+Inline I1 rect_contains(F4 rect, F2 point) {
+	I1 result = 0;
+
+	if (point[0] >= rect[0] &&
+			point[1] >= rect[1] &&
+			point[0] <= rect[0]+rect[2] &&
+			point[1] <= rect[1]+rect[3]) {
+		result = 1;
+	}
+
+	return result;
+}
+
 #endif

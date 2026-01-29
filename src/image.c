@@ -185,23 +185,21 @@ Internal void image_write_to_file(Image image, String8 filename) {
 	header.compression    = 0;
 	header.size_of_bitmap = pixels_size;
 
-	// Alternatives to capping filename length:
-	// - Alloc to arena.
-	// - Just take a CString and let the user decide.
-	Assert(filename.len < MAX_FILENAME_LEN);
-	char cstr_filename[MAX_FILENAME_LEN] = {0};
-	memmove(cstr_filename, filename.str, filename.len);
+  Temp_Arena scratch = scratch_begin(0, 0);
+  String8 cstr_filename = push_str8_copy(scratch.arena, filename);
 
 	// TODO: Create os_ functions for this
-	L1 file = open(cstr_filename, O_CREAT | O_WRONLY, 0666);
+	L1 file = open((CString)cstr_filename.str, O_CREAT | O_WRONLY, 0666);
 	if (GtSI1(file, 0)) {
 		write(file, &header, sizeof(Bitmap_Header));
 		write(file, image.pixels, pixels_size);
 		close(file);
-		printf("Image written to %s\n", cstr_filename);
+		printf("Image written to %s\n", cstr_filename.str);
 	} else {
-		fprintf(stderr, "Could not open '%s' to write image.\n", cstr_filename);
+		fprintf(stderr, "Could not open '%s' to write image.\n", cstr_filename.str);
 	}
+
+	scratch_end(scratch);
 }
 
 #endif

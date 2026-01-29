@@ -28,6 +28,7 @@ Internal void lane(Arena *arena) {
 
 	lane_sync();
 
+	F1 button_hue = 0.0f;
 	L1 running = 1;
 
 	////////////////////////////////
@@ -78,10 +79,13 @@ Internal void lane(Arena *arena) {
 				ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
 				ui_set_next_pref_height(ui_em(2.0f, 1.0f));
 				ui_set_next_border_color(oklch(0.933f, 0.063f, 25.0f, 1.0f));
-				ui_set_next_background_color(oklch(0.435f, 0.151f, 25.0f, 1.0f));
+				ui_set_next_background_color(oklch(0.435f, 0.151f, button_hue, 1.0f));
 				ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
 				ui_set_next_corner_radius(5.0f);
-				ui_button(Str8_("Press me"));
+
+				if (ui_button(Str8_("Press me")).flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+					button_hue = fmodf(button_hue+40.0f, 360.0f);
+				}
 
 				ui_spacer(ui_pct(1.0f, 0.0f));
 			} ui_pop_parent();
@@ -107,7 +111,8 @@ Internal void lane(Arena *arena) {
 				UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
 
 				if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
-					GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, 1.0f);
+					F4 color = box->background_color;
+					GFX_Rect_Instance *inst = dr_rect(box->rect, color, 0.0f, 1.0f);
 					inst->corner_radii = box->corner_radii;
 				}
 

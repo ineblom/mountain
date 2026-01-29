@@ -61,6 +61,10 @@ enum {
 	UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT = (1<<18),
 	UI_BOX_FLAG__HAS_DISPLAY_STRING       = (1<<19),
 	UI_BOX_FLAG__DISABLE_ID_STRING        = (1<<20),
+	UI_BOX_FLAG__FOCUS_HOT                = (1<<21),
+	UI_BOX_FLAG__FOCUS_ACTIVE             = (1<<22),
+	UI_BOX_FLAG__FOCUS_HOT_DISABLED       = (1<<23),
+	UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED    = (1<<24),
 };
 
 typedef struct UI_Box UI_Box;
@@ -204,6 +208,10 @@ struct UI_State {
 
 	UI_Key hot_box_key;
 	UI_Key active_box_key[OS_MOUSE_BUTTON__COUNT];
+
+	OS_Event_List events;
+	UI_Key press_key_history[OS_MOUSE_BUTTON__COUNT][3];
+	L1 press_timestamp_history[OS_MOUSE_BUTTON__COUNT][3];
 
 	UIStacks;
 };
@@ -465,10 +473,118 @@ Internal UI_Box *ui_build_box_from_stringf(UI_Box_Flags flags, CString fmt, ...)
 	return box;
 }
 
-Internal UI_Signal ui_signal_from_box(UI_Box *box) {
-	UI_Signal result = {0};
+Internal I1 ui_next_event(OS_Event **ev) {
+	OS_Event_List events = ui_state->events;
+	OS_Event *start_node = events.first;
 
+	if (ev[0] != 0) {
+		start_node = ev[0]->next;
+		ev[0] = 0;
+	}
+	if (start_node != 0) {
+		// TODO: Permissions?
+		// Have permissions stack.
+		// Skip events that don't fit permisisons.
+		//
+		// for now just return first node...
+		ev[0] = start_node;
+	}
+
+	I1 result = !!ev[0];
 	return result;
+}
+
+Internal UI_Signal ui_signal_from_box(UI_Box *box) {
+	// TODO: Get from os.
+	L1 double_click_time = 500000000;
+
+	I1 is_focus_hot = box->flags & UI_BOX_FLAG__FOCUS_HOT && !(box->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
+	UI_Signal signal = {0};
+	signal.box = box;
+	signal.modifiers |= os_get_modifiers();
+
+	F4 rect = box->rect;
+	for (UI_Box *p = box->parent; !ui_box_is_nil(p); p = p->parent) {
+		if (p->flags & UI_BOX_FLAG__CLIP) {
+			rect = intersect_rects(rect, p->rect);
+		}
+	}
+
+	for (OS_Event *e = 0; ui_next_event(&e);) {
+		I1 taken = 0;
+
+		signal.modifiers |= e->modifiers;
+
+		F2 evt_mouse = {e->x, e->y};
+		I1 evt_mouse_in_bounds = rect_contains(rect, evt_mouse); 
+		I1 evt_key_is_mouse = (e->key == OS_MOUSE_BUTTON__LEFT ||
+				e->key == OS_MOUSE_BUTTON__MIDDLE ||
+				e->key == OS_MOUSE_BUTTON__RIGHT);
+		I1 evt_mouse_idx = evt_key_is_mouse ?  e->key - OS_MOUSE_BUTTON__LEFT : 0;
+
+		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
+				e->type == OS_EVENT_TYPE__PRESS &&
+				evt_mouse_in_bounds &&
+				evt_key_is_mouse) {
+
+			ui_state->hot_box_key = box->key;
+			ui_state->active_box_key[evt_mouse_idx] = box->key;
+			signal.flags |= UI_SIGNAL_FLAG__LEFT_PRESSED << evt_mouse_idx;
+
+			if (ui_key_match(box->key, ui_state->press_key_history[evt_mouse_idx][0]) &&
+					e->timestamp_ns-ui_state->press_timestamp_history[evt_mouse_idx][0] <= double_click_time) {
+				signal.flags |= UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED << evt_mouse_idx;
+			}
+
+			if (ui_key_match(box->key, ui_state->press_key_history[evt_mouse_idx][0]) &&
+					ui_key_match(box->key, ui_state->press_key_history[evt_mouse_idx][1]) &&
+					e->timestamp_ns-ui_state->press_timestamp_history[evt_mouse_idx][0] <= double_click_time &&
+					ui_state->press_timestamp_history[evt_mouse_idx][0]-ui_state->press_timestamp_history[evt_mouse_idx][1] <= double_click_time) {
+				signal.flags |= UI_SIGNAL_FLAG__LEFT_TRIPPLE_CLICKED << evt_mouse_idx;
+			}
+
+			memmove(&ui_state->press_key_history[evt_mouse_idx][1],
+				  		&ui_state->press_key_history[evt_mouse_idx][0],
+							sizeof(ui_state->press_key_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_key_history[evt_mouse_idx])-1));
+			memmove(&ui_state->press_timestamp_history[evt_mouse_idx][1],
+							&ui_state->press_timestamp_history[evt_mouse_idx][0],
+							sizeof(ui_state->press_timestamp_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_timestamp_history[evt_mouse_idx])-1));
+			ui_state->press_key_history[evt_mouse_idx][0] = box->key;
+			ui_state->press_timestamp_history[evt_mouse_idx][0] = e->timestamp_ns;
+
+			taken = 1;
+		}
+
+		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
+				e->type == OS_EVENT_TYPE__RELEASE &&
+				evt_mouse_in_bounds &&
+				evt_key_is_mouse &&
+				ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key)) {
+			ui_state->active_box_key[evt_mouse_idx] = ui_key_zero();
+			signal.flags |= UI_SIGNAL_FLAG__LEFT_RELEASED << evt_mouse_idx;
+			signal.flags |= UI_SIGNAL_FLAG__LEFT_CLICKED << evt_mouse_idx;
+			taken = 1;
+		}
+
+		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
+				e->type == OS_EVENT_TYPE__RELEASE &&
+				evt_key_is_mouse &&
+				!evt_mouse_in_bounds &&
+				ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key)) {
+			ui_state->hot_box_key = ui_key_zero();
+			ui_state->active_box_key[evt_mouse_idx] = ui_key_zero();
+			signal.flags |= UI_SIGNAL_FLAG__LEFT_RELEASED << evt_mouse_idx;
+			taken = 1;
+		}
+
+		// TODO: Scrolling
+
+		if (taken) {
+			// TODO: Eat event.
+		}
+	}
+
+	return signal;
 }
 
 Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
@@ -477,6 +593,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	ui_state->last_build_box_count = ui_state->build_box_count;
 	ui_state->build_box_count = 0;
 	ui_state->window = window;
+	ui_state->events = events;
 
 	for (OS_Event *e = events.last; e != 0; e = e->prev) {
 		if (e->type == OS_EVENT_TYPE__MOUSE_MOVE) {
@@ -520,21 +637,11 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 		ui_state->hot_box_key = ui_key_zero();
 	}
 
-	//- kti: Reset active key if box is disabled.
+	//- kti: Reset active key when the box is disabled or nil.
 	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
 		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
 			UI_Box *box = ui_box_from_key(ui_state->active_box_key[k]);
-			if (!ui_box_is_nil(box) && box->flags & UI_BOX_FLAG__DISABLED) {
-				ui_state->active_box_key[k] = ui_key_zero();
-			}
-		}
-	}
-
-	//- kti: Reset active key if box is nil.
-	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
-		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
-			UI_Box *box = ui_box_from_key(ui_state->active_box_key[k]);
-			if (ui_box_is_nil(box)) {
+			if (ui_box_is_nil(box) || box->flags & UI_BOX_FLAG__DISABLED) {
 				ui_state->active_box_key[k] = ui_key_zero();
 			}
 		}

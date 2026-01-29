@@ -240,6 +240,11 @@ enum {
   OS_KEY_COUNT,
 };
 
+#define OS_MOUSE_BUTTON__LEFT   OS_KEY__LEFT_MOUSE_BUTTON
+#define OS_MOUSE_BUTTON__MIDDLE OS_KEY__MIDDLE_MOUSE_BUTTON
+#define OS_MOUSE_BUTTON__RIGHT  OS_KEY__RIGHT_MOUSE_BUTTON
+#define OS_MOUSE_BUTTON__COUNT 3
+
 typedef struct OS_GFX_State OS_GFX_State;
 struct OS_GFX_State {
 	Arena *arena;
@@ -268,6 +273,8 @@ struct OS_GFX_State {
 
 	Arena *event_arena;
 	OS_Event_List events;
+
+	B1 key_states[OS_KEY_COUNT];
 };
 
 #endif
@@ -675,12 +682,15 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer,
   }
 
   if (key != OS_KEY__NULL) {
+		L1 type = (state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE;
     OS_Event event = {
       .timestamp_ns = (L1)time * 1000000LLU,
-      .type = ((state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE),
+      .type = type,
       .key = key,
     };
     os_push_event(event);
+
+		os_gfx_state->key_states[key] = (type == OS_EVENT_TYPE__PRESS);
   }
 }
 
@@ -731,12 +741,15 @@ Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard,
                                    I1 serial, I1 time, I1 key, I1 state) {
   I1 os_key = os_key_from_wl_key(key);
   if (os_key != OS_KEY__NULL) {
+		L1 type = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE;
     OS_Event event = {
       .timestamp_ns = (L1)time * 1000000LLU,
-      .type = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE,
+      .type = type,
       .key = os_key,
     };
     os_push_event(event);
+
+		os_gfx_state->key_states[os_key] = (type == OS_EVENT_TYPE__PRESS) ? 1 : 0;
   }
 }
 
@@ -916,6 +929,16 @@ Internal void os_window_close(OS_Window *window) {
 
 Internal OS_Window *os_hovered_window(void) {
 	return os_gfx_state->hovered_window;
+}
+
+Internal I1 os_key_is_down(L1 key) {
+	I1 result = 0;
+
+	if (key > OS_KEY__NULL && key < OS_KEY_COUNT) {
+		result = os_gfx_state->key_states[key];
+	}
+
+	return result;
 }
 
 #endif

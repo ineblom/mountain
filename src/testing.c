@@ -56,13 +56,14 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 			ui_begin_build(window, events);
 
-			FC_Tag noto_tag = fc_tag_from_path(Str8_("/usr/share/fonts/noto/NotoSans-Regular.ttf"));
-			ui_push_font(noto_tag);
+			FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-PropU_B.ttf"));
+			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-FixedU_B.ttf"));
+			ui_push_font(prop_fnt);
 
 			ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
 			ui_set_next_pref_height(ui_children_sum(1.0f));
 			ui_set_next_child_layout_axis(UI_AXIS__Y);
-			UI_Box *b1 = ui_build_box_from_string(0, Str8_("container"));
+			UI_Box *b1 = ui_build_box_from_key(0, ui_key_zero());
 			ui_push_parent(b1);
 
 			ui_spacer(ui_em(1.8f, 1.0f));
@@ -70,10 +71,10 @@ Internal void lane(Arena *arena) {
 			ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
 			ui_set_next_pref_height(ui_children_sum(1.0f));
 			ui_set_next_child_layout_axis(UI_AXIS__X);
-			UI_Box *row = ui_build_box_from_string(0, Str8_("button row"));
+			UI_Box *row = ui_build_box_from_key(0, ui_key_zero());
 			ui_push_parent(row); {
 				ui_spacer(ui_pct(1.0f, 0.0f));
-
+				
 				ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
 				ui_set_next_pref_height(ui_em(2.0f, 1.0f));
 				ui_set_next_border_color(oklch(0.933f, 0.063f, 25.0f, 1.0f));
@@ -146,12 +147,11 @@ Internal void lane(Arena *arena) {
 					}
 				}
 
-
 				box = rec.next;
 			}
 
 			//- kti: fps counter
-			FC_Run run = fc_run_from_string(noto_tag, 16.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
+			FC_Run run = fc_run_from_string(fixed_fnt, 14.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
 			dr_text_run(run, (F2){0.0f, run.ascent}, white);
 
 			dr_submit_bucket(window, gfx_window, bucket);

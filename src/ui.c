@@ -203,7 +203,7 @@ struct UI_State {
 	L1 last_time_mouse_moved;
 
 	UI_Key hot_box_key;
-	UI_Key active_box_key;
+	UI_Key active_box_key[OS_MOUSE_BUTTON__COUNT];
 
 	UIStacks;
 };
@@ -493,9 +493,13 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 		ui_state->mouse[1] = -100.0f;
 	}
 
-	// TODO: Detect external press & holds
-	// This sets the active box key to the external key.
-	// Handling the user interacting with something outside this ui system.
+	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
+		if (ui_key_match(ui_state->active_box_key[k], ui_key_zero()) && os_key_is_down(OS_MOUSE_BUTTON__LEFT+k)) {
+			ui_state->active_box_key[k] = ui_state->external_key;
+		} else if (ui_key_match(ui_state->active_box_key[k], ui_state->external_key) && !os_key_is_down(OS_MOUSE_BUTTON__LEFT+k)) {
+			ui_state->active_box_key[k] = ui_key_zero();
+		}
+	}
 
 	ui_set_next_fixed_width(window->width);
 	ui_set_next_fixed_height(window->height);
@@ -505,23 +509,34 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	ui_state->root = root;
 	
 	//- kti: Reset hot key if we don't have an active box.
-	if (ui_key_match(ui_state->active_box_key, ui_key_zero())) {
+	L1 has_active = 0;
+	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
+		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
+			has_active = 1;
+			break;
+		}
+	}
+	if (!has_active) {
 		ui_state->hot_box_key = ui_key_zero();
 	}
 
 	//- kti: Reset active key if box is disabled.
-	if (!ui_key_match(ui_state->active_box_key, ui_key_zero())) {
-		UI_Box *box = ui_box_from_key(ui_state->active_box_key);
-		if (!ui_box_is_nil(box) && box->flags & UI_BOX_FLAG__DISABLED) {
-			ui_state->active_box_key = ui_key_zero();
+	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
+		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
+			UI_Box *box = ui_box_from_key(ui_state->active_box_key[k]);
+			if (!ui_box_is_nil(box) && box->flags & UI_BOX_FLAG__DISABLED) {
+				ui_state->active_box_key[k] = ui_key_zero();
+			}
 		}
 	}
 
 	//- kti: Reset active key if box is nil.
-	if (!ui_key_match(ui_state->active_box_key, ui_key_zero())) {
-		UI_Box *box = ui_box_from_key(ui_state->active_box_key);
-		if (ui_box_is_nil(box)) {
-			ui_state->active_box_key = ui_key_zero();
+	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
+		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
+			UI_Box *box = ui_box_from_key(ui_state->active_box_key[k]);
+			if (ui_box_is_nil(box)) {
+				ui_state->active_box_key[k] = ui_key_zero();
+			}
 		}
 	}
 }

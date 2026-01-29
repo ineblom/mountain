@@ -112,6 +112,9 @@ Internal void lane(Arena *arena) {
 
 				if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
 					F4 color = box->background_color;
+					if (ui_key_match(box->key, ui_hot_key())) {
+						color[0] = ClampTop(color[0]+0.1f, 1.0f);
+					}
 					GFX_Rect_Instance *inst = dr_rect(box->rect, color, 0.0f, 1.0f);
 					inst->corner_radii = box->corner_radii;
 				}

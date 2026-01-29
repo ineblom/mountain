@@ -80,6 +80,7 @@ struct UI_Box {
 	L1 child_count;
 
 	UI_Key key;
+	UI_Key group_key;
 	UI_Box_Flags flags;
 	String8 string;
 	F2 fixed_pos;
@@ -207,11 +208,11 @@ struct UI_State {
 	L1 last_time_mouse_moved;
 
 	UI_Key hot_box_key;
-	UI_Key active_box_key[OS_MOUSE_BUTTON__COUNT];
+	UI_Key active_box_key[OS_MOUSE_BUTTON_COUNT];
 
 	OS_Event_List events;
-	UI_Key press_key_history[OS_MOUSE_BUTTON__COUNT][3];
-	L1 press_timestamp_history[OS_MOUSE_BUTTON__COUNT][3];
+	UI_Key press_key_history[OS_MOUSE_BUTTON_COUNT][3];
+	L1 press_timestamp_history[OS_MOUSE_BUTTON_COUNT][3];
 
 	UIStacks;
 };
@@ -377,6 +378,8 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	//- kti: Fill box
 	box->key = key;
 	box->flags = flags; // TODO: Flags & Omit flags stack.
+	box->group_key = ui_top_group_key();
+
 	if (box_first_frame) {
 		box->first_touch_build_index = ui_state->build_index;
 	}
@@ -584,6 +587,35 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		}
 	}
 
+	if (rect_contains(rect, ui_state->mouse)) {
+		signal.flags |= UI_SIGNAL_FLAG__MOUSE_OVER;
+	}
+
+ // TODO: The huge check making sure that one mouse button is available (or active for this box) may be unecessary.
+ // This will almost never fail. Maybe at least make it a for loop. 
+	if (box->flags & UI_BOX_FLAG__CLICKABLE &&
+			rect_contains(rect, ui_state->mouse) &&
+			(ui_key_match(ui_state->hot_box_key, ui_key_zero()) || ui_key_match(ui_state->hot_box_key, box->key)) &&
+			(ui_key_match(ui_state->active_box_key[0], ui_key_zero()) || ui_key_match(ui_state->active_box_key[0], box->key)) &&
+			(ui_key_match(ui_state->active_box_key[1], ui_key_zero()) || ui_key_match(ui_state->active_box_key[1], box->key)) &&
+			(ui_key_match(ui_state->active_box_key[2], ui_key_zero()) || ui_key_match(ui_state->active_box_key[2], box->key))) {
+		ui_state->hot_box_key = box->key;
+		signal.flags |= UI_SIGNAL_FLAG__HOVERING;
+	}
+
+	if (box->flags & UI_BOX_FLAG__CLICKABLE &&
+			rect_contains(rect, ui_state->mouse) &&
+			!ui_key_match(box->group_key, ui_key_zero())) {
+		for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
+			UI_Box *active_box = ui_box_from_key(ui_state->active_box_key[k]);
+			if (ui_key_match(active_box->group_key, box->group_key)) {
+				ui_state->hot_box_key = box->key;
+				ui_state->active_box_key[k] = box->key;
+				signal.flags |= UI_SIGNAL_FLAG__HOVERING|(UI_SIGNAL_FLAG__LEFT_DRAGGING<<k);
+			}
+		}
+	}
+
 	return signal;
 }
 
@@ -605,12 +637,12 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	}
 
 	L1 now = os_clock();
-	if (os_hovered_window() != window || now-ui_state->last_time_mouse_moved > 500000000) {
+	if (os_hovered_window() != window && now-ui_state->last_time_mouse_moved > 500000000) {
 		ui_state->mouse[0] = -100.0f;
 		ui_state->mouse[1] = -100.0f;
 	}
 
-	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
+	for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
 		if (ui_key_match(ui_state->active_box_key[k], ui_key_zero()) && os_key_is_down(OS_MOUSE_BUTTON__LEFT+k)) {
 			ui_state->active_box_key[k] = ui_state->external_key;
 		} else if (ui_key_match(ui_state->active_box_key[k], ui_state->external_key) && !os_key_is_down(OS_MOUSE_BUTTON__LEFT+k)) {
@@ -627,7 +659,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	
 	//- kti: Reset hot key if we don't have an active box.
 	L1 has_active = 0;
-	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
+	for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
 		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
 			has_active = 1;
 			break;
@@ -638,7 +670,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	}
 
 	//- kti: Reset active key when the box is disabled or nil.
-	for (L1 k = 0; k < OS_MOUSE_BUTTON__COUNT; k += 1) {
+	for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
 		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
 			UI_Box *box = ui_box_from_key(ui_state->active_box_key[k]);
 			if (ui_box_is_nil(box) || box->flags & UI_BOX_FLAG__DISABLED) {
@@ -924,6 +956,18 @@ Internal F2 ui_box_text_pos(UI_Box *box) {
 		} break;
 	}
 	result[0] = floor_F1(result[0]);
+	return result;
+}
+
+Internal UI_Key ui_hot_key(void) {
+	UI_Key result = ui_state->hot_box_key;
+	return result;
+}
+
+Internal UI_Key ui_active_key(I1 mouse_button) {
+	// TODO: Maybe add UI mouse buttons enum that goes from 0 to BUTTON COUNT.
+	Assert(mouse_button >= OS_MOUSE_BUTTON__LEFT && mouse_button < OS_MOUSE_BUTTON__LEFT+OS_MOUSE_BUTTON_COUNT);
+	UI_Key result = ui_state->active_box_key[mouse_button-OS_MOUSE_BUTTON__LEFT];
 	return result;
 }
 

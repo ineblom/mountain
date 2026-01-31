@@ -62,10 +62,19 @@ Internal void lane(Arena *arena) {
 			ui_push_font(prop_fnt);
 
 			ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
-			ui_set_next_pref_height(ui_children_sum(1.0f));
+			ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
 			ui_set_next_child_layout_axis(UI_AXIS__Y);
-			UI_Box *b1 = ui_build_box_from_key(0, ui_key_zero());
+			ui_set_next_background_color(oklch(0.4f, 0.0f, 0.0f, 1.0f));
+			UI_Box *b1 = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
 			ui_push_parent(b1);
+
+			ui_spacer(ui_em(1.8f, 1.0f));
+
+			ui_push_text_color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f));
+			ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
+			ui_set_next_pref_height(ui_em(1.0f, 1.0f));
+			ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Hejsan Hejsan, testing testing. ÅÄÖ ¡@£$€¥"));
+			ui_pop_text_color();
 
 			ui_spacer(ui_em(1.8f, 1.0f));
 
@@ -79,12 +88,11 @@ Internal void lane(Arena *arena) {
 				ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
 				ui_set_next_pref_height(ui_em(2.0f, 1.0f));
 				ui_set_next_border_color(oklch(0.933f, 0.063f, 25.0f, 1.0f));
-				ui_set_next_background_color(oklch(0.435f, 0.151f, button_hue, 1.0f));
+				ui_set_next_background_color(oklch(0.335f, 0.151f, button_hue, 1.0f));
 				ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
 				ui_set_next_corner_radius(5.0f);
-
-				if (ui_button(Str8_("Press me")).flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-					button_hue = fmodf(button_hue+40.0f, 360.0f);
+				if (ui_button(Str8_("Press me")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+					button_hue = fmodf(button_hue+33.0f, 360.0f);
 				}
 
 				ui_spacer(ui_pct(1.0f, 0.0f));
@@ -93,9 +101,6 @@ Internal void lane(Arena *arena) {
 			ui_pop_parent();
 			ui_end_build();
 
-		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
-		  F4 bg = oklch(0.186f, 0.027f, 343.0f, 1.0f);
-
 			fc_frame();
 			gfx_window_begin_frame(window, gfx_window);
 			dr_begin_frame();
@@ -103,20 +108,47 @@ Internal void lane(Arena *arena) {
 			DR_Bucket *bucket = dr_bucket_make();
 			dr_push_bucket(bucket);
 
-			//- kti: bg
-			dr_rect((F4){0.0f, 0.0f, window->width, window->height}, bg, 0.0f, 0.0f);
-
 			//- kti: ui
 			for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
 				UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
 
+				if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
+					F4 shadow = {
+						box->rect[0] - 4,
+						box->rect[1] - 4,
+						box->rect[2] + 16,
+						box->rect[3] + 16,
+					};
+					dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
+				}
+
 				if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
-					F4 color = box->background_color;
-					if (ui_key_match(box->key, ui_hot_key())) {
-						color[0] = ClampTop(color[0]+0.1f, 1.0f);
+					I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
+																	!ui_key_match(box->key, ui_key_zero()) &&
+																	ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT)));
+					I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS &&
+															 !ui_key_match(box->key, ui_key_zero()) &&
+															 ui_key_match(box->key, ui_hot_key()));
+					if (draw_hot_effect && !draw_active_effect) {
+						F4 shadow = {
+							box->rect[0] - 4,
+							box->rect[1] - 4,
+							box->rect[2] + 16,
+							box->rect[3] + 16,
+						};
+						dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
 					}
-					GFX_Rect_Instance *inst = dr_rect(box->rect, color, 0.0f, 1.0f);
+
+					GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, 1.0f);
 					inst->corner_radii = box->corner_radii;
+
+					if (draw_active_effect) {
+						inst->colors[2][0] += 0.1f;
+						inst->colors[3][0] += 0.1f;
+					} else if (draw_hot_effect) {
+						inst->colors[0][0] += 0.1f;
+						inst->colors[1][0] += 0.1f;
+					}
 				}
 
 				if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
@@ -160,6 +192,7 @@ Internal void lane(Arena *arena) {
 
 			//- kti: fps counter
 			FC_Run run = fc_run_from_string(fixed_fnt, 14.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
+		  F4 white = oklch(1.0, 0.0, 0, 1.0f);
 			dr_text_run(run, (F2){0.0f, run.ascent}, white);
 
 			dr_submit_bucket(window, gfx_window, bucket);
@@ -191,7 +224,7 @@ Internal void lane(Arena *arena) {
 				fps = 1000.0f/avg_ms;
 	      printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
 	      total_frame_time = 0;
-	      min_frame_time = UINT64_MAX;
+	      min_frame_time = L1_MAX;
 	      max_frame_time = 0;
 			}
 		}

@@ -47,8 +47,8 @@ enum {
 	UI_BOX_FLAG__DRAW_BACKGROUND          = (1<<4),
 	UI_BOX_FLAG__DRAW_DROP_SHADOW         = (1<<5),
 	UI_BOX_FLAG__CLIP                     = (1<<6),
-	UI_BOX_FLAG__HOT_ANIMATION            = (1<<7),
-	UI_BOX_FLAG__ACTIVE_ANIMATION         = (1<<8),
+	UI_BOX_FLAG__DRAW_HOT_EFFECTS         = (1<<7),
+	UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS      = (1<<8),
 	UI_BOX_FLAG__DISABLED                 = (1<<9),
 	UI_BOX_FLAG__FLOATING_X               = (1<<10),
 	UI_BOX_FLAG__FLOATING_Y               = (1<<11),
@@ -525,6 +525,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 				e->key == OS_MOUSE_BUTTON__RIGHT);
 		I1 evt_mouse_idx = evt_key_is_mouse ?  e->key - OS_MOUSE_BUTTON__LEFT : 0;
 
+		//- kti: Mouse down in bounds.
 		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
 				e->type == OS_EVENT_TYPE__PRESS &&
 				evt_mouse_in_bounds &&
@@ -546,6 +547,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 				signal.flags |= UI_SIGNAL_FLAG__LEFT_TRIPPLE_CLICKED << evt_mouse_idx;
 			}
 
+			// Move history buffers back and fill in latest.
 			memmove(&ui_state->press_key_history[evt_mouse_idx][1],
 				  		&ui_state->press_key_history[evt_mouse_idx][0],
 							sizeof(ui_state->press_key_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_key_history[evt_mouse_idx])-1));
@@ -558,6 +560,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 			taken = 1;
 		}
 
+		//- kti: Mouse released in bounds. Triggers click.
 		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
 				e->type == OS_EVENT_TYPE__RELEASE &&
 				evt_mouse_in_bounds &&
@@ -569,6 +572,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 			taken = 1;
 		}
 
+		//- kti: Mouse released outside of bounds.
 		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
 				e->type == OS_EVENT_TYPE__RELEASE &&
 				evt_key_is_mouse &&
@@ -591,8 +595,9 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		signal.flags |= UI_SIGNAL_FLAG__MOUSE_OVER;
 	}
 
- // TODO: The huge check making sure that one mouse button is available (or active for this box) may be unecessary.
- // This will almost never fail. Maybe at least make it a for loop. 
+	//- kti: Hovering.
+  // TODO: The huge check making sure that one mouse button is available (or active for this box) may be unecessary.
+	// This will almost never fail. Maybe at least make it a for loop. 
 	if (box->flags & UI_BOX_FLAG__CLICKABLE &&
 			rect_contains(rect, ui_state->mouse) &&
 			(ui_key_match(ui_state->hot_box_key, ui_key_zero()) || ui_key_match(ui_state->hot_box_key, box->key)) &&
@@ -603,6 +608,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		signal.flags |= UI_SIGNAL_FLAG__HOVERING;
 	}
 
+	//- kti: Group hovering.
 	if (box->flags & UI_BOX_FLAG__CLICKABLE &&
 			rect_contains(rect, ui_state->mouse) &&
 			!ui_key_match(box->group_key, ui_key_zero())) {
@@ -1025,8 +1031,8 @@ Internal UI_Signal ui_button(String8 string) {
 			UI_BOX_FLAG__DRAW_TEXT |
 			UI_BOX_FLAG__DRAW_BORDER |
 			UI_BOX_FLAG__DRAW_BACKGROUND |
-			UI_BOX_FLAG__HOT_ANIMATION |
-			UI_BOX_FLAG__ACTIVE_ANIMATION,
+			UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+			UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
 			string);
 	UI_Signal signal = ui_signal_from_box(box);
 	return signal;

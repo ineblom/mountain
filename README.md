@@ -1,27 +1,3 @@
 # Mountain
 
 A pile of C code. Used as a base environment for multiple projects.
-
-## Files
-
-- `base.c` typedefs and macros.
-- `arena.c` allocator.
-- `lane.c` (has main function)
-  1. starts up a thread (lane) for each core.
-  2. allocates an arena for each lane.
-  3. runs externally defined lane function on each thread.
-  4. provides utility functions dividing work and synchronizing between lanes.
-- `build.c`
-  - unity build; I.e. includes all other .c files (modules).
-  - includes itself multiple times, setting a different compile time constant each time.
-  - DEF\_, TYP\_, RAM\_, ROM\_ define separate sections of included modules.
-  - eliminates the need for .h files.
-- `os.c` operating system abstraction.
-- `strings.c` custom string type and operations.
-- `math.c` math operations.
-- `image.c` read/write, sample.
-- `rt.c` simple CPU ray tracer.
-- `gfx.c` Vulkan 1.3 graphics API abstraction.
-- `font_provider.c` FreeType abstraction for rasterizing fonts.
-- `font_cache.c` Immediate mode API that heavily caches outputs from font provider.
-- `editor.c` 3D scene editor integrated with ray tracer.

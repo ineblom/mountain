@@ -10,7 +10,7 @@ Internal void prof_begin(const char *str, L1 length);
 #  define ProfBegin(x) prof_begin(x, sizeof(x)-1)
 #  define ProfFuncBegin() ProfBegin(__FUNCTION__)
 #  define ProfEnd(x) spall_buffer_end(&spall_ctx, &spall_buffer, os_clock())
-#  define ProfScope(x) for (int _i_ = (ProfBegin(x), 0); !_i_; _i_ += 1, ProfEnd())
+#  define ProfScope(x) DeferLoop(ProfBegin(x), ProfEnd())
 #  define ProfFlush() spall_buffer_flush(&spall_ctx, &spall_buffer)
 # else
 #  define ProfInit()

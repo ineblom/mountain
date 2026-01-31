@@ -63,42 +63,49 @@ Internal void lane(Arena *arena) {
 
 			ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
 			ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
-			ui_set_next_child_layout_axis(UI_AXIS__Y);
-			ui_set_next_background_color(oklch(0.4f, 0.0f, 0.0f, 1.0f));
-			UI_Box *b1 = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
-			ui_push_parent(b1);
+			UI_Child_Layout_Axis(UI_AXIS__Y)
+			UI_Background_Color(oklch(0.0f, 0.0f, 0.0f, 1.0f))
+			UI_Parent(ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero())) {
+				ui_spacer(ui_em(2.0f, 1.0f));
 
-			ui_spacer(ui_em(1.8f, 1.0f));
+				UI_Pref_Width(ui_children_sum(1.0f))
+				UI_Pref_Height(ui_children_sum(1.0f))
+				UI_Row()
+				UI_Padding(ui_px(10.0f, 1.0f)) {
+					ui_set_next_pref_width(ui_children_sum(1.0f));
+					ui_set_next_pref_height(ui_px(300.0f, 1.0f));
+					ui_set_next_child_layout_axis(UI_AXIS__Y);
+					ui_set_next_background_color(oklch(0.2f, 0.0f, 0.0f, 1.0f));
+					UI_Parent(ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP, Str8_("scroll container")))
+					UI_Padding(ui_em(1, 1))
+					{
 
-			ui_push_text_color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f));
-			ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
-			ui_set_next_pref_height(ui_em(1.0f, 1.0f));
-			ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Hejsan Hejsan, testing testing. ÅÄÖ ¡@£$€¥"));
-			ui_pop_text_color();
+						ui_push_text_color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f));
+						ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
+						ui_set_next_pref_height(ui_em(1.0f, 1.0f));
+						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Hejsan Hejsan, testing testing. ÅÄÖ ¡@£$€¥"));
+						ui_pop_text_color();
 
-			ui_spacer(ui_em(1.8f, 1.0f));
+						ui_spacer(ui_em(1.8f, 1.0f));
 
-			ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
-			ui_set_next_pref_height(ui_children_sum(1.0f));
-			ui_set_next_child_layout_axis(UI_AXIS__X);
-			UI_Box *row = ui_build_box_from_key(0, ui_key_zero());
-			ui_push_parent(row); {
-				ui_spacer(ui_pct(1.0f, 0.0f));
-				
-				ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
-				ui_set_next_pref_height(ui_em(2.0f, 1.0f));
-				ui_set_next_border_color(oklch(0.933f, 0.063f, 25.0f, 1.0f));
-				ui_set_next_background_color(oklch(0.335f, 0.151f, button_hue, 1.0f));
-				ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-				ui_set_next_corner_radius(5.0f);
-				if (ui_button(Str8_("Press me")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-					button_hue = fmodf(button_hue+33.0f, 360.0f);
+						for (L1 i = 0; i < 10; i += 1) {
+							ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
+							ui_set_next_pref_height(ui_em(2.0f, 1.0f));
+							ui_set_next_border_color(oklch(0.933f, 0.063f, 25.0f, 1.0f));
+							ui_set_next_background_color(oklch(0.335f, 0.151f, button_hue, 1.0f));
+							ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
+							ui_set_next_corner_radius(5.0f);
+							if (ui_buttonf("Press me##%llu", i).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+								// button_hue = fmodf(button_hue+33.0f, 360.0f);
+							}
+
+							ui_spacer(ui_px(10.0f, 1.0f));
+						}
+					}
 				}
 
-				ui_spacer(ui_pct(1.0f, 0.0f));
-			} ui_pop_parent();
+			}
 
-			ui_pop_parent();
 			ui_end_build();
 
 			fc_frame();
@@ -112,6 +119,10 @@ Internal void lane(Arena *arena) {
 			for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
 				UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
 
+				I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
+						!ui_key_match(box->key, ui_key_zero()) &&
+						ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT)));
+
 				if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
 					F4 shadow = {
 						box->rect[0] - 4,
@@ -123,12 +134,9 @@ Internal void lane(Arena *arena) {
 				}
 
 				if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
-					I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
-																	!ui_key_match(box->key, ui_key_zero()) &&
-																	ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT)));
 					I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS &&
-															 !ui_key_match(box->key, ui_key_zero()) &&
-															 ui_key_match(box->key, ui_hot_key()));
+							!ui_key_match(box->key, ui_key_zero()) &&
+							ui_key_match(box->key, ui_hot_key()));
 					if (draw_hot_effect && !draw_active_effect) {
 						F4 shadow = {
 							box->rect[0] - 4,
@@ -143,18 +151,24 @@ Internal void lane(Arena *arena) {
 					inst->corner_radii = box->corner_radii;
 
 					if (draw_active_effect) {
-						inst->colors[2][0] += 0.1f;
-						inst->colors[3][0] += 0.1f;
+						inst->colors[0][0] = ClampBot(inst->colors[0][0]-0.1f, 0.0f);
+						inst->colors[1][0] = ClampBot(inst->colors[1][0]-0.1f, 0.0f);
+						inst->colors[2][0] = ClampTop(inst->colors[2][0]+0.1f, 1.0f);
+						inst->colors[3][0] = ClampTop(inst->colors[3][0]+0.1f, 1.0f);
 					} else if (draw_hot_effect) {
-						inst->colors[0][0] += 0.1f;
-						inst->colors[1][0] += 0.1f;
+						inst->colors[0][0] = ClampTop(inst->colors[0][0]+0.1f, 1.0f);
+						inst->colors[1][0] = ClampTop(inst->colors[1][0]+0.1f, 1.0f);
 					}
 				}
 
 				if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
 					for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
 						F2 pos = ui_box_text_pos(box);
-						dr_text_run(n->value.run, pos, box->text_color);
+						F4 color = box->text_color;
+						if (draw_active_effect) {
+							color[0] = ClampBot(color[0]-0.1f, 0.0f);
+						}
+						dr_text_run(n->value.run, pos, color);
 					}
 				}
 

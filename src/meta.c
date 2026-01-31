@@ -158,6 +158,7 @@ Internal void lane(Arena *arena) {
 			String8 name = push_str8_copy(scratch.arena, line->params[1]);
 			String8 type = push_str8_copy(scratch.arena, line->params[2]);
 			String8 default_value = push_str8_copy(scratch.arena, line->params[3]);
+			String8 pascal_case_name = push_str8_copy(scratch.arena, line->params[0]);
 
 			str8_list_pushf(scratch.arena, &header_strings, R"(
 typedef struct %1$s %1$s;
@@ -165,7 +166,7 @@ struct %1$s { %1$s *next; %4$s value; };
 typedef struct %2$s %2$s;
 struct %2$s { %1$s *top; %1$s *free; I1 auto_pop; };
 Internal void ui_push_%3$s(%4$s value);
-Internal void ui_pop_%3$s(void);
+Internal %4$s ui_pop_%3$s(void);
 Internal void ui_set_next_%3$s(%4$s value);
 Internal %4$s ui_top_%3$s(void);
 )", node_type.str, stack_type.str, name.str, type.str);
@@ -180,7 +181,7 @@ Internal void ui_push_%3$s(%4$s value) {
 	SLLStackPush(stack->top, node);
 	stack->auto_pop = 0;
 }
-Internal void ui_pop_%3$s(void) {
+Internal %4$s ui_pop_%3$s(void) {
 	%2$s *stack = &ui_state->%3$s_stack;
 	%1$s *popped_node = stack->top;
 	if (popped_node != &ui_state->nil_%3$s) {
@@ -188,6 +189,7 @@ Internal void ui_pop_%3$s(void) {
 		SLLStackPush(stack->free, popped_node);
 		stack->auto_pop = 0;
 	}
+	return popped_node->value;
 }
 Internal void ui_set_next_%3$s(%4$s value) {
 	ui_push_%3$s(value);
@@ -196,7 +198,8 @@ Internal void ui_set_next_%3$s(%4$s value) {
 Internal %4$s ui_top_%3$s(void) {
 	return ui_state->%3$s_stack.top->value;
 }
-)", node_type.str, stack_type.str, name.str, type.str);
+#define UI_%5$s(v) DeferLoop(ui_push_%3$s(v), ui_pop_%3$s())
+)", node_type.str, stack_type.str, name.str, type.str, pascal_case_name.str);
 
 			str8_list_pushf(scratch.arena, &stacks_strings,
 					"	%2$s %3$s_stack;\\\n"

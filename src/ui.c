@@ -508,8 +508,8 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 
 	F4 rect = box->rect;
 	for (UI_Box *p = box->parent; !ui_box_is_nil(p); p = p->parent) {
-		if (p->flags & UI_BOX_FLAG__CLIP) {
-			rect = intersect_rects(rect, p->rect);
+		if (!ui_key_match(p->key, ui_key_zero()) && p->flags & UI_BOX_FLAG__CLIP) {
+			rect = intersect_rects(p->rect, rect);
 		}
 	}
 
@@ -874,17 +874,6 @@ Internal void ui_layout_root(UI_Box *root, UI_Axis axis) {
 	ui_layout_position__in_place(root, axis);
 }
 
-Internal void ui_print_tree(UI_Box *box, L1 depth) {
-	for EachIndex(i, depth) {
-		printf(" ");
-	}
-	printf("%llu (%.2f %.2f - %.2fx%.2f)\n", box->key.l1[0], box->rect[0], box->rect[1], box->rect[2], box->rect[3]);
-
-	for (UI_Box *c = box->first; !ui_box_is_nil(c); c = c->next) {
-		ui_print_tree(c, depth + 1);
-	}
-}
-
 Internal void ui_end_build(void) {
 	//- kti: Prune untouched or transient boxes.
 	for EachIndex(slot_idx, ui_state->box_table_size) {
@@ -931,10 +920,6 @@ Internal void ui_end_build(void) {
 		}
 	}
 
-	if (ui_state->build_index == 0) {
-		ui_print_tree(ui_state->root, 0);
-	}
-
 	ui_state->build_index += 1;
 	arena_clear(ui_build_arena());
 }
@@ -963,6 +948,10 @@ Internal F2 ui_box_text_pos(UI_Box *box) {
 	}
 	result[0] = floor_F1(result[0]);
 	return result;
+}
+
+Internal UI_Box *ui_root(void) {
+	return ui_state->root;
 }
 
 Internal UI_Key ui_hot_key(void) {
@@ -1025,6 +1014,41 @@ Internal UI_Size ui_size(UI_Size_Kind kind, F1 value, F1 strictness) {
 #define ui_pct(value, strictness) ui_size(UI_SIZE_KIND__PERCENT_OF_PARENT, value, strictness)
 #define ui_children_sum(strictness) ui_size(UI_SIZE_KIND__CHILDREN_SUM, 0.0f, strictness)
 
+#define UI_Column() DeferLoop(ui_column_begin(), ui_column_end())
+#define UI_Row() DeferLoop(ui_row_begin(), ui_row_end())
+#define UI_Padding(v) DeferLoop(ui_spacer(v), ui_spacer(v))
+
+Internal UI_Box *ui_named_column_begin(String8 name) {
+	ui_set_next_child_layout_axis(UI_AXIS__Y);
+	UI_Box *box = ui_build_box_from_string(0, name);
+	ui_push_parent(box);
+	return box;
+}
+
+Internal UI_Signal ui_named_column_end(void) {
+	UI_Box *box = ui_pop_parent();
+	UI_Signal signal = ui_signal_from_box(box);
+	return signal;
+}
+
+Internal UI_Box *ui_named_row_begin(String8 name) {
+	ui_set_next_child_layout_axis(UI_AXIS__X);
+	UI_Box *box = ui_build_box_from_string(0, name);
+	ui_push_parent(box);
+	return box;
+}
+
+Internal UI_Signal ui_named_row_end(void) {
+	UI_Box *box = ui_pop_parent();
+	UI_Signal signal = ui_signal_from_box(box);
+	return signal;
+}
+
+Internal UI_Box *ui_column_begin(void) { return ui_named_column_begin(Str8_("")); }
+Internal UI_Box *ui_row_begin(void) { return ui_named_row_begin(Str8_("")); }
+Internal UI_Signal ui_column_end(void) { return ui_named_column_end(); }
+Internal UI_Signal ui_row_end(void) { return ui_named_row_end(); }
+
 Internal UI_Signal ui_button(String8 string) {
 	UI_Box *box = ui_build_box_from_string(
 			UI_BOX_FLAG__CLICKABLE |
@@ -1038,8 +1062,15 @@ Internal UI_Signal ui_button(String8 string) {
 	return signal;
 }
 
-Internal UI_Box *ui_root(void) {
-	return ui_state->root;
+Internal UI_Signal ui_buttonf(CString fmt, ...) {
+  Temp_Arena scratch = scratch_begin(0, 0);
+  va_list args;
+  va_start(args, fmt);
+  String8 string = str8fv(scratch.arena, fmt, args);
+  va_end(args);
+  UI_Signal result = ui_button(string);
+  scratch_end(scratch);
+  return result;
 }
 
 #endif

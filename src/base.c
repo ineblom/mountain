@@ -105,6 +105,8 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 	return v;
 }
 
+#define DeferLoop(a, b) for (int _i_ = ((a), 0); !_i_; _i_ += 1, (b))
+
 #define EachIndex(it, count) (L1 it = 0; it < (count); it += 1)
 #define EachInRange(it, range) (L1 it = (range).min; it < (range).max; it += 1)
 

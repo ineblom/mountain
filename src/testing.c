@@ -86,8 +86,7 @@ Internal void lane(Arena *arena) {
 					}
 
 					F2 original_pos = *ui_get_drag_struct(F2);
-					F2 offset = original_pos - ui_drag_start_mouse();
-					pane_pos = ui_mouse() + offset;
+					pane_pos = original_pos + ui_drag_delta();
 				}
 
 				UI_Parent(scroll_container)

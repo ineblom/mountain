@@ -28,6 +28,7 @@ Internal void lane(Arena *arena) {
 
 	lane_sync();
 
+	F2 pane_pos = {30.0f, 50.0f};
 	F1 button_hue = 0.0f;
 	L1 running = 1;
 
@@ -67,34 +68,37 @@ Internal void lane(Arena *arena) {
 			UI_Background_Color(oklch(0.0f, 0.0f, 0.0f, 1.0f))
 			UI_Border_Color(oklch(1.0f, 0.0f, 0.0f, 1.0f))
 			UI_Parent(ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero())) {
-				ui_spacer(ui_em(2.0f, 1.0f));
 
-				UI_Pref_Width(ui_children_sum(1.0f))
-				UI_Pref_Height(ui_children_sum(1.0f))
-				UI_Row()
-				UI_Padding(ui_px(25.0f, 1.0f)) {
-					ui_set_next_pref_width(ui_children_sum(1.0f));
-					ui_set_next_pref_height(ui_px(300.0f, 1.0f));
-					ui_set_next_child_layout_axis(UI_AXIS__Y);
-					ui_set_next_background_color(oklch(0.2f, 0.0f, 0.0f, 1.0f));
-					UI_Box *scroll_container = ui_build_box_from_string(
-							UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL | UI_BOX_FLAG__VIEW_CLAMP,
-							Str8_("scroll container"));
-					ui_signal_from_box(scroll_container);
-					UI_Parent(scroll_container)
+				ui_set_next_fixed_x(pane_pos[0]);
+				ui_set_next_fixed_y(pane_pos[1]);
+				ui_set_next_pref_width(ui_children_sum(1.0f));
+				ui_set_next_pref_height(ui_px(300.0f, 1.0f));
+				ui_set_next_child_layout_axis(UI_AXIS__Y);
+				ui_set_next_background_color(oklch(0.2f, 0.0f, 0.0f, 1.0f));
+				UI_Box *scroll_container = ui_build_box_from_string(
+						UI_BOX_FLAG__FLOATING | UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BACKGROUND |
+						UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL | UI_BOX_FLAG__VIEW_CLAMP,
+						Str8_("scroll container"));
+				UI_Signal scroll_sig = ui_signal_from_box(scroll_container);
+				if (scroll_sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+					if (scroll_sig.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+						ui_store_drag_struct(&pane_pos);
+					}
+
+					F2 original_pos = *ui_get_drag_struct(F2);
+					F2 offset = original_pos - ui_drag_start_mouse();
+					pane_pos = ui_mouse() + offset;
+				}
+
+				UI_Parent(scroll_container)
+
+					UI_Pref_Width(ui_children_sum(1.0f))
 					UI_Row() UI_Padding(ui_em(1, 1))
 					UI_Column() UI_Padding(ui_em(1, 1)) {
-
 						UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
 						UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
 						UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
-							UI_Box *a = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_TEXT,
-									Str8_("It's pretty fun to write a UI system."));
-							UI_Signal sig = ui_signal_from_box(a);
-							if (sig.flags & (UI_SIGNAL_FLAG__HOVERING|UI_SIGNAL_FLAG__MOUSE_OVER)) {
-								a->flags |= UI_BOX_FLAG__DRAW_BORDER;
-							}
-
+							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("It's pretty fun to write a UI system."));
 							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
 						}
 
@@ -109,7 +113,6 @@ Internal void lane(Arena *arena) {
 							button_hue = fmodf(button_hue+33.0f, 360.0f);
 						}
 					}
-				}
 			}
 
 			ui_end_build();

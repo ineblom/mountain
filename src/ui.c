@@ -70,8 +70,9 @@ enum {
 	UI_BOX_FLAG__VIEW_CLAMP_X             = (1<<27),
 	UI_BOX_FLAG__VIEW_CLAMP_Y             = (1<<28),
 
-	UI_BOX_FLAG__VIEW_SCROLL = (UI_BOX_FLAG__VIEW_SCROLL_X | UI_BOX_FLAG__VIEW_SCROLL_Y),
-	UI_BOX_FLAG__VIEW_CLAMP  = (UI_BOX_FLAG__VIEW_CLAMP_X | UI_BOX_FLAG__VIEW_CLAMP_Y),
+	UI_BOX_FLAG__FLOATING    = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
+	UI_BOX_FLAG__VIEW_SCROLL = (UI_BOX_FLAG__VIEW_SCROLL_X|UI_BOX_FLAG__VIEW_SCROLL_Y),
+	UI_BOX_FLAG__VIEW_CLAMP  = (UI_BOX_FLAG__VIEW_CLAMP_X|UI_BOX_FLAG__VIEW_CLAMP_Y),
 };
 
 typedef struct UI_Box UI_Box;
@@ -201,6 +202,9 @@ struct UI_State {
 	Arena *arena;
 	UI_Key external_key;
 
+	Arena *drag_arena;
+	String8 drag_data;
+
 	Arena *build_arenas[2];
 	L1 build_index;
 
@@ -213,6 +217,7 @@ struct UI_State {
 	L1 last_build_box_count;
 	OS_Window *window;
 	F2 mouse;
+	F2 drag_start_mouse;
 	L1 last_time_mouse_moved;
 
 	UI_Key hot_box_key;
@@ -221,6 +226,7 @@ struct UI_State {
 	OS_Event_List events;
 	UI_Key press_key_history[OS_MOUSE_BUTTON_COUNT][3];
 	L1 press_timestamp_history[OS_MOUSE_BUTTON_COUNT][3];
+	F2 press_pos_history[OS_MOUSE_BUTTON_COUNT][3];
 
 	UIStacks;
 };
@@ -297,6 +303,7 @@ Internal void ui_init(void) {
 	ui_state->external_key = ui_key_from_string(ui_key_zero(), Str8_("external_interaction_key"));
 	ui_state->build_arenas[0] = arena_create(MiB(64));
 	ui_state->build_arenas[1] = arena_create(MiB(64));
+	ui_state->drag_arena = arena_create(MiB(64));
 	ui_state->box_table_size = 4096;
 	ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
 	UIInitStackNils();
@@ -537,6 +544,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 			ui_state->hot_box_key = box->key;
 			ui_state->active_box_key[evt_mouse_idx] = box->key;
 			signal.flags |= UI_SIGNAL_FLAG__LEFT_PRESSED << evt_mouse_idx;
+			ui_state->drag_start_mouse = evt_mouse;
 
 			if (ui_key_match(box->key, ui_state->press_key_history[evt_mouse_idx][0]) &&
 					e->timestamp_ns-ui_state->press_timestamp_history[evt_mouse_idx][0] <= double_click_time) {
@@ -551,14 +559,15 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 			}
 
 			// Move history buffers back and fill in latest.
-			memmove(&ui_state->press_key_history[evt_mouse_idx][1],
-				  		&ui_state->press_key_history[evt_mouse_idx][0],
+			memmove(&ui_state->press_key_history[evt_mouse_idx][1], &ui_state->press_key_history[evt_mouse_idx][0],
 							sizeof(ui_state->press_key_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_key_history[evt_mouse_idx])-1));
-			memmove(&ui_state->press_timestamp_history[evt_mouse_idx][1],
-							&ui_state->press_timestamp_history[evt_mouse_idx][0],
+			memmove(&ui_state->press_timestamp_history[evt_mouse_idx][1], &ui_state->press_timestamp_history[evt_mouse_idx][0],
 							sizeof(ui_state->press_timestamp_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_timestamp_history[evt_mouse_idx])-1));
+			memmove(&ui_state->press_pos_history[evt_mouse_idx][1], &ui_state->press_pos_history[evt_mouse_idx][0],
+							sizeof(ui_state->press_pos_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_pos_history[evt_mouse_idx])-1));
 			ui_state->press_key_history[evt_mouse_idx][0] = box->key;
 			ui_state->press_timestamp_history[evt_mouse_idx][0] = e->timestamp_ns;
+			ui_state->press_pos_history[evt_mouse_idx][0] = (F2){e->x, e->y};
 
 			taken = 1;
 		}
@@ -644,6 +653,28 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		}
 		if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_Y) {
 			box->view_off_target[1] = Clamp(0, box->view_off_target[1], max_view_off_target[1]);
+		}
+	}
+
+	//- kti: Dragging
+	if (box->flags & UI_BOX_FLAG__CLICKABLE) {
+		for EachIndex(k, OS_MOUSE_BUTTON_COUNT) {
+			if (ui_key_match(box->key, ui_state->active_box_key[k]) || signal.flags & (UI_SIGNAL_FLAG__LEFT_PRESSED<<k)) {
+				signal.flags |= (UI_SIGNAL_FLAG__LEFT_DRAGGING<<k);
+
+				if (ui_key_match(box->key, ui_state->press_key_history[k][0]) &&
+						ui_key_match(box->key, ui_state->press_key_history[k][1]) &&
+						ui_state->press_timestamp_history[k][0] - ui_state->press_timestamp_history[k][1] <= double_click_time &&
+						length_sq_F2(ui_state->press_pos_history[k][0] - ui_state->press_pos_history[k][1]) < 10*10) {
+					signal.flags |= (UI_SIGNAL_FLAG__LEFT_DOUBLE_DRAGGING<<k);
+
+					if (ui_key_match(box->key, ui_state->press_key_history[k][2]) &&
+							ui_state->press_timestamp_history[k][1] - ui_state->press_timestamp_history[k][2] <= double_click_time &&
+							length_sq_F2(ui_state->press_pos_history[k][1] - ui_state->press_pos_history[k][2]) < 10*10) {
+						signal.flags |= (UI_SIGNAL_FLAG__LEFT_TRIPPLE_DRAGGING<<k);
+					}
+				}
+			}
 		}
 	}
 
@@ -1024,8 +1055,44 @@ Internal F2 ui_box_text_pos(UI_Box *box) {
 	return result;
 }
 
+Internal F2 ui_mouse(void) {
+	return ui_state->mouse;
+}
+
+Internal F2 ui_drag_start_mouse(void) {
+	F2 pos = ui_state->drag_start_mouse;
+	return pos;
+}
+
+Internal F2 ui_drag_delta(void) {
+	F2 delta = ui_mouse() - ui_state->drag_start_mouse;
+	return delta;
+}
+
+Internal void ui_store_drag_data(String8 data) {
+	arena_clear(ui_state->drag_arena);
+	ui_state->drag_data = push_str8_copy(ui_state->drag_arena, data);
+}
+
+Internal String8 ui_get_drag_data(L1 min_required_size) {
+	if (ui_state->drag_data.len < min_required_size) {
+		Temp_Arena scratch = scratch_begin(0, 0);
+		String8 data = {
+			.str = push_array(scratch.arena, B1, min_required_size),
+			.len = min_required_size,
+		};
+		ui_store_drag_data(data);
+		scratch_end(scratch);
+	}
+	return ui_state->drag_data;
+}
+
+#define ui_store_drag_struct(ptr) ui_store_drag_data((String8){.str = (B1 *)(ptr), .len = sizeof(*(ptr)) })
+#define ui_get_drag_struct(type) ((type *)ui_get_drag_data(sizeof(type)).str)
+
 Internal UI_Box *ui_root(void) {
-	return ui_state->root;
+	UI_Box *root = ui_state->root;
+	return root;
 }
 
 Internal UI_Key ui_hot_key(void) {
@@ -1153,6 +1220,25 @@ Internal UI_Signal ui_buttonf(CString fmt, ...) {
   UI_Signal result = ui_button(string);
   scratch_end(scratch);
   return result;
+}
+
+Internal UI_Box *ui_pane_begin(F4 rect, String8 string) {
+	ui_set_next_fixed_x(rect[0]);
+	ui_set_next_fixed_y(rect[1]);
+	ui_set_next_fixed_width(rect[2]);
+	ui_set_next_fixed_height(rect[3]);
+	ui_set_next_child_layout_axis(UI_AXIS__Y);
+	UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__CLIP|UI_BOX_FLAG__DRAW_BORDER|UI_BOX_FLAG__DRAW_BACKGROUND, string);
+	ui_push_parent(box);
+	ui_push_pref_width(ui_pct(1.0f, 0.0f));
+	return box;
+}
+
+Internal UI_Signal ui_pane_end(void) {
+	ui_pop_pref_width();
+	UI_Box *box = ui_pop_parent();
+	UI_Signal signal = ui_signal_from_box(box);
+	return signal;
 }
 
 #endif

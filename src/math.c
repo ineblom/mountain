@@ -30,6 +30,21 @@ Inline F1 sign_F1(F1 a) {
 	return result;
 }
 
+Inline F1 dot_F2(F2 v) {
+	F1 result = v[0]*v[0] + v[1]*v[1];
+	return result;
+}
+
+Inline F1 length_sq_F2(F2 v) {
+	F1 result = dot_F2(v);
+	return result;
+}
+
+Inline F1 length_F2(F2 v) {
+	F1 result = sqrtf(length_sq_F2(v));
+	return result;
+}
+
 Inline F1 dot_F3(F3 a, F3 b) {
 	F1 result = a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 	return result;

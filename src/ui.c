@@ -427,16 +427,9 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	box->corner_radii[1] = ui_top_tr_corner_radius();
 	box->corner_radii[2] = ui_top_bl_corner_radius();
 	box->corner_radii[3] = ui_top_br_corner_radius();
-
-	if (flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
-		box->background_color = ui_top_background_color();
-	}
-	if (flags & UI_BOX_FLAG__DRAW_TEXT) {
-		box->text_color = ui_top_text_color();
-	}
-	if (flags & UI_BOX_FLAG__DRAW_BORDER) {
-		box->border_color = ui_top_border_color();
-	}
+	box->background_color = ui_top_background_color();
+	box->text_color = ui_top_text_color();
+	box->border_color = ui_top_border_color();
 
 	UIAutoPopStacks();
 

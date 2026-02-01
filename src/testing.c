@@ -75,43 +75,48 @@ Internal void lane(Arena *arena) {
 				ui_set_next_pref_height(ui_px(300.0f, 1.0f));
 				ui_set_next_child_layout_axis(UI_AXIS__Y);
 				ui_set_next_background_color(oklch(0.2f, 0.0f, 0.0f, 1.0f));
-				UI_Box *scroll_container = ui_build_box_from_string(
+				UI_Box *pane = ui_build_box_from_string(
 						UI_BOX_FLAG__FLOATING | UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BACKGROUND |
 						UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL | UI_BOX_FLAG__VIEW_CLAMP,
-						Str8_("scroll container"));
-				UI_Signal scroll_sig = ui_signal_from_box(scroll_container);
-				if (scroll_sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-					if (scroll_sig.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+						Str8_("pane"));
+				UI_Parent(pane) {
+					UI_Pref_Width(ui_children_sum(1.0f))
+					UI_Pref_Height(ui_children_sum(1.0f))
+					UI_Row() UI_Padding(ui_em(1, 1))
+					UI_Column() UI_Padding(ui_em(1, 1)) {
+
+						UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
+						UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+						UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("My super awesome UI system."));
+							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
+						}
+
+						ui_spacer(ui_em(1.0f, 1.0f));
+
+						for EachIndex(i, 10) {
+							ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
+							ui_set_next_pref_height(ui_em(2.0f, 1.0f));
+							ui_set_next_background_color(oklch(0.335f, 0.151f, button_hue, 1.0f));
+							ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
+							ui_set_next_corner_radius(5.0f);
+							if (ui_buttonf("Press me##%llu", i).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+								button_hue = fmodf(button_hue+33.0f, 360.0f);
+							}
+							ui_spacer(ui_px(10.0f, 1.0f));
+						}
+					}
+				}
+
+				UI_Signal pane_signal = ui_signal_from_box(pane);
+				if (pane_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+					if (pane_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
 						ui_store_drag_struct(&pane_pos);
 					}
 
 					F2 original_pos = *ui_get_drag_struct(F2);
 					pane_pos = original_pos + ui_drag_delta();
 				}
-
-				UI_Parent(scroll_container)
-
-					UI_Pref_Width(ui_children_sum(1.0f))
-					UI_Row() UI_Padding(ui_em(1, 1))
-					UI_Column() UI_Padding(ui_em(1, 1)) {
-						UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
-						UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-						UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
-							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("It's pretty fun to write a UI system."));
-							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
-						}
-
-						ui_spacer(ui_em(1.0f, 1.0f));
-
-						ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
-						ui_set_next_pref_height(ui_em(2.0f, 1.0f));
-						ui_set_next_background_color(oklch(0.335f, 0.151f, button_hue, 1.0f));
-						ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-						ui_set_next_corner_radius(5.0f);
-						if (ui_button(Str8_("Press me")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-							button_hue = fmodf(button_hue+33.0f, 360.0f);
-						}
-					}
 			}
 
 			ui_end_build();

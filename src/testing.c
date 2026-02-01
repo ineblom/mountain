@@ -71,19 +71,22 @@ Internal void lane(Arena *arena) {
 				UI_Pref_Width(ui_children_sum(1.0f))
 				UI_Pref_Height(ui_children_sum(1.0f))
 				UI_Row()
-				UI_Padding(ui_px(10.0f, 1.0f)) {
+				UI_Padding(ui_px(25.0f, 1.0f)) {
 					ui_set_next_pref_width(ui_children_sum(1.0f));
 					ui_set_next_pref_height(ui_px(300.0f, 1.0f));
 					ui_set_next_child_layout_axis(UI_AXIS__Y);
 					ui_set_next_background_color(oklch(0.2f, 0.0f, 0.0f, 1.0f));
-					UI_Parent(ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP, Str8_("scroll container")))
-					UI_Padding(ui_em(1, 1))
-					{
+					UI_Box *scroll_container = ui_build_box_from_string(
+							UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL | UI_BOX_FLAG__VIEW_CLAMP,
+							Str8_("scroll container"));
+					ui_signal_from_box(scroll_container);
+					UI_Parent(scroll_container)
+					UI_Padding(ui_em(1, 1)) {
 
 						ui_push_text_color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f));
 						ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
 						ui_set_next_pref_height(ui_em(1.0f, 1.0f));
-						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Hejsan Hejsan, testing testing. ÅÄÖ ¡@£$€¥"));
+						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("It's pretty fun to write a UI system."));
 						ui_pop_text_color();
 
 						ui_spacer(ui_em(1.8f, 1.0f));
@@ -96,14 +99,13 @@ Internal void lane(Arena *arena) {
 							ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
 							ui_set_next_corner_radius(5.0f);
 							if (ui_buttonf("Press me##%llu", i).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-								// button_hue = fmodf(button_hue+33.0f, 360.0f);
+								button_hue = fmodf(button_hue+33.0f, 360.0f);
 							}
 
 							ui_spacer(ui_px(10.0f, 1.0f));
 						}
 					}
 				}
-
 			}
 
 			ui_end_build();

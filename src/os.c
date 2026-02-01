@@ -78,6 +78,7 @@ struct OS_Event {
   I1 modifiers;
 	// TODO: Are ints or doubles better here?
   D1 x, y;
+	D1 delta_x, delta_y;
 };
 
 typedef struct OS_Event_List OS_Event_List;
@@ -724,11 +725,13 @@ Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer,
   OS_Event event = {
     .timestamp_ns = (L1)time * 1000000LLU,
     .type = OS_EVENT_TYPE__SCROLL,
+		.x = os_gfx_state->mouse_x,
+		.y = os_gfx_state->mouse_y,
   };
   if (axis == 0) {
-    event.y = wl_fixed_to_double(value);
+    event.delta_y = wl_fixed_to_double(value);
   } else if (axis == 1) {
-    event.x = wl_fixed_to_double(value);
+    event.delta_x = wl_fixed_to_double(value);
   }
 
   os_push_event(event);

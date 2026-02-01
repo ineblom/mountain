@@ -41,30 +41,37 @@ struct UI_Size {
 typedef L1 UI_Box_Flags;
 enum {
 	UI_BOX_FLAG__CLICKABLE                = (1<<0),
-	UI_BOX_FLAG__VIEW_SCROLL              = (1<<1),
-	UI_BOX_FLAG__DRAW_TEXT                = (1<<2),
-	UI_BOX_FLAG__DRAW_BORDER              = (1<<3),
-	UI_BOX_FLAG__DRAW_BACKGROUND          = (1<<4),
-	UI_BOX_FLAG__DRAW_DROP_SHADOW         = (1<<5),
-	UI_BOX_FLAG__CLIP                     = (1<<6),
-	UI_BOX_FLAG__DRAW_HOT_EFFECTS         = (1<<7),
-	UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS      = (1<<8),
-	UI_BOX_FLAG__DISABLED                 = (1<<9),
-	UI_BOX_FLAG__FLOATING_X               = (1<<10),
-	UI_BOX_FLAG__FLOATING_Y               = (1<<11),
-	UI_BOX_FLAG__FIXED_WIDTH              = (1<<12),
-	UI_BOX_FLAG__FIXED_HEIGHT             = (1<<13),
-	UI_BOX_FLAG__ALLOW_OVERFLOW_X         = (1<<14),
-	UI_BOX_FLAG__ALLOW_OVERFLOW_Y         = (1<<15),
-	UI_BOX_FLAG__SKIP_VIEW_OFF_X          = (1<<16),
-	UI_BOX_FLAG__SKIP_VIEW_OFF_Y          = (1<<17),
-	UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT = (1<<18),
-	UI_BOX_FLAG__HAS_DISPLAY_STRING       = (1<<19),
-	UI_BOX_FLAG__DISABLE_ID_STRING        = (1<<20),
-	UI_BOX_FLAG__FOCUS_HOT                = (1<<21),
-	UI_BOX_FLAG__FOCUS_ACTIVE             = (1<<22),
-	UI_BOX_FLAG__FOCUS_HOT_DISABLED       = (1<<23),
-	UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED    = (1<<24),
+	UI_BOX_FLAG__VIEW_SCROLL_X            = (1<<1),
+	UI_BOX_FLAG__VIEW_SCROLL_Y            = (1<<2),
+	UI_BOX_FLAG__DRAW_TEXT                = (1<<3),
+	UI_BOX_FLAG__DRAW_BORDER              = (1<<4),
+	UI_BOX_FLAG__DRAW_BACKGROUND          = (1<<5),
+	UI_BOX_FLAG__DRAW_DROP_SHADOW         = (1<<6),
+	UI_BOX_FLAG__CLIP                     = (1<<7),
+	UI_BOX_FLAG__DRAW_HOT_EFFECTS         = (1<<8),
+	UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS      = (1<<9),
+	UI_BOX_FLAG__DISABLED                 = (1<<10),
+	UI_BOX_FLAG__FLOATING_X               = (1<<11),
+	UI_BOX_FLAG__FLOATING_Y               = (1<<12),
+	UI_BOX_FLAG__FIXED_WIDTH              = (1<<13),
+	UI_BOX_FLAG__FIXED_HEIGHT             = (1<<14),
+	UI_BOX_FLAG__ALLOW_OVERFLOW_X         = (1<<15),
+	UI_BOX_FLAG__ALLOW_OVERFLOW_Y         = (1<<16),
+	UI_BOX_FLAG__SKIP_VIEW_OFF_X          = (1<<17),
+	UI_BOX_FLAG__SKIP_VIEW_OFF_Y          = (1<<18),
+	UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT = (1<<19),
+	UI_BOX_FLAG__HAS_DISPLAY_STRING       = (1<<20),
+	UI_BOX_FLAG__DISABLE_ID_STRING        = (1<<21),
+	UI_BOX_FLAG__FOCUS_HOT                = (1<<22),
+	UI_BOX_FLAG__FOCUS_ACTIVE             = (1<<23),
+	UI_BOX_FLAG__FOCUS_HOT_DISABLED       = (1<<24),
+	UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED    = (1<<25),
+	UI_BOX_FLAG__SCROLL                   = (1<<26),
+	UI_BOX_FLAG__VIEW_CLAMP_X             = (1<<27),
+	UI_BOX_FLAG__VIEW_CLAMP_Y             = (1<<28),
+
+	UI_BOX_FLAG__VIEW_SCROLL = (UI_BOX_FLAG__VIEW_SCROLL_X | UI_BOX_FLAG__VIEW_SCROLL_Y),
+	UI_BOX_FLAG__VIEW_CLAMP  = (UI_BOX_FLAG__VIEW_CLAMP_X | UI_BOX_FLAG__VIEW_CLAMP_Y),
 };
 
 typedef struct UI_Box UI_Box;
@@ -87,6 +94,7 @@ struct UI_Box {
 	F2 fixed_size;
 	F2 min_size;
 	F2 view_off;
+	F2 view_off_target;
 	F2 view_bounds;
 	F4 rect;
 	UI_Size pref_size[UI_AXIS_COUNT];
@@ -513,6 +521,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		}
 	}
 
+	I1 view_scrolled = 0;
 	for (OS_Event *e = 0; ui_next_event(&e);) {
 		I1 taken = 0;
 
@@ -584,13 +593,64 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 			taken = 1;
 		}
 
-		// TODO: Scrolling
+		if (box->flags & UI_BOX_FLAG__SCROLL &&
+				e->type == OS_EVENT_TYPE__SCROLL && 
+				(e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT) &&
+				evt_mouse_in_bounds) {
+			F2 delta = {e->delta_x, e->delta_y};
+			if (e->modifiers == OS_MODIFIER_FLAG__SHIFT) {
+				Swap(delta[0], delta[1]);
+			}
+			signal.scroll += delta;
+			taken = 1;
+		}
+
+		if (box->flags & UI_BOX_FLAG__VIEW_SCROLL &&
+				box->first_touch_build_index != box->last_touch_build_index &&
+				e->type == OS_EVENT_TYPE__SCROLL &&
+				(e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT) &&
+				evt_mouse_in_bounds) {
+			F2 delta = {e->delta_x, e->delta_y};
+			if (e->modifiers == OS_MODIFIER_FLAG__SHIFT) {
+				Swap(delta[0], delta[1]);
+			}
+			if (!(box->flags & UI_BOX_FLAG__VIEW_SCROLL_X)) {
+				if (delta[1] == 0) {
+					delta[1] = delta[0];
+				}
+				delta[0] = 0;
+			}
+			if (!(box->flags & UI_BOX_FLAG__VIEW_SCROLL_Y)) {
+				if (delta[0] == 0) {
+					delta[0] = delta[1];
+				}
+				delta[1] = 0;
+			}
+			box->view_off_target += delta;
+			view_scrolled = 1;
+			taken = 1;
+		}
 
 		if (taken) {
 			// TODO: Eat event.
 		}
 	}
 
+	//- kti: View clamp.
+	if (box->flags & UI_BOX_FLAG__VIEW_CLAMP && view_scrolled) {
+		F2 max_view_off_target = {
+			ClampBot(0, box->view_bounds[0] - box->fixed_size[0]),
+			ClampBot(0, box->view_bounds[1] - box->fixed_size[1]),
+		};
+		if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_X) {
+			box->view_off_target[0] = Clamp(0, box->view_off_target[0], max_view_off_target[0]);
+		}
+		if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_Y) {
+			box->view_off_target[1] = Clamp(0, box->view_off_target[1], max_view_off_target[1]);
+		}
+	}
+
+	//- kti: Mouse over.
 	if (rect_contains(rect, ui_state->mouse)) {
 		signal.flags |= UI_SIGNAL_FLAG__MOUSE_OVER;
 	}
@@ -891,6 +951,7 @@ Internal void ui_end_build(void) {
 		ui_layout_root(ui_state->root, axis);
 	}
 
+	//- kti: Enforce child rounding.
 	for EachIndex(slot_idx, ui_state->box_table_size) {
 		for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next) {
 			if (box->flags & UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT) {
@@ -916,6 +977,22 @@ Internal void ui_end_build(void) {
 				box->first->corner_radii[1] = box->corner_radii[1];
 				box->last->corner_radii[2] = box->corner_radii[2];
 				box->last->corner_radii[3] = box->corner_radii[3];
+			}
+		}
+	}
+
+	//- kti: Animate
+	for EachIndex(slot_idx, ui_state->box_table_size) {
+		UI_Box_HT_Slot *slot = &ui_state->box_table[slot_idx];
+		for (UI_Box *b = slot->first; !ui_box_is_nil(b); b = b->hash_next) {
+			F1 scroll_animation_rate = 0.2f;
+
+			b->view_off += scroll_animation_rate * (b->view_off_target - b->view_off);
+			if (abs_F1(b->view_off_target[0] - b->view_off[0]) < 2.0f) {
+				b->view_off[0] = b->view_off_target[0];
+			}
+			if (abs_F1(b->view_off_target[1] - b->view_off[1]) < 2.0f) {
+				b->view_off[1] = b->view_off_target[1];
 			}
 		}
 	}

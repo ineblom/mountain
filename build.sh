@@ -9,20 +9,22 @@ OPT="-g -maes -mssse3" # -march=native
 
 echo Building...
 
-cd src
-$COMPILER $WARN $DEFS $INC $LIB $OPT -DMETA_APP=1 build.c -o ../meta
-BUILD_STATUS=$?
-cd ..
+if [ "$1" = "META" ]; then
+	cd src
+	$COMPILER $WARN $DEFS $INC $LIB $OPT -DMETA_APP=1 build.c -o ../meta
+	BUILD_STATUS=$?
+	cd ..
 
-if [ $BUILD_STATUS -eq 0 ]; then
-	echo META build successful, running...
-	./meta
-else
-	echo META build failed
-	exit
+	if [ $BUILD_STATUS -eq 0 ]; then
+		echo META build successful, running...
+		./meta
+	else
+		echo META build failed
+		exit
+	fi
+
+	echo "Meta program done."
 fi
-
-echo "Meta program done."
 
 cd src
 $COMPILER $WARN $DEFS $INC $LIB $OPT build.c -o ../m

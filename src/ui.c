@@ -420,6 +420,7 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	box->child_layout_axis = ui_top_child_layout_axis();
 	box->tab_size = ui_top_tab_size();
 	box->text_align = ui_top_text_align();
+	box->text_padding = ui_top_text_padding();
 	box->font = ui_top_font();
 	box->font_size = ui_top_font_size();
 	box->corner_radii[0] = ui_top_tl_corner_radius();
@@ -593,11 +594,14 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 			taken = 1;
 		}
 
+		//- kti: Scrolling
+		F1 scroll_mult = 4.0f;
+
 		if (box->flags & UI_BOX_FLAG__SCROLL &&
 				e->type == OS_EVENT_TYPE__SCROLL && 
 				(e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT) &&
 				evt_mouse_in_bounds) {
-			F2 delta = {e->delta_x, e->delta_y};
+			F2 delta = (F2){e->delta_x, e->delta_y} * scroll_mult;
 			if (e->modifiers == OS_MODIFIER_FLAG__SHIFT) {
 				Swap(delta[0], delta[1]);
 			}
@@ -610,7 +614,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 				e->type == OS_EVENT_TYPE__SCROLL &&
 				(e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT) &&
 				evt_mouse_in_bounds) {
-			F2 delta = {e->delta_x, e->delta_y};
+			F2 delta = (F2){e->delta_x, e->delta_y} * scroll_mult;
 			if (e->modifiers == OS_MODIFIER_FLAG__SHIFT) {
 				Swap(delta[0], delta[1]);
 			}
@@ -1062,6 +1066,14 @@ Internal void ui_pop_corner_radius(void) {
 	ui_pop_tr_corner_radius();
 	ui_pop_bl_corner_radius();
 	ui_pop_br_corner_radius();
+}
+
+Internal void ui_push_pref_size(UI_Axis axis, UI_Size size) {
+	(axis == UI_AXIS__X ? ui_push_pref_width : ui_push_pref_height)(size);
+}
+
+Internal void ui_pop_pref_size(UI_Axis axis) {
+	(axis == UI_AXIS__X ? ui_pop_pref_width : ui_pop_pref_height)();
 }
 
 Internal void ui_set_next_pref_size(UI_Axis axis, UI_Size size) {

@@ -65,6 +65,7 @@ Internal void lane(Arena *arena) {
 			ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
 			UI_Child_Layout_Axis(UI_AXIS__Y)
 			UI_Background_Color(oklch(0.0f, 0.0f, 0.0f, 1.0f))
+			UI_Border_Color(oklch(1.0f, 0.0f, 0.0f, 1.0f))
 			UI_Parent(ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero())) {
 				ui_spacer(ui_em(2.0f, 1.0f));
 
@@ -77,32 +78,35 @@ Internal void lane(Arena *arena) {
 					ui_set_next_child_layout_axis(UI_AXIS__Y);
 					ui_set_next_background_color(oklch(0.2f, 0.0f, 0.0f, 1.0f));
 					UI_Box *scroll_container = ui_build_box_from_string(
-							UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL | UI_BOX_FLAG__VIEW_CLAMP,
+							UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL | UI_BOX_FLAG__VIEW_CLAMP,
 							Str8_("scroll container"));
 					ui_signal_from_box(scroll_container);
 					UI_Parent(scroll_container)
-					UI_Padding(ui_em(1, 1)) {
+					UI_Row() UI_Padding(ui_em(1, 1))
+					UI_Column() UI_Padding(ui_em(1, 1)) {
 
-						ui_push_text_color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f));
-						ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
-						ui_set_next_pref_height(ui_em(1.0f, 1.0f));
-						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("It's pretty fun to write a UI system."));
-						ui_pop_text_color();
-
-						ui_spacer(ui_em(1.8f, 1.0f));
-
-						for (L1 i = 0; i < 10; i += 1) {
-							ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
-							ui_set_next_pref_height(ui_em(2.0f, 1.0f));
-							ui_set_next_border_color(oklch(0.933f, 0.063f, 25.0f, 1.0f));
-							ui_set_next_background_color(oklch(0.335f, 0.151f, button_hue, 1.0f));
-							ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-							ui_set_next_corner_radius(5.0f);
-							if (ui_buttonf("Press me##%llu", i).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-								button_hue = fmodf(button_hue+33.0f, 360.0f);
+						UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
+						UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+						UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+							UI_Box *a = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_TEXT,
+									Str8_("It's pretty fun to write a UI system."));
+							UI_Signal sig = ui_signal_from_box(a);
+							if (sig.flags & (UI_SIGNAL_FLAG__HOVERING|UI_SIGNAL_FLAG__MOUSE_OVER)) {
+								a->flags |= UI_BOX_FLAG__DRAW_BORDER;
 							}
 
-							ui_spacer(ui_px(10.0f, 1.0f));
+							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
+						}
+
+						ui_spacer(ui_em(1.0f, 1.0f));
+
+						ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
+						ui_set_next_pref_height(ui_em(2.0f, 1.0f));
+						ui_set_next_background_color(oklch(0.335f, 0.151f, button_hue, 1.0f));
+						ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
+						ui_set_next_corner_radius(5.0f);
+						if (ui_button(Str8_("Press me")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+							button_hue = fmodf(button_hue+33.0f, 360.0f);
 						}
 					}
 				}
@@ -168,7 +172,7 @@ Internal void lane(Arena *arena) {
 						F2 pos = ui_box_text_pos(box);
 						F4 color = box->text_color;
 						if (draw_active_effect) {
-							color[0] = ClampBot(color[0]-0.1f, 0.0f);
+							color[0] = ClampBot(color[0]-0.2f, 0.0f);
 						}
 						dr_text_run(n->value.run, pos, color);
 					}

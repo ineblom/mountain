@@ -506,6 +506,11 @@ Internal I1 ui_next_event(OS_Event **ev) {
 	return result;
 }
 
+Internal void ui_eat_event(OS_Event *e) {
+	DLLRemove(ui_state->events.first, ui_state->events.last, e);
+	ui_state->events.count -= 1;
+}
+
 Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 	// TODO: Get from os.
 	L1 double_click_time = 500000000;
@@ -638,7 +643,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		}
 
 		if (taken) {
-			// TODO: Eat event.
+			ui_eat_event(e);
 		}
 	}
 
@@ -719,8 +724,22 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	ui_state->last_build_box_count = ui_state->build_box_count;
 	ui_state->build_box_count = 0;
 	ui_state->window = window;
-	ui_state->events = events;
 
+	//- kti: Copy events.
+	MemoryZeroStruct(&ui_state->events);
+	L1 event_pool_idx = 0;
+	OS_Event *event_pool = push_array_no_zero(ui_build_arena(), OS_Event, events.count);
+	for (OS_Event *e = events.first; e != 0; e = e->next) {
+		OS_Event *new_e = &event_pool[event_pool_idx];
+		event_pool_idx += 1;
+		memmove(new_e, e, sizeof(OS_Event));
+		new_e->prev = 0;
+		new_e->next = 0;
+		DLLPushBack(ui_state->events.first, ui_state->events.last, new_e);
+		ui_state->events.count += 1;
+	}
+
+	//- kti: Mouse movement.
 	for (OS_Event *e = events.last; e != 0; e = e->prev) {
 		if (e->type == OS_EVENT_TYPE__MOUSE_MOVE) {
 			ui_state->mouse[0] = e->x;
@@ -744,6 +763,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 		}
 	}
 
+	//- kti: Setup root.
 	ui_set_next_fixed_width(window->width);
 	ui_set_next_fixed_height(window->height);
 	ui_set_next_child_layout_axis(UI_AXIS__X);

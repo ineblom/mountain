@@ -1,5 +1,45 @@
 #if (CPU_ && ROM_)
 
+Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
+	F1 range = max - min;
+	F1 pct = (value[0]-min) / range;
+
+	ui_set_next_child_layout_axis(UI_AXIS__X);
+	UI_Parent(ui_build_box_from_key(0, ui_key_zero())) {
+		ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
+		ui_set_next_pref_height(ui_text_dim(0.0f, 1.0f));
+		ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str);
+
+		ui_spacer(ui_em(1.0f, 1.0f));
+
+		F1 height = 20.0f;
+		UI_Pref_Width(ui_pct(1.0f, 0.0f))
+		UI_Column() UI_Padding(ui_pct(1, 0)) {
+			UI_Pref_Height(ui_px(height, 1.0f))
+			UI_Corner_Radius(height/2.0f-1.0f)
+			UI_Border_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f)) {
+				UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, Str8_("slider"));
+				UI_Parent(box) {
+					ui_set_next_background_color(oklch(0.3f, 0.0f, 0.0f, 1.0f));
+					ui_set_next_pref_width(ui_px(box->rect[2]*pct, 1.0f));
+					ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+				}
+
+				UI_Signal sig = ui_signal_from_box(box);
+				if (sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+					if (sig.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+						ui_store_drag_struct(&pct);
+					}
+
+					F1 initial_pct = ui_get_drag_struct(F1)[0];
+					F1 pct_change = ui_drag_delta()[0] / box->rect[2];
+					value[0] = min + Clamp(0, initial_pct+pct_change, 1.0f)*range;
+				}
+			}
+		}
+	}
+}
+
 Internal void lane(Arena *arena) {
   OS_Window *window = 0;
   GFX_Window *gfx_window = 0;
@@ -28,6 +68,7 @@ Internal void lane(Arena *arena) {
 
 	lane_sync();
 
+	F1 slider_value = 50.0f;
 	F2 pane_pos = {30.0f, 50.0f};
 	F1 button_hue = 0.0f;
 	L1 running = 1;
@@ -71,8 +112,8 @@ Internal void lane(Arena *arena) {
 
 				ui_set_next_fixed_x(pane_pos[0]);
 				ui_set_next_fixed_y(pane_pos[1]);
-				ui_set_next_pref_width(ui_children_sum(1.0f));
-				ui_set_next_pref_height(ui_px(300.0f, 1.0f));
+				ui_set_next_fixed_width(400.0f);
+				ui_set_next_fixed_height(300.0f);
 				ui_set_next_child_layout_axis(UI_AXIS__Y);
 				ui_set_next_background_color(oklch(0.2f, 0.0f, 0.0f, 1.0f));
 				UI_Box *pane = ui_build_box_from_string(
@@ -80,34 +121,44 @@ Internal void lane(Arena *arena) {
 						UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL | UI_BOX_FLAG__VIEW_CLAMP,
 						Str8_("pane"));
 				UI_Parent(pane) {
-					UI_Pref_Width(ui_children_sum(1.0f))
-					UI_Pref_Height(ui_pct(1.0f, 1.0f))
-					UI_Row() UI_Padding(ui_em(1, 1))
-					UI_Column() UI_Padding(ui_em(1, 1)) {
+					ui_set_next_pref_width(ui_children_sum(1.0f));
+					ui_set_next_pref_height(ui_children_sum(1.0f));
+					UI_Row()
+					UI_Padding(ui_em(1.0f, 1.0f)) {
+						ui_set_next_pref_width(ui_children_sum(0.0f));
+						ui_set_next_pref_height(ui_children_sum(1.0f));
+						UI_Column()
+						UI_Padding(ui_em(1.0f, 1.0f)) {
+							UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
+							UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+							UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+								ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("My super awesome UI system."));
+								ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
+							}
 
-						UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
-						UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-						UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
-							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("My super awesome UI system."));
-							ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
-						}
+							ui_spacer(ui_em(1.0f, 1.0f));
 
-						ui_spacer(ui_em(1.0f, 1.0f));
-
-						UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-						UI_Pref_Height(ui_em(2.0f, 1.0f))
-						UI_Background_Color(oklch(0.335f, 0.151f, button_hue, 1.0f))
-						UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-						UI_Corner_Radius(5.0f) {
-							UI_Row() {
-								if (ui_button(Str8_("Prev")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-									button_hue = fmodf(button_hue-33.0f, 360.0f);
-								}
-								ui_spacer(ui_px(10.0f, 1.0f));
-								if (ui_button(Str8_("Next")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-									button_hue = fmodf(button_hue+33.0f, 360.0f);
+							UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+							UI_Pref_Height(ui_em(2.0f, 1.0f))
+							UI_Background_Color(oklch(0.335f, 0.151f, button_hue, 1.0f))
+							UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+							UI_Corner_Radius(5.0f) {
+								UI_Row() {
+									if (ui_button(Str8_("Prev")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+										button_hue = fmodf(button_hue-33.0f, 360.0f);
+									}
+									ui_spacer(ui_px(10.0f, 1.0f));
+									if (ui_button(Str8_("Next")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+										button_hue = fmodf(button_hue+33.0f, 360.0f);
+									}
 								}
 							}
+
+							ui_spacer(ui_em(1.0f, 1.0f));
+
+							ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+							ui_set_next_pref_height(ui_children_sum(1.0f));
+							ui_slider_F1(Str8_("Value"), &slider_value, 0.0f, 100.0f);
 						}
 					}
 				}
@@ -118,13 +169,13 @@ Internal void lane(Arena *arena) {
 						ui_store_drag_struct(&pane_pos);
 					}
 
-					F2 original_pos = *ui_get_drag_struct(F2);
+					F2 original_pos = ui_get_drag_struct(F2)[0];
 					pane_pos = original_pos + ui_drag_delta();
 					pane->fixed_pos = pane_pos;
 				}
 
 				//- kti: Pane bounds chcek
-				F1 pane_bounds_animation_rate = 0.2f;
+				F1 pane_bounds_animation_rate = 0.3f;
 				F2 window_size = {window->width, window->height};
 				for EachIndex(axis, UI_AXIS_COUNT) {
 					F1 max = ClampBot(0, window_size[axis] - pane->fixed_size[axis]);

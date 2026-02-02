@@ -122,10 +122,12 @@ Internal void lane(Arena *arena) {
 					pane_pos = original_pos + ui_drag_delta();
 					pane->fixed_pos = pane_pos;
 				}
+
+				//- kti: Pane bounds chcek
 				F1 pane_bounds_animation_rate = 0.2f;
 				F2 window_size = {window->width, window->height};
 				for EachIndex(axis, UI_AXIS_COUNT) {
-					F1 max = window_size[axis] - pane->fixed_size[axis];
+					F1 max = ClampBot(0, window_size[axis] - pane->fixed_size[axis]);
 					F1 target = Clamp(0.0f, pane_pos[axis], max);
 
 					pane_pos[axis] += pane_bounds_animation_rate * (target - pane_pos[axis]);

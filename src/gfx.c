@@ -1488,7 +1488,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
   vkCmdBindVertexBuffers(cmd, 0, 1, &instance_buffer, &offset);
 
   for (GFX_Batch *batch = batches.first; batch != 0; batch = batch->next) {
-    // NOTE(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
+    // TODO(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
     // Alternatively we could allocate a buffer that could contain the entire batch. This would allow for "infinite" rectangle counts.
     if (rect_instances_count + batch->instance_count > MAX_RECTANGLE_COUNT) {
       printf("Max number of rectangle instances reached for frame. Skipping batch.\n");
@@ -1508,10 +1508,17 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
     };
     if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
         batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
-      scissor.offset.x = batch->clip_rect[0];
-      scissor.offset.y = batch->clip_rect[1];
-      scissor.extent.width = batch->clip_rect[2];
-      scissor.extent.height = batch->clip_rect[3];
+			F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+			F4 intersection = intersect_rects(screen_rect, batch->clip_rect);
+			if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
+				scissor.offset.x = intersection[0];
+				scissor.offset.y = intersection[1];
+				scissor.extent.width = intersection[2];
+				scissor.extent.height = intersection[3];
+			} else {
+				// NOTE(kti): Clip and screen rect don't overlap, we can skip the batch.
+				continue;
+			}
     }
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 

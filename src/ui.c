@@ -1148,6 +1148,8 @@ Internal void ui_pop_corner_radius(void) {
 	ui_pop_br_corner_radius();
 }
 
+#define UI_Corner_Radius(v) DeferLoop(ui_push_corner_radius(v), ui_pop_corner_radius())
+
 Internal void ui_push_pref_size(UI_Axis axis, UI_Size size) {
 	(axis == UI_AXIS__X ? ui_push_pref_width : ui_push_pref_height)(size);
 }

@@ -81,7 +81,7 @@ Internal void lane(Arena *arena) {
 						Str8_("pane"));
 				UI_Parent(pane) {
 					UI_Pref_Width(ui_children_sum(1.0f))
-					UI_Pref_Height(ui_children_sum(1.0f))
+					UI_Pref_Height(ui_pct(1.0f, 1.0f))
 					UI_Row() UI_Padding(ui_em(1, 1))
 					UI_Column() UI_Padding(ui_em(1, 1)) {
 
@@ -94,16 +94,20 @@ Internal void lane(Arena *arena) {
 
 						ui_spacer(ui_em(1.0f, 1.0f));
 
-						for EachIndex(i, 10) {
-							ui_set_next_pref_width(ui_text_dim(20.0f, 1.0f));
-							ui_set_next_pref_height(ui_em(2.0f, 1.0f));
-							ui_set_next_background_color(oklch(0.335f, 0.151f, button_hue, 1.0f));
-							ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-							ui_set_next_corner_radius(5.0f);
-							if (ui_buttonf("Press me##%llu", i).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-								button_hue = fmodf(button_hue+33.0f, 360.0f);
+						UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+						UI_Pref_Height(ui_em(2.0f, 1.0f))
+						UI_Background_Color(oklch(0.335f, 0.151f, button_hue, 1.0f))
+						UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+						UI_Corner_Radius(5.0f) {
+							UI_Row() {
+								if (ui_button(Str8_("Prev")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+									button_hue = fmodf(button_hue-33.0f, 360.0f);
+								}
+								ui_spacer(ui_px(10.0f, 1.0f));
+								if (ui_button(Str8_("Next")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+									button_hue = fmodf(button_hue+33.0f, 360.0f);
+								}
 							}
-							ui_spacer(ui_px(10.0f, 1.0f));
 						}
 					}
 				}
@@ -116,6 +120,18 @@ Internal void lane(Arena *arena) {
 
 					F2 original_pos = *ui_get_drag_struct(F2);
 					pane_pos = original_pos + ui_drag_delta();
+					pane->fixed_pos = pane_pos;
+				}
+				F1 pane_bounds_animation_rate = 0.2f;
+				F2 window_size = {window->width, window->height};
+				for EachIndex(axis, UI_AXIS_COUNT) {
+					F1 max = window_size[axis] - pane->fixed_size[axis];
+					F1 target = Clamp(0.0f, pane_pos[axis], max);
+
+					pane_pos[axis] += pane_bounds_animation_rate * (target - pane_pos[axis]);
+					if (abs_F1(target-pane_pos[axis]) < 2.0f) {
+						pane_pos[axis] = target;
+					}
 				}
 			}
 

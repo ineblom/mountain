@@ -23,12 +23,10 @@ Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 			fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, max_str).dim[0]);
 
 		UI_Pref_Width(ui_px(value_box_width, 1.0f))
-		UI_Min_Width(value_box_width)
 		UI_Column() UI_Padding(ui_pct(1.0f, 0.0f)) {
 			UI_Font_Size(value_font_size)
 			UI_Text_Align(UI_TEXT_ALIGN__RIGHT)
 			UI_Pref_Width(ui_px(value_box_width, 1.0f))
-			UI_Min_Width(value_box_width)
 			UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
 				ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8f(scratch.arena, "%.2f", value[0]));
 			}
@@ -38,16 +36,36 @@ Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 		ui_spacer(ui_px(10.f, 1.0f));
 
 		F1 height = 20.0f;
+		F1 knob_size = 14.0f;
+
 		UI_Pref_Width(ui_pct(1.0f, 0.0f))
 		UI_Column() UI_Padding(ui_pct(1, 0)) {
 			UI_Pref_Height(ui_px(height, 1.0f))
-			UI_Corner_Radius(height/2.0f-1.0f)
+			UI_Corner_Radius(height*0.5f-1.0f)
 			UI_Border_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f)) {
 				UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, Str8_("slider"));
 				UI_Parent(box) {
-					ui_set_next_background_color(oklch(0.3f, 0.0f, 0.0f, 1.0f));
-					ui_set_next_pref_width(ui_px(box->rect[2]*pct, 1.0f));
-					ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+					F1 knob_inset = floor_F1((height-knob_size)*0.5f);
+					F1 min = knob_size+knob_inset*2.0f;
+					F1 w = floor_F1(min+(box->rect[2]-min)*pct);
+					ui_set_next_background_color(oklch(0.335f, 0.151f, 0.0f, 1.0f));
+					ui_set_next_pref_width(ui_px(w, 1.0f));
+					UI_Parent(ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero())) {
+						ui_spacer(ui_px(knob_inset, 1.0f));
+						ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+						ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
+						UI_Row() {
+							ui_spacer(ui_pct(1.0f, 0.0f));
+
+							ui_set_next_background_color(oklch(0.7f, 0.0f, 0.0f, 1.0f));
+							ui_set_next_pref_width(ui_px(knob_size, 1.0f));
+							ui_set_next_pref_height(ui_px(knob_size, 1.0f));
+							ui_set_next_corner_radius(knob_size*0.5f-2.0f);
+							ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+
+							ui_spacer(ui_px(knob_inset, 1.0f));
+						}
+					}
 				}
 
 				UI_Signal sig = ui_signal_from_box(box);
@@ -57,7 +75,7 @@ Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 					}
 
 					F1 initial_pct = ui_get_drag_struct(F1)[0];
-					F1 pct_change = ui_drag_delta()[0] / box->rect[2];
+					F1 pct_change = ui_drag_delta()[0] / (box->rect[2]-knob_size);
 					value[0] = min + Clamp(0, initial_pct+pct_change, 1.0f)*range;
 				}
 			}
@@ -93,7 +111,7 @@ Internal void lane(Arena *arena) {
 
 	lane_sync();
 
-	F1 slider_value = 50.0f;
+	F1 slider_value = 0.0f;
 	F2 pane_pos = {30.0f, 50.0f};
 	F1 button_hue = 0.0f;
 	L1 running = 1;
@@ -183,7 +201,7 @@ Internal void lane(Arena *arena) {
 
 							ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
 							ui_set_next_pref_height(ui_children_sum(1.0f));
-							ui_slider_F1(Str8_("Val"), &slider_value, 0.0f, 10000.0f);
+							ui_slider_F1(Str8_("Val"), &slider_value, 0.0f, 1.0f);
 						}
 					}
 				}

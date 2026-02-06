@@ -6,11 +6,25 @@ Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 
 	ui_set_next_child_layout_axis(UI_AXIS__X);
 	UI_Parent(ui_build_box_from_key(0, ui_key_zero())) {
-		ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
-		ui_set_next_pref_height(ui_text_dim(0.0f, 1.0f));
-		ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str);
+		UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+		UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+			ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str);
+			ui_spacer(ui_em(1.0f, 1.0f));
+		}
 
-		ui_spacer(ui_em(1.0f, 1.0f));
+		Temp_Arena scratch = scratch_begin(0, 0);
+
+		UI_Pref_Width(ui_children_sum(1.0f))
+		UI_Column() UI_Padding(ui_pct(1.0f, 0.0f)) {
+			UI_Font_Size(10.0f)
+			UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+			UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+				ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8f(scratch.arena, "%.2f", value[0]));
+			}
+		}
+
+		scratch_end(scratch);
+		ui_spacer(ui_em(0.5f, 1.0f));
 
 		F1 height = 20.0f;
 		UI_Pref_Width(ui_pct(1.0f, 0.0f))

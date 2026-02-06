@@ -13,18 +13,29 @@ Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 		}
 
 		Temp_Arena scratch = scratch_begin(0, 0);
+		F1 value_font_size = 10.0f;
+		FC_Tag value_font = ui_top_font();
+		F1 value_tab_px = ui_top_tab_size();
+		String8 min_str = str8f(scratch.arena, "%.2f", min);
+		String8 max_str = str8f(scratch.arena, "%.2f", max);
+		F1 value_box_width = Max(
+			fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, min_str).dim[0],
+			fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, max_str).dim[0]);
 
-		UI_Pref_Width(ui_children_sum(1.0f))
+		UI_Pref_Width(ui_px(value_box_width, 1.0f))
+		UI_Min_Width(value_box_width)
 		UI_Column() UI_Padding(ui_pct(1.0f, 0.0f)) {
-			UI_Font_Size(10.0f)
-			UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+			UI_Font_Size(value_font_size)
+			UI_Text_Align(UI_TEXT_ALIGN__RIGHT)
+			UI_Pref_Width(ui_px(value_box_width, 1.0f))
+			UI_Min_Width(value_box_width)
 			UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
 				ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8f(scratch.arena, "%.2f", value[0]));
 			}
 		}
 
 		scratch_end(scratch);
-		ui_spacer(ui_em(0.5f, 1.0f));
+		ui_spacer(ui_px(10.f, 1.0f));
 
 		F1 height = 20.0f;
 		UI_Pref_Width(ui_pct(1.0f, 0.0f))
@@ -172,7 +183,7 @@ Internal void lane(Arena *arena) {
 
 							ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
 							ui_set_next_pref_height(ui_children_sum(1.0f));
-							ui_slider_F1(Str8_("Value"), &slider_value, 0.0f, 100.0f);
+							ui_slider_F1(Str8_("Val"), &slider_value, 0.0f, 10000.0f);
 						}
 					}
 				}

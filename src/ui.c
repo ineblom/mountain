@@ -1263,12 +1263,13 @@ Internal UI_Signal ui_pane_end(void) {
 	return signal;
 }
 
-Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
+Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
+	UI_Signal signal = {0};
+
 	F1 range = max - min;
 	F1 pct = (value[0]-min) / range;
 
-	ui_set_next_child_layout_axis(UI_AXIS__X);
-	UI_Parent(ui_build_box_from_key(0, ui_key_zero())) {
+	UI_Row() {
 		//- kti: Label
 		UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
 		UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
@@ -1337,15 +1338,15 @@ Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 				}
 
 				//- kti: Signal handling
-				UI_Signal sig = ui_signal_from_box(box);
-				if ((sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING || sig.flags & UI_SIGNAL_FLAG__HOVERING)
+				signal = ui_signal_from_box(box);
+				if ((signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING || signal.flags & UI_SIGNAL_FLAG__HOVERING)
 						&& !ui_box_is_nil(knob) && !ui_box_is_nil(bg_box)) {
 					knob->background_color[0] = ClampTop(knob->background_color[0]+0.1f, 1.0f);
 					bg_box->background_color[0] = ClampTop(bg_box->background_color[0]+0.04f, 1.0f);
 				}
 
-				if (sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-					if (sig.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+				if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+					if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
 						ui_store_drag_struct(&pct);
 					}
 
@@ -1356,7 +1357,65 @@ Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 			}
 		}
 	}
+
+	return signal;
 }
 
+Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
+	UI_Signal signal = {0};
+	
+	F1 size = 20.0f;
+	F1 check_inset = 3.0f;
+
+	UI_Row() {
+		UI_Pref_Width(ui_px(size, 1.0f))
+		UI_Column()
+		UI_Pref_Height(ui_px(size, 1.0f))
+		UI_Padding(ui_pct(1.0f, 0.0f)) {
+			ui_set_next_background_color(oklch(0.195f, 0.1f, 17.0f, 1.0f));
+			ui_set_next_border_color(oklch(0.5f, 0.0f, 0.0f, 1.0f));
+			UI_Box *inset_box = &ui_nil_box;
+			UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_HOT_EFFECTS|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, Str8_("checkbox"));
+
+			if (value[0]) {
+				UI_Parent(box)
+				// UI_Background_Color(oklch(0.2f, 0.5f, 17.0f, 1.0f))
+				UI_Background_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f))
+				UI_Padding(ui_pct(1.0f, 0.0f)) {
+					UI_Pref_Height(ui_px(size-check_inset*2, 1.0f))
+					UI_Row()
+					UI_Padding(ui_pct(1.0f, 0.0f))
+					UI_Pref_Width(ui_px(size-check_inset*2, 1.0f))
+					UI_Corner_Radius(check_inset*0.5f) {
+						inset_box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+					}
+				}
+			}
+
+			signal = ui_signal_from_box(box);
+			if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+				value[0] = !value[0];
+			}
+			if (!ui_box_is_nil(inset_box)) {
+				/* if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+					inset_box->background_color[0] = ClampBot(0.0f, inset_box->background_color[0]-0.2f);
+				} else */ if (signal.flags & UI_SIGNAL_FLAG__HOVERING) {
+					inset_box->background_color[0] = ClampTop(1.0f, inset_box->background_color[0]+0.1f);
+				}
+			}
+		}
+		
+		ui_spacer(ui_px(10.0f, 1.0f));
+
+		//- kti: Label
+		UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+		UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+			ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str);
+			ui_spacer(ui_em(1.0f, 1.0f));
+		}
+	}
+
+	return signal;
+}
 
 #endif

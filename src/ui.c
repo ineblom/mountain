@@ -1263,4 +1263,100 @@ Internal UI_Signal ui_pane_end(void) {
 	return signal;
 }
 
+Internal void ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
+	F1 range = max - min;
+	F1 pct = (value[0]-min) / range;
+
+	ui_set_next_child_layout_axis(UI_AXIS__X);
+	UI_Parent(ui_build_box_from_key(0, ui_key_zero())) {
+		//- kti: Label
+		UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+		UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+			ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str);
+			ui_spacer(ui_em(1.0f, 1.0f));
+		}
+
+		//- kti: Value
+		Temp_Arena scratch = scratch_begin(0, 0);
+		F1 value_font_size = 10.0f;
+		FC_Tag value_font = ui_top_font();
+		F1 value_tab_px = ui_top_tab_size();
+		String8 min_str = str8f(scratch.arena, "%.2f", min);
+		String8 max_str = str8f(scratch.arena, "%.2f", max);
+		F1 value_box_width = Max(
+			fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, min_str).dim[0],
+			fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, max_str).dim[0]);
+
+		UI_Pref_Width(ui_px(value_box_width, 1.0f))
+		UI_Column() UI_Padding(ui_pct(1.0f, 0.0f)) {
+			UI_Font_Size(value_font_size)
+			UI_Text_Align(UI_TEXT_ALIGN__RIGHT)
+			UI_Pref_Width(ui_px(value_box_width, 1.0f))
+			UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+				ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8f(scratch.arena, "%.2f", value[0]));
+			}
+		}
+
+		scratch_end(scratch);
+		ui_spacer(ui_px(10.f, 1.0f));
+
+		//- kti: Slider
+		F1 height = 20.0f;
+		F1 knob_size = 14.0f;
+		UI_Pref_Width(ui_pct(1.0f, 0.0f))
+		UI_Column() UI_Padding(ui_pct(1, 0)) {
+			UI_Pref_Height(ui_px(height, 1.0f))
+			UI_Corner_Radius(height*0.5f-1.0f)
+			UI_Border_Color(oklch(0.5f, 0.0f, 0.0f, 1.0f)) {
+				UI_Box *knob = &ui_nil_box;
+				UI_Box *bg_box = &ui_nil_box;
+				UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, Str8_("slider"));
+				UI_Parent(box) {
+					F1 knob_inset = floor_F1((height-knob_size)*0.5f);
+					F1 min = knob_size+knob_inset*2.0f;
+					F1 w = floor_F1(min+(box->rect[2]-min)*pct);
+					ui_set_next_background_color(oklch(0.195f, 0.100f, 17.0f, 1.0f));
+					ui_set_next_pref_width(ui_px(w, 1.0f));
+					bg_box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
+					UI_Parent(bg_box) {
+						ui_spacer(ui_px(knob_inset, 1.0f));
+						ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+						ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
+						UI_Row() {
+							ui_spacer(ui_pct(1.0f, 0.0f));
+
+							ui_set_next_background_color(oklch(0.7f, 0.0f, 0.0f, 1.0f));
+							ui_set_next_pref_width(ui_px(knob_size, 1.0f));
+							ui_set_next_pref_height(ui_px(knob_size, 1.0f));
+							ui_set_next_corner_radius(knob_size*0.5f-2.0f);
+							knob = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+
+							ui_spacer(ui_px(knob_inset, 1.0f));
+						}
+					}
+				}
+
+				//- kti: Signal handling
+				UI_Signal sig = ui_signal_from_box(box);
+				if ((sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING || sig.flags & UI_SIGNAL_FLAG__HOVERING)
+						&& !ui_box_is_nil(knob) && !ui_box_is_nil(bg_box)) {
+					knob->background_color[0] = ClampTop(knob->background_color[0]+0.1f, 1.0f);
+					bg_box->background_color[0] = ClampTop(bg_box->background_color[0]+0.04f, 1.0f);
+				}
+
+				if (sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+					if (sig.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+						ui_store_drag_struct(&pct);
+					}
+
+					F1 initial_pct = ui_get_drag_struct(F1)[0];
+					F1 pct_change = ui_drag_delta()[0] / (box->rect[2]-knob_size);
+					value[0] = min + Clamp(0, initial_pct+pct_change, 1.0f)*range;
+				}
+			}
+		}
+	}
+}
+
+
 #endif

@@ -570,40 +570,29 @@ Internal void os_push_event(OS_Event event) {
 Internal void registry_global_handler(void *data, struct wl_registry *registry,
                                       I1 name, CString interface, I1 version) {
   if (cstr_compare(interface, wl_compositor_interface.name)) {
-    os_gfx_state->compositor =
-        wl_registry_bind(registry, name, &wl_compositor_interface, 4);
+    os_gfx_state->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
   } else if (cstr_compare(interface, wl_shm_interface.name)) {
     os_gfx_state->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
   } else if (cstr_compare(interface, xdg_wm_base_interface.name)) {
-    os_gfx_state->xdg_wm_base =
-        wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
+    os_gfx_state->xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
   } else if (cstr_compare(interface, wl_seat_interface.name)) {
     os_gfx_state->seat = wl_registry_bind(registry, name, &wl_seat_interface, 5);
   }
 }
 
-Internal void registry_global_remove_handler(void *data,
-                                             struct wl_registry *registry,
-                                             I1 name) {}
+Internal void registry_global_remove_handler(void *data, struct wl_registry *registry, I1 name) {}
 
-Internal void xdg_wm_base_ping_handler(void *data,
-                                       struct xdg_wm_base *xdg_wm_base,
-                                       I1 serial) {
+Internal void xdg_wm_base_ping_handler(void *data, struct xdg_wm_base *xdg_wm_base, I1 serial) {
   xdg_wm_base_pong(xdg_wm_base, serial);
 }
 
-Internal void xdg_surface_configure_handler(void *data,
-                                            struct xdg_surface *xdg_surface,
-                                            I1 serial) {
+Internal void xdg_surface_configure_handler(void *data, struct xdg_surface *xdg_surface, I1 serial) {
   OS_Window *window = (OS_Window *)data;
   xdg_surface_ack_configure(xdg_surface, serial);
   window->configured = 1;
 }
 
-Internal void xdg_toplevel_configure_handler(void *data,
-                                             struct xdg_toplevel *xdg_toplevel,
-                                             SI1 width, SI1 height,
-                                             struct wl_array *states) {
+Internal void xdg_toplevel_configure_handler(void *data, struct xdg_toplevel *xdg_toplevel, SI1 width, SI1 height, struct wl_array *states) {
   if (width > 0 && height > 0) {
     OS_Window *window = (OS_Window *)data;
     window->width = width;
@@ -611,8 +600,7 @@ Internal void xdg_toplevel_configure_handler(void *data,
   }
 }
 
-Internal void xdg_toplevel_close_handler(void *data,
-                                         struct xdg_toplevel *xdg_toplevel) {
+Internal void xdg_toplevel_close_handler(void *data, struct xdg_toplevel *xdg_toplevel) {
   OS_Window *window = (OS_Window *)data;
 
   OS_Event event = {
@@ -626,8 +614,7 @@ Internal void xdg_toplevel_close_handler(void *data,
 ////////////////////////////////
 //~ kti: Seat event handlers
 
-Internal void seat_capabilities_handler(void *data, struct wl_seat *seat,
-                                        I1 capabilities) {
+Internal void seat_capabilities_handler(void *data, struct wl_seat *seat, I1 capabilities) {
   if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
     os_gfx_state->pointer = wl_seat_get_pointer(seat);
     wl_pointer_add_listener(os_gfx_state->pointer, &os_gfx_state->pointer_listener, 0);
@@ -641,10 +628,7 @@ Internal void seat_capabilities_handler(void *data, struct wl_seat *seat,
 Internal void seat_name_handler(void *data, struct wl_seat *seat, CString name) {}
 
 // Pointer event handlers
-Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer,
-                                    I1 serial, struct wl_surface *surface,
-                                    wl_fixed_t surface_x,
-                                    wl_fixed_t surface_y) {
+Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface, wl_fixed_t surface_x, wl_fixed_t surface_y) {
   OS_Window *window = 0;
   for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next) {
     if (surface == it->surface) {
@@ -659,22 +643,18 @@ Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer,
   if (os_gfx_state->default_cursor && os_gfx_state->cursor_surface) {
     struct wl_cursor_image *image = os_gfx_state->default_cursor->images[0];
     struct wl_buffer *buffer = wl_cursor_image_get_buffer(image);
-    wl_pointer_set_cursor(pointer, serial, os_gfx_state->cursor_surface,
-                          image->hotspot_x, image->hotspot_y);
+    wl_pointer_set_cursor(pointer, serial, os_gfx_state->cursor_surface, image->hotspot_x, image->hotspot_y);
     wl_surface_attach(os_gfx_state->cursor_surface, buffer, 0, 0);
     wl_surface_damage(os_gfx_state->cursor_surface, 0, 0, image->width, image->height);
     wl_surface_commit(os_gfx_state->cursor_surface);
   }
 }
 
-Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer,
-                                    I1 serial, struct wl_surface *surface) {
+Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface) {
   os_gfx_state->hovered_window = 0;
 }
 
-Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer,
-                                     I1 time, wl_fixed_t surface_x,
-                                     wl_fixed_t surface_y) {
+Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
 	D1 x = wl_fixed_to_double(surface_x);
 	D1 y = wl_fixed_to_double(surface_y);
 
@@ -690,8 +670,7 @@ Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer,
 	os_gfx_state->mouse_y = y;
 }
 
-Internal void pointer_button_handler(void *data, struct wl_pointer *pointer,
-                                     I1 serial, I1 time, I1 button, I1 state) {
+Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 serial, I1 time, I1 button, I1 state) {
   I1 key = OS_KEY__NULL;
   switch (button) {
     case 0x110: {
@@ -720,8 +699,7 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer,
   }
 }
 
-Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer,
-                                   I1 time, I1 axis, wl_fixed_t value) {
+Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer, I1 time, I1 axis, wl_fixed_t value) {
   OS_Event event = {
     .timestamp_ns = (L1)time * 1000000LLU,
     .type = OS_EVENT_TYPE__SCROLL,
@@ -739,34 +717,25 @@ Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer,
 
 Internal void pointer_frame_handler(void *data, struct wl_pointer *pointer) {}
 
-Internal void pointer_axis_source_handler(void *data,
-                                          struct wl_pointer *pointer,
+Internal void pointer_axis_source_handler(void *data, struct wl_pointer *pointer,
                                           I1 axis_source) {}
 
-Internal void pointer_axis_stop_handler(void *data, struct wl_pointer *pointer,
-                                        I1 time, I1 axis) {}
+Internal void pointer_axis_stop_handler(void *data, struct wl_pointer *pointer, I1 time, I1 axis) {}
 
-Internal void pointer_axis_discrete_handler(void *data,
-                                            struct wl_pointer *pointer, I1 axis,
-                                            SI1 discrete) {}
+Internal void pointer_axis_discrete_handler(void *data, struct wl_pointer *pointer, I1 axis, SI1 discrete) {}
 
 ////////////////////////////////
 //~ kti: Keyboard Event Handlers
 
-Internal void keyboard_keymap_handler(void *data, struct wl_keyboard *keyboard,
-                                      I1 format, SI1 fd, I1 size) {
+Internal void keyboard_keymap_handler(void *data, struct wl_keyboard *keyboard, I1 format, SI1 fd, I1 size) {
   close(fd);
 }
 
-Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard,
-                                     I1 serial, struct wl_surface *surface,
-                                     struct wl_array *keys) {}
+Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface, struct wl_array *keys) {}
 
-Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard,
-                                     I1 serial, struct wl_surface *surface) {}
+Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface) {}
 
-Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard,
-                                   I1 serial, I1 time, I1 key, I1 state) {
+Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 time, I1 key, I1 state) {
   I1 os_key = os_key_from_wl_key(key);
   if (os_key != OS_KEY__NULL) {
 		L1 type = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE;
@@ -781,15 +750,9 @@ Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard,
   }
 }
 
-Internal void keyboard_modifiers_handler(void *data,
-                                         struct wl_keyboard *keyboard,
-                                         I1 serial, I1 mods_depressed,
-                                         I1 mods_latched, I1 mods_locked,
-                                         I1 group) {}
+Internal void keyboard_modifiers_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 mods_depressed, I1 mods_latched, I1 mods_locked, I1 group) {}
 
-Internal void keyboard_repeat_info_handler(void *data,
-                                           struct wl_keyboard *keyboard,
-                                           SI1 rate, SI1 delay) {}
+Internal void keyboard_repeat_info_handler(void *data, struct wl_keyboard *keyboard, SI1 rate, SI1 delay) {}
 
 Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   if (os_gfx_state == 0) {
@@ -868,7 +831,6 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   result->xdg_toplevel_listener.close = xdg_toplevel_close_handler;
   xdg_toplevel_add_listener(result->xdg_toplevel, &result->xdg_toplevel_listener, (void *)result);
 
-  //- kti: Use max filename length as a reasonable title length limit.
   Temp_Arena scratch = scratch_begin(0, 0);
   String8 cstr_title = push_str8_copy(scratch.arena, title);
   xdg_toplevel_set_title(result->xdg_toplevel, (CString)cstr_title.str);

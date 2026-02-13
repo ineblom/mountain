@@ -9,3 +9,4 @@ meta
 shaders/*.spv
 **/*.meta.h
 **/*.meta.c
+tags

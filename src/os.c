@@ -1,4 +1,4 @@
-#if (CPU_ && DEF_)
+#if (DEF_)
 
 #include <wayland-client.h>
 #include <wayland-cursor.h>
@@ -19,7 +19,7 @@
 
 #endif
 
-#if (CPU_ && TYP_)
+#if (TYP_)
 
 typedef void *ThreadFunc(void *);
 
@@ -280,7 +280,7 @@ struct OS_GFX_State {
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Global OS_GFX_State *os_gfx_state = 0;
 

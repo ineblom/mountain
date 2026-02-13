@@ -2,7 +2,7 @@
 
 COMPILER="gcc"
 WARN="-Wall -Wno-unused-function -Wno-unused-variable"
-DEFS="-DCPU_=1 -DDEV_=1"
+DEFS="-DDEV=1"
 INC="-I/usr/include/freetype2"
 LIB="-lm -lwayland-client -lwayland-cursor -lfreetype"
 OPT="-g -maes -mssse3" # -march=native

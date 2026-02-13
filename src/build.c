@@ -1,26 +1,18 @@
 #if (!defined(PRE_))
 #define PRE_
 
-#ifndef CPU_
-# define CPU_ 0
-#endif
 #ifndef DEV_
 # define DEV_ 0
 #endif
-#ifndef GPU_
-# define GPU_ 0
-#endif
 
-#if CPU_
-# define DEF_ 0
-# define TYP_ 0
-# define ROM_ 0
-#endif
+#define DEF_ 0
+#define TYP_ 0
+#define ROM_ 0
 
 # include "base.c"
 #endif
 
-#if (CPU_ && (!defined(BOT_)))
+#ifndef BOT_
 # define BOT_
 # undef DEF_
 # define DEF_ 1

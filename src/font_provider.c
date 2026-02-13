@@ -1,9 +1,9 @@
-#if (CPU_ && DEF_)
+#if (DEF_)
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #endif
 
-#if (CPU_ && TYP_)
+#if (TYP_)
 
 typedef struct FP_Handle FP_Handle;
 struct FP_Handle {
@@ -35,7 +35,7 @@ struct FP_State {
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Global FP_State *fp_state = 0;
 

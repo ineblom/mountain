@@ -1,5 +1,4 @@
-
-#if (CPU_ && TYP_)
+#if (TYP_)
 typedef struct Arena Arena;
 struct Arena {
   L1 pos;
@@ -13,7 +12,7 @@ struct Temp_Arena {
 };
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 Internal Arena *arena_create(L1 max_size) {
   Assert(max_size > sizeof(Arena));
 

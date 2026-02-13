@@ -1,5 +1,5 @@
 
-#if (CPU_) && (TYP_)
+#if (TYP_)
 
 #define PI 3.141592653598979f
 #define GOLDEN_RATIO 1.61803398875f
@@ -12,7 +12,7 @@ struct Random_State {
 
 #endif
 
-#if (CPU_) && (ROM_)
+#if (ROM_)
 
 #define abs_F1(x) fabsf(x)
 #define abs_SL1(x) llabs(x)

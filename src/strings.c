@@ -1,5 +1,5 @@
 
-#if (CPU_ && TYP_)
+#if (TYP_)
 
 typedef const char * CString;
 
@@ -45,7 +45,7 @@ struct Unicode_Decode {
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 ////////////////////////////////
 //~ kti: C String

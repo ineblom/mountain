@@ -1,4 +1,4 @@
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Internal void lane(Arena *arena) {
   OS_Window *window = 0;
@@ -30,6 +30,7 @@ Internal void lane(Arena *arena) {
 
 	F2 pane_pos = {30.0f, 50.0f};
 	F1 button_hue = 0.0f;
+	I1 show_buttons = 0;
 	L1 running = 1;
 
 	////////////////////////////////
@@ -77,7 +78,8 @@ Internal void lane(Arena *arena) {
 				ui_set_next_background_color(oklch(0.2f, 0.0f, 0.0f, 1.0f));
 				UI_Box *pane = ui_build_box_from_string(
 						UI_BOX_FLAG__FLOATING | UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BACKGROUND |
-						UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL | UI_BOX_FLAG__VIEW_CLAMP,
+						UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__VIEW_SCROLL |
+						UI_BOX_FLAG__VIEW_CLAMP,
 						Str8_("pane"));
 				UI_Parent(pane) {
 					ui_set_next_pref_width(ui_children_sum(1.0f));
@@ -95,29 +97,36 @@ Internal void lane(Arena *arena) {
 								ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
 							}
 
-							ui_spacer(ui_em(1.0f, 1.0f));
+							ui_spacer(ui_em(0.5f, 1.0f));
 
-							UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-							UI_Pref_Height(ui_em(2.0f, 1.0f))
-							UI_Background_Color(oklch(0.335f, 0.151f, button_hue, 1.0f))
-							UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-							UI_Corner_Radius(5.0f) {
+							ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+							ui_set_next_pref_height(ui_children_sum(1.0f));
+							ui_slider_F1(Str8_("HUE"), &button_hue, 0.0f, 360.0f);
+
+							ui_set_next_pref_width(ui_children_sum(1.0f));
+							ui_set_next_pref_height(ui_children_sum(1.0f));
+							ui_checkbox(Str8_("Show buttons?"), &show_buttons);
+
+							if (show_buttons) {
+								ui_spacer(ui_em(0.5f, 1.0f));
+
+								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+								UI_Pref_Height(ui_em(2.0f, 1.0f))
+								UI_Background_Color(oklch(0.335f, 0.151f, button_hue, 1.0f))
+								UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+								UI_Corner_Radius(5.0f)
 								UI_Row() {
 									if (ui_button(Str8_("Prev")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										button_hue = fmodf(button_hue-30.0f, 360.0f);
+										button_hue = fmodf(button_hue+330.0f, 360.0f);
 									}
 									ui_spacer(ui_px(10.0f, 1.0f));
 									if (ui_button(Str8_("Next")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
 										button_hue = fmodf(button_hue+30.0f, 360.0f);
 									}
 								}
+
+								ui_spacer(ui_em(0.5f, 1.0f));
 							}
-
-							ui_spacer(ui_em(1.0f, 1.0f));
-
-							ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
-							ui_set_next_pref_height(ui_children_sum(1.0f));
-							ui_slider_F1(Str8_("HUE"), &button_hue, 0.0f, 360.0f);
 						}
 					}
 				}

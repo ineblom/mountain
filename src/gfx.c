@@ -1,4 +1,4 @@
-#if (CPU_ && DEF_)
+#if (DEF_)
 #define VK_NO_PROTOTYPES
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include "vulkan.h"
@@ -93,7 +93,7 @@ VK_EXTENSION_FUNCTIONS
 // Dynamically allocate new buffers if needed.
 #define MAX_RECTANGLE_COUNT 8192
 
-#if (CPU_ && TYP_)
+#if (TYP_)
 
 typedef struct GFX_Per_Frame GFX_Per_Frame;
 struct GFX_Per_Frame {
@@ -207,7 +207,7 @@ struct GFX_State {
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Global GFX_State *gfx_state = 0;
 Global PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR = 0;

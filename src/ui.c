@@ -1,4 +1,4 @@
-#if (CPU_ && TYP_)
+#if (TYP_)
 
 typedef I1 UI_Axis;
 
@@ -233,7 +233,7 @@ struct UI_State {
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Global UI_Box ui_nil_box = {
 	&ui_nil_box,
@@ -1371,6 +1371,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 		UI_Pref_Width(ui_px(size, 1.0f))
 		UI_Column()
 		UI_Pref_Height(ui_px(size, 1.0f))
+		UI_Corner_Radius(check_inset*0.5f) 
 		UI_Padding(ui_pct(1.0f, 0.0f)) {
 			ui_set_next_background_color(oklch(0.195f, 0.1f, 17.0f, 1.0f));
 			ui_set_next_border_color(oklch(0.5f, 0.0f, 0.0f, 1.0f));
@@ -1385,8 +1386,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 					UI_Pref_Height(ui_px(size-check_inset*2, 1.0f))
 					UI_Row()
 					UI_Padding(ui_pct(1.0f, 0.0f))
-					UI_Pref_Width(ui_px(size-check_inset*2, 1.0f))
-					UI_Corner_Radius(check_inset*0.5f) {
+					UI_Pref_Width(ui_px(size-check_inset*2, 1.0f)) {
 						inset_box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
 					}
 				}
@@ -1396,12 +1396,8 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 			if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
 				value[0] = !value[0];
 			}
-			if (!ui_box_is_nil(inset_box)) {
-				/* if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-					inset_box->background_color[0] = ClampBot(0.0f, inset_box->background_color[0]-0.2f);
-				} else */ if (signal.flags & UI_SIGNAL_FLAG__HOVERING) {
-					inset_box->background_color[0] = ClampTop(1.0f, inset_box->background_color[0]+0.1f);
-				}
+			if (!ui_box_is_nil(inset_box) && signal.flags & UI_SIGNAL_FLAG__HOVERING) {
+				inset_box->background_color[0] = ClampTop(1.0f, inset_box->background_color[0]+0.1f);
 			}
 		}
 		
@@ -1416,6 +1412,10 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 	}
 
 	return signal;
+}
+
+Internal void ui_textbox(String8 label, String8 *str, L1 buffer_size) {
+
 }
 
 #endif

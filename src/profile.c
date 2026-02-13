@@ -1,4 +1,4 @@
-#if  (CPU_ && DEF_)
+#if  (DEF_)
 
 # include "spall.h"
 
@@ -27,7 +27,7 @@ Global ThreadLocal SpallBuffer spall_buffer;
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Internal void prof_begin(const char *str, L1 length) {
 	if (spall_buffer.data == 0) {

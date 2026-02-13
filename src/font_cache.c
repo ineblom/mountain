@@ -1,10 +1,10 @@
-#if (CPU_ && DEF_)
+#if (DEF_)
 
 # include "meow_hash_x64_aesni.h"
 
 #endif
 
-#if (CPU_ && TYP_)
+#if (TYP_)
 
 typedef struct FC_Tag FC_Tag;
 struct FC_Tag {
@@ -191,7 +191,7 @@ struct FC_State {
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Global FC_State *fc_state = 0;
 

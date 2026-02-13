@@ -1,4 +1,4 @@
-#if (CPU_ && TYP_)
+#if (TYP_)
 
 typedef struct DR_FStr_Params DR_FStr_Params;
 struct DR_FStr_Params {
@@ -75,7 +75,7 @@ struct DR_State {
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Global DR_Clip_Node dr_nil_clip_node = {0, (F4){0}};
 Global DR_State *dr_state = 0;

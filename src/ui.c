@@ -1268,7 +1268,9 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 
 	F1 range = max - min;
 	F1 pct = (value[0]-min) / range;
+	F1 height = 20.0f;
 
+	ui_set_next_pref_height(ui_px(height, 1.0f));
 	UI_Row() {
 		//- kti: Label
 		UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
@@ -1288,6 +1290,7 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 			fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, min_str).dim[0],
 			fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, max_str).dim[0]);
 
+		ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
 		UI_Pref_Width(ui_px(value_box_width, 1.0f))
 		UI_Column() UI_Padding(ui_pct(1.0f, 0.0f)) {
 			UI_Font_Size(value_font_size)
@@ -1302,8 +1305,8 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 		ui_spacer(ui_px(10.f, 1.0f));
 
 		//- kti: Slider
-		F1 height = 20.0f;
 		F1 knob_size = 14.0f;
+		ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
 		UI_Pref_Width(ui_pct(1.0f, 0.0f))
 		UI_Column() UI_Padding(ui_pct(1, 0)) {
 			UI_Pref_Height(ui_px(height, 1.0f))
@@ -1311,7 +1314,7 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 			UI_Border_Color(oklch(0.5f, 0.0f, 0.0f, 1.0f)) {
 				UI_Box *knob = &ui_nil_box;
 				UI_Box *bg_box = &ui_nil_box;
-				UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, Str8_("slider"));
+				UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%.*s", (int)str.len, str.str);
 				UI_Parent(box) {
 					F1 knob_inset = floor_F1((height-knob_size)*0.5f);
 					F1 min = knob_size+knob_inset*2.0f;
@@ -1376,7 +1379,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 			ui_set_next_background_color(oklch(0.195f, 0.1f, 17.0f, 1.0f));
 			ui_set_next_border_color(oklch(0.5f, 0.0f, 0.0f, 1.0f));
 			UI_Box *inset_box = &ui_nil_box;
-			UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_HOT_EFFECTS|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, Str8_("checkbox"));
+			UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_HOT_EFFECTS|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, "##checkbox_%.*s", (int)str.len, str.str);
 
 			if (value[0]) {
 				UI_Parent(box)
@@ -1415,6 +1418,10 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 }
 
 Internal void ui_textbox(String8 label, String8 *str, L1 buffer_size) {
+	UI_Border_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f)) {
+		UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP, Str8_("textbox"));
+
+	}
 
 }
 

@@ -29,8 +29,9 @@ Internal void lane(Arena *arena) {
 	lane_sync();
 
 	F2 pane_pos = {30.0f, 50.0f};
-	F1 button_hue = 0.0f;
+	F4 rect_color = {0.5f, 0.5f, 17.0f/180.0f*PI, 1.0f};
 	I1 show_buttons = 0;
+
 	L1 running = 1;
 
 	////////////////////////////////
@@ -90,6 +91,26 @@ Internal void lane(Arena *arena) {
 						ui_set_next_pref_height(ui_children_sum(1.0f));
 						UI_Column()
 						UI_Padding(ui_em(1.0f, 1.0f)) {
+							UI_Pref_Width(ui_pct(1.0f, 0.0f))
+							UI_Pref_Height(ui_em(2.0f, 1.0f)) {
+								ui_set_next_background_color(oklch(0.8454f, 0.0863f, 146.23f, 1.0f)); ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+								ui_set_next_background_color(rect_color); ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+							}
+
+							ui_spacer(ui_em(0.5f, 1.0f));
+
+							UI_Pref_Width(ui_pct(1.0f, 0.0f))
+							UI_Pref_Height(ui_children_sum(1.0f)) {
+								ui_slider_F1(Str8_("L"), &rect_color[0], 0.0f, 1.0f);
+								ui_spacer(ui_em(0.5f, 1.0f));
+								ui_slider_F1(Str8_("C"), &rect_color[1], 0.0f, 1.0f);
+								ui_spacer(ui_em(0.5f, 1.0f));
+								F1 hue = rect_color[2]/PI * 180.0f;
+								ui_slider_F1(Str8_("H"), &hue, 0.0f, 360.0f);
+								rect_color[2] = hue / 180.0f * PI;
+								ui_spacer(ui_em(0.5f, 1.0f));
+							}
+
 							UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
 							UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
 							UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
@@ -98,10 +119,6 @@ Internal void lane(Arena *arena) {
 							}
 
 							ui_spacer(ui_em(0.5f, 1.0f));
-
-							ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
-							ui_set_next_pref_height(ui_children_sum(1.0f));
-							ui_slider_F1(Str8_("HUE"), &button_hue, 0.0f, 360.0f);
 
 							ui_set_next_pref_width(ui_children_sum(1.0f));
 							ui_set_next_pref_height(ui_children_sum(1.0f));
@@ -112,16 +129,14 @@ Internal void lane(Arena *arena) {
 
 								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
 								UI_Pref_Height(ui_em(2.0f, 1.0f))
-								UI_Background_Color(oklch(0.335f, 0.151f, button_hue, 1.0f))
+								UI_Background_Color(oklch(0.335f, 0.151f, 17.0f, 1.0f))
 								UI_Text_Align(UI_TEXT_ALIGN__CENTER)
 								UI_Corner_Radius(5.0f)
 								UI_Row() {
 									if (ui_button(Str8_("Prev")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										button_hue = fmodf(button_hue+330.0f, 360.0f);
 									}
 									ui_spacer(ui_px(10.0f, 1.0f));
 									if (ui_button(Str8_("Next")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										button_hue = fmodf(button_hue+30.0f, 360.0f);
 									}
 								}
 
@@ -146,8 +161,8 @@ Internal void lane(Arena *arena) {
 				F1 pane_bounds_animation_rate = 0.3f;
 				F2 window_size = {window->width, window->height};
 				for EachIndex(axis, UI_AXIS_COUNT) {
-					F1 max = ClampBot(0, window_size[axis] - pane->fixed_size[axis]);
-					F1 target = Clamp(0.0f, pane_pos[axis], max);
+					F1 max = ClampBot(1, window_size[axis] - pane->fixed_size[axis] - 1);
+					F1 target = Clamp(1.0f, pane_pos[axis], max);
 
 					pane_pos[axis] += pane_bounds_animation_rate * (target - pane_pos[axis]);
 					if (abs_F1(target-pane_pos[axis]) < 2.0f) {
@@ -168,6 +183,8 @@ Internal void lane(Arena *arena) {
 			//- kti: ui
 			for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
 				UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
+
+				F1 softness = (box->corner_radii[0] > 0 || box->corner_radii[1] > 0 || box->corner_radii[2] > 0 || box->corner_radii[3] > 0) ? 1.0f : 0.0f;
 
 				I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
 						!ui_key_match(box->key, ui_key_zero()) &&
@@ -197,7 +214,7 @@ Internal void lane(Arena *arena) {
 						dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
 					}
 
-					GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, 1.0f);
+					GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, softness);
 					inst->corner_radii = box->corner_radii;
 
 					if (draw_active_effect) {
@@ -244,7 +261,7 @@ Internal void lane(Arena *arena) {
 
 					if (b->flags & UI_BOX_FLAG__DRAW_BORDER) {
 						F4 border_rect = (F4){b->rect[0]-1, b->rect[1]-1, b->rect[2]+2, b->rect[3]+2};
-						GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, 1.0f);
+						GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, softness);
 						inst->corner_radii = b->corner_radii;
 						inst->border_width = 1.0f;
 						inst->border_color = b->border_color;

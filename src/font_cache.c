@@ -33,6 +33,7 @@ struct FC_Piece {
 	SW4 subrect;
 	SW2 offset;
 	F1 advance;
+	F1 scale;
 	W1 decode_size;
 };
 
@@ -683,13 +684,22 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 					info->raster_dim[0],
 					info->raster_dim[1]
 				};
-				piece->advance = advance;
 				piece->decode_size = piece_substring.len;
-				piece->offset = (SW2){0, -(style_raster_node->ascent + style_raster_node->descent)};
 
-				base_align_px += advance;
+				F1 pixel_size = (96.0f/72.0f) * size;
+				if (info->raster_dim[1] > 0 && (F1)info->raster_dim[1] > pixel_size * 1.5f) {
+					piece->scale = pixel_size / (F1)info->raster_dim[1];
+					piece->advance = info->advance * piece->scale;
+					piece->offset = (SW2){0, (SW1)(-(pixel_size + style_raster_node->ascent - style_raster_node->descent) * 0.5f)};
+				} else {
+					piece->scale = 1.0f;
+					piece->advance = advance;
+					piece->offset = (SW2){0, -(style_raster_node->ascent + style_raster_node->descent)};
+				}
+
+				base_align_px += piece->advance;
 				dim[0] += piece->advance;
-				dim[1] = Max(dim[1], info->raster_dim[1]);
+				dim[1] = Max(dim[1], (SW1)(info->raster_dim[1] * piece->scale));
 				// dim[1] = style_raster_node->ascent + style_raster_node->descent;
 			}
 		}

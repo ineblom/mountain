@@ -227,9 +227,11 @@ Internal void dr_text_run(FC_Run run, F2 pos, F4 color) {
 		SW4 subrect = piece->subrect;
 		SW2 offset = piece->offset;
 
+		F1 dst_w = (F1)subrect[2] * piece->scale;
+		F1 dst_h = (F1)subrect[3] * piece->scale;
 		dr_img(
 				(F4){pos[0]+offset[0], pos[1]+offset[1],
-				subrect[2], subrect[3]},
+				dst_w, dst_h},
 				(F4){subrect[0], subrect[1],
 				subrect[2], subrect[3]},
 				piece->texture, color, 0.0f, 0.0f);

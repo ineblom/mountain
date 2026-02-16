@@ -15,6 +15,7 @@ struct Random_State {
 #if (ROM_)
 
 #define abs_F1(x) fabsf(x)
+#define abs_SI1(x) abs(x)
 #define abs_SL1(x) llabs(x)
 #define mod_F1(x, y) fmodf(x, y)
 #define floor_F1(x) floorf(x)

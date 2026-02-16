@@ -83,11 +83,24 @@ Internal void fp_font_close(FP_Handle font) {
 Internal FP_Metrics fp_metrics_from_font(FP_Handle font) {
 	FP_Metrics result = {0};
 	if (font.face != 0) {
-		result.design_units_per_em = (F1)(font.face->units_per_EM);
-		result.ascent              = (F1)font.face->ascender;
-		result.descent             = -(F1)font.face->descender;
-		result.line_gap            = (F1)(font.face->height - font.face->ascender + font.face->descender);
-		result.capital_height      = (F1)(font.face->ascender);
+		if (font.face->units_per_EM != 0) {
+			result.design_units_per_em = (F1)(font.face->units_per_EM);
+			result.ascent              = (F1)font.face->ascender;
+			result.descent             = -(F1)font.face->descender;
+			result.line_gap            = (F1)(font.face->height - font.face->ascender + font.face->descender);
+			result.capital_height      = (F1)(font.face->ascender);
+		} else if (font.face->num_fixed_sizes > 0) {
+			FT_Select_Size(font.face, 0);
+			FT_Size_Metrics *m = &font.face->size->metrics;
+			F1 height  = (F1)(m->height >> 6);
+			F1 ascent  = (F1)(m->ascender >> 6);
+			F1 descent = (F1)(-(m->descender >> 6));
+			result.design_units_per_em = height;
+			result.ascent              = ascent;
+			result.descent             = descent;
+			result.line_gap            = height - ascent - descent;
+			result.capital_height      = ascent;
+		}
 	}
 	return result;
 }
@@ -102,10 +115,20 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
 
 		//- kti: Unpack font
 		FT_Face face = font.face;
+		FT_UInt pixel_size = (FT_UInt)((96.0f/72.0f) * size);
 		if (face->num_fixed_sizes > 0) {
-			FT_Select_Size(face, 0);
+			SI1 best_idx = 0;
+			SI1 best_diff = abs_SI1((SI1)face->available_sizes[0].height - (SI1)pixel_size);
+			for (SI1 j = 1; j < face->num_fixed_sizes; j += 1) {
+				SI1 diff = abs_SI1((SI1)face->available_sizes[j].height - (SI1)pixel_size);
+				if (diff < best_diff) {
+					best_diff = diff;
+					best_idx = j;
+				}
+			}
+			FT_Select_Size(face, best_idx);
 		} else {
-			FT_Set_Pixel_Sizes(face, 0, (FT_UInt)((96.0f/72.0f) * size));
+			FT_Set_Pixel_Sizes(face, 0, pixel_size);
 		}
 		SL1 ascent = face->size->metrics.ascender >> 6;
 		SL1 descent = abs_SL1(face->size->metrics.descender >> 6);
@@ -115,19 +138,27 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
 		String32 string32 = str32_from_str8(scratch.arena, string);
 
 		//- kti: Render & Measure
+		FT_Int32 load_flags = FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT;
+		if (FT_HAS_COLOR(face)) {
+			load_flags |= FT_LOAD_COLOR;
+		}
+
 		SI1 total_width = 0;
 		for EachIndex(i, string32.len) {
-			FT_Load_Char(face, string32.str[i], FT_LOAD_RENDER);
+			FT_Load_Char(face, string32.str[i], load_flags);
 			total_width += face->glyph->advance.x >> 6;
 		}
 
 		//- kti: Allocate & fill atlas w/rasterization
-		SW2 dim = { (SW1)total_width+1, height+1 };
+		SW2 dim = { (SW1)total_width, height };
 		L1 atlas_size = dim[0] * dim[1] * 4;
 		B1 *atlas = push_array(arena, B1, atlas_size);
 		SI1 baseline = ascent;
 		SI1 atlas_write_x = 0;
 		for EachIndex(i, string32.len) {
+			if (FT_Load_Char(face, string32.str[i], load_flags) != 0) {
+				continue;
+			}
 			FT_Bitmap *bmp = &face->glyph->bitmap;
 			SI1 top = face->glyph->bitmap_top;
 			SI1 left = face->glyph->bitmap_left;
@@ -137,21 +168,29 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
 				for (SI1 col = 0; col < (SI1)bmp->width; col += 1) {
 					SI1 x = atlas_write_x + left + col;
 					if (x >= 0 && x < dim[0] && y >= 0 && y < dim[1]) {
-						B1 alpha = 0;
+						L1 off = (y*dim[0] + x)*4;
 
 						if (bmp->pixel_mode == FT_PIXEL_MODE_MONO) {
 							B1 byte = bmp->buffer[row*bmp->pitch + (col >> 3)];
 							B1 bit = (byte >> (7 - (col & 7))) & 1;
-							alpha = bit ? 255 : 0;
+							B1 alpha = bit ? 255 : 0;
+							atlas[off+0] = 255;
+							atlas[off+1] = 255;
+							atlas[off+2] = 255;
+							atlas[off+3] = alpha;
+						} else if (bmp->pixel_mode == FT_PIXEL_MODE_BGRA) {
+							L1 src = row*bmp->pitch + col*4;
+							atlas[off+0] = bmp->buffer[src+2];
+							atlas[off+1] = bmp->buffer[src+1];
+							atlas[off+2] = bmp->buffer[src+0];
+							atlas[off+3] = bmp->buffer[src+3];
 						} else {
-							alpha = bmp->buffer[row*bmp->pitch + col];
+							B1 alpha = bmp->buffer[row*bmp->pitch + col];
+							atlas[off+0] = 255;
+							atlas[off+1] = 255;
+							atlas[off+2] = 255;
+							atlas[off+3] = alpha;
 						}
-
-						L1 off = (y*dim[0] + x)*4;
-						atlas[off+0] = 255;
-						atlas[off+1] = 255;
-						atlas[off+2] = 255;
-						atlas[off+3] = alpha;
 					}
 				}
 			}

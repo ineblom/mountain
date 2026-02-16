@@ -61,6 +61,7 @@ Internal void lane(Arena *arena) {
 			ui_begin_build(window, events);
 
 			FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-PropU_B.ttf"));
+			FC_Tag emoji_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf"));
 			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-FixedU_B.ttf"));
 			ui_push_font(prop_fnt);
 
@@ -111,11 +112,21 @@ Internal void lane(Arena *arena) {
 								ui_spacer(ui_em(0.5f, 1.0f));
 							}
 
-							UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
-							UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-							UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
-								ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("My super awesome UI system."));
-								ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
+							UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f)) {
+								UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+								UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("My super awesome UI system."));
+								}
+								UI_Pref_Width(ui_children_sum(1.0f))
+								UI_Pref_Height(ui_children_sum(1.0f))
+								UI_Row()
+								UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+								UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("This text is on another row."));
+									UI_Font(emoji_fnt) {
+										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("🥳"));
+									}
+								}
 							}
 
 							ui_spacer(ui_em(0.5f, 1.0f));

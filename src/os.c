@@ -250,6 +250,7 @@ struct OS_GFX_State {
 	Arena *arena;
 
 	OS_Window *hovered_window;
+	OS_Window *focused_window;
 	OS_Window *first_window;
 
 	struct wl_display *display;
@@ -629,15 +630,13 @@ Internal void seat_name_handler(void *data, struct wl_seat *seat, CString name) 
 
 // Pointer event handlers
 Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface, wl_fixed_t surface_x, wl_fixed_t surface_y) {
-  OS_Window *window = 0;
   for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next) {
     if (surface == it->surface) {
-      window = it;
+			os_gfx_state->hovered_window = it;
       break;
     }
   }
 
-  os_gfx_state->hovered_window = window;
 
   // Set the cursor to default pointer
   if (os_gfx_state->default_cursor && os_gfx_state->cursor_surface) {
@@ -655,10 +654,12 @@ Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer, I1 s
 }
 
 Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
+  OS_Window *window = os_gfx_state->hovered_window;
 	D1 x = wl_fixed_to_double(surface_x);
 	D1 y = wl_fixed_to_double(surface_y);
 
   OS_Event event = {
+		.window = window,
     .timestamp_ns = (L1)time * 1000000LLU,
     .type = OS_EVENT_TYPE__MOUSE_MOVE,
     .x = x,
@@ -671,6 +672,8 @@ Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 
 }
 
 Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 serial, I1 time, I1 button, I1 state) {
+  OS_Window *window = os_gfx_state->hovered_window;
+
   I1 key = OS_KEY__NULL;
   switch (button) {
     case 0x110: {
@@ -687,6 +690,7 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 
   if (key != OS_KEY__NULL) {
 		L1 type = (state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE;
     OS_Event event = {
+			.window = window,
       .timestamp_ns = (L1)time * 1000000LLU,
       .type = type,
       .key = key,
@@ -700,7 +704,10 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 
 }
 
 Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer, I1 time, I1 axis, wl_fixed_t value) {
+  OS_Window *window = os_gfx_state->hovered_window;
+
   OS_Event event = {
+		.window = window,
     .timestamp_ns = (L1)time * 1000000LLU,
     .type = OS_EVENT_TYPE__SCROLL,
 		.x = os_gfx_state->mouse_x,
@@ -731,15 +738,27 @@ Internal void keyboard_keymap_handler(void *data, struct wl_keyboard *keyboard, 
   close(fd);
 }
 
-Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface, struct wl_array *keys) {}
+Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface, struct wl_array *keys) {
+  for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next) {
+    if (surface == it->surface) {
+      os_gfx_state->focused_window = it;
+      break;
+    }
+  }
+}
 
-Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface) {}
+Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface) {
+  os_gfx_state->focused_window = 0;
+}
 
 Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 time, I1 key, I1 state) {
+  OS_Window *window = os_gfx_state->focused_window;
+	
   I1 os_key = os_key_from_wl_key(key);
   if (os_key != OS_KEY__NULL) {
 		L1 type = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE;
     OS_Event event = {
+			.window = window,
       .timestamp_ns = (L1)time * 1000000LLU,
       .type = type,
       .key = os_key,

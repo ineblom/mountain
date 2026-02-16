@@ -76,7 +76,8 @@
   X(vkDestroyCommandPool) \
   X(vkFreeMemory) \
   X(vkDestroyFence) \
-  X(vkGetDeviceProcAddr)
+  X(vkGetDeviceProcAddr) \
+	X(vkDestroySemaphore)
 
 #define VK_EXTENSION_FUNCTIONS \
   X(vkCreateDebugReportCallbackEXT) \
@@ -124,6 +125,7 @@ struct GFX_Window {
   VkImage *swapchain_images;
   VkImageView *swapchain_image_views;
   GFX_Per_Frame *per_frame;
+  I1 frame_active;
 };
 
 typedef struct GFX_Rect_Instance GFX_Rect_Instance;
@@ -283,6 +285,17 @@ Internal void gfx_vk_transition_image_layout(
   };
 
   vkCmdPipelineBarrier2(cmd, &dependency_info);
+}
+
+Internal void gfx_vk_recycle_semaphore(VkSemaphore semaphore) {
+  if (semaphore != VK_NULL_HANDLE) {
+		if (gfx_state->recycle_semaphores_count < ArrayCount(gfx_state->recycle_semaphores)) {
+			gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = semaphore;
+			gfx_state->recycle_semaphores_count += 1;
+		} else {
+			vkDestroySemaphore(gfx_state->device, semaphore, 0);
+		}
+	}
 }
 
 Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 height, void *pixels) {
@@ -1292,14 +1305,8 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   ////////////////////////////////
   //~ kti: Destroy Per frame Resources
 
-  //- kti: Wait for all GPU work to finich for this window.
-  Temp_Arena scratch = temp_arena_begin(gfx_state->arena);
-  VkFence *fences = push_array(scratch.arena, VkFence, vkw->image_count);
-  for EachIndex(i, vkw->image_count) {
-    fences[i] = vkw->per_frame[i].queue_submit_fence;
-  }
-  vkWaitForFences(gfx_state->device, vkw->image_count, fences, VK_TRUE, L1_MAX);
-  temp_arena_end(scratch);
+  //- kti: Wait for all GPU work to finish (including presents).
+  vkQueueWaitIdle(gfx_state->queue);
 
   //- kti: Free per frame resources.
   for EachIndex(i, vkw->image_count) {
@@ -1326,15 +1333,9 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
       vkFreeMemory(gfx_state->device, frame->instance_buffer_memory, 0);
     }
 
-    //- kti: Recycle semaphores instead of destroying.
-    if (frame->swapchain_acquire_semaphore != VK_NULL_HANDLE) {
-      gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = frame->swapchain_acquire_semaphore;
-      gfx_state->recycle_semaphores_count += 1;
-    }
-    if (frame->swapchain_release_semaphore != VK_NULL_HANDLE) {
-      gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = frame->swapchain_release_semaphore;
-      gfx_state->recycle_semaphores_count += 1;
-    }
+    //- kti: Recycle semaphores.
+    gfx_vk_recycle_semaphore(frame->swapchain_acquire_semaphore);
+    gfx_vk_recycle_semaphore(frame->swapchain_release_semaphore);
   }
 
   ////////////////////////////////
@@ -1383,11 +1384,9 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   //- kti: If grabbing image failed we return early.
   if (img_acquire_result != VK_SUCCESS) {
     // - kti: Recycle the semaphore we never used.
-    Assert(gfx_state->recycle_semaphores_count < ArrayCount(gfx_state->recycle_semaphores));
-    gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = acquire_semaphore;
-    gfx_state->recycle_semaphores_count += 1;
-
+    gfx_vk_recycle_semaphore(acquire_semaphore);
     vkQueueWaitIdle(gfx_state->queue);
+    vkw->frame_active = 0;
     return;
   }
 
@@ -1396,14 +1395,11 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   vkResetFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence);
 
   //- kti: Recycle old semaphore and store new one.
-  VkSemaphore old_semaphore = vkw->per_frame[image_idx].swapchain_acquire_semaphore;
-  if (old_semaphore != VK_NULL_HANDLE) {
-    gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = old_semaphore;
-    gfx_state->recycle_semaphores_count += 1;
-  }
+  gfx_vk_recycle_semaphore(vkw->per_frame[image_idx].swapchain_acquire_semaphore);
   vkw->per_frame[image_idx].swapchain_acquire_semaphore = acquire_semaphore;
 
   gfx_state->image_idx = image_idx;
+  vkw->frame_active = 1;
 
 	// TODO(kti): Look into whether or not we need to release resources.
   vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
@@ -1478,6 +1474,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 }
 
 Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch_List batches) {
+  if (!vkw->frame_active) return;
   I1 image_idx = gfx_state->image_idx;
   VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
   VkBuffer instance_buffer = vkw->per_frame[image_idx].instance_buffer;
@@ -1561,6 +1558,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
 
 Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
 	ProfFuncBegin();
+  if (!vkw->frame_active) { ProfEnd(); return; }
 
   I1 image_idx = gfx_state->image_idx;
   VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;

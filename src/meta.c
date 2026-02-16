@@ -1,4 +1,4 @@
-#if (CPU_ && TYP_)
+#if (TYP_)
 
 #define MAX_PARAM_COUNT 256
 
@@ -21,7 +21,7 @@ struct Line_List {
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (ROM_)
 
 Internal Line *parse_line(Arena *arena, String8 str) {
 	Line *line = push_array(arena, Line, 1);
@@ -198,7 +198,7 @@ Internal void ui_set_next_%3$s(%4$s value) {
 Internal %4$s ui_top_%3$s(void) {
 	return ui_state->%3$s_stack.top->value;
 }
-#define UI_%5$s(v) DeferLoop(ui_push_%3$s(v), ui_pop_%3$s())
+#define UI_%5$s(v) DeferLoop(ui_push_%3$s((v)), ui_pop_%3$s())
 )", node_type.str, stack_type.str, name.str, type.str, pascal_case_name.str);
 
 			str8_list_pushf(scratch.arena, &stacks_strings,

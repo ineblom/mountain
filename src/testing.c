@@ -1,5 +1,23 @@
 #if (TYP_)
 
+typedef struct Panel Panel;
+struct Panel {
+	Panel *first;
+	Panel *last;
+	Panel *next;
+	Panel *prev;
+	Panel *parent;
+	F1 pct_of_parent;
+	UI_Axis split_axis;
+};
+
+typedef struct Panel_Rec Panel_Rec;
+struct Panel_Rec {
+	Panel *next;
+	I1 push_count;
+	I1 pop_count;
+};
+
 typedef struct Window Window;
 struct Window {
 	Window *next;
@@ -7,6 +25,9 @@ struct Window {
 	OS_Window *os;
 	GFX_Window *gfx;
 	UI_State *ui;
+	Arena *arena;
+	Panel *root_panel;
+	Panel *free_panel;
 };
 
 typedef struct State State;
@@ -25,6 +46,60 @@ Internal void draw_ui(void);
 
 Global State *state = 0;
 
+Internal Panel_Rec panel_rec_depth_first_pre_order(Panel *panel) {
+	Panel_Rec rec = {0};
+
+	if (panel->first) {
+		rec.next = panel->first;
+		rec.push_count = 1;
+	} else for (Panel *p = panel; p != 0; p = p->parent) {
+		if (p->next) {
+			rec.next = p->next;
+			break;
+		}
+		rec.pop_count += 1;
+	}
+
+	return rec;
+}
+
+Internal F4 panel_rect_from_parent_rect(Panel *child, F4 parent_rect) {
+	F4 result = parent_rect;
+	Panel *parent = child->parent;
+	if (parent) {
+		for (Panel *p = parent->first; p != child && p != 0; p = p->next) {
+			result[parent->split_axis] += p->pct_of_parent * parent_rect[2+parent->split_axis];
+		}
+		result[2+parent->split_axis] = child->pct_of_parent * parent_rect[2+parent->split_axis];
+	}
+	return result;
+}
+
+Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect) {
+	Temp_Arena scratch = scratch_begin(0, 0);
+
+	typedef struct Walk_Node Walk_Node;
+	struct Walk_Node {
+		Walk_Node *next;
+		Panel *child;
+	};
+	Walk_Node *first_walk_node = 0;
+	for (Panel *p = panel; p != 0 && p->parent != 0; p = p->parent) {
+		Walk_Node *node = push_array(scratch.arena, Walk_Node, 1);
+		node->child = p;
+		SLLStackPush(first_walk_node, node);
+	}
+
+	F4 result = root_rect;
+	for (Walk_Node *n = first_walk_node; n != 0; n = n->next) {
+		result = panel_rect_from_parent_rect(n->child, result);
+	}
+
+	scratch_end(scratch);
+
+	return result; 
+}
+
 Internal Window *window_open(void) {
 	Window *window = state->free_window;
 	if (window != 0) {
@@ -37,6 +112,20 @@ Internal Window *window_open(void) {
 	window->os = os_window_open(Str8_("Testing"), 1280, 720);
 	window->gfx = gfx_window_equip(window->os);
 	window->ui = ui_state_alloc();
+	window->arena = arena_create(MiB(32));
+	window->root_panel = push_array(window->arena, Panel, 1);
+	window->root_panel->pct_of_parent = 1.0f;
+	window->root_panel->split_axis = UI_AXIS__X;
+
+	{
+		Panel *left = push_array(window->arena, Panel, 1);
+		Panel *right = push_array(window->arena, Panel, 1);
+		left->pct_of_parent = right->pct_of_parent = 0.5f;
+		left->parent = right->parent = window->root_panel;
+		DLLPushBack(window->root_panel->first, window->root_panel->last, left);
+		DLLPushBack(window->root_panel->first, window->root_panel->last, right);
+	}
+
 	DLLPushBack(state->first_window, state->last_window, window);
 	return window;
 }
@@ -125,34 +214,78 @@ Internal void lane(Arena *arena) {
 			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-FixedU_B.ttf"));
 
 			for (Window *w = state->first_window; w != 0; w = w->next) {
-				gfx_window_begin_frame(w->os, w->gfx);
-
 				ui_state_equip(w->ui);
 				ui_begin_build(w->os, events);
 				ui_push_font(prop_fnt);
 				ui_push_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
+				ui_push_border_color((F4){0.5f, 0.0f, 0.0f, 1.0f});
 
-				UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-				UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) UI_Pref_Height(ui_em(2.0f, 1.0f))
-				if (ui_button(Str8_("Open Window")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-					window_open();
+				typedef struct Rect_Node Rect_Node;
+				struct Rect_Node {
+					Rect_Node *next;
+					F4 rect;
+				};
+				Rect_Node start_parent_rect = { 0, {0, 0, w->os->width, w->os->height} };
+				Rect_Node *top_parent_rect = &start_parent_rect;
+				Rect_Node *free_parent_rect = 0;
+				Panel_Rec rec = {0};
+				for (Panel *panel = w->root_panel; panel != 0; panel = rec.next) {
+					//- kti: Calculate rectagles.
+					F4 parent_rect = top_parent_rect->rect;
+					F4 panel_rect = panel_rect_from_parent_rect(panel, parent_rect);
+
+					//- kti: Build ui
+					if (panel->first == 0) {
+						ui_set_next_fixed_rect(rect_pad(panel_rect, -4.0f));
+						ui_set_next_child_layout_axis(UI_AXIS__X);
+						UI_Box *box = ui_build_box_from_stringf(
+								UI_BOX_FLAG__DRAW_BACKGROUND|
+								UI_BOX_FLAG__DRAW_BORDER|
+								UI_BOX_FLAG__CLICKABLE|
+								UI_BOX_FLAG__FLOATING,
+								"##panel_box_%p", panel);
+						UI_Parent(box)
+						UI_Padding(ui_px(8.0f, 1.0f)) {
+							UI_Pref_Width(ui_pct(1.0f, 0.0f))
+							UI_Column() {
+								ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_TEXT, "%p", panel);
+
+								UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+								ui_button(Str8_("Press me"));
+							}
+						}
+					}
+
+					//- kti: Iterate
+					rec = panel_rec_depth_first_pre_order(panel);
+					if (rec.push_count != 0) {
+						Rect_Node *node = free_parent_rect;
+						if (node != 0) {
+							SLLStackPop(free_parent_rect);
+						} else {
+							node = push_array(scratch.arena, Rect_Node, 1);
+						}
+						node->rect = panel_rect;
+						SLLStackPush(top_parent_rect, node);
+					} else for EachIndex(i, rec.pop_count) {
+						Rect_Node *popped_node = top_parent_rect;
+						if (popped_node != 0) {
+							SLLStackPop(top_parent_rect);
+							SLLStackPush(free_parent_rect, popped_node);
+						}
+					}
 				}
 
 				ui_end_build();
 
+				gfx_window_begin_frame(w->os, w->gfx);
 				DR_Bucket *bucket = dr_bucket_make();
 				dr_push_bucket(bucket);
 
 				draw_ui();
 
-				//- kti: fps counter
-				// FC_Run run = fc_run_from_string(fixed_fnt, 14.0f, 0.0f, 100.0f, str8f(scratch.arena, "%.1f fps", fps));
-				// F4 white = oklch(1.0, 0.0, 0, 1.0f);
-				// dr_text_run(run, (F2){0.0f, run.ascent}, white);
-
 				dr_submit_bucket(w->os, w->gfx, bucket);
 				dr_pop_bucket();
-
 				gfx_window_end_frame(w->os, w->gfx);
 			}
 		}
@@ -202,8 +335,8 @@ Internal void lane(Arena *arena) {
 	lane_sync();
 
 	if (lane_idx() == 0) {
-		for (Window *w = state->first_window; w != 0; w = w->next) {
-			window_close(w);
+		while (state->first_window != 0) {
+			window_close(state->first_window);
 		}
 
 		ProfShutdown();
@@ -249,8 +382,8 @@ Internal void draw_ui(void) {
 			inst->corner_radii = box->corner_radii;
 
 			if (draw_active_effect) {
-				inst->colors[0][0] = ClampBot(inst->colors[0][0]-0.1f, 0.0f);
-				inst->colors[1][0] = ClampBot(inst->colors[1][0]-0.1f, 0.0f);
+				inst->colors[0][0] = inst->colors[0][0]*0.9f;
+				inst->colors[1][0] = inst->colors[1][0]*0.9f;
 				inst->colors[2][0] = ClampTop(inst->colors[2][0]+0.1f, 1.0f);
 				inst->colors[3][0] = ClampTop(inst->colors[3][0]+0.1f, 1.0f);
 			} else if (draw_hot_effect) {

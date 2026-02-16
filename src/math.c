@@ -183,4 +183,14 @@ Inline I1 rect_contains(F4 rect, F2 point) {
 	return result;
 }
 
+Inline F4 rect_pad(F4 rect, F1 amt) {
+	F4 result = {
+		rect[0] - amt,
+		rect[1] - amt,
+		rect[2] + amt*2,
+		rect[3] + amt*2,
+	};
+	return result;
+}
+
 #endif

@@ -939,6 +939,10 @@ Internal OS_Window *os_hovered_window(void) {
 	return os_gfx_state->hovered_window;
 }
 
+Internal OS_Window *os_focused_window(void) {
+	return os_gfx_state->focused_window;
+}
+
 Internal I1 os_key_is_down(L1 key) {
 	I1 result = 0;
 

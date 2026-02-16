@@ -1170,7 +1170,14 @@ Internal void ui_pop_corner_radius(void) {
 	ui_pop_br_corner_radius();
 }
 
-#define UI_Corner_Radius(v) DeferLoop(ui_push_corner_radius(v), ui_pop_corner_radius())
+#define UI_Corner_Radius(v) DeferLoop(ui_push_corner_radius((v)), ui_pop_corner_radius())
+
+Internal void ui_set_next_fixed_rect(F4 rect) {
+	ui_set_next_fixed_x(rect[0]);
+	ui_set_next_fixed_y(rect[1]);
+	ui_set_next_fixed_width(rect[2]);
+	ui_set_next_fixed_height(rect[3]);
+}
 
 Internal void ui_push_pref_size(UI_Axis axis, UI_Size size) {
 	(axis == UI_AXIS__X ? ui_push_pref_width : ui_push_pref_height)(size);
@@ -1264,25 +1271,6 @@ Internal UI_Signal ui_buttonf(CString fmt, ...) {
   UI_Signal result = ui_button(string);
   scratch_end(scratch);
   return result;
-}
-
-Internal UI_Box *ui_pane_begin(F4 rect, String8 string) {
-	ui_set_next_fixed_x(rect[0]);
-	ui_set_next_fixed_y(rect[1]);
-	ui_set_next_fixed_width(rect[2]);
-	ui_set_next_fixed_height(rect[3]);
-	ui_set_next_child_layout_axis(UI_AXIS__Y);
-	UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__CLIP|UI_BOX_FLAG__DRAW_BORDER|UI_BOX_FLAG__DRAW_BACKGROUND, string);
-	ui_push_parent(box);
-	ui_push_pref_width(ui_pct(1.0f, 0.0f));
-	return box;
-}
-
-Internal UI_Signal ui_pane_end(void) {
-	ui_pop_pref_width();
-	UI_Box *box = ui_pop_parent();
-	UI_Signal signal = ui_signal_from_box(box);
-	return signal;
 }
 
 // TODO(kti): Look at alignment.
@@ -1445,7 +1433,6 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 Internal void ui_textbox(String8 label, String8 *str, L1 buffer_size) {
 	UI_Border_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f)) {
 		UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP, Str8_("textbox"));
-
 	}
 
 }

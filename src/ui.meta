@@ -10,7 +10,7 @@ Min_Height,        min_height,        F1,            0.0f
 Child_Layout_Axis, child_layout_axis, UI_Axis,       0.0f
 Tab_Size,          tab_size,          F1,            24.0f*4.0f
 Font,              font,              FC_Tag,        (FC_Tag){0}
-Font_Size,         font_size,         F1,            16.0f
+Font_Size,         font_size,         F1,            12.0f
 Background_Color,  background_color,  F4,            `(F4){0.0f, 0.0f, 0.0f, 1.0f}`
 Text_Color,        text_color,        F4,            `oklch(1.0f, 0.0f, 0.0f, 1.0f)`
 TL_Corner_Radius,  tl_corner_radius,  F1,            0.0f

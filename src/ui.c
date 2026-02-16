@@ -296,8 +296,9 @@ Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string) {
 	return result;
 }
 
-Internal void ui_init(void) {
+Internal UI_State *ui_state_alloc(void) {
 	Arena *arena = arena_create(MiB(64));
+	UI_State *prev_state = ui_state;
 	ui_state = push_array(arena, UI_State, 1);
 	ui_state->arena = arena;
 	ui_state->external_key = ui_key_from_string(ui_key_zero(), Str8_("external_interaction_key"));
@@ -307,6 +308,25 @@ Internal void ui_init(void) {
 	ui_state->box_table_size = 4096;
 	ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
 	UIInitStackNils();
+
+	UI_State *new_state = ui_state;
+	ui_state = prev_state;
+	return new_state;
+}
+
+Internal void ui_state_release(UI_State *state) {
+	if (ui_state == state) {
+		ui_state = 0;
+	}
+
+	arena_release(state->build_arenas[0]);
+	arena_release(state->build_arenas[1]);
+	arena_release(state->drag_arena);
+	arena_release(state->arena);
+}
+
+Internal void ui_state_equip(UI_State *state) {
+	ui_state = state;
 }
 
 Internal I1 ui_box_is_nil(UI_Box *box) {
@@ -730,17 +750,19 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	L1 event_pool_idx = 0;
 	OS_Event *event_pool = push_array_no_zero(ui_build_arena(), OS_Event, events.count);
 	for (OS_Event *e = events.first; e != 0; e = e->next) {
-		OS_Event *new_e = &event_pool[event_pool_idx];
-		event_pool_idx += 1;
-		memmove(new_e, e, sizeof(OS_Event));
-		new_e->prev = 0;
-		new_e->next = 0;
-		DLLPushBack(ui_state->events.first, ui_state->events.last, new_e);
-		ui_state->events.count += 1;
+		if (e->window == window) {
+			OS_Event *new_e = &event_pool[event_pool_idx];
+			event_pool_idx += 1;
+			memmove(new_e, e, sizeof(OS_Event));
+			new_e->prev = 0;
+			new_e->next = 0;
+			DLLPushBack(ui_state->events.first, ui_state->events.last, new_e);
+			ui_state->events.count += 1;
+		}
 	}
 
 	//- kti: Mouse movement.
-	for (OS_Event *e = events.last; e != 0; e = e->prev) {
+	for (OS_Event *e = ui_state->events.last; e != 0; e = e->prev) {
 		if (e->type == OS_EVENT_TYPE__MOUSE_MOVE) {
 			ui_state->mouse[0] = e->x;
 			ui_state->mouse[1] = e->y;
@@ -1263,6 +1285,7 @@ Internal UI_Signal ui_pane_end(void) {
 	return signal;
 }
 
+// TODO(kti): Look at alignment.
 Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 	UI_Signal signal = {0};
 
@@ -1364,6 +1387,7 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 	return signal;
 }
 
+// TODO (kti): Fix vertical alignment.
 Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 	UI_Signal signal = {0};
 	
@@ -1417,6 +1441,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 	return signal;
 }
 
+// TODO(kti): Implement.
 Internal void ui_textbox(String8 label, String8 *str, L1 buffer_size) {
 	UI_Border_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f)) {
 		UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP, Str8_("textbox"));

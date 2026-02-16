@@ -637,7 +637,6 @@ Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer, I1 s
     }
   }
 
-
   // Set the cursor to default pointer
   if (os_gfx_state->default_cursor && os_gfx_state->cursor_surface) {
     struct wl_cursor_image *image = os_gfx_state->default_cursor->images[0];

@@ -11,14 +11,6 @@ struct FC_Tag {
 	L1 l1[2];
 };
 
-typedef struct FC_Metrics FC_Metrics;
-struct FC_Metrics {
-  F1 ascent;
-  F1 descent;
-  F1 line_gap;
-  F1 capital_height;
-};
-
 typedef struct FC_Raster_Info FC_Raster_Info;
 struct FC_Raster_Info {
 	SW4 subrect;
@@ -75,7 +67,6 @@ struct FC_Font_HT_Node {
 	FC_Font_HT_Node *hash_next;
 	FC_Tag tag;
 	FP_Handle handle;
-	FP_Metrics metrics;
 	String8 path;
 };
 
@@ -280,7 +271,6 @@ Internal FC_Tag fc_tag_from_path(String8 path) {
 		existing_node = push_array(fc_state->arena, FC_Font_HT_Node, 1);
 		existing_node->tag = result;
 		existing_node->handle = handle;
-		existing_node->metrics = fp_metrics_from_font(handle);
 		existing_node->path = push_str8_copy(fc_state->arena, path);
 		SLLQueuePush_N(slot->first, slot->last, existing_node, hash_next);
 	}
@@ -294,32 +284,21 @@ Internal FC_Tag fc_tag_from_path(String8 path) {
 	return result;
 }
 
-Internal FP_Metrics fc_fp_metrics_from_tag(FC_Tag tag) {
+Internal FP_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size) {
 	L1 slot_idx = tag.l1[1] % fc_state->font_hash_table_size;
-	
+
 	FC_Font_HT_Node *existing_node = 0;
 	for (FC_Font_HT_Node *n = fc_state->font_hash_table[slot_idx].first; n != 0; n = n->hash_next) {
 		if (memcmp(&tag, &n->tag, sizeof(FC_Tag)) == 0) {
-			existing_node =n;
+			existing_node = n;
 			break;
 		}
 	}
-	
+
 	FP_Metrics result = {0};
 	if (existing_node != 0) {
-		result = fp_metrics_from_font(existing_node->handle);
+		result = fp_metrics_from_font(existing_node->handle, size);
 	}
-	return result;
-}
-
-Internal FC_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size) {
-	FP_Metrics metrics = fc_fp_metrics_from_tag(tag);
-	FC_Metrics result = {
-		.ascent         = floor_F1(size) * metrics.ascent / metrics.design_units_per_em,
-		.descent        = floor_F1(size) * metrics.descent / metrics.design_units_per_em,
-		.line_gap       = floor_F1(size) * metrics.line_gap / metrics.design_units_per_em,
-		.capital_height = floor_F1(size) * metrics.capital_height / metrics.design_units_per_em,
-	};
 	return result;
 }
 
@@ -348,7 +327,7 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
 	}
 
 	if (style_raster_node == 0) {
-		FC_Metrics metrics = fc_metrics_from_tag_size(tag, size);
+		FP_Metrics metrics = fc_metrics_from_tag_size(tag, size);
 		style_raster_node = push_array(fc_state->raster_arena, FC_Style_Raster_HT_Node, 1);
 		style_raster_node->style_hash = style_hash;
 		style_raster_node->ascent = metrics.ascent;
@@ -694,13 +673,12 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 				} else {
 					piece->scale = 1.0f;
 					piece->advance = advance;
-					piece->offset = (SW2){0, -(style_raster_node->ascent + style_raster_node->descent)};
+					piece->offset = (SW2){0, -style_raster_node->ascent};
 				}
 
 				base_align_px += piece->advance;
 				dim[0] += piece->advance;
 				dim[1] = Max(dim[1], (SW1)(info->raster_dim[1] * piece->scale));
-				// dim[1] = style_raster_node->ascent + style_raster_node->descent;
 			}
 		}
 

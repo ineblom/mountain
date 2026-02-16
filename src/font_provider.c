@@ -19,7 +19,6 @@ struct FP_Raster_Result {
 
 typedef struct FP_Metrics FP_Metrics;
 struct FP_Metrics {
-	F1 design_units_per_em;
 	F1 ascent;
 	F1 descent;
 	F1 line_gap;
@@ -80,27 +79,51 @@ Internal void fp_font_close(FP_Handle font) {
   }
 }
 
-Internal FP_Metrics fp_metrics_from_font(FP_Handle font) {
+Inline FT_UInt fp_pixel_size_from_font_size(F1 size) {
+	return (FT_UInt)((96.0f/72.0f) * size);
+}
+
+Internal void fp_select_size(FT_Face face, FT_UInt pixel_size) {
+	if (face->num_fixed_sizes > 0) {
+		L1 best_idx = 0;
+		I1 best_diff = I1_MAX;
+		for EachIndex(i, face->num_fixed_sizes) {
+			I1 diff = abs_SI1((SI1)face->available_sizes[i].height - (SI1)pixel_size);
+			if (diff < best_diff) {
+				best_diff = diff;
+				best_idx = i;
+			}
+		}
+		FT_Select_Size(face, best_idx);
+	} else {
+		FT_Set_Pixel_Sizes(face, 0, pixel_size);
+	}
+}
+
+Internal FP_Metrics fp_metrics_from_font(FP_Handle font, F1 size) {
 	FP_Metrics result = {0};
 	if (font.face != 0) {
-		if (font.face->units_per_EM != 0) {
-			result.design_units_per_em = (F1)(font.face->units_per_EM);
-			result.ascent              = (F1)font.face->ascender;
-			result.descent             = -(F1)font.face->descender;
-			result.line_gap            = (F1)(font.face->height - font.face->ascender + font.face->descender);
-			result.capital_height      = (F1)(font.face->ascender);
-		} else if (font.face->num_fixed_sizes > 0) {
-			FT_Select_Size(font.face, 0);
-			FT_Size_Metrics *m = &font.face->size->metrics;
-			F1 height  = (F1)(m->height >> 6);
-			F1 ascent  = (F1)(m->ascender >> 6);
-			F1 descent = (F1)(-(m->descender >> 6));
-			result.design_units_per_em = height;
-			result.ascent              = ascent;
-			result.descent             = descent;
-			result.line_gap            = height - ascent - descent;
-			result.capital_height      = ascent;
+		FT_Face face = font.face;
+		FT_UInt pixel_size = fp_pixel_size_from_font_size(size);
+		fp_select_size(face, pixel_size);
+
+		FT_Size_Metrics *m = &face->size->metrics;
+		F1 ascent  = (F1)(m->ascender >> 6);
+		F1 descent = (F1)(-(m->descender >> 6));
+		F1 height  = (F1)(m->height >> 6);
+
+		//- kti: Scale bitmap font metrics to match requested pixel size.
+		if (face->num_fixed_sizes > 0 && height > 0) {
+			F1 scale = (F1)pixel_size / height;
+			ascent  *= scale;
+			descent *= scale;
+			height   = (F1)pixel_size;
 		}
+
+		result.ascent         = ascent;
+		result.descent        = descent;
+		result.line_gap       = height - ascent - descent;
+		result.capital_height = ascent;
 	}
 	return result;
 }
@@ -109,27 +132,14 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
 	ProfFuncBegin();
 
 	FP_Raster_Result result = {0};
-	
+
 	if (font.face != 0) {
 		Temp_Arena scratch = scratch_begin(&arena, 1);
 
 		//- kti: Unpack font
 		FT_Face face = font.face;
-		FT_UInt pixel_size = (FT_UInt)((96.0f/72.0f) * size);
-		if (face->num_fixed_sizes > 0) {
-			SI1 best_idx = 0;
-			SI1 best_diff = abs_SI1((SI1)face->available_sizes[0].height - (SI1)pixel_size);
-			for (SI1 j = 1; j < face->num_fixed_sizes; j += 1) {
-				SI1 diff = abs_SI1((SI1)face->available_sizes[j].height - (SI1)pixel_size);
-				if (diff < best_diff) {
-					best_diff = diff;
-					best_idx = j;
-				}
-			}
-			FT_Select_Size(face, best_idx);
-		} else {
-			FT_Set_Pixel_Sizes(face, 0, pixel_size);
-		}
+		FT_UInt pixel_size = fp_pixel_size_from_font_size(size);
+		fp_select_size(face, pixel_size);
 		SL1 ascent = face->size->metrics.ascender >> 6;
 		SL1 descent = abs_SL1(face->size->metrics.descender >> 6);
 		SL1 height = face->size->metrics.height >> 6;

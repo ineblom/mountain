@@ -1053,7 +1053,7 @@ Internal F2 ui_box_text_pos(UI_Box *box) {
 	F2 result = {0};
 	FC_Tag font = box->font;
 	F1 font_size = box->font_size;
-	FC_Metrics font_metrics = fc_metrics_from_tag_size(font, font_size);
+	FP_Metrics font_metrics = fc_metrics_from_tag_size(font, font_size);
 	result[1] = floor_F1((box->rect[1]+box->rect[3]*0.5f) + font_metrics.ascent*0.5f - font_metrics.descent*0.5f);
 	switch (box->text_align) {
 		default:

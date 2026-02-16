@@ -117,6 +117,7 @@ Internal void lane(Arena *arena) {
 								UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
 									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("My super awesome UI system."));
 								}
+
 								UI_Pref_Width(ui_children_sum(1.0f))
 								UI_Pref_Height(ui_children_sum(1.0f))
 								UI_Row()

@@ -220,19 +220,45 @@ Internal void lane(Arena *arena) {
 				ui_push_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
 				ui_push_border_color((F4){0.5f, 0.0f, 0.0f, 1.0f});
 
-				typedef struct Rect_Node Rect_Node;
-				struct Rect_Node {
-					Rect_Node *next;
-					F4 rect;
-				};
-				Rect_Node start_parent_rect = { 0, {0, 0, w->os->width, w->os->height} };
-				Rect_Node *top_parent_rect = &start_parent_rect;
-				Rect_Node *free_parent_rect = 0;
-				Panel_Rec rec = {0};
-				for (Panel *panel = w->root_panel; panel != 0; panel = rec.next) {
-					//- kti: Calculate rectagles.
-					F4 parent_rect = top_parent_rect->rect;
-					F4 panel_rect = panel_rect_from_parent_rect(panel, parent_rect);
+				F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
+
+				//- kti: Non leaf panel ui
+				for (Panel *panel = w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
+					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
+
+					for (Panel *child = panel->first; child != 0 && child->next != 0; child = child->next) {
+						F4 child_rect = panel_rect_from_parent_rect(child, panel_rect);
+						F4 boundary_rect = child_rect;
+						F1 boundary_w = 8;
+						boundary_rect[panel->split_axis] += child_rect[2+panel->split_axis] - boundary_w*0.5f;
+						boundary_rect[2+panel->split_axis] = boundary_w;
+						ui_set_next_fixed_rect(boundary_rect);
+						UI_Box *boundary_box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__FLOATING, "##panel_boundary_%p", child);
+						UI_Signal sig = ui_signal_from_box(boundary_box);
+						if (sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+							Panel *min_child = child;
+							Panel *max_child = child->next;
+							if (sig.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+								F2 drag_data = {min_child->pct_of_parent, max_child->pct_of_parent};
+								ui_store_drag_struct(&drag_data);
+							}
+							F2 drag_data = ui_get_drag_struct(F2)[0];
+							F2 drag_delta = ui_drag_delta();
+							F1 min_child_pct__pre_drag = drag_data[0];
+							F1 max_child_pct__pre_drag = drag_data[1];
+							F1 min_child_px__pre_drag = min_child_pct__pre_drag*panel_rect[2+panel->split_axis];
+							F1 max_child_px__pre_drag = max_child_pct__pre_drag*panel_rect[2+panel->split_axis];
+							F1 min_child_px__post_drag = min_child_px__pre_drag + drag_delta[panel->split_axis];
+							F1 max_child_px__post_drag = max_child_px__pre_drag - drag_delta[panel->split_axis];
+							min_child->pct_of_parent = min_child_px__post_drag/panel_rect[2+panel->split_axis];
+							max_child->pct_of_parent = max_child_px__post_drag/panel_rect[2+panel->split_axis];
+						}
+					}
+				}
+
+				//- kti: build all leaf panel ui
+				for (Panel *panel = w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
+					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
 					//- kti: Build ui
 					if (panel->first == 0) {
@@ -242,7 +268,8 @@ Internal void lane(Arena *arena) {
 								UI_BOX_FLAG__DRAW_BACKGROUND|
 								UI_BOX_FLAG__DRAW_BORDER|
 								UI_BOX_FLAG__CLICKABLE|
-								UI_BOX_FLAG__FLOATING,
+								UI_BOX_FLAG__FLOATING|
+								UI_BOX_FLAG__CLIP,
 								"##panel_box_%p", panel);
 						UI_Parent(box)
 						UI_Padding(ui_px(8.0f, 1.0f)) {
@@ -251,27 +278,10 @@ Internal void lane(Arena *arena) {
 								ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_TEXT, "%p", panel);
 
 								UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-								ui_button(Str8_("Press me"));
+								if (ui_button(Str8_("Press me")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+									window_open();
+								}
 							}
-						}
-					}
-
-					//- kti: Iterate
-					rec = panel_rec_depth_first_pre_order(panel);
-					if (rec.push_count != 0) {
-						Rect_Node *node = free_parent_rect;
-						if (node != 0) {
-							SLLStackPop(free_parent_rect);
-						} else {
-							node = push_array(scratch.arena, Rect_Node, 1);
-						}
-						node->rect = panel_rect;
-						SLLStackPush(top_parent_rect, node);
-					} else for EachIndex(i, rec.pop_count) {
-						Rect_Node *popped_node = top_parent_rect;
-						if (popped_node != 0) {
-							SLLStackPop(top_parent_rect);
-							SLLStackPush(free_parent_rect, popped_node);
 						}
 					}
 				}

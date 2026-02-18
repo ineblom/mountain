@@ -774,7 +774,7 @@ Internal void keyboard_repeat_info_handler(void *data, struct wl_keyboard *keybo
 
 Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   if (os_gfx_state == 0) {
-		Arena *arena = arena_create(MiB(64));
+		Arena *arena = arena_alloc(MiB(64));
 		os_gfx_state = push_array(arena, OS_GFX_State, 1);
 		os_gfx_state->arena = arena;
 

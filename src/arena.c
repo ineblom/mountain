@@ -13,8 +13,7 @@ struct Temp_Arena {
 #endif
 
 #if (ROM_)
-// TODO: Rename to arena_alloc
-Internal Arena *arena_create(L1 max_size) {
+Internal Arena *arena_alloc(L1 max_size) {
   Assert(max_size > sizeof(Arena));
 
   void *base = os_reserve(max_size);

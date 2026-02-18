@@ -100,19 +100,19 @@ SI1 main(void) {
 
   OS_Barrier barrier = os_barrier_alloc(thread_count);
 
-  Arena *threads_arena = arena_create(MiB(1));
+  Arena *threads_arena = arena_alloc(MiB(1));
 
   LaneCtx *lane_contexts = push_array(threads_arena, LaneCtx, thread_count);
 
   for EachIndex(i, thread_count) {
     LaneCtx ctx = {
-      .arena = arena_create(MiB(512)),
+      .arena = arena_alloc(MiB(512)),
       .lane_idx = i,
       .lane_count = thread_count,
       .barrier = &barrier,
     };
     for EachIndex(j, ArrayCount(ctx.scratch_arenas)) {
-      ctx.scratch_arenas[j] = arena_create(MiB(64));
+      ctx.scratch_arenas[j] = arena_alloc(MiB(64));
     }
     lane_contexts[i] = ctx;
   }

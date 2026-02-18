@@ -125,7 +125,7 @@ Internal void dr_begin_frame(void) {
 	ProfFuncBegin();
 
 	if (dr_state == 0) {
-		Arena *arena = arena_create(MiB(64));
+		Arena *arena = arena_alloc(MiB(64));
 		dr_state = push_array(arena, DR_State, 1);
 		dr_state->arena = arena;
 		dr_state->arena_frame_start_pos = arena_pos(arena);

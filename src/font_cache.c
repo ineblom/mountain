@@ -198,11 +198,11 @@ Internal void fc_reset(void) {
 }
 
 Internal void fc_init(void) {
-	Arena *arena = arena_create(MiB(64));
+	Arena *arena = arena_alloc(MiB(64));
 	fc_state = push_array(arena, FC_State, 1);
 	fc_state->arena = arena;
-	fc_state->raster_arena = arena_create(MiB(64));
-	fc_state->frame_arena = arena_create(MiB(64));
+	fc_state->raster_arena = arena_alloc(MiB(64));
+	fc_state->frame_arena = arena_alloc(MiB(64));
 	fc_state->font_hash_table_size = 64;
 	fc_state->font_hash_table = push_array(arena, FC_Font_HT_Slot, fc_state->font_hash_table_size);
 	fc_reset();

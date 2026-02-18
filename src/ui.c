@@ -297,14 +297,14 @@ Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string) {
 }
 
 Internal UI_State *ui_state_alloc(void) {
-	Arena *arena = arena_create(MiB(64));
+	Arena *arena = arena_alloc(MiB(64));
 	UI_State *prev_state = ui_state;
 	ui_state = push_array(arena, UI_State, 1);
 	ui_state->arena = arena;
 	ui_state->external_key = ui_key_from_string(ui_key_zero(), Str8_("external_interaction_key"));
-	ui_state->build_arenas[0] = arena_create(MiB(64));
-	ui_state->build_arenas[1] = arena_create(MiB(64));
-	ui_state->drag_arena = arena_create(MiB(64));
+	ui_state->build_arenas[0] = arena_alloc(MiB(64));
+	ui_state->build_arenas[1] = arena_alloc(MiB(64));
+	ui_state->drag_arena = arena_alloc(MiB(64));
 	ui_state->box_table_size = 4096;
 	ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
 	UIInitStackNils();
@@ -1435,6 +1435,99 @@ Internal void ui_textbox(String8 label, String8 *str, L1 buffer_size) {
 		UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP, Str8_("textbox"));
 	}
 
+}
+
+Internal void ui_draw(void) {
+	for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
+		UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
+
+		// F1 softness = (box->corner_radii[0] > 0 || box->corner_radii[1] > 0 || box->corner_radii[2] > 0 || box->corner_radii[3] > 0) ? 1.0f : 0.0f;
+		F1 softness = 1.0f;
+
+		I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
+				!ui_key_match(box->key, ui_key_zero()) &&
+				ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT)));
+
+		if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
+			F4 shadow = {
+				box->rect[0] - 4,
+				box->rect[1] - 4,
+				box->rect[2] + 16,
+				box->rect[3] + 16,
+			};
+			dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
+		}
+
+		if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
+			I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS &&
+					!ui_key_match(box->key, ui_key_zero()) &&
+					ui_key_match(box->key, ui_hot_key()));
+			if (draw_hot_effect && !draw_active_effect) {
+				F4 shadow = {
+					box->rect[0] - 4,
+					box->rect[1] - 4,
+					box->rect[2] + 16,
+					box->rect[3] + 16,
+				};
+				dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
+			}
+
+			GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, softness);
+			inst->corner_radii = box->corner_radii;
+
+			if (draw_active_effect) {
+				inst->colors[0][0] = inst->colors[0][0]*0.9f;
+				inst->colors[1][0] = inst->colors[1][0]*0.9f;
+				inst->colors[2][0] = ClampTop(inst->colors[2][0]+0.1f, 1.0f);
+				inst->colors[3][0] = ClampTop(inst->colors[3][0]+0.1f, 1.0f);
+			} else if (draw_hot_effect) {
+				inst->colors[0][0] = ClampTop(inst->colors[0][0]+0.1f, 1.0f);
+				inst->colors[1][0] = ClampTop(inst->colors[1][0]+0.1f, 1.0f);
+			}
+		}
+
+		if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
+			for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
+				F2 pos = ui_box_text_pos(box);
+				F4 color = box->text_color;
+				if (draw_active_effect) {
+					color[0] = ClampBot(color[0]-0.2f, 0.0f);
+				}
+				dr_text_run(n->value.run, pos, color);
+			}
+		}
+
+		if (box->flags & UI_BOX_FLAG__CLIP) {
+			F4 top_clip = dr_top_clip();
+			F4 new_clip = (F4){box->rect[0]+1, box->rect[1]+1, box->rect[2]-2, box->rect[3]-2};
+			if (top_clip[2] != 0 || top_clip[3] != 0) {
+				new_clip = intersect_rects(new_clip, top_clip);
+			}
+			dr_push_clip(new_clip);
+		}
+
+		L1 pop_idx = 0;
+		for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent) {
+			pop_idx += 1;
+			if (b == box && rec.push_count != 0) {
+				continue;
+			}
+
+			if (b->flags & UI_BOX_FLAG__CLIP) {
+				dr_pop_clip();
+			}
+
+			if (b->flags & UI_BOX_FLAG__DRAW_BORDER) {
+				F4 border_rect = (F4){b->rect[0]-1, b->rect[1]-1, b->rect[2]+2, b->rect[3]+2};
+				GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, softness);
+				inst->corner_radii = b->corner_radii;
+				inst->border_width = 1.0f;
+				inst->border_color = b->border_color;
+			}
+		}
+
+		box = rec.next;
+	}
 }
 
 #endif

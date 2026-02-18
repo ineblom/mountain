@@ -49,7 +49,7 @@ Inline I1 fp_handle_match(FP_Handle a, FP_Handle b) {
 }
 
 Internal void fp_init(void) {
-  Arena *arena = arena_create(MiB(64));
+  Arena *arena = arena_alloc(MiB(64));
   fp_state = push_array(arena, FP_State, 1);
   fp_state->arena = arena;
 

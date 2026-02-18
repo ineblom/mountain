@@ -42,8 +42,6 @@ struct State {
 
 #if (ROM_)
 
-Internal void draw_ui(void);
-
 Global State *state = 0;
 
 Internal Panel_Rec panel_rec_depth_first_pre_order(Panel *panel) {
@@ -112,7 +110,7 @@ Internal Window *window_open(void) {
 	window->os = os_window_open(Str8_("Testing"), 1280, 720);
 	window->gfx = gfx_window_equip(window->os);
 	window->ui = ui_state_alloc();
-	window->arena = arena_create(MiB(32));
+	window->arena = arena_alloc(MiB(32));
 	window->root_panel = push_array(window->arena, Panel, 1);
 	window->root_panel->pct_of_parent = 1.0f;
 	window->root_panel->split_axis = UI_AXIS__X;
@@ -292,7 +290,7 @@ Internal void lane(Arena *arena) {
 				DR_Bucket *bucket = dr_bucket_make();
 				dr_push_bucket(bucket);
 
-				draw_ui();
+				ui_draw();
 
 				dr_submit_bucket(w->os, w->gfx, bucket);
 				dr_pop_bucket();
@@ -350,99 +348,6 @@ Internal void lane(Arena *arena) {
 		}
 
 		ProfShutdown();
-	}
-}
-
-Internal void draw_ui(void) {
-	for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
-		UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
-
-		// F1 softness = (box->corner_radii[0] > 0 || box->corner_radii[1] > 0 || box->corner_radii[2] > 0 || box->corner_radii[3] > 0) ? 1.0f : 0.0f;
-		F1 softness = 1.0f;
-
-		I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
-				!ui_key_match(box->key, ui_key_zero()) &&
-				ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT)));
-
-		if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
-			F4 shadow = {
-				box->rect[0] - 4,
-				box->rect[1] - 4,
-				box->rect[2] + 16,
-				box->rect[3] + 16,
-			};
-			dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
-		}
-
-		if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
-			I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS &&
-					!ui_key_match(box->key, ui_key_zero()) &&
-					ui_key_match(box->key, ui_hot_key()));
-			if (draw_hot_effect && !draw_active_effect) {
-				F4 shadow = {
-					box->rect[0] - 4,
-					box->rect[1] - 4,
-					box->rect[2] + 16,
-					box->rect[3] + 16,
-				};
-				dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
-			}
-
-			GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, softness);
-			inst->corner_radii = box->corner_radii;
-
-			if (draw_active_effect) {
-				inst->colors[0][0] = inst->colors[0][0]*0.9f;
-				inst->colors[1][0] = inst->colors[1][0]*0.9f;
-				inst->colors[2][0] = ClampTop(inst->colors[2][0]+0.1f, 1.0f);
-				inst->colors[3][0] = ClampTop(inst->colors[3][0]+0.1f, 1.0f);
-			} else if (draw_hot_effect) {
-				inst->colors[0][0] = ClampTop(inst->colors[0][0]+0.1f, 1.0f);
-				inst->colors[1][0] = ClampTop(inst->colors[1][0]+0.1f, 1.0f);
-			}
-		}
-
-		if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
-			for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
-				F2 pos = ui_box_text_pos(box);
-				F4 color = box->text_color;
-				if (draw_active_effect) {
-					color[0] = ClampBot(color[0]-0.2f, 0.0f);
-				}
-				dr_text_run(n->value.run, pos, color);
-			}
-		}
-
-		if (box->flags & UI_BOX_FLAG__CLIP) {
-			F4 top_clip = dr_top_clip();
-			F4 new_clip = (F4){box->rect[0]+1, box->rect[1]+1, box->rect[2]-2, box->rect[3]-2};
-			if (top_clip[2] != 0 || top_clip[3] != 0) {
-				new_clip = intersect_rects(new_clip, top_clip);
-			}
-			dr_push_clip(new_clip);
-		}
-
-		L1 pop_idx = 0;
-		for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent) {
-			pop_idx += 1;
-			if (b == box && rec.push_count != 0) {
-				continue;
-			}
-
-			if (b->flags & UI_BOX_FLAG__CLIP) {
-				dr_pop_clip();
-			}
-
-			if (b->flags & UI_BOX_FLAG__DRAW_BORDER) {
-				F4 border_rect = (F4){b->rect[0]-1, b->rect[1]-1, b->rect[2]+2, b->rect[3]+2};
-				GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, softness);
-				inst->corner_radii = b->corner_radii;
-				inst->border_width = 1.0f;
-				inst->border_color = b->border_color;
-			}
-		}
-
-		box = rec.next;
 	}
 }
 

@@ -650,7 +650,7 @@ Internal void gfx_tex2d_free(GFX_Texture *tex) {
 }
 
 Internal void gfx_init() {
-  Arena *arena = arena_create(MiB(64));
+  Arena *arena = arena_alloc(MiB(64));
   gfx_state = push_array(arena, GFX_State, 1);
   gfx_state->arena = arena;
 

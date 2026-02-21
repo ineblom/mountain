@@ -152,9 +152,11 @@ Internal void panel_close(Window *window, Panel *panel) {
 
 	Panel *parent = panel->parent;
 
-	F1 amt = (panel->prev && panel->next) ? 0.5f : 1.0f;
-	if (panel->prev) { panel->prev->pct_of_parent += panel->pct_of_parent*amt; }
-	if (panel->next) { panel->next->pct_of_parent += panel->pct_of_parent*amt; }
+	if (panel->prev) {
+		panel->prev->pct_of_parent += panel->pct_of_parent;
+	} else if (panel->next) {
+		panel->next->pct_of_parent += panel->pct_of_parent;
+	}
 
 	if (parent) {
 		DLLRemove(parent->first, parent->last, panel);

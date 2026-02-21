@@ -98,6 +98,87 @@ Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect) {
 	return result; 
 }
 
+Internal Panel *panel_alloc(Window *window) {
+	Panel *result = window->free_panel;
+	if (result != 0) {
+		SLLStackPop(window->free_panel);
+		MemoryZeroStruct(result);
+	} else {
+		result = push_array(window->arena, Panel, 1);
+	}
+	return result;
+}
+
+Internal void panel_split(Window *window, Panel *split_panel, UI_Axis split_axis) {
+	Panel *parent = split_panel->parent;
+
+	if (parent && parent->split_axis == split_axis) {
+		Panel *new_sibling = panel_alloc(window);
+		new_sibling->parent = parent;
+		new_sibling->pct_of_parent = split_panel->pct_of_parent*0.5f;
+		split_panel->pct_of_parent *= 0.5f;
+		DLLInsert(parent->first, parent->last, split_panel, new_sibling);
+	} else {
+		Panel *new_parent = panel_alloc(window);
+		Panel *new_sibling = panel_alloc(window);
+
+		new_parent->split_axis = split_axis;
+
+		if (parent) {
+			DLLInsert(parent->first, parent->last, split_panel, new_parent);
+			DLLRemove(parent->first, parent->last, split_panel);
+		} else {
+			// TODO: Verify that this works.
+			window->root_panel = new_parent;
+		}
+
+		DLLPushBack(new_parent->first, new_parent->last, split_panel);
+		DLLPushBack(new_parent->first, new_parent->last, new_sibling);
+
+		new_parent->parent = parent;
+		split_panel->parent = new_parent;
+		new_sibling->parent = new_parent;
+
+		new_parent->pct_of_parent = split_panel->pct_of_parent;
+		split_panel->pct_of_parent = 0.5f;
+		new_sibling->pct_of_parent = 0.5f;
+	}
+}
+
+Internal void panel_close(Window *window, Panel *panel) {
+	if (panel->first != 0) {
+		return;
+	}
+
+	Panel *parent = panel->parent;
+
+	F1 amt = (panel->prev && panel->next) ? 0.5f : 1.0f;
+	if (panel->prev) { panel->prev->pct_of_parent += panel->pct_of_parent*amt; }
+	if (panel->next) { panel->next->pct_of_parent += panel->pct_of_parent*amt; }
+
+	if (parent) {
+		DLLRemove(parent->first, parent->last, panel);
+
+		if (parent->first == parent->last) {
+			Panel *grandparent = parent->parent;
+			Panel *survivor = parent->first;
+			survivor->parent = grandparent;
+			survivor->pct_of_parent = parent->pct_of_parent;
+			if (grandparent) {
+				DLLInsert(grandparent->first, grandparent->last, parent, survivor);
+				DLLRemove(grandparent->first, grandparent->last, parent);
+			} else {
+				window->root_panel = survivor;
+			}
+			SLLStackPush(window->free_panel, parent);
+		}
+	} else {
+		window->root_panel = 0;
+	}
+
+	SLLStackPush(window->free_panel, panel);
+}
+
 Internal Window *window_open(void) {
 	Window *window = state->free_window;
 	if (window != 0) {
@@ -254,6 +335,8 @@ Internal void lane(Arena *arena) {
 					}
 				}
 
+				Panel *panel_to_close = 0;
+
 				//- kti: build all leaf panel ui
 				for (Panel *panel = w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
@@ -276,12 +359,30 @@ Internal void lane(Arena *arena) {
 								ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_TEXT, "%p", panel);
 
 								UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-								if (ui_button(Str8_("Press me")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-									window_open();
+								UI_Row() {
+									// if (ui_button(Str8_("New Window")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+									// 	window_open();
+									// }
+									// ui_spacer(ui_em(1.0f, 1.0f));
+									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+										panel_split(w, panel, UI_AXIS__X);
+									}
+									ui_spacer(ui_em(1.0f, 1.0f));
+									if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+										panel_split(w, panel, UI_AXIS__Y);
+									}
+									ui_spacer(ui_em(1.0f, 1.0f));
+									if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+										panel_to_close = panel;
+									}
 								}
 							}
 						}
 					}
+				}
+
+				if (panel_to_close) {
+					panel_close(w, panel_to_close);
 				}
 
 				ui_end_build();

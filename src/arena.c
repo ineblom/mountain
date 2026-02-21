@@ -56,10 +56,10 @@ Inline void arena_clear(Arena *arena) {
 Internal void *arena_push(Arena *arena, L1 size, L1 align, I1 zero) {
   L1 aligned_pos = AlignPow2(arena->pos, align);
 
-  Assert(arena->reserved - aligned_pos >= size);
-
   void *result = (void *)((B1 *)arena + aligned_pos);
   arena->pos = aligned_pos + size;
+
+	Assert(arena->pos < arena->reserved);
 
   if (zero != 0) {
     memset(result, 0, size);

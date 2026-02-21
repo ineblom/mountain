@@ -553,7 +553,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 
 		signal.modifiers |= e->modifiers;
 
-		F2 evt_mouse = {e->x, e->y};
+		F2 evt_mouse = {floor_F1(e->x), floor_F1(e->y)};
 		I1 evt_mouse_in_bounds = rect_contains(rect, evt_mouse); 
 		I1 evt_key_is_mouse = (e->key == OS_MOUSE_BUTTON__LEFT ||
 				e->key == OS_MOUSE_BUTTON__MIDDLE ||
@@ -764,8 +764,8 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	//- kti: Mouse movement.
 	for (OS_Event *e = ui_state->events.last; e != 0; e = e->prev) {
 		if (e->type == OS_EVENT_TYPE__MOUSE_MOVE) {
-			ui_state->mouse[0] = e->x;
-			ui_state->mouse[1] = e->y;
+			ui_state->mouse[0] = floor_F1(e->x);
+			ui_state->mouse[1] = floor_F1(e->y);
 			ui_state->last_time_mouse_moved = e->timestamp_ns;
 			break;
 		}

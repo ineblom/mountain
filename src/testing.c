@@ -135,36 +135,30 @@ Internal Panel *panel_alloc(Window *window) {
 }
 
 Internal void panel_insert(Window *window, Panel *panel, Panel *at, UI_Axis split_axis) {
-	if (at == 0) {
-		window->root_panel = panel;
+	Panel *parent = at->parent;
+	if (!parent) {
+		panel->parent = at;
 		panel->pct_of_parent = 1.0f;
+		DLLPushBack(at->first, at->last, panel);
+	} else if (parent->split_axis == split_axis) {
+		panel->parent = parent;
+		panel->pct_of_parent = at->pct_of_parent = at->pct_of_parent*0.5f;
+		DLLInsert(parent->first, parent->last, at, panel);
 	} else {
-		Panel *parent = at->parent;
-		if (parent && parent->split_axis == split_axis) {
-			panel->parent = parent;
-			panel->pct_of_parent = at->pct_of_parent = at->pct_of_parent*0.5f;
-			DLLInsert(parent->first, parent->last, at, panel);
-		} else {
-			Panel *container = panel_alloc(window);
-			container->split_axis = split_axis;
+		Panel *container = panel_alloc(window);
+		container->split_axis = split_axis;
+		container->parent = parent;
+		container->pct_of_parent = at->pct_of_parent;
 
-			if (parent) {
-				DLLInsert(parent->first, parent->last, at, container);
-				DLLRemove(parent->first, parent->last, at);
-			} else {
-				window->root_panel = container;
-			}
+		DLLInsert(parent->first, parent->last, at, container);
+		DLLRemove(parent->first, parent->last, at);
 
-			DLLPushBack(container->first, container->last, at);
-			DLLPushBack(container->first, container->last, panel);
+		DLLPushBack(container->first, container->last, at);
+		DLLPushBack(container->first, container->last, panel);
 
-			container->parent = parent;
-			at->parent = container;
-			panel->parent = container;
-
-			container->pct_of_parent = at->pct_of_parent;
-			at->pct_of_parent = panel->pct_of_parent = 0.5f;
-		}
+		at->parent = container;
+		panel->parent = container;
+		at->pct_of_parent = panel->pct_of_parent = 0.5f;
 	}
 }
 
@@ -181,24 +175,16 @@ Internal void panel_close(Window *window, Panel *panel) {
 		panel->next->pct_of_parent += panel->pct_of_parent;
 	}
 
-	if (parent) {
-		DLLRemove(parent->first, parent->last, panel);
+	DLLRemove(parent->first, parent->last, panel);
 
-		if (parent->first == parent->last) {
-			Panel *grandparent = parent->parent;
-			Panel *survivor = parent->first;
-			survivor->parent = grandparent;
-			survivor->pct_of_parent = parent->pct_of_parent;
-			if (grandparent) {
-				DLLInsert(grandparent->first, grandparent->last, parent, survivor);
-				DLLRemove(grandparent->first, grandparent->last, parent);
-			} else {
-				window->root_panel = survivor;
-			}
-			SLLStackPush(window->free_panel, parent);
-		}
-	} else {
-		window->root_panel = 0;
+	if (parent->first && parent->first == parent->last && parent != window->root_panel) {
+		Panel *grandparent = parent->parent;
+		Panel *survivor = parent->first;
+		survivor->parent = grandparent;
+		survivor->pct_of_parent = parent->pct_of_parent;
+		DLLInsert(grandparent->first, grandparent->last, parent, survivor);
+		DLLRemove(grandparent->first, grandparent->last, parent);
+		SLLStackPush(window->free_panel, parent);
 	}
 
 	SLLStackPush(window->free_panel, panel);
@@ -218,17 +204,8 @@ Internal Window *window_open(void) {
 	window->ui = ui_state_alloc();
 	window->arena = arena_alloc(MiB(32));
 	window->root_panel = push_array(window->arena, Panel, 1);
-	window->root_panel->pct_of_parent = 1.0f;
 	window->root_panel->split_axis = UI_AXIS__X;
-
-	{
-		Panel *left = push_array(window->arena, Panel, 1);
-		Panel *right = push_array(window->arena, Panel, 1);
-		left->pct_of_parent = right->pct_of_parent = 0.5f;
-		left->parent = right->parent = window->root_panel;
-		DLLPushBack(window->root_panel->first, window->root_panel->last, left);
-		DLLPushBack(window->root_panel->first, window->root_panel->last, right);
-	}
+	panel_insert(window, panel_alloc(window), window->root_panel, 0);
 
 	DLLPushBack(state->first_window, state->last_window, window);
 	return window;
@@ -367,7 +344,7 @@ Internal void lane(Arena *arena) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
 					//- kti: Build ui
-					if (panel->first == 0) {
+					if (panel->first == 0 && panel != w->root_panel) {
 						ui_set_next_fixed_rect(rect_pad(panel_rect, -4.0f));
 						ui_set_next_child_layout_axis(UI_AXIS__X);
 						UI_Box *box = ui_build_box_from_stringf(
@@ -412,12 +389,12 @@ Internal void lane(Arena *arena) {
 					panel_close(w, panel_to_close);
 				}
 
-				if (w->root_panel == 0) {
+				if (w->root_panel->first == 0) {
 					UI_Text_Align(UI_TEXT_ALIGN__CENTER)
 					UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
 						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
 						if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-							panel_insert(w, panel_alloc(w), 0, 0);
+							panel_insert(w, panel_alloc(w), w->root_panel, 0);
 						}
 					}
 				}

@@ -763,7 +763,6 @@ Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 
       .key = os_key,
     };
     os_push_event(event);
-
 		os_gfx_state->key_states[os_key] = (type == OS_EVENT_TYPE__PRESS) ? 1 : 0;
   }
 }

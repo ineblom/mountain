@@ -51,8 +51,7 @@ struct Window {
 	GFX_Window *gfx;
 	UI_State *ui;
 	Arena *arena;
-	Panel *root_panel;
-	Panel *free_panel;
+	Panel root_panel;
 };
 
 typedef struct State State;
@@ -61,6 +60,7 @@ struct State {
 	Window *first_window;
 	Window *last_window;
 	Window *free_window;
+	Panel *free_panel;
 };
 
 #endif
@@ -123,20 +123,20 @@ Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect) {
 	return result; 
 }
 
-Internal Panel *panel_alloc(Window *window) {
-	Panel *result = window->free_panel;
+Internal Panel *panel_alloc() {
+	Panel *result = state->free_panel;
 	if (result != 0) {
-		SLLStackPop(window->free_panel);
+		SLLStackPop(state->free_panel);
 		MemoryZeroStruct(result);
 	} else {
-		result = push_array(window->arena, Panel, 1);
+		result = push_array(state->arena, Panel, 1);
 	}
 	return result;
 }
 
-Internal void panel_insert(Window *window, Panel *panel, Panel *at, UI_Axis split_axis) {
+Internal void panel_insert(Panel *panel, Panel *at, UI_Axis split_axis) {
 	Panel *parent = at->parent;
-	if (!parent) {
+	if (parent == 0) {
 		panel->parent = at;
 		panel->pct_of_parent = 1.0f;
 		DLLPushBack(at->first, at->last, panel);
@@ -145,7 +145,7 @@ Internal void panel_insert(Window *window, Panel *panel, Panel *at, UI_Axis spli
 		panel->pct_of_parent = at->pct_of_parent = at->pct_of_parent*0.5f;
 		DLLInsert(parent->first, parent->last, at, panel);
 	} else {
-		Panel *container = panel_alloc(window);
+		Panel *container = panel_alloc();
 		container->split_axis = split_axis;
 		container->parent = parent;
 		container->pct_of_parent = at->pct_of_parent;
@@ -162,7 +162,7 @@ Internal void panel_insert(Window *window, Panel *panel, Panel *at, UI_Axis spli
 	}
 }
 
-Internal void panel_close(Window *window, Panel *panel) {
+Internal void panel_close(Panel *root, Panel *panel) {
 	if (panel->first != 0) {
 		return;
 	}
@@ -177,17 +177,17 @@ Internal void panel_close(Window *window, Panel *panel) {
 
 	DLLRemove(parent->first, parent->last, panel);
 
-	if (parent->first && parent->first == parent->last && parent != window->root_panel) {
+	if (parent->first && parent->first == parent->last && parent != root) {
 		Panel *grandparent = parent->parent;
 		Panel *survivor = parent->first;
 		survivor->parent = grandparent;
 		survivor->pct_of_parent = parent->pct_of_parent;
 		DLLInsert(grandparent->first, grandparent->last, parent, survivor);
 		DLLRemove(grandparent->first, grandparent->last, parent);
-		SLLStackPush(window->free_panel, parent);
+		SLLStackPush(state->free_panel, parent);
 	}
 
-	SLLStackPush(window->free_panel, panel);
+	SLLStackPush(state->free_panel, panel);
 }
 
 Internal Window *window_open(void) {
@@ -203,9 +203,8 @@ Internal Window *window_open(void) {
 	window->gfx = gfx_window_equip(window->os);
 	window->ui = ui_state_alloc();
 	window->arena = arena_alloc(MiB(32));
-	window->root_panel = push_array(window->arena, Panel, 1);
-	window->root_panel->split_axis = UI_AXIS__X;
-	panel_insert(window, panel_alloc(window), window->root_panel, 0);
+	window->root_panel.split_axis = UI_AXIS__X;
+	panel_insert(panel_alloc(), &window->root_panel, 0);
 
 	DLLPushBack(state->first_window, state->last_window, window);
 	return window;
@@ -304,7 +303,7 @@ Internal void lane(Arena *arena) {
 				F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
 
 				//- kti: Non leaf panel ui
-				for (Panel *panel = w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
+				for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
 					for (Panel *child = panel->first; child != 0 && child->next != 0; child = child->next) {
@@ -340,11 +339,11 @@ Internal void lane(Arena *arena) {
 				Panel *panel_to_close = 0;
 
 				//- kti: build all leaf panel ui
-				for (Panel *panel = w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
+				for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
 					//- kti: Build ui
-					if (panel->first == 0 && panel != w->root_panel) {
+					if (panel->first == 0) {
 						ui_set_next_fixed_rect(rect_pad(panel_rect, -4.0f));
 						ui_set_next_child_layout_axis(UI_AXIS__X);
 						UI_Box *box = ui_build_box_from_stringf(
@@ -369,11 +368,11 @@ Internal void lane(Arena *arena) {
 								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
 								UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
 									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										panel_insert(w, panel_alloc(w), panel, UI_AXIS__X);
+										panel_insert(panel_alloc(), panel, UI_AXIS__X);
 									}
 									ui_spacer(ui_px(10.0f, 1.0f));
 									if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										panel_insert(w, panel_alloc(w), panel, UI_AXIS__Y);
+										panel_insert(panel_alloc(), panel, UI_AXIS__Y);
 									}
 									ui_spacer(ui_px(10.0f, 1.0f));
 									if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
@@ -386,15 +385,15 @@ Internal void lane(Arena *arena) {
 				}
 
 				if (panel_to_close) {
-					panel_close(w, panel_to_close);
+					panel_close(&w->root_panel, panel_to_close);
 				}
 
-				if (w->root_panel->first == 0) {
+				if (w->root_panel.first == 0) {
 					UI_Text_Align(UI_TEXT_ALIGN__CENTER)
 					UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
 						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
 						if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-							panel_insert(w, panel_alloc(w), w->root_panel, 0);
+							panel_insert(panel_alloc(), &w->root_panel, 0);
 						}
 					}
 				}

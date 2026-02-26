@@ -346,7 +346,7 @@ Internal void lane(Arena *arena) {
 				ui_state_equip(w->ui);
 				ui_begin_build(w->os, events);
 				ui_push_font(prop_fnt);
-				ui_push_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
+				ui_push_background_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
 				ui_push_border_color((F4){0.5f, 0.0f, 0.0f, 1.0f});
 
 				F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
@@ -391,8 +391,8 @@ Internal void lane(Arena *arena) {
 
 					//- kti: Build ui
 					if (panel->first == 0) {
-						ui_set_next_fixed_rect(rect_pad(panel_rect, -4.0f));
-						ui_set_next_child_layout_axis(UI_AXIS__X);
+						ui_set_next_fixed_rect(rect_pad(panel_rect, 0.0f));
+						ui_set_next_child_layout_axis(UI_AXIS__Y);
 						UI_Box *box = ui_build_box_from_stringf(
 								UI_BOX_FLAG__DRAW_BACKGROUND|
 								UI_BOX_FLAG__DRAW_BORDER|
@@ -401,17 +401,20 @@ Internal void lane(Arena *arena) {
 								UI_BOX_FLAG__CLIP,
 								"##panel_box_%p", panel);
 						UI_Parent(box)
-						UI_Padding(ui_px(8.0f, 1.0f))
-						UI_Pref_Width(ui_pct(1.0f, 0.0f))
-						UI_Column() {
-							UI_Row() {
+						UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
+							UI_Child_Layout_Axis(UI_AXIS__X);
+							UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
+							UI_Parent(title_bar)
+							UI_Font_Size(10.0f) {
+								UI_Padding(ui_px(10.0f, 1.0f))
 								UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
 								ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_TEXT, "%p", panel);
 
-								ui_spacer(ui_px(10.0f, 1.0f));
+								ui_spacer(ui_pct(1.0f, 0.0f));
 
 								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-								UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
+								UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+								UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
 									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
 										cmd_push((Cmd){
 											.kind = CMD_KIND__OPEN_PANEL,
@@ -420,7 +423,6 @@ Internal void lane(Arena *arena) {
 											.dir = DIR__RIGHT,
 										});
 									}
-									ui_spacer(ui_px(10.0f, 1.0f));
 									if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
 										cmd_push((Cmd){
 											.kind = CMD_KIND__OPEN_PANEL,
@@ -429,7 +431,6 @@ Internal void lane(Arena *arena) {
 											.dir = DIR__DOWN,
 										});
 									}
-									ui_spacer(ui_px(10.0f, 1.0f));
 									if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
 										cmd_push((Cmd){
 											.kind = CMD_KIND__CLOSE_PANEL,
@@ -460,6 +461,8 @@ Internal void lane(Arena *arena) {
 				gfx_window_begin_frame(w->os, w->gfx);
 				DR_Bucket *bucket = dr_bucket_make();
 				dr_push_bucket(bucket);
+
+				// dr_rect((F4){0, 0, w->os->width, w->os->height}, (F4){0.15f, 0.0f, 0.0f, 1.0f}, 0.0f, 0.0f);
 
 				ui_draw();
 

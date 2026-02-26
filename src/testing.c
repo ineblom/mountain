@@ -18,12 +18,27 @@ struct Panel_Rec {
 	I1 pop_count;
 };
 
+typedef struct Window Window;
+struct Window {
+	Window *next;
+	Window *prev;
+
+	Arena *arena;
+
+	OS_Window *os;
+	GFX_Window *gfx;
+
+	UI_State *ui;
+	Panel root_panel;
+};
+
 typedef I1 Dir;
 enum {
 	DIR__RIGHT = 0,
 	DIR__UP,
 	DIR__LEFT,
 	DIR__DOWN,
+
 	DIR_COUNT,
 };
 
@@ -31,7 +46,8 @@ typedef I1 Cmd_Kind;
 enum {
 	CMD_KIND__NONE = 0,
 
-	CMD_KIND__OPEN_RIGHT,
+	CMD_KIND__OPEN_PANEL,
+	CMD_KIND__CLOSE_PANEL,
 
 	CMD_KIND_COUNT,
 };
@@ -40,18 +56,10 @@ typedef struct Cmd Cmd;
 struct Cmd {
 	Cmd_Kind kind;
 
+	Window *window;
 	Panel *panel;
-};
 
-typedef struct Window Window;
-struct Window {
-	Window *next;
-	Window *prev;
-	OS_Window *os;
-	GFX_Window *gfx;
-	UI_State *ui;
-	Arena *arena;
-	Panel root_panel;
+	Dir dir;
 };
 
 typedef struct State State;
@@ -61,6 +69,9 @@ struct State {
 	Window *last_window;
 	Window *free_window;
 	Panel *free_panel;
+
+	Cmd cmds[512];
+	L1 cmd_count;
 };
 
 #endif
@@ -68,6 +79,9 @@ struct State {
 #if (ROM_)
 
 Global State *state = 0;
+
+////////////////////////////////
+//~ kti: Panel
 
 Internal Panel_Rec panel_rec_depth_first_pre_order(Panel *panel) {
 	Panel_Rec rec = {0};
@@ -134,13 +148,15 @@ Internal Panel *panel_alloc() {
 	return result;
 }
 
-Internal void panel_insert(Panel *panel, Panel *at, UI_Axis split_axis) {
+Internal void panel_insert(Panel *panel, Panel *at, Dir dir) {
+	I1 split_axis = (dir == DIR__RIGHT || dir == DIR__LEFT) ? UI_AXIS__X : UI_AXIS__Y;
 	Panel *parent = at->parent;
 	if (parent == 0) {
 		panel->parent = at;
 		panel->pct_of_parent = 1.0f;
 		DLLPushBack(at->first, at->last, panel);
-	} else if (parent->split_axis == split_axis) {
+	} else if (parent->split_axis == split_axis || parent->first == parent->last) {
+		parent->split_axis = split_axis;
 		panel->parent = parent;
 		panel->pct_of_parent = at->pct_of_parent = at->pct_of_parent*0.5f;
 		DLLInsert(parent->first, parent->last, at, panel);
@@ -153,8 +169,14 @@ Internal void panel_insert(Panel *panel, Panel *at, UI_Axis split_axis) {
 		DLLInsert(parent->first, parent->last, at, container);
 		DLLRemove(parent->first, parent->last, at);
 
-		DLLPushBack(container->first, container->last, at);
-		DLLPushBack(container->first, container->last, panel);
+		Panel *first = at;
+		Panel *second = panel;
+		if (dir == DIR__LEFT || dir == DIR__UP) {
+			first = panel;
+			second = at;
+		}
+		DLLPushBack(container->first, container->last, first);
+		DLLPushBack(container->first, container->last, second);
 
 		at->parent = container;
 		panel->parent = container;
@@ -189,6 +211,9 @@ Internal void panel_close(Panel *root, Panel *panel) {
 
 	SLLStackPush(state->free_panel, panel);
 }
+
+////////////////////////////////
+//~ kti: Window
 
 Internal Window *window_open(void) {
 	Window *window = state->free_window;
@@ -228,6 +253,16 @@ Internal Window *window_from_os_window(OS_Window *os) {
 	}
 
 	return result;
+}
+
+////////////////////////////////
+//~ Cmd
+
+Internal void cmd_push(Cmd cmd) {
+	if (state->cmd_count < ArrayCount(state->cmds)) {
+		L1 idx = atomic_add_L1(&state->cmd_count, 1);
+		state->cmds[idx] = cmd;
+	}
 }
 
 Internal void lane(Arena *arena) {
@@ -279,17 +314,31 @@ Internal void lane(Arena *arena) {
 					}
 				}
 			}
-
-			if (state->first_window == 0) {
-				running = 0;
-			}
 		}
-		lane_sync_L1(&running, 0);
 
-		//- kti: UI
+		lane_sync();
+		
+		if (state->first_window == 0) {
+			running = 0;
+		}
+
+		lane_sync();
+
 		if (lane_idx() == 0) {
-			fc_frame();
-			dr_begin_frame();
+			for EachIndex(i, state->cmd_count) {
+				Cmd cmd = state->cmds[i];
+				switch (cmd.kind) {
+					case CMD_KIND__OPEN_PANEL: {
+						panel_insert(panel_alloc(), cmd.panel, cmd.dir);
+					} break;
+					case CMD_KIND__CLOSE_PANEL: {
+						panel_close(&cmd.window->root_panel, cmd.panel);
+					} break;
+				}
+			}
+
+			state->cmd_count = 0;
+
 			FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-PropU_B.ttf"));
 			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-FixedU_B.ttf"));
 
@@ -303,7 +352,7 @@ Internal void lane(Arena *arena) {
 				F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
 
 				//- kti: Non leaf panel ui
-				for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
+				for (Panel *panel = &w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
 					for (Panel *child = panel->first; child != 0 && child->next != 0; child = child->next) {
@@ -336,8 +385,6 @@ Internal void lane(Arena *arena) {
 					}
 				}
 
-				Panel *panel_to_close = 0;
-
 				//- kti: build all leaf panel ui
 				for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
@@ -357,8 +404,6 @@ Internal void lane(Arena *arena) {
 						UI_Padding(ui_px(8.0f, 1.0f))
 						UI_Pref_Width(ui_pct(1.0f, 0.0f))
 						UI_Column() {
-
-
 							UI_Row() {
 								UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
 								ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_TEXT, "%p", panel);
@@ -368,24 +413,34 @@ Internal void lane(Arena *arena) {
 								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
 								UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
 									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										panel_insert(panel_alloc(), panel, UI_AXIS__X);
+										cmd_push((Cmd){
+											.kind = CMD_KIND__OPEN_PANEL,
+											.window = w,
+											.panel = panel,
+											.dir = DIR__RIGHT,
+										});
 									}
 									ui_spacer(ui_px(10.0f, 1.0f));
 									if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										panel_insert(panel_alloc(), panel, UI_AXIS__Y);
+										cmd_push((Cmd){
+											.kind = CMD_KIND__OPEN_PANEL,
+											.window = w,
+											.panel = panel,
+											.dir = DIR__DOWN,
+										});
 									}
 									ui_spacer(ui_px(10.0f, 1.0f));
 									if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										panel_to_close = panel;
+										cmd_push((Cmd){
+											.kind = CMD_KIND__CLOSE_PANEL,
+											.window = w,
+											.panel = panel,
+										});
 									}
 								}
 							}
 						}
 					}
-				}
-
-				if (panel_to_close) {
-					panel_close(&w->root_panel, panel_to_close);
 				}
 
 				if (w->root_panel.first == 0) {
@@ -400,6 +455,8 @@ Internal void lane(Arena *arena) {
 
 				ui_end_build();
 
+				fc_frame();
+				dr_begin_frame();
 				gfx_window_begin_frame(w->os, w->gfx);
 				DR_Bucket *bucket = dr_bucket_make();
 				dr_push_bucket(bucket);

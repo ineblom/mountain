@@ -106,7 +106,7 @@ SI1 main(void) {
 
   for EachIndex(i, thread_count) {
     LaneCtx ctx = {
-      .arena = arena_alloc(MiB(512)),
+      .arena = arena_alloc(GiB(1)),
       .lane_idx = i,
       .lane_count = thread_count,
       .barrier = &barrier,

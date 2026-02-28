@@ -793,6 +793,18 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	ui_push_parent(root);
 	ui_state->root = root;
 	
+	//- kti: Reset active key when the box is disabled or nil.
+	for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
+		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
+			UI_Box *box = ui_box_from_key(ui_state->active_box_key[k]);
+			if (ui_box_is_nil(box) ||
+					!(box->flags & UI_BOX_FLAG__CLICKABLE) ||
+					box->flags & UI_BOX_FLAG__DISABLED) {
+				ui_state->active_box_key[k] = ui_key_zero();
+			}
+		}
+	}
+
 	//- kti: Reset hot key if we don't have an active box.
 	L1 has_active = 0;
 	for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
@@ -803,16 +815,6 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	}
 	if (!has_active) {
 		ui_state->hot_box_key = ui_key_zero();
-	}
-
-	//- kti: Reset active key when the box is disabled or nil.
-	for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
-		if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
-			UI_Box *box = ui_box_from_key(ui_state->active_box_key[k]);
-			if (ui_box_is_nil(box) || box->flags & UI_BOX_FLAG__DISABLED) {
-				ui_state->active_box_key[k] = ui_key_zero();
-			}
-		}
 	}
 }
 
@@ -1447,6 +1449,9 @@ Internal void ui_draw(void) {
 		I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
 				!ui_key_match(box->key, ui_key_zero()) &&
 				ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT)));
+		I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS &&
+				!ui_key_match(box->key, ui_key_zero()) &&
+				ui_key_match(box->key, ui_hot_key()));
 
 		if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
 			F4 shadow = {
@@ -1459,9 +1464,6 @@ Internal void ui_draw(void) {
 		}
 
 		if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
-			I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS &&
-					!ui_key_match(box->key, ui_key_zero()) &&
-					ui_key_match(box->key, ui_hot_key()));
 			if (draw_hot_effect && !draw_active_effect) {
 				F4 shadow = {
 					box->rect[0] - 4,
@@ -1492,6 +1494,8 @@ Internal void ui_draw(void) {
 				F4 color = box->text_color;
 				if (draw_active_effect) {
 					color[0] = ClampBot(color[0]-0.2f, 0.0f);
+				} else if (draw_hot_effect) {
+					color[0] = ClampTop(color[0]+0.1f, 1.0f);
 				}
 				dr_text_run(n->value.run, pos, color);
 			}

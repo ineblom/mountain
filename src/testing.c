@@ -1,5 +1,24 @@
 #if (TYP_)
 
+typedef I1 View_Kind;
+enum {
+	VIEW_KIND__TEST = 0,
+	VIEW_KIND__OTHER,
+
+	VIEW_KIND_COUNT,
+};
+
+Global String8 view_kind_names[VIEW_KIND_COUNT] = {
+	[VIEW_KIND__TEST] = Str8_("Test"),
+	[VIEW_KIND__OTHER] = Str8_("Other"),
+};
+
+typedef struct View View;
+struct View {
+	View_Kind kind;
+	String8 title;
+};
+
 typedef struct Panel Panel;
 struct Panel {
 	Panel *first;
@@ -9,6 +28,9 @@ struct Panel {
 	Panel *parent;
 	F1 pct_of_parent;
 	UI_Axis split_axis;
+
+	View views[64];
+	L1 view_count;
 };
 
 typedef struct Panel_Rec Panel_Rec;
@@ -212,6 +234,14 @@ Internal void panel_close(Panel *root, Panel *panel) {
 	SLLStackPush(state->free_panel, panel);
 }
 
+Internal void panel_push_view(Panel *panel, View_Kind kind) {
+	View *view = &panel->views[panel->view_count];
+	panel->view_count += 1;
+
+	view->kind = kind;
+	view->title = view_kind_names[kind];
+}
+
 ////////////////////////////////
 //~ kti: Window
 
@@ -339,8 +369,8 @@ Internal void lane(Arena *arena) {
 
 			state->cmd_count = 0;
 
-			FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-PropU_B.ttf"));
-			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-FixedU_B.ttf"));
+			FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-PropU_N.ttf"));
+			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-FixedU_N.ttf"));
 
 			for (Window *w = state->first_window; w != 0; w = w->next) {
 				ui_state_equip(w->ui);
@@ -408,11 +438,16 @@ Internal void lane(Arena *arena) {
 							UI_Font_Size(10.0f) {
 								UI_Padding(ui_px(10.0f, 1.0f))
 								UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-								ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_TEXT, "%p", panel);
+								if (panel->view_count == 0) {
+									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
+								} else for EachIndex(i, panel->view_count) {
+									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
+								}
 
 								ui_spacer(ui_pct(1.0f, 0.0f));
 
 								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+								UI_Pref_Height(ui_pct(1.0f, 1.0f))
 								UI_Text_Align(UI_TEXT_ALIGN__CENTER)
 								UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
 									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
@@ -437,6 +472,27 @@ Internal void lane(Arena *arena) {
 											.window = w,
 											.panel = panel,
 										});
+									}
+								}
+							}
+
+							if (panel->view_count == 0) {
+								UI_Row() {
+									ui_spacer(ui_px(10.0f, 1.0f));
+									UI_Column() {
+										UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
+										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Choose view kind."));
+
+										UI_Row()
+										UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
+										UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+										UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
+										UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+										for EachIndex(i, VIEW_KIND_COUNT) {
+											if (ui_button(view_kind_names[i]).flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+												panel_push_view(panel, i);
+											}
+										}
 									}
 								}
 							}

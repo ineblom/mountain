@@ -1325,16 +1325,24 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 			UI_Pref_Height(ui_px(height, 1.0f))
 			UI_Corner_Radius(height*0.5f-1.0f)
 			UI_Border_Color(oklch(0.5f, 0.0f, 0.0f, 1.0f)) {
-				UI_Box *knob = &ui_nil_box;
-				UI_Box *bg_box = &ui_nil_box;
 				UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%.*s", (int)str.len, str.str);
+				UI_Key bg_key = ui_key_from_string(box->key, Str8_("bg"));
+				UI_Key knob_key = ui_key_from_string(box->key, Str8_("knob"));
+				box->group_key = box->key;
+				ui_push_group_key(box->group_key);
 				UI_Parent(box) {
 					F1 knob_inset = floor_F1((height-knob_size)*0.5f);
 					F1 min = knob_size+knob_inset*2.0f;
 					F1 w = floor_F1(min+(box->rect[2]-min)*pct);
 					ui_set_next_background_color(oklch(0.195f, 0.100f, 17.0f, 1.0f));
 					ui_set_next_pref_width(ui_px(w, 1.0f));
-					bg_box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
+					ui_build_box_from_key(
+						UI_BOX_FLAG__DRAW_BACKGROUND|
+						UI_BOX_FLAG__DRAW_BORDER|
+						UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+						UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
+						bg_key);
+					UI_Box *bg_box = ui_box_from_key(bg_key);
 					UI_Parent(bg_box) {
 						ui_spacer(ui_px(knob_inset, 1.0f));
 						ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
@@ -1342,24 +1350,29 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 						UI_Row() {
 							ui_spacer(ui_pct(1.0f, 0.0f));
 
-							ui_set_next_background_color(oklch(0.7f, 0.0f, 0.0f, 1.0f));
-							ui_set_next_pref_width(ui_px(knob_size, 1.0f));
-							ui_set_next_pref_height(ui_px(knob_size, 1.0f));
-							ui_set_next_corner_radius(knob_size*0.5f-2.0f);
-							knob = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+							UI_Pref_Width(ui_px(knob_size, 1.0f))
+							UI_Pref_Height(ui_pct(1.0f, 0.0f))
+							UI_Column()
+							UI_Padding(ui_pct(1.0f, 0.0f))
+							UI_Background_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f))
+							UI_Pref_Width(ui_px(knob_size, 1.0f))
+							UI_Pref_Height(ui_px(knob_size, 1.0f))
+							UI_Corner_Radius(knob_size*0.5f-2.0f) {
+								ui_build_box_from_key(
+									UI_BOX_FLAG__DRAW_BACKGROUND|
+									UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+									UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
+									knob_key);
+							}
 
 							ui_spacer(ui_px(knob_inset, 1.0f));
 						}
 					}
 				}
+				ui_pop_group_key();
 
 				//- kti: Signal handling
 				signal = ui_signal_from_box(box);
-				if ((signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING || signal.flags & UI_SIGNAL_FLAG__HOVERING)
-						&& !ui_box_is_nil(knob) && !ui_box_is_nil(bg_box)) {
-					knob->background_color[0] = ClampTop(knob->background_color[0]+0.1f, 1.0f);
-					bg_box->background_color[0] = ClampTop(bg_box->background_color[0]+0.04f, 1.0f);
-				}
 
 				if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
 					if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
@@ -1442,16 +1455,24 @@ Internal void ui_textbox(String8 label, String8 *str, L1 buffer_size) {
 Internal void ui_draw(void) {
 	for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
 		UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
+		UI_Box *hot_box = ui_box_from_key(ui_hot_key());
+		UI_Box *active_box = ui_box_from_key(ui_active_key(OS_MOUSE_BUTTON__LEFT));
 
 		// F1 softness = (box->corner_radii[0] > 0 || box->corner_radii[1] > 0 || box->corner_radii[2] > 0 || box->corner_radii[3] > 0) ? 1.0f : 0.0f;
 		F1 softness = 1.0f;
 
+		I1 hot_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_hot_key());
+		I1 active_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT));
+		I1 hot_by_group = (!ui_key_match(box->group_key, ui_key_zero()) &&
+				!ui_box_is_nil(hot_box) &&
+				ui_key_match(box->group_key, hot_box->group_key));
+		I1 active_by_group = (!ui_key_match(box->group_key, ui_key_zero()) &&
+				!ui_box_is_nil(active_box) &&
+				ui_key_match(box->group_key, active_box->group_key));
 		I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
-				!ui_key_match(box->key, ui_key_zero()) &&
-				ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT)));
+				(active_by_key || active_by_group));
 		I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS &&
-				!ui_key_match(box->key, ui_key_zero()) &&
-				ui_key_match(box->key, ui_hot_key()));
+				(hot_by_key || hot_by_group));
 
 		if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
 			F4 shadow = {

@@ -148,7 +148,7 @@ Inline F3 sample_GGX_half(F3 n, float alpha) {
   F1 r2 = random_unilateral(rng);
 
   F1 phi = 2.0f * PI * r1;
-  F1 cosTheta = sqrtf( (1.0f - r2) / (1.0f + (alpha*alpha - 1.0f) * r2) );
+  F1 cosTheta = sqrtf((1.0f - r2) / (1.0f + (alpha*alpha - 1.0f) * r2));
   F1 sinTheta = sqrtf(Max(0.0f, 1.0f - cosTheta*cosTheta));
 
   F1 x = sinTheta * cosf(phi);

@@ -17,6 +17,8 @@ typedef struct View View;
 struct View {
 	View_Kind kind;
 	String8 title;
+
+	F1 value;
 };
 
 typedef struct Panel Panel;
@@ -31,6 +33,7 @@ struct Panel {
 
 	View views[64];
 	L1 view_count;
+	L1 selected_view_idx;
 };
 
 typedef struct Panel_Rec Panel_Rec;
@@ -259,7 +262,9 @@ Internal Window *window_open(void) {
 	window->ui = ui_state_alloc();
 	window->arena = arena_alloc(MiB(32));
 	window->root_panel.split_axis = UI_AXIS__X;
-	panel_insert(panel_alloc(), &window->root_panel, 0);
+	Panel *new_panel = panel_alloc();
+	panel_insert(new_panel, &window->root_panel, 0);
+	panel_push_view(new_panel, VIEW_KIND__TEST);
 
 	DLLPushBack(state->first_window, state->last_window, window);
 	return window;
@@ -382,17 +387,22 @@ Internal void lane(Arena *arena) {
 				F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
 
 				//- kti: Non leaf panel ui
+				F1 resize_box_w = 8;
+
 				for (Panel *panel = &w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
 					for (Panel *child = panel->first; child != 0 && child->next != 0; child = child->next) {
 						F4 child_rect = panel_rect_from_parent_rect(child, panel_rect);
+
+						//- kti: Build separator box.
 						F4 boundary_rect = child_rect;
-						F1 boundary_w = 8;
-						boundary_rect[panel->split_axis] += child_rect[2+panel->split_axis] - boundary_w*0.5f;
-						boundary_rect[2+panel->split_axis] = boundary_w;
+						boundary_rect[panel->split_axis] += child_rect[2+panel->split_axis] - resize_box_w*0.5f;
+						boundary_rect[2+panel->split_axis] = resize_box_w;
 						ui_set_next_fixed_rect(boundary_rect);
 						UI_Box *boundary_box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__FLOATING, "##panel_boundary_%p", child);
+
+						//- kti: Handle resize.
 						UI_Signal sig = ui_signal_from_box(boundary_box);
 						if (sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
 							Panel *min_child = child;
@@ -401,16 +411,16 @@ Internal void lane(Arena *arena) {
 								F2 drag_data = {min_child->pct_of_parent, max_child->pct_of_parent};
 								ui_store_drag_struct(&drag_data);
 							}
-							F2 drag_data = ui_get_drag_struct(F2)[0];
-							F2 drag_delta = ui_drag_delta();
+							F2 drag_data               = ui_get_drag_struct(F2)[0];
+							F2 drag_delta              = ui_drag_delta();
 							F1 min_child_pct__pre_drag = drag_data[0];
 							F1 max_child_pct__pre_drag = drag_data[1];
-							F1 min_child_px__pre_drag = min_child_pct__pre_drag*panel_rect[2+panel->split_axis];
-							F1 max_child_px__pre_drag = max_child_pct__pre_drag*panel_rect[2+panel->split_axis];
+							F1 min_child_px__pre_drag  = min_child_pct__pre_drag*panel_rect[2+panel->split_axis];
+							F1 max_child_px__pre_drag  = max_child_pct__pre_drag*panel_rect[2+panel->split_axis];
 							F1 min_child_px__post_drag = min_child_px__pre_drag + drag_delta[panel->split_axis];
 							F1 max_child_px__post_drag = max_child_px__pre_drag - drag_delta[panel->split_axis];
-							min_child->pct_of_parent = min_child_px__post_drag/panel_rect[2+panel->split_axis];
-							max_child->pct_of_parent = max_child_px__post_drag/panel_rect[2+panel->split_axis];
+							min_child->pct_of_parent   = min_child_px__post_drag/panel_rect[2+panel->split_axis];
+							max_child->pct_of_parent   = max_child_px__post_drag/panel_rect[2+panel->split_axis];
 						}
 					}
 				}
@@ -476,10 +486,11 @@ Internal void lane(Arena *arena) {
 								}
 							}
 
-							if (panel->view_count == 0) {
-								UI_Row() {
-									ui_spacer(ui_px(10.0f, 1.0f));
-									UI_Column() {
+
+							UI_Row()
+							UI_Padding(ui_px(10.0f, 1.0f)) {
+								UI_Column() {
+									if (panel->view_count == 0) {
 										UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
 										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Choose view kind."));
 
@@ -492,6 +503,17 @@ Internal void lane(Arena *arena) {
 											if (ui_button(view_kind_names[i]).flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
 												panel_push_view(panel, i);
 											}
+										}
+									} else {
+										ui_spacer(ui_px(10.0f, 1.0f));
+
+										View *view = &panel->views[panel->selected_view_idx];
+										switch (view->kind) {
+											case VIEW_KIND__TEST: {
+
+												UI_Pref_Width(ui_px(400.0f, 1.0f))
+												ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
+											} break;
 										}
 									}
 								}

@@ -1328,8 +1328,10 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 				UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%.*s", (int)str.len, str.str);
 				UI_Key bg_key = ui_key_from_string(box->key, Str8_("bg"));
 				UI_Key knob_key = ui_key_from_string(box->key, Str8_("knob"));
+
 				box->group_key = box->key;
-				ui_push_group_key(box->group_key);
+
+				UI_Group_Key(box->group_key)
 				UI_Parent(box) {
 					F1 knob_inset = floor_F1((height-knob_size)*0.5f);
 					F1 min = knob_size+knob_inset*2.0f;
@@ -1369,7 +1371,6 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 						}
 					}
 				}
-				ui_pop_group_key();
 
 				//- kti: Signal handling
 				signal = ui_signal_from_box(box);
@@ -1390,52 +1391,57 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 	return signal;
 }
 
-// TODO (kti): Fix vertical alignment.
 Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 	UI_Signal signal = {0};
-	
-	F1 size = 20.0f;
-	F1 check_inset = 3.0f;
 
+	FP_Metrics metrics = fc_metrics_from_tag_size(ui_top_font(), ui_top_font_size());
+	F1 size = metrics.ascent + metrics.descent;
+	F1 check_inset = size * 0.15f;
+
+	ui_set_next_pref_height(ui_px(size, 1.0f));
 	UI_Row() {
-		UI_Pref_Width(ui_px(size, 1.0f))
-		UI_Column()
-		UI_Pref_Height(ui_px(size, 1.0f))
-		UI_Corner_Radius(check_inset*0.5f) 
-		UI_Padding(ui_pct(1.0f, 0.0f)) {
+		//- kti: Checkbox square. outer is Y-layout so inner check can be centered with padding.
+		ui_set_next_fixed_width(size);
+		ui_set_next_fixed_height(size);
+		ui_set_next_child_layout_axis(UI_AXIS__Y);
+		UI_Corner_Radius(check_inset * 0.5f) {
 			ui_set_next_background_color(oklch(0.195f, 0.1f, 17.0f, 1.0f));
 			ui_set_next_border_color(oklch(0.5f, 0.0f, 0.0f, 1.0f));
-			UI_Box *inset_box = &ui_nil_box;
-			UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_HOT_EFFECTS|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, "##checkbox_%.*s", (int)str.len, str.str);
+			UI_Box *outer = ui_build_box_from_stringf(
+					UI_BOX_FLAG__CLICKABLE|
+					UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+					UI_BOX_FLAG__DRAW_BACKGROUND|
+					UI_BOX_FLAG__DRAW_BORDER,
+					"##checkbox_%.*s", (int)str.len, str.str);
+			UI_Box *check = &ui_nil_box;
 
 			if (value[0]) {
-				UI_Parent(box)
-				// UI_Background_Color(oklch(0.2f, 0.5f, 17.0f, 1.0f))
+				UI_Parent(outer)
 				UI_Background_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f))
 				UI_Padding(ui_pct(1.0f, 0.0f)) {
 					UI_Pref_Height(ui_px(size-check_inset*2, 1.0f))
 					UI_Row()
 					UI_Padding(ui_pct(1.0f, 0.0f))
 					UI_Pref_Width(ui_px(size-check_inset*2, 1.0f)) {
-						inset_box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
+						check = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
 					}
 				}
 			}
 
-			signal = ui_signal_from_box(box);
+			signal = ui_signal_from_box(outer);
 			if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
 				value[0] = !value[0];
 			}
-			if (!ui_box_is_nil(inset_box) && signal.flags & UI_SIGNAL_FLAG__HOVERING) {
-				inset_box->background_color[0] = ClampTop(1.0f, inset_box->background_color[0]+0.1f);
+			if (!ui_box_is_nil(check) && signal.flags & UI_SIGNAL_FLAG__HOVERING) {
+				check->background_color[0] = ClampTop(1.0f, check->background_color[0]+0.1f);
 			}
 		}
-		
-		ui_spacer(ui_px(10.0f, 1.0f));
 
-		//- kti: Label
-		UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-		UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+		ui_spacer(ui_px(size * 0.5f, 1.0f));
+
+		//- kti: Label. Text is vertically centered by ui_box_text_pos.
+		UI_Pref_Width(ui_text_dim(0.0f, 1.0f)) {
+			ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
 			ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str);
 			ui_spacer(ui_em(1.0f, 1.0f));
 		}

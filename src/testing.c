@@ -19,6 +19,7 @@ struct View {
 	String8 title;
 
 	F1 value;
+	I1 checked;
 };
 
 typedef struct Panel Panel;
@@ -444,7 +445,7 @@ Internal void lane(Arena *arena) {
 						UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
 							UI_Child_Layout_Axis(UI_AXIS__X);
 							UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
-							UI_Parent(title_bar)
+							UI_Parent((title_bar))
 							UI_Font_Size(10.0f) {
 								UI_Padding(ui_px(10.0f, 1.0f))
 								UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
@@ -458,7 +459,7 @@ Internal void lane(Arena *arena) {
 
 								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
 								UI_Pref_Height(ui_pct(1.0f, 1.0f))
-								UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+								UI_Text_Align((UI_TEXT_ALIGN__CENTER))
 								UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
 									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
 										cmd_push((Cmd){
@@ -496,7 +497,7 @@ Internal void lane(Arena *arena) {
 
 										UI_Row()
 										UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
-										UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+										UI_Text_Align((UI_TEXT_ALIGN__CENTER))
 										UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
 										UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
 										for EachIndex(i, VIEW_KIND_COUNT) {
@@ -510,9 +511,13 @@ Internal void lane(Arena *arena) {
 										View *view = &panel->views[panel->selected_view_idx];
 										switch (view->kind) {
 											case VIEW_KIND__TEST: {
-
 												UI_Pref_Width(ui_px(400.0f, 1.0f))
 												ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
+
+												ui_spacer(ui_px(10, 1.0f));
+
+												UI_Pref_Width(ui_px(400.0f, 1.0f))
+												ui_checkbox(Str8_("Check"), &view->checked);
 											} break;
 										}
 									}
@@ -523,7 +528,7 @@ Internal void lane(Arena *arena) {
 				}
 
 				if (w->root_panel.first == 0) {
-					UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+					UI_Text_Align((UI_TEXT_ALIGN__CENTER))
 					UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
 						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
 						if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
@@ -578,10 +583,11 @@ Internal void lane(Arena *arena) {
 			}
 		}
 
-		if (frame_time < target_frame_time) {
+		//- kti: 0 lane sleeps if we haven't hit the target frame time. Others wait on the barrier.
+		if (lane_idx() == 0 && frame_time < target_frame_time) {
 			L1 remainder = target_frame_time - frame_time;
-			if (remainder > 2000000ULL) {
-				os_sleep(remainder - 2000000ULL);
+			if (remainder > 1000000ULL) {
+				os_sleep(remainder - 1000000ULL);
 			}
 			while (os_clock() - frame_begin_time < target_frame_time) {}
 		}

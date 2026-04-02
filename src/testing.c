@@ -160,7 +160,7 @@ Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect) {
 
 	scratch_end(scratch);
 
-	return result; 
+	return result;
 }
 
 Internal Panel *panel_alloc() {
@@ -320,7 +320,7 @@ Internal void lane(Arena *arena) {
 
 		state = push_array(arena, State, 1);
 		state->arena = arena;
-		
+
 	  window_open();
 	}
 
@@ -353,7 +353,7 @@ Internal void lane(Arena *arena) {
 		}
 
 		lane_sync();
-		
+
 		if (state->first_window == 0) {
 			running = 0;
 		}
@@ -573,13 +573,13 @@ Internal void lane(Arena *arena) {
 
 			if (frame_count % 60 == 0) {
 				F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
-	      F1 min_ms = min_frame_time / 1000000.0f;
-	      F1 max_ms = max_frame_time / 1000000.0f;
+				F1 min_ms = min_frame_time / 1000000.0f;
+				F1 max_ms = max_frame_time / 1000000.0f;
 				fps = 1000.0f/avg_ms;
-	      printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
-	      total_frame_time = 0;
-	      min_frame_time = L1_MAX;
-	      max_frame_time = 0;
+				printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
+				total_frame_time = 0;
+				min_frame_time = L1_MAX;
+				max_frame_time = 0;
 			}
 		}
 

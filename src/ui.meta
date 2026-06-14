@@ -21,3 +21,5 @@ Text_Align,        text_align,        UI_Text_Align, UI_TEXT_ALIGN__LEFT
 Border_Color,      border_color,      F4,            `oklch(1.0f, 0.0f, 0.0f, 1.0f)`
 Group_Key,         group_key,         UI_Key,        ui_key_zero()
 Text_Padding,      text_padding,      F1,            0.0f
+Focus_Hot,         focus_hot,         UI_Focus_Kind, 0
+Focus_Active,      focus_active,      UI_Focus_Kind, 0

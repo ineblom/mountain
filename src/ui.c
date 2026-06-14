@@ -38,6 +38,15 @@ struct UI_Size {
 	F1 strictness;
 };
 
+typedef I1 UI_Focus_Kind;
+enum {
+	UI_FOCUS_KIND__NULL,
+	UI_FOCUS_KIND__OFF,
+	UI_FOCUS_KIND__ON,
+	UI_FOCUS_KIND__ROOT,
+	UI_FOCUS_KIND_COUNT,
+};
+
 typedef L1 UI_Box_Flags;
 enum {
 	UI_BOX_FLAG__CLICKABLE                = (1<<0),
@@ -115,8 +124,10 @@ struct UI_Box {
 	DR_FRun_List display_fruns;
 	DR_FStr_List display_fstrs;
 
-	F1 hot_t;
-	F1 active_t;
+	UI_Key default_nav_focus_hot_key;
+	UI_Key default_nav_focus_active_key;
+	UI_Key default_nav_focus_next_hot_key;
+	UI_Key default_nav_focus_active_key;
 };
 
 typedef struct UI_Box_Rec UI_Box_Rec;
@@ -195,6 +206,12 @@ struct UI_Signal {
 	UI_Signal_Flags flags;
 };
 
+typedef struct Txt_Pt Txt_Pt;
+struct Txt_Pt {
+	L1 line;
+	L1 column;
+};
+
 #include "ui.meta.h"
 
 typedef struct UI_State UI_State;
@@ -213,6 +230,7 @@ struct UI_State {
 	UI_Box_HT_Slot *box_table;
 
 	UI_Box *root;
+	UI_Key default_nav_root_key;
 	L1 build_box_count;
 	L1 last_build_box_count;
 	OS_Window *window;
@@ -277,7 +295,7 @@ Internal I1 ui_key_match(UI_Key a, UI_Key b) {
 Internal String8 ui_display_part_from_key_string(String8 key) {
 	L1 end = key.len;
 
-	for EachIndex(i, key.len) {
+	for (L1 i = 0; i+1 < key.len; i += 1) {
 		if (key.str[i] == '#' && key.str[i+1] == '#') {
 			end = i;
 			break;
@@ -784,6 +802,13 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 			ui_state->active_box_key[k] = ui_key_zero();
 		}
 	}
+
+	//- kti: default navigation
+	Temp_Arena scratch = scratch_begin(0, 0);
+	if (!ui_key_match(ui_state->default_nav_root_key, ui_key_zero())) {
+
+	}
+	scratch_end(scratch);
 
 	//- kti: Setup root.
 	ui_set_next_fixed_width(window->width);
@@ -1451,18 +1476,21 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 }
 
 // TODO(kti): Implement.
-Internal void ui_textbox(String8 label, String8 *str, L1 buffer_size) {
-	UI_Row() {
-		UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-		ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, label);
+Internal void ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
+	UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 
-		ui_spacer(ui_px(10.0f, 1.0f));
-
-		UI_Border_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f)) 
-		UI_Pref_Width(ui_pct(1.0f, 0.0f))
-		ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__DRAW_TEXT, str[0]);
+	ui_set_next_border_color(oklch(0.7f, 0.0f, 0.0f, 1.0f));
+	UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND |
+																				UI_BOX_FLAG__DRAW_BORDER |
+																				UI_BOX_FLAG__CLICKABLE |
+																				UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+																				UI_BOX_FLAG__CLIP | UI_BOX_FLAG__ALLOW_OVERFLOW_X | UI_BOX_FLAG__VIEW_CLAMP,
+																				key);
+	UI_Parent(box) {
+		ui_set_next_text_padding(5.0f);
+		ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
+		ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, pre_edit_value);
 	}
-
 }
 
 Internal void ui_draw(void) {

@@ -99,7 +99,7 @@ struct State {
 	Cmd cmds[512];
 	L1 cmd_count;
 
-	char name_buffer[256];
+	B1 name_buffer[256];
 	String8 name;
 };
 
@@ -325,6 +325,8 @@ Internal void lane(Arena *arena) {
 		state->arena = arena;
 
 		state->name.str = (B1 *)state->name_buffer;
+		memmove(state->name.str, "Hejsan", 6);
+		state->name.len = 6;
 
 	  window_open();
 	}
@@ -527,7 +529,7 @@ Internal void lane(Arena *arena) {
 												ui_spacer(ui_px(10, 1.0f));
 
 												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												ui_textbox(Str8_("Name"), &state->name, sizeof(state->name_buffer));
+												ui_textedit(0, 0, state->name_buffer, sizeof(state->name_buffer), 0, state->name, state->name);
 											} break;
 										}
 									}

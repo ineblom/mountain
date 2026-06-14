@@ -98,6 +98,9 @@ struct State {
 
 	Cmd cmds[512];
 	L1 cmd_count;
+
+	char name_buffer[256];
+	String8 name;
 };
 
 #endif
@@ -321,6 +324,8 @@ Internal void lane(Arena *arena) {
 		state = push_array(arena, State, 1);
 		state->arena = arena;
 
+		state->name.str = (B1 *)state->name_buffer;
+
 	  window_open();
 	}
 
@@ -432,7 +437,7 @@ Internal void lane(Arena *arena) {
 
 					//- kti: Build ui
 					if (panel->first == 0) {
-						ui_set_next_fixed_rect(rect_pad(panel_rect, 0.0f));
+						ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
 						ui_set_next_child_layout_axis(UI_AXIS__Y);
 						UI_Box *box = ui_build_box_from_stringf(
 								UI_BOX_FLAG__DRAW_BACKGROUND|
@@ -511,13 +516,18 @@ Internal void lane(Arena *arena) {
 										View *view = &panel->views[panel->selected_view_idx];
 										switch (view->kind) {
 											case VIEW_KIND__TEST: {
-												UI_Pref_Width(ui_px(400.0f, 1.0f))
+												UI_Pref_Width(ui_px(500.0f, 1.0f))
 												ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
 
 												ui_spacer(ui_px(10, 1.0f));
 
-												UI_Pref_Width(ui_px(400.0f, 1.0f))
+												UI_Pref_Width(ui_pct(1.0f, 0.0f))
 												ui_checkbox(Str8_("Check"), &view->checked);
+
+												ui_spacer(ui_px(10, 1.0f));
+
+												UI_Pref_Width(ui_px(500.0f, 1.0f))
+												ui_textbox(Str8_("Name"), &state->name, sizeof(state->name_buffer));
 											} break;
 										}
 									}
@@ -586,8 +596,8 @@ Internal void lane(Arena *arena) {
 		//- kti: 0 lane sleeps if we haven't hit the target frame time. Others wait on the barrier.
 		if (lane_idx() == 0 && frame_time < target_frame_time) {
 			L1 remainder = target_frame_time - frame_time;
-			if (remainder > 1000000ULL) {
-				os_sleep(remainder - 1000000ULL);
+			if (remainder > 50000ULL) {
+				os_sleep(remainder - 50000ULL);
 			}
 			while (os_clock() - frame_begin_time < target_frame_time) {}
 		}

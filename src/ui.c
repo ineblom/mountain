@@ -277,7 +277,7 @@ Internal I1 ui_key_match(UI_Key a, UI_Key b) {
 Internal String8 ui_display_part_from_key_string(String8 key) {
 	L1 end = key.len;
 
-	for EachIndex(i, key.len-1) {
+	for EachIndex(i, key.len) {
 		if (key.str[i] == '#' && key.str[i+1] == '#') {
 			end = i;
 			break;
@@ -1452,8 +1452,15 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 
 // TODO(kti): Implement.
 Internal void ui_textbox(String8 label, String8 *str, L1 buffer_size) {
-	UI_Border_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f)) {
-		UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP, Str8_("textbox"));
+	UI_Row() {
+		UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+		ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, label);
+
+		ui_spacer(ui_px(10.0f, 1.0f));
+
+		UI_Border_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f)) 
+		UI_Pref_Width(ui_pct(1.0f, 0.0f))
+		ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__DRAW_TEXT, str[0]);
 	}
 
 }

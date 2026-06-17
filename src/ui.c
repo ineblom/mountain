@@ -127,7 +127,7 @@ struct UI_Box {
 	UI_Key default_nav_focus_hot_key;
 	UI_Key default_nav_focus_active_key;
 	UI_Key default_nav_focus_next_hot_key;
-	UI_Key default_nav_focus_active_key;
+	UI_Key default_nav_focus_next_active_key;
 };
 
 typedef struct UI_Box_Rec UI_Box_Rec;
@@ -549,6 +549,34 @@ Internal void ui_eat_event(OS_Event *e) {
 	ui_state->events.count -= 1;
 }
 
+Internal I1 ui_key_press(OS_Modifier_Flags modifiers, OS_Key key) {
+	I1 result = 0;
+
+	for (OS_Event *e = ui_state->events.first; e != 0; e = e->next) {
+		if (e->kind == OS_EVENT_KIND__PRESS && e->key == key && e->modifiers == modifiers) {
+			result = 1;
+			ui_eat_event(e);
+			break;
+		}
+	}
+
+	return result;
+}
+
+Internal I1 ui_key_release(OS_Modifier_Flags modifiers, OS_Key key) {
+	I1 result = 0;
+
+	for (OS_Event *e = ui_state->events.first; e != 0; e = e->next) {
+		if (e->kind == OS_EVENT_KIND__RELEASE && e->key == key && e->modifiers == modifiers) {
+			result = 1;
+			ui_eat_event(e);
+			break;
+		}
+	}
+
+	return result;
+}
+
 Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 	// TODO: Get from os.
 	L1 double_click_time = 500000000;
@@ -580,7 +608,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 
 		//- kti: Mouse down in bounds.
 		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
-				e->type == OS_EVENT_TYPE__PRESS &&
+				e->kind == OS_EVENT_KIND__PRESS &&
 				evt_mouse_in_bounds &&
 				evt_key_is_mouse) {
 
@@ -617,7 +645,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 
 		//- kti: Mouse released in bounds. Triggers click.
 		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
-				e->type == OS_EVENT_TYPE__RELEASE &&
+				e->kind == OS_EVENT_KIND__RELEASE &&
 				evt_mouse_in_bounds &&
 				evt_key_is_mouse &&
 				ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key)) {
@@ -629,7 +657,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 
 		//- kti: Mouse released outside of bounds.
 		if (box->flags & UI_BOX_FLAG__CLICKABLE &&
-				e->type == OS_EVENT_TYPE__RELEASE &&
+				e->kind == OS_EVENT_KIND__RELEASE &&
 				evt_key_is_mouse &&
 				!evt_mouse_in_bounds &&
 				ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key)) {
@@ -643,7 +671,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		F1 scroll_mult = 4.0f;
 
 		if (box->flags & UI_BOX_FLAG__SCROLL &&
-				e->type == OS_EVENT_TYPE__SCROLL && 
+				e->kind == OS_EVENT_KIND__SCROLL && 
 				(e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT) &&
 				evt_mouse_in_bounds) {
 			F2 delta = (F2){e->delta_x, e->delta_y} * scroll_mult;
@@ -656,7 +684,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 
 		if (box->flags & UI_BOX_FLAG__VIEW_SCROLL &&
 				box->first_touch_build_index != box->last_touch_build_index &&
-				e->type == OS_EVENT_TYPE__SCROLL &&
+				e->kind == OS_EVENT_KIND__SCROLL &&
 				(e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT) &&
 				evt_mouse_in_bounds) {
 			F2 delta = (F2){e->delta_x, e->delta_y} * scroll_mult;
@@ -781,7 +809,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 
 	//- kti: Mouse movement.
 	for (OS_Event *e = ui_state->events.last; e != 0; e = e->prev) {
-		if (e->type == OS_EVENT_TYPE__MOUSE_MOVE) {
+		if (e->kind == OS_EVENT_KIND__MOUSE_MOVE) {
 			ui_state->mouse[0] = floor_F1(e->x);
 			ui_state->mouse[1] = floor_F1(e->y);
 			ui_state->last_time_mouse_moved = e->timestamp_ns;
@@ -806,7 +834,31 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	//- kti: default navigation
 	Temp_Arena scratch = scratch_begin(0, 0);
 	if (!ui_key_match(ui_state->default_nav_root_key, ui_key_zero())) {
+		UI_Box *nav_root = ui_box_from_key(ui_state->default_nav_root_key);
+		if (!ui_box_is_nil(nav_root)) {
+			if (ui_key_match(ui_key_zero(), nav_root->default_nav_focus_active_key)) {
+				for (;;) {
+					I1 moved = 0;
+					UI_Box *focus_box = ui_box_from_key(nav_root->default_nav_focus_next_hot_key);
+					UI_Box_List next_focus_box_candidates = {0};
 
+					I1 nav_next = 0;
+					I1 nav_prev = 0;
+
+					if (ui_key_press(0, OS_KEY__TAB)) {
+						nav_next = 1;
+					}
+					if (ui_key_press(OS_MODIFIER_FLAG__SHIFT, OS_KEY__TAB)) {
+						nav_prev = 1;
+					}
+
+					for (OS_Event *e = ui_state->events.first, *next = 0; e != 0; e = e->next) {
+						next = e->next;
+						I1 taken = 0;
+					}
+				}
+			}
+		}
 	}
 	scratch_end(scratch);
 

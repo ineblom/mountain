@@ -50,14 +50,16 @@ struct OS_Window {
 };
 
 enum {
-  OS_EVENT_TYPE__NULL,
-  OS_EVENT_TYPE__PRESS,
-  OS_EVENT_TYPE__RELEASE,
-  OS_EVENT_TYPE__MOUSE_MOVE,
-  OS_EVENT_TYPE__SCROLL,
-  OS_EVENT_TYPE__WINDOW_CLOSE,
-  OS_EVENT_TYPE_COUNT,
+  OS_EVENT_KIND__NULL,
+  OS_EVENT_KIND__PRESS,
+  OS_EVENT_KIND__RELEASE,
+  OS_EVENT_KIND__MOUSE_MOVE,
+  OS_EVENT_KIND__SCROLL,
+  OS_EVENT_KIND__WINDOW_CLOSE,
+  OS_EVENT_KIND_COUNT,
 };
+
+typedef I1 OS_Key;
 
 typedef I1 OS_Modifier_Flags;
 
@@ -73,9 +75,9 @@ struct OS_Event {
   OS_Event *prev;
   OS_Window *window;
   L1 timestamp_ns;
-  I1 type;
-  I1 key;
-  I1 modifiers;
+  I1 kind;
+  OS_Key key;
+  OS_Modifier_Flags modifiers;
 	// TODO: Are ints or doubles better here?
   D1 x, y;
 	D1 delta_x, delta_y;
@@ -606,7 +608,7 @@ Internal void xdg_toplevel_close_handler(void *data, struct xdg_toplevel *xdg_to
 
   OS_Event event = {
     .timestamp_ns = 0,
-    .type = OS_EVENT_TYPE__WINDOW_CLOSE,
+    .kind = OS_EVENT_KIND__WINDOW_CLOSE,
     .window = window,
   };
   os_push_event(event);
@@ -660,7 +662,7 @@ Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 
   OS_Event event = {
 		.window = window,
     .timestamp_ns = (L1)time * 1000000LLU,
-    .type = OS_EVENT_TYPE__MOUSE_MOVE,
+    .kind = OS_EVENT_KIND__MOUSE_MOVE,
     .x = x,
     .y = y,
   };
@@ -687,18 +689,18 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 
   }
 
   if (key != OS_KEY__NULL) {
-		L1 type = (state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE;
+		L1 kind = (state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
     OS_Event event = {
 			.window = window,
       .timestamp_ns = (L1)time * 1000000LLU,
-      .type = type,
+      .kind = kind,
       .key = key,
 			.x = os_gfx_state->mouse_x,
 			.y = os_gfx_state->mouse_y,
     };
     os_push_event(event);
 
-		os_gfx_state->key_states[key] = (type == OS_EVENT_TYPE__PRESS);
+		os_gfx_state->key_states[key] = (kind == OS_EVENT_KIND__PRESS);
   }
 }
 
@@ -708,7 +710,7 @@ Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer, I1 ti
   OS_Event event = {
 		.window = window,
     .timestamp_ns = (L1)time * 1000000LLU,
-    .type = OS_EVENT_TYPE__SCROLL,
+    .kind = OS_EVENT_KIND__SCROLL,
 		.x = os_gfx_state->mouse_x,
 		.y = os_gfx_state->mouse_y,
   };
@@ -755,15 +757,15 @@ Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 
 	
   I1 os_key = os_key_from_wl_key(key);
   if (os_key != OS_KEY__NULL) {
-		L1 type = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_TYPE__PRESS : OS_EVENT_TYPE__RELEASE;
+		L1 kind = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
     OS_Event event = {
 			.window = window,
       .timestamp_ns = (L1)time * 1000000LLU,
-      .type = type,
+      .kind = kind,
       .key = os_key,
     };
     os_push_event(event);
-		os_gfx_state->key_states[os_key] = (type == OS_EVENT_TYPE__PRESS) ? 1 : 0;
+		os_gfx_state->key_states[os_key] = (kind == OS_EVENT_KIND__PRESS) ? 1 : 0;
   }
 }
 

@@ -350,7 +350,7 @@ Internal void lane(Arena *arena) {
 		if (lane_idx() == 0) {
 			events = os_poll_events(scratch.arena);
 			for (OS_Event *e = events.first; e != 0; e = e->next) {
-				if (e->type == OS_EVENT_TYPE__WINDOW_CLOSE) {
+				if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE) {
 					Window *window = window_from_os_window(e->window);
 					if (window != 0) {
 						window_close(window);

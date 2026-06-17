@@ -10,6 +10,15 @@ struct Random_State {
 	L1 inc;
 };
 
+typedef I1 Axis;
+
+enum {
+	AXIS__INVALID = -1,
+	AXIS__X,
+	AXIS__Y,
+	AXIS_COUNT,
+};
+
 #endif
 
 #if (ROM_)

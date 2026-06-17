@@ -30,7 +30,7 @@ struct Panel {
 	Panel *prev;
 	Panel *parent;
 	F1 pct_of_parent;
-	UI_Axis split_axis;
+	Axis split_axis;
 
 	View views[64];
 	L1 view_count;
@@ -178,7 +178,7 @@ Internal Panel *panel_alloc() {
 }
 
 Internal void panel_insert(Panel *panel, Panel *at, Dir dir) {
-	I1 split_axis = (dir == DIR__RIGHT || dir == DIR__LEFT) ? UI_AXIS__X : UI_AXIS__Y;
+	I1 split_axis = (dir == DIR__RIGHT || dir == DIR__LEFT) ? AXIS__X : AXIS__Y;
 	Panel *parent = at->parent;
 	if (parent == 0) {
 		panel->parent = at;
@@ -265,7 +265,7 @@ Internal Window *window_open(void) {
 	window->gfx = gfx_window_equip(window->os);
 	window->ui = ui_state_alloc();
 	window->arena = arena_alloc(MiB(32));
-	window->root_panel.split_axis = UI_AXIS__X;
+	window->root_panel.split_axis = AXIS__X;
 	Panel *new_panel = panel_alloc();
 	panel_insert(new_panel, &window->root_panel, 0);
 	panel_push_view(new_panel, VIEW_KIND__TEST);
@@ -346,6 +346,7 @@ Internal void lane(Arena *arena) {
 
 		Temp_Arena scratch = scratch_begin(0, 0);
 
+		UI_Cmd_List ui_cmds = {0};
 		OS_Event_List events = {0};
 		if (lane_idx() == 0) {
 			events = os_poll_events(scratch.arena);
@@ -387,7 +388,8 @@ Internal void lane(Arena *arena) {
 
 			for (Window *w = state->first_window; w != 0; w = w->next) {
 				ui_state_equip(w->ui);
-				ui_begin_build(w->os, events);
+				ui_begin_build(w->os, events, ui_cmds);
+
 				ui_push_font(prop_fnt);
 				ui_push_background_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
 				ui_push_border_color((F4){0.5f, 0.0f, 0.0f, 1.0f});
@@ -440,7 +442,7 @@ Internal void lane(Arena *arena) {
 					//- kti: Build ui
 					if (panel->first == 0) {
 						ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
-						ui_set_next_child_layout_axis(UI_AXIS__Y);
+						ui_set_next_child_layout_axis(AXIS__Y);
 						UI_Box *box = ui_build_box_from_stringf(
 								UI_BOX_FLAG__DRAW_BACKGROUND|
 								UI_BOX_FLAG__DRAW_BORDER|
@@ -450,7 +452,7 @@ Internal void lane(Arena *arena) {
 								"##panel_box_%p", panel);
 						UI_Parent(box)
 						UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
-							UI_Child_Layout_Axis(UI_AXIS__X);
+							UI_Child_Layout_Axis(AXIS__X);
 							UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
 							UI_Parent((title_bar))
 							UI_Font_Size(10.0f) {

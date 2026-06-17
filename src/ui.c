@@ -1,11 +1,57 @@
 #if (TYP_)
 
-typedef I1 UI_Axis;
+typedef enum UI_Cmd_Kind
+{
+  UI_CMD_KIND__NULL,
+  UI_CMD_KIND__TEXT,
+  UI_CMD_KIND__NAVIGATE,
+  UI_CMD_KIND__EDIT,
+  UI_CMD_KIND__FILEDROP,
+  UI_CMD_KIND_COUNT
+}
+UI_Cmd_Kind;
+
+typedef I1 UI_Cmd_Flags;
 
 enum {
-	UI_AXIS__X,
-	UI_AXIS__Y,
-	UI_AXIS_COUNT,
+	UI_CMD_FLAG__EXPLICIT_DIRECTIONAL = (1<<0),
+};
+
+typedef enum UI_Cmd_Delta_Unit
+{
+  UI_CMD_DELTA_UNIT__NULL,
+  UI_CMD_DELTA_UNIT__CHAR,
+  UI_CMD_DELTA_UNIT__WORD,
+  UI_CMD_DELTA_UNIT__LINE,
+  UI_CMD_DELTA_UNIT__PAGE,
+  UI_CMD_DELTA_UNIT__WHOLE,
+  UI_CMD_DELTA_UNIT_COUNT
+}
+UI_Cmd_Delta_Unit;
+
+typedef struct UI_Cmd UI_Cmd;
+struct UI_Cmd
+{
+  UI_Cmd *next;
+  UI_Cmd *prev;
+
+  UI_Cmd_Kind kind;
+  UI_Cmd_Delta_Unit delta_unit;
+	UI_Cmd_Flags flags;
+  String8 string;
+  String8_List paths;
+  F2 pos;
+  F2 delta_f2;
+  SI2 delta_si2;
+  L1 timestamp_us;
+};
+
+typedef struct UI_Cmd_List UI_Cmd_List;
+struct UI_Cmd_List
+{
+  UI_Cmd *first;
+  UI_Cmd *last;
+  L1 count;
 };
 
 typedef I1 UI_Text_Align;
@@ -78,6 +124,9 @@ enum {
 	UI_BOX_FLAG__SCROLL                   = (1<<26),
 	UI_BOX_FLAG__VIEW_CLAMP_X             = (1<<27),
 	UI_BOX_FLAG__VIEW_CLAMP_Y             = (1<<28),
+	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X      = (1<<29),
+	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y      = (1<<30),
+	UI_BOX_FLAG__FOCUS_NAV_SKIP           = (1<<31),
 
 	UI_BOX_FLAG__FLOATING    = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
 	UI_BOX_FLAG__VIEW_SCROLL = (UI_BOX_FLAG__VIEW_SCROLL_X|UI_BOX_FLAG__VIEW_SCROLL_Y),
@@ -107,8 +156,8 @@ struct UI_Box {
 	F2 view_off_target;
 	F2 view_bounds;
 	F4 rect;
-	UI_Size pref_size[UI_AXIS_COUNT];
-	UI_Axis child_layout_axis;
+	UI_Size pref_size[AXIS_COUNT];
+	Axis child_layout_axis;
 	L1 first_touch_build_index;
 	L1 last_touch_build_index;
 
@@ -241,6 +290,7 @@ struct UI_State {
 	UI_Key hot_box_key;
 	UI_Key active_box_key[OS_MOUSE_BUTTON_COUNT];
 
+	UI_Cmd_List cmds;
 	OS_Event_List events;
 	UI_Key press_key_history[OS_MOUSE_BUTTON_COUNT][3];
 	L1 press_timestamp_history[OS_MOUSE_BUTTON_COUNT][3];
@@ -312,6 +362,13 @@ Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string) {
 		result.l1[0] = MeowU64From(hash, 0) ^ seed_key.l1[0];
 	}
 	return result;
+}
+
+Internal void ui_box_list_push(Arena *arena, UI_Box_List *list, UI_Box *box) {
+	UI_Box_Node *n = push_array(arena, UI_Box_Node, 1);
+	n->box = box;
+	SLLQueuePush(list->first, list->last, n);
+	list->count += 1;
 }
 
 Internal UI_State *ui_state_alloc(void) {
@@ -451,13 +508,13 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 		box->flags |= UI_BOX_FLAG__FIXED_WIDTH;
 		box->fixed_size[0] = ui_top_fixed_width();
 	} else {
-		box->pref_size[UI_AXIS__X] = ui_top_pref_width();
+		box->pref_size[AXIS__X] = ui_top_pref_width();
 	}
 	if (ui_state->fixed_height_stack.top != &ui_state->nil_fixed_height) {
 		box->flags |= UI_BOX_FLAG__FIXED_HEIGHT;
 		box->fixed_size[1] = ui_top_fixed_height();
 	} else {
-		box->pref_size[UI_AXIS__Y] = ui_top_pref_height();
+		box->pref_size[AXIS__Y] = ui_top_pref_height();
 	}
 
 	box->min_size[0] = ui_top_min_width();
@@ -547,6 +604,20 @@ Internal I1 ui_next_event(OS_Event **ev) {
 Internal void ui_eat_event(OS_Event *e) {
 	DLLRemove(ui_state->events.first, ui_state->events.last, e);
 	ui_state->events.count -= 1;
+}
+
+Internal UI_Cmd *ui_cmd_list_push(Arena *arena, UI_Cmd_List *list, UI_Cmd *cmd) {
+	UI_Cmd *out_cmd = push_array(arena, UI_Cmd, 1);
+	memmove(out_cmd, cmd, sizeof(UI_Cmd));
+	out_cmd->string = push_str8_copy(arena, cmd->string);
+	DLLPushBack(list->first, list->last, out_cmd);
+	list->count += 1;
+	return out_cmd;
+}
+
+Internal void ui_eat_cmd(UI_Cmd *cmd) {
+	DLLRemove(ui_state->cmds.first, ui_state->cmds.last, cmd);
+	ui_state->cmds.count -= 1;
 }
 
 Internal I1 ui_key_press(OS_Modifier_Flags modifiers, OS_Key key) {
@@ -784,12 +855,14 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 	return signal;
 }
 
-Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
+Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_List cmds) {
 	UIResetStacks();
 	ui_state->root = &ui_nil_box;
 	ui_state->last_build_box_count = ui_state->build_box_count;
 	ui_state->build_box_count = 0;
 	ui_state->window = window;
+
+	ui_state->cmds = cmds;
 
 	//- kti: Copy events.
 	MemoryZeroStruct(&ui_state->events);
@@ -844,6 +917,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 
 					I1 nav_next = 0;
 					I1 nav_prev = 0;
+					Axis axis_lock = AXIS__INVALID;
 
 					if (ui_key_press(0, OS_KEY__TAB)) {
 						nav_next = 1;
@@ -852,9 +926,64 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 						nav_prev = 1;
 					}
 
-					for (OS_Event *e = ui_state->events.first, *next = 0; e != 0; e = e->next) {
-						next = e->next;
+					for (UI_Cmd *cmd = cmds.first, *next = 0; cmd != 0; cmd = next) {
+						next = cmd->next;
 						I1 taken = 0;
+						if (cmd->delta_si2[0] == 0 && cmd->delta_si2[1] == 0) {
+							continue;
+						}
+						if (((cmd->delta_si2[0] > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X) || cmd->delta_si2[0] == 0) &&
+								((cmd->delta_si2[1] > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2[1] == 0)) {
+							taken = 1;
+							nav_next = 1;
+						}
+						if (((cmd->delta_si2[0] < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X) || cmd->delta_si2[0] == 0) &&
+								((cmd->delta_si2[1] < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2[1] == 0)) {
+							taken = 1;
+							nav_prev = 1;
+						}
+						if (cmd->flags & UI_CMD_FLAG__EXPLICIT_DIRECTIONAL) {
+							axis_lock = cmd->delta_si2[0] != 0 ? AXIS__X : AXIS__Y;
+						}
+						if (taken) {
+							ui_eat_cmd(cmd);
+						}
+					}
+
+					if (nav_next) {
+						UI_Box *search_start = ui_box_is_nil(focus_box) ? nav_root : focus_box;
+						I1 moved_in_axis[AXIS_COUNT] = {0};
+						moved = 1;
+						for (UI_Box *box = search_start;;) {
+							if (box != search_start && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP) &&
+								(box->flags & UI_BOX_FLAG__CLICKABLE || ui_box_is_nil(box)) &&
+								(axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 0)) {
+								ui_box_list_push(scratch.arena, &next_focus_box_candidates, box);
+								if (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 1) {
+									break;
+								}
+							}
+
+							UI_Box *last_box = box;
+							if (!ui_box_is_nil(box->first)) {
+								moved_in_axis[box->child_layout_axis] += 1;
+								box = box->first;
+							} else for (UI_Box *p = box; !ui_box_is_nil(p) && p != nav_root; p = p->parent) {
+								if (!ui_box_is_nil(p->parent)) {
+									moved_in_axis[p->parent->child_layout_axis] += 1;
+									box = p->next;
+									break;
+								}
+							}
+							if (last_box == box) {
+								ui_box_list_push(scratch.arena, &next_focus_box_candidates, &ui_nil_box);
+								break;
+							}
+						}
+					}
+
+					if (nav_prev) {
+
 					}
 				}
 			}
@@ -865,7 +994,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events) {
 	//- kti: Setup root.
 	ui_set_next_fixed_width(window->width);
 	ui_set_next_fixed_height(window->height);
-	ui_set_next_child_layout_axis(UI_AXIS__X);
+	ui_set_next_child_layout_axis(AXIS__X);
 	UI_Box *root = ui_build_box_from_stringf(0, "%llu", (L1)window);
 	ui_push_parent(root);
 	ui_state->root = root;
@@ -916,7 +1045,7 @@ Internal UI_Box_Rec ui_box_rec_df(UI_Box *box, UI_Box *root, L1 sib_member_off, 
 #define ui_box_rec_df_pre(box, root) ui_box_rec_df(box, root, OffsetOf(UI_Box, next), OffsetOf(UI_Box, first))
 #define ui_box_rec_df_post(box, root) ui_box_rec_df(box, root, OffsetOf(UI_Box, prev), OffsetOf(UI_Box, last))
 
-Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, UI_Axis axis) {
+Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, Axis axis) {
 	for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next) {
 		switch (b->pref_size[axis].kind) {
 			default: {} break;
@@ -932,7 +1061,7 @@ Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, UI_Axis axis) {
 	}
 }
 
-Internal void ui_calc_sizes_upwards_dependent__in_place(UI_Box *root, UI_Axis axis) {
+Internal void ui_calc_sizes_upwards_dependent__in_place(UI_Box *root, Axis axis) {
 	for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next) {
 		switch (b->pref_size[axis].kind) {
 			default: {} break;
@@ -956,7 +1085,7 @@ Internal void ui_calc_sizes_upwards_dependent__in_place(UI_Box *root, UI_Axis ax
 	}
 }
 
-Internal void ui_calc_sizes_downwards_dependent__in_place(UI_Box *root, UI_Axis axis) {
+Internal void ui_calc_sizes_downwards_dependent__in_place(UI_Box *root, Axis axis) {
 	UI_Box_Rec rec = {0};
 	for (UI_Box *box = root; !ui_box_is_nil(box); box = rec.next) {
 		rec = ui_box_rec_df_pre(box, root);
@@ -980,7 +1109,7 @@ Internal void ui_calc_sizes_downwards_dependent__in_place(UI_Box *root, UI_Axis 
 	}
 }
 
-Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, UI_Axis axis) {
+Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis) {
 	Temp_Arena scratch = scratch_begin(0, 0);
 
 	for (UI_Box *box = root; !ui_box_is_nil(box); box = ui_box_rec_df_pre(box, root).next) {
@@ -1045,7 +1174,7 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, UI_Axis axis
 	scratch_end(scratch);
 }
 
-Internal void ui_layout_position__in_place(UI_Box *root, UI_Axis axis) {
+Internal void ui_layout_position__in_place(UI_Box *root, Axis axis) {
 	for (UI_Box *box = root; !ui_box_is_nil(box); box = ui_box_rec_df_pre(box, root).next) {
 		F1 layout_position = 0;
 
@@ -1075,7 +1204,7 @@ Internal void ui_layout_position__in_place(UI_Box *root, UI_Axis axis) {
 	}
 }
 
-Internal void ui_layout_root(UI_Box *root, UI_Axis axis) {
+Internal void ui_layout_root(UI_Box *root, Axis axis) {
 	ui_calc_sizes_standalone__in_place(root, axis);
 	ui_calc_sizes_upwards_dependent__in_place(root, axis);
 	ui_calc_sizes_downwards_dependent__in_place(root, axis);
@@ -1096,7 +1225,7 @@ Internal void ui_end_build(void) {
 		}
 	}
 
-	for EachIndex(axis, UI_AXIS_COUNT) {
+	for EachIndex(axis, AXIS_COUNT) {
 		ui_layout_root(ui_state->root, axis);
 	}
 
@@ -1258,16 +1387,16 @@ Internal void ui_set_next_fixed_rect(F4 rect) {
 	ui_set_next_fixed_height(rect[3]);
 }
 
-Internal void ui_push_pref_size(UI_Axis axis, UI_Size size) {
-	(axis == UI_AXIS__X ? ui_push_pref_width : ui_push_pref_height)(size);
+Internal void ui_push_pref_size(Axis axis, UI_Size size) {
+	(axis == AXIS__X ? ui_push_pref_width : ui_push_pref_height)(size);
 }
 
-Internal void ui_pop_pref_size(UI_Axis axis) {
-	(axis == UI_AXIS__X ? ui_pop_pref_width : ui_pop_pref_height)();
+Internal void ui_pop_pref_size(Axis axis) {
+	(axis == AXIS__X ? ui_pop_pref_width : ui_pop_pref_height)();
 }
 
-Internal void ui_set_next_pref_size(UI_Axis axis, UI_Size size) {
-	(axis == UI_AXIS__X ? ui_set_next_pref_width : ui_set_next_pref_height)(size);
+Internal void ui_set_next_pref_size(Axis axis, UI_Size size) {
+	(axis == AXIS__X ? ui_set_next_pref_width : ui_set_next_pref_height)(size);
 }
 
 Internal UI_Signal ui_spacer(UI_Size size) {
@@ -1298,7 +1427,7 @@ Internal UI_Size ui_size(UI_Size_Kind kind, F1 value, F1 strictness) {
 #define UI_Padding(v) DeferLoop(ui_spacer(v), ui_spacer(v))
 
 Internal UI_Box *ui_named_column_begin(String8 name) {
-	ui_set_next_child_layout_axis(UI_AXIS__Y);
+	ui_set_next_child_layout_axis(AXIS__Y);
 	UI_Box *box = ui_build_box_from_string(0, name);
 	ui_push_parent(box);
 	return box;
@@ -1311,7 +1440,7 @@ Internal UI_Signal ui_named_column_end(void) {
 }
 
 Internal UI_Box *ui_named_row_begin(String8 name) {
-	ui_set_next_child_layout_axis(UI_AXIS__X);
+	ui_set_next_child_layout_axis(AXIS__X);
 	UI_Box *box = ui_build_box_from_string(0, name);
 	ui_push_parent(box);
 	return box;
@@ -1480,7 +1609,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 		//- kti: Checkbox square. outer is Y-layout so inner check can be centered with padding.
 		ui_set_next_fixed_width(size);
 		ui_set_next_fixed_height(size);
-		ui_set_next_child_layout_axis(UI_AXIS__Y);
+		ui_set_next_child_layout_axis(AXIS__Y);
 		UI_Corner_Radius(check_inset * 0.5f) {
 			ui_set_next_background_color(oklch(0.195f, 0.1f, 17.0f, 1.0f));
 			ui_set_next_border_color(oklch(0.5f, 0.0f, 0.0f, 1.0f));

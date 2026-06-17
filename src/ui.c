@@ -7,6 +7,7 @@ typedef enum UI_Cmd_Kind
   UI_CMD_KIND__NAVIGATE,
   UI_CMD_KIND__EDIT,
   UI_CMD_KIND__FILEDROP,
+  UI_CMD_KIND__CANCEL,
   UI_CMD_KIND_COUNT
 }
 UI_Cmd_Kind;
@@ -926,7 +927,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 						nav_prev = 1;
 					}
 
-					for (UI_Cmd *cmd = cmds.first, *next = 0; cmd != 0; cmd = next) {
+					for (UI_Cmd *cmd = ui_state->cmds.first, *next = 0; cmd != 0; cmd = next) {
 						next = cmd->next;
 						I1 taken = 0;
 						if (cmd->delta_si2[0] == 0 && cmd->delta_si2[1] == 0) {
@@ -952,7 +953,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
 					if (nav_next) {
 						UI_Box *search_start = ui_box_is_nil(focus_box) ? nav_root : focus_box;
-						I1 moved_in_axis[AXIS_COUNT] = {0};
+						L1 moved_in_axis[AXIS_COUNT] = {0};
 						moved = 1;
 						for (UI_Box *box = search_start;;) {
 							if (box != search_start && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP) &&
@@ -983,13 +984,103 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 					}
 
 					if (nav_prev) {
+						UI_Box *search_start = ui_box_is_nil(focus_box) ? nav_root : focus_box;
+						L1 moved_in_axis[AXIS_COUNT] = {0};
+						moved = 1;
+						for (UI_Box *box = search_start;;) {
+							if (box != search_start && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP) &&
+								(box->flags & UI_BOX_FLAG__CLICKABLE || ui_box_is_nil(box)) &&
+								(axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 0)) {
+								ui_box_list_push(scratch.arena, &next_focus_box_candidates, box);
+								if (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 1) {
+									break;
+								}
+							}
+							UI_Box *last_box = box;
+							UI_Box *root_descendant = &ui_nil_box;
+							if (box == nav_root && box == search_start) {
+								for (UI_Box *d = box->last; !ui_box_is_nil(d); d = d->last) {
+									moved_in_axis[d->parent->child_layout_axis] += 1;
+									root_descendant = d;
+								}
+							}
+							UI_Box *prev_descendant = &ui_nil_box;
+							for (UI_Box *d = box->prev; !ui_box_is_nil(d); d = d->last) {
+								moved_in_axis[d->parent->child_layout_axis] += 1;
+								root_descendant = d;
+							}
+							if (!ui_box_is_nil(root_descendant)) {
+								box = root_descendant;
+							} else if (!ui_box_is_nil(prev_descendant)) {
+								box = prev_descendant;
+							} else if (box->parent != nav_root) {	
+								moved_in_axis[box->parent->child_layout_axis] += 1;
+								box = box->parent;
+							}
+							if (box == last_box) {
+								ui_box_list_push(scratch.arena, &next_focus_box_candidates, &ui_nil_box);
+								break;
+							}
+						}
+					}
 
+					//- kti: scan candidates and grab next focus box.
+					UI_Box *next_focus_box = focus_box;
+					F1 best_distance_from_start = 1000000;
+					for (UI_Box_Node *n = next_focus_box_candidates.first; n != 0; n = n->next) {
+						UI_Box *box = n->box;
+						F1 distance_from_start = 0;
+						if (axis_lock != AXIS__INVALID) {
+							distance_from_start = abs_F1(rect_center(box->rect)[axis_flip(axis_lock)] - rect_center(focus_box->rect)[axis_flip(axis_lock)]);
+						}
+						if (distance_from_start < best_distance_from_start && box != focus_box) {
+							next_focus_box = box;
+							best_distance_from_start = distance_from_start;
+						}
+					}
+
+					//- kti: commit next focus box.
+					nav_root->default_nav_focus_next_hot_key = next_focus_box->key;
+
+					//- kti: no movement -> break.
+					if (moved == 0) {
+						break;
+					}
+				}
+			}
+
+			if (!ui_key_match(ui_key_zero(), nav_root->default_nav_focus_active_key)) {
+				for (UI_Cmd *cmd = ui_state->cmds.first, *next = 0; cmd != 0; cmd = next) {
+					next = cmd->next;
+					if (cmd->kind == UI_CMD_KIND__CANCEL) {
+						ui_eat_cmd(cmd);
+						
+						UI_Box *prev_focus_root = nav_root;
+						for(UI_Box *focus_root = ui_box_from_key(nav_root->default_nav_focus_active_key); !ui_box_is_nil(focus_root);) {
+							UI_Box *next_focus_root = ui_box_from_key(focus_root->default_nav_focus_active_key);
+							if(ui_box_is_nil(next_focus_root)) {
+								prev_focus_root->default_nav_focus_next_active_key = ui_key_zero();
+								break;
+							} else {
+								prev_focus_root = focus_root;
+								focus_root = next_focus_root;
+							}
+						}
 					}
 				}
 			}
 		}
 	}
+	ui_state->default_nav_root_key = ui_key_zero();
 	scratch_end(scratch);
+
+	//- kti: next-default-nav-focus keys -> current-default-nav-focus-keys
+	for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1) {
+		for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next) {
+			box->default_nav_focus_hot_key = box->default_nav_focus_next_hot_key;
+			box->default_nav_focus_active_key = box->default_nav_focus_next_active_key;
+		}
+	}
 
 	//- kti: Setup root.
 	ui_set_next_fixed_width(window->width);

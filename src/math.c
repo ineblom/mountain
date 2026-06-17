@@ -18,6 +18,7 @@ enum {
 	AXIS__Y,
 	AXIS_COUNT,
 };
+#define axis_flip(a) ((Axis)(!(a)))
 
 #endif
 
@@ -198,6 +199,14 @@ Inline F4 rect_pad(F4 rect, F1 amt) {
 		rect[1] - amt,
 		rect[2] + amt*2,
 		rect[3] + amt*2,
+	};
+	return result;
+}
+
+Inline F2 rect_center(F4 rect) {
+	F2 result = {
+		rect[0] + rect[2]*0.5,
+		rect[1] + rect[3]*0.5,
 	};
 	return result;
 }

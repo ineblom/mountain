@@ -561,6 +561,7 @@ Internal OS_Modifier_Flags os_get_modifiers(void) {
 	return result;
 }
 
+// TODO: make into os_event_list_push instead.
 Internal void os_push_event(OS_Event event) {
   OS_Event *new_event = push_array(os_gfx_state->event_arena, OS_Event, 1);
   new_event[0] = event;

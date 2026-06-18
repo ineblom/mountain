@@ -99,8 +99,8 @@ struct State {
 	Cmd cmds[512];
 	L1 cmd_count;
 
-	B1 name_buffer[256];
-	String8 name;
+	L1 name_edit_buffer_len;
+	B1 name_edit_buffer[512];
 };
 
 #endif
@@ -324,10 +324,6 @@ Internal void lane(Arena *arena) {
 		state = push_array(arena, State, 1);
 		state->arena = arena;
 
-		state->name.str = (B1 *)state->name_buffer;
-		memmove(state->name.str, "Hejsan", 6);
-		state->name.len = 6;
-
 	  window_open();
 	}
 
@@ -356,6 +352,12 @@ Internal void lane(Arena *arena) {
 					if (window != 0) {
 						window_close(window);
 					}
+				}
+				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ESC) {
+					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
+						.kind = UI_CMD_KIND__CANCEL,
+						.timestamp_ns = os_clock(),
+					});
 				}
 			}
 		}
@@ -417,7 +419,7 @@ Internal void lane(Arena *arena) {
 						if (sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
 							Panel *min_child = child;
 							Panel *max_child = child->next;
-							if (sig.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+							if (sig.flags & UI_SIGNAL_FLAG__PRESSED) {
 								F2 drag_data = {min_child->pct_of_parent, max_child->pct_of_parent};
 								ui_store_drag_struct(&drag_data);
 							}
@@ -510,7 +512,7 @@ Internal void lane(Arena *arena) {
 										UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
 										UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
 										for EachIndex(i, VIEW_KIND_COUNT) {
-											if (ui_button(view_kind_names[i]).flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+											if (ui_button(view_kind_names[i]).flags & UI_SIGNAL_FLAG__PRESSED) {
 												panel_push_view(panel, i);
 											}
 										}
@@ -530,8 +532,11 @@ Internal void lane(Arena *arena) {
 
 												ui_spacer(ui_px(10, 1.0f));
 
+												Txt_Pt cursor = {1, 1};
+												Txt_Pt mark = {1, 1};
+												String8 name = Str8_("Theodor");
 												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												ui_textedit(0, 0, state->name_buffer, sizeof(state->name_buffer), 0, state->name, state->name);
+												ui_textedit(&cursor, &mark, state->name_edit_buffer, sizeof(state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
 											} break;
 										}
 									}

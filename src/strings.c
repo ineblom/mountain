@@ -139,6 +139,11 @@ Internal I1 str8_match(String8 a, String8 b) {
 	return result;
 }
 
+Internal String8 str8_prefix(String8 str, L1 len) {
+	str.len = Min(len, str.len);
+	return str;
+}
+
 Internal String8 str8_substr(String8 str, L1 min, L1 max) {
 	String8 result = str;
 	min = Min(min, str.len);

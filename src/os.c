@@ -162,7 +162,7 @@ enum {
   OS_KEY__L,
   OS_KEY__SEMICOLON,
   OS_KEY__QUOTE,
-  OS_KEY__RETURN,
+  OS_KEY__ENTER,
   OS_KEY__SHIFT,
   OS_KEY__Z,
   OS_KEY__X,
@@ -455,7 +455,7 @@ Internal I1 os_key_from_wl_key(I1 wl_key) {
     key_table[25] = OS_KEY__P;
     key_table[26] = OS_KEY__LEFT_BRACKET;
     key_table[27] = OS_KEY__RIGHT_BRACKET;
-    key_table[28] = OS_KEY__RETURN;
+    key_table[28] = OS_KEY__ENTER;
     key_table[29] = OS_KEY__CTRL;
     key_table[30] = OS_KEY__A;
     key_table[31] = OS_KEY__S;
@@ -561,18 +561,19 @@ Internal OS_Modifier_Flags os_get_modifiers(void) {
 	return result;
 }
 
-// TODO: make into os_event_list_push instead.
-Internal void os_push_event(OS_Event event) {
-  OS_Event *new_event = push_array(os_gfx_state->event_arena, OS_Event, 1);
-  new_event[0] = event;
+Internal void os_event_list_push(Arena *arena, OS_Event_List *list, OS_Event event) {
+  OS_Event *new_event = push_array(arena, OS_Event, 1);
+	memmove(new_event, &event, sizeof(OS_Event));
 	new_event->modifiers = os_get_modifiers();
-
-  DLLPushBack(os_gfx_state->events.first, os_gfx_state->events.last, new_event);
-	os_gfx_state->events.count += 1;
+  DLLPushBack(list->first, list->last, new_event);
+	list->count += 1;
 }
 
-Internal void registry_global_handler(void *data, struct wl_registry *registry,
-                                      I1 name, CString interface, I1 version) {
+Internal void os_push_event(OS_Event event) {
+	os_event_list_push(os_gfx_state->event_arena, &os_gfx_state->events, event);
+}
+
+Internal void registry_global_handler(void *data, struct wl_registry *registry, I1 name, CString interface, I1 version) {
   if (cstr_compare(interface, wl_compositor_interface.name)) {
     os_gfx_state->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
   } else if (cstr_compare(interface, wl_shm_interface.name)) {

@@ -1,6 +1,6 @@
 #if (DEF_)
 
-# include "meow_hash_x64_aesni.h"
+#include "meow_hash_x64_aesni.h"
 
 #endif
 
@@ -706,4 +706,35 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
 	return run;
 }
 
+Internal F2 fc_dim_from_tag_size_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string) {
+	Temp_Arena scratch = scratch_begin(0, 0);
+	F2 result = {0};
+	FC_Run run = fc_run_from_string(tag, size, base_align_px, tab_size_px, string);
+	result = run.dim;
+	scratch_end(scratch);
+	return result;
+}
+
+Internal L1 fc_char_pos_from_tag_size_string_p(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string, F1 p) {
+  Temp_Arena scratch = scratch_begin(0, 0);
+  L1 best_offset_bytes = 0;
+  F1 best_offset_px = F1_MAX;
+  L1 offset_bytes = 0;
+  F1 offset_px = 0.f;
+  FC_Run run = fc_run_from_string(tag, size, base_align_px, tab_size_px, string);
+  for (L1 idx = 0; idx <= run.pieces.count; idx += 1) {
+    F1 this_piece_offset_px = abs_F1(offset_px - p);
+    if (this_piece_offset_px < best_offset_px) {
+      best_offset_bytes = offset_bytes;
+      best_offset_px = this_piece_offset_px;
+    }
+    if(idx < run.pieces.count) {
+      FC_Piece *piece = &run.pieces.v[idx];
+      offset_px += piece->advance;
+      offset_bytes += piece->decode_size;
+    }
+  }
+  scratch_end(scratch);
+  return best_offset_bytes;
+}
 #endif

@@ -18,8 +18,7 @@ enum {
 	UI_CMD_FLAG__EXPLICIT_DIRECTIONAL = (1<<0),
 };
 
-typedef enum UI_Cmd_Delta_Unit
-{
+typedef enum UI_Cmd_Delta_Unit {
   UI_CMD_DELTA_UNIT__NULL,
   UI_CMD_DELTA_UNIT__CHAR,
   UI_CMD_DELTA_UNIT__WORD,
@@ -31,8 +30,7 @@ typedef enum UI_Cmd_Delta_Unit
 UI_Cmd_Delta_Unit;
 
 typedef struct UI_Cmd UI_Cmd;
-struct UI_Cmd
-{
+struct UI_Cmd {
   UI_Cmd *next;
   UI_Cmd *prev;
 
@@ -44,15 +42,31 @@ struct UI_Cmd
   F2 pos;
   F2 delta_f2;
   SI2 delta_si2;
-  L1 timestamp_us;
+  L1 timestamp_ns;
 };
 
 typedef struct UI_Cmd_List UI_Cmd_List;
-struct UI_Cmd_List
-{
+struct UI_Cmd_List {
   UI_Cmd *first;
   UI_Cmd *last;
   L1 count;
+};
+
+typedef I1 UI_Txt_Op_Flags;
+enum {
+  UI_TxtOpFlag_Invalid = (1<<0),
+  UI_TxtOpFlag_Copy    = (1<<1),
+};
+
+typedef struct UI_TxtOp UI_TxtOp;
+struct UI_TxtOp
+{
+  UI_TxtOpFlags flags;
+  String8 replace;
+  String8 copy;
+  TxtRng range;
+  TxtPt cursor;
+  TxtPt mark;
 };
 
 typedef I1 UI_Text_Align;
@@ -96,42 +110,47 @@ enum {
 
 typedef L1 UI_Box_Flags;
 enum {
-	UI_BOX_FLAG__CLICKABLE                = (1<<0),
-	UI_BOX_FLAG__VIEW_SCROLL_X            = (1<<1),
-	UI_BOX_FLAG__VIEW_SCROLL_Y            = (1<<2),
-	UI_BOX_FLAG__DRAW_TEXT                = (1<<3),
-	UI_BOX_FLAG__DRAW_BORDER              = (1<<4),
-	UI_BOX_FLAG__DRAW_BACKGROUND          = (1<<5),
-	UI_BOX_FLAG__DRAW_DROP_SHADOW         = (1<<6),
-	UI_BOX_FLAG__CLIP                     = (1<<7),
-	UI_BOX_FLAG__DRAW_HOT_EFFECTS         = (1<<8),
-	UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS      = (1<<9),
-	UI_BOX_FLAG__DISABLED                 = (1<<10),
-	UI_BOX_FLAG__FLOATING_X               = (1<<11),
-	UI_BOX_FLAG__FLOATING_Y               = (1<<12),
-	UI_BOX_FLAG__FIXED_WIDTH              = (1<<13),
-	UI_BOX_FLAG__FIXED_HEIGHT             = (1<<14),
-	UI_BOX_FLAG__ALLOW_OVERFLOW_X         = (1<<15),
-	UI_BOX_FLAG__ALLOW_OVERFLOW_Y         = (1<<16),
-	UI_BOX_FLAG__SKIP_VIEW_OFF_X          = (1<<17),
-	UI_BOX_FLAG__SKIP_VIEW_OFF_Y          = (1<<18),
-	UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT = (1<<19),
-	UI_BOX_FLAG__HAS_DISPLAY_STRING       = (1<<20),
-	UI_BOX_FLAG__DISABLE_ID_STRING        = (1<<21),
-	UI_BOX_FLAG__FOCUS_HOT                = (1<<22),
-	UI_BOX_FLAG__FOCUS_ACTIVE             = (1<<23),
-	UI_BOX_FLAG__FOCUS_HOT_DISABLED       = (1<<24),
-	UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED    = (1<<25),
-	UI_BOX_FLAG__SCROLL                   = (1<<26),
-	UI_BOX_FLAG__VIEW_CLAMP_X             = (1<<27),
-	UI_BOX_FLAG__VIEW_CLAMP_Y             = (1<<28),
-	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X      = (1<<29),
-	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y      = (1<<30),
-	UI_BOX_FLAG__FOCUS_NAV_SKIP           = (1<<31),
+	UI_BOX_FLAG__MOUSE_CLICKABLE          = (1LLU<<0),
+	UI_BOX_FLAG__VIEW_SCROLL_X            = (1LLU<<1),
+	UI_BOX_FLAG__VIEW_SCROLL_Y            = (1LLU<<2),
+	UI_BOX_FLAG__DRAW_TEXT                = (1LLU<<3),
+	UI_BOX_FLAG__DRAW_BORDER              = (1LLU<<4),
+	UI_BOX_FLAG__DRAW_BACKGROUND          = (1LLU<<5),
+	UI_BOX_FLAG__DRAW_DROP_SHADOW         = (1LLU<<6),
+	UI_BOX_FLAG__CLIP                     = (1LLU<<7),
+	UI_BOX_FLAG__DRAW_HOT_EFFECTS         = (1LLU<<8),
+	UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS      = (1LLU<<9),
+	UI_BOX_FLAG__DISABLED                 = (1LLU<<10),
+	UI_BOX_FLAG__FLOATING_X               = (1LLU<<11),
+	UI_BOX_FLAG__FLOATING_Y               = (1LLU<<12),
+	UI_BOX_FLAG__FIXED_WIDTH              = (1LLU<<13),
+	UI_BOX_FLAG__FIXED_HEIGHT             = (1LLU<<14),
+	UI_BOX_FLAG__ALLOW_OVERFLOW_X         = (1LLU<<15),
+	UI_BOX_FLAG__ALLOW_OVERFLOW_Y         = (1LLU<<16),
+	UI_BOX_FLAG__SKIP_VIEW_OFF_X          = (1LLU<<17),
+	UI_BOX_FLAG__SKIP_VIEW_OFF_Y          = (1LLU<<18),
+	UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT = (1LLU<<19),
+	UI_BOX_FLAG__HAS_DISPLAY_STRING       = (1LLU<<20),
+	UI_BOX_FLAG__DISABLE_ID_STRING        = (1LLU<<21),
+	UI_BOX_FLAG__FOCUS_HOT                = (1LLU<<22),
+	UI_BOX_FLAG__FOCUS_ACTIVE             = (1LLU<<23),
+	UI_BOX_FLAG__FOCUS_HOT_DISABLED       = (1LLU<<24),
+	UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED    = (1LLU<<25),
+	UI_BOX_FLAG__SCROLL                   = (1LLU<<26),
+	UI_BOX_FLAG__VIEW_CLAMP_X             = (1LLU<<27),
+	UI_BOX_FLAG__VIEW_CLAMP_Y             = (1LLU<<28),
+	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X      = (1LLU<<29),
+	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y      = (1LLU<<30),
+	UI_BOX_FLAG__FOCUS_NAV_SKIP           = (1LLU<<31),
+	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_EDIT   = (1LLU<<32),
+	UI_BOX_FLAG__KEYBOARD_CLICKABLE       = (1LLU<<33),
+	UI_BOX_FLAG__CLICK_TO_FOCUS           = (1LLU<<34),
 
-	UI_BOX_FLAG__FLOATING    = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
-	UI_BOX_FLAG__VIEW_SCROLL = (UI_BOX_FLAG__VIEW_SCROLL_X|UI_BOX_FLAG__VIEW_SCROLL_Y),
-	UI_BOX_FLAG__VIEW_CLAMP  = (UI_BOX_FLAG__VIEW_CLAMP_X|UI_BOX_FLAG__VIEW_CLAMP_Y),
+	UI_BOX_FLAG__CLICKABLE         = (UI_BOX_FLAG__MOUSE_CLICKABLE|UI_BOX_FLAG__KEYBOARD_CLICKABLE),
+	UI_BOX_FLAG__FLOATING          = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
+	UI_BOX_FLAG__VIEW_SCROLL       = (UI_BOX_FLAG__VIEW_SCROLL_X|UI_BOX_FLAG__VIEW_SCROLL_Y),
+	UI_BOX_FLAG__VIEW_CLAMP        = (UI_BOX_FLAG__VIEW_CLAMP_X|UI_BOX_FLAG__VIEW_CLAMP_Y),
+	UI_BOX_FLAG__DEFAULT_FOCUS_NAV = (UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X|UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y|UI_BOX_FLAG__DEFAULT_FOCUS_NAV_EDIT),
 };
 
 typedef struct UI_Box UI_Box;
@@ -246,6 +265,13 @@ enum {
 	UI_SIGNAL_FLAG__MOUSE_OVER = (1<<26),
 
 	UI_SIGNAL_FLAG__COMMIT = (1<<27),
+
+	UI_SIGNAL_FLAG__PRESSED = UI_SIGNAL_FLAG__LEFT_PRESSED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
+	UI_SIGNAL_FLAG__RELEASED = UI_SIGNAL_FLAG__LEFT_RELEASED,
+	UI_SIGNAL_FLAG__CLICKED = UI_SIGNAL_FLAG__LEFT_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
+	UI_SIGNAL_FLAG__DOUBLE_CLICKED = UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED,
+	UI_SIGNAL_FLAG__TRIPPLE_CLICKED = UI_SIGNAL_FLAG__LEFT_TRIPPLE_CLICKED,
+	UI_SIGNAL_FLAG__DRAGGING = UI_SIGNAL_FLAG__LEFT_DRAGGING,
 };
 
 typedef struct UI_Signal UI_Signal;
@@ -343,6 +369,11 @@ Internal I1 ui_key_match(UI_Key a, UI_Key b) {
 	return result;
 }
 
+Internal I1 ui_box_is_nil(UI_Box *box) {
+	I1 result = (box == 0 || box == &ui_nil_box);
+	return result;
+}
+
 Internal String8 ui_display_part_from_key_string(String8 key) {
 	L1 end = key.len;
 
@@ -405,10 +436,90 @@ Internal void ui_state_equip(UI_State *state) {
 	ui_state = state;
 }
 
-Internal I1 ui_box_is_nil(UI_Box *box) {
-	I1 result = (box == 0 || box == &ui_nil_box);
+//- kti: Focus tree coloring.
+
+Internal I1 ui_is_focus_active(void) {
+	I1 result = (ui_top_focus_active() == UI_FOCUS_KIND__ON);
+	if (result) {
+		for (UI_Focus_Active_Node *n = ui_state->focus_active_stack.top; n != 0; n = n->next) {
+			if (n->value == UI_FOCUS_KIND__ROOT) {
+				break;
+			}
+			if (n->value == UI_FOCUS_KIND__OFF) {
+				result = 0;
+				break;
+			}
+		}
+	}
 	return result;
 }
+
+
+Internal I1 ui_is_focus_hot(void) {
+	I1 result = (ui_top_focus_hot() == UI_FOCUS_KIND__ON);
+	if (result) {
+		for (UI_Focus_Hot_Node *n = ui_state->focus_hot_stack.top; n != 0; n = n->next) {
+			if (n->value == UI_FOCUS_KIND__ROOT) {
+				break;
+			}
+			if (n->value == UI_FOCUS_KIND__OFF) {
+				result = 0;
+				break;
+			}
+		}
+	}
+	return result;
+}
+
+//- kti: Implicit auto-managed tree-based focus state
+
+Internal I1 ui_is_key_auto_focus_active(UI_Key key) {
+	I1 result = 0;
+	if (!ui_key_match(ui_key_zero(), key)) {
+		for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
+			if (p->flags & UI_BOX_FLAG__FOCUS_ACTIVE && ui_key_match(key, p->default_nav_focus_active_key)) {
+				result = 1;
+				break;
+			}
+		}
+	}
+	return result;
+}
+
+Internal I1 ui_is_key_auto_focus_hot(UI_Key key) {
+	I1 result = 0;
+	if (!ui_key_match(ui_key_zero(), key)) {
+		for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
+			if (p->flags & UI_BOX_FLAG__FOCUS_HOT &&
+				((!(p->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED) && ui_key_match(key, p->default_nav_focus_hot_key)) ||
+					ui_key_match(key, p->default_nav_focus_active_key))) {
+				result = 1;
+				break;
+			}
+		}
+	}
+	return result;
+}
+
+Internal void ui_set_auto_focus_active_key(UI_Key key) {
+	for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
+		if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) {
+			p->default_nav_focus_next_active_key = key;
+			break;
+		}
+	}
+}
+
+Internal void ui_set_auto_focus_hot_key(UI_Key key) {
+	for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
+		if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) {
+			p->default_nav_focus_next_hot_key = key;
+			break;
+		}
+	}
+}
+
+//- kti: Box building
 
 Internal UI_Box *ui_box_from_key(UI_Key key) {
 	UI_Box *result = &ui_nil_box;
@@ -491,6 +602,10 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	box->flags = flags; // TODO: Flags & Omit flags stack.
 	box->group_key = ui_top_group_key();
 
+	if (ui_is_focus_active() && (box->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) && ui_key_match(ui_state->default_nav_root_key, ui_key_zero())) {
+		ui_state->default_nav_root_key = box->key;
+	}
+
 	if (box_first_frame) {
 		box->first_touch_build_index = ui_state->build_index;
 	}
@@ -520,6 +635,24 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 
 	box->min_size[0] = ui_top_min_width();
 	box->min_size[1] = ui_top_min_height();
+
+	I1 is_auto_focus_active = ui_is_key_auto_focus_active(key);
+	I1 is_auto_focus_hot = ui_is_key_auto_focus_hot(key);
+	if (is_auto_focus_active) {
+		ui_set_next_focus_active(UI_FOCUS_KIND__ON);
+	}
+	if (is_auto_focus_hot) {
+		ui_set_next_focus_hot(UI_FOCUS_KIND__ON);
+	}
+	box->flags |= UI_BOX_FLAG__FOCUS_ACTIVE * (ui_top_focus_active() == UI_FOCUS_KIND__ON);
+	box->flags |= UI_BOX_FLAG__FOCUS_HOT * (ui_top_focus_hot() == UI_FOCUS_KIND__ON);
+	if (box->flags & UI_BOX_FLAG__FOCUS_HOT && !ui_is_focus_hot()) {
+		box->flags |= UI_BOX_FLAG__FOCUS_HOT_DISABLED;
+	}
+	if (box->flags & UI_BOX_FLAG__FOCUS_ACTIVE && !ui_is_focus_active()) {
+		box->flags |= UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED;
+	}
+
 	box->child_layout_axis = ui_top_child_layout_axis();
 	box->tab_size = ui_top_tab_size();
 	box->text_align = ui_top_text_align();
@@ -607,10 +740,10 @@ Internal void ui_eat_event(OS_Event *e) {
 	ui_state->events.count -= 1;
 }
 
-Internal UI_Cmd *ui_cmd_list_push(Arena *arena, UI_Cmd_List *list, UI_Cmd *cmd) {
+Internal UI_Cmd *ui_cmd_list_push(Arena *arena, UI_Cmd_List *list, UI_Cmd cmd) {
 	UI_Cmd *out_cmd = push_array(arena, UI_Cmd, 1);
-	memmove(out_cmd, cmd, sizeof(UI_Cmd));
-	out_cmd->string = push_str8_copy(arena, cmd->string);
+	memmove(out_cmd, &cmd, sizeof(UI_Cmd));
+	out_cmd->string = push_str8_copy(arena, cmd.string);
 	DLLPushBack(list->first, list->last, out_cmd);
 	list->count += 1;
 	return out_cmd;
@@ -650,7 +783,7 @@ Internal I1 ui_key_release(OS_Modifier_Flags modifiers, OS_Key key) {
 }
 
 Internal UI_Signal ui_signal_from_box(UI_Box *box) {
-	// TODO: Get from os.
+	// TODO: Get double click time from os.
 	L1 double_click_time = 500000000;
 
 	I1 is_focus_hot = box->flags & UI_BOX_FLAG__FOCUS_HOT && !(box->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
@@ -736,6 +869,14 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 			ui_state->hot_box_key = ui_key_zero();
 			ui_state->active_box_key[evt_mouse_idx] = ui_key_zero();
 			signal.flags |= UI_SIGNAL_FLAG__LEFT_RELEASED << evt_mouse_idx;
+			taken = 1;
+		}
+
+		//- kti: focus is hot & keyboard click -> mark signal
+		// TODO: Cmd instead of hard coding enter?
+		if (box->flags & UI_BOX_FLAG__KEYBOARD_CLICKABLE &&
+			is_focus_hot && e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ENTER) {
+			signal.flags |= UI_SIGNAL_FLAG__KEYBOARD_PRESSED;
 			taken = 1;
 		}
 
@@ -853,6 +994,23 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		}
 	}
 
+	//- kti: get default nav ancestor
+	UI_Box *default_nav_parent = &ui_nil_box;
+	for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
+		if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) {
+			default_nav_parent = p;
+			break;
+		}
+	}
+
+	//- kti: clicking in default nav -> set navigation state to this box
+	if (box->flags & UI_BOX_FLAG__CLICK_TO_FOCUS && signal.flags&UI_SIGNAL_FLAG__PRESSED && !ui_box_is_nil(default_nav_parent)) {
+		default_nav_parent->default_nav_focus_next_hot_key = box->key;
+		if (!ui_key_match(default_nav_parent->default_nav_focus_active_key, box->key)) {
+			default_nav_parent->default_nav_focus_next_active_key = ui_key_zero();
+		}
+	}
+
 	return signal;
 }
 
@@ -862,24 +1020,9 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 	ui_state->last_build_box_count = ui_state->build_box_count;
 	ui_state->build_box_count = 0;
 	ui_state->window = window;
+	ui_state->events = events;
 
 	ui_state->cmds = cmds;
-
-	//- kti: Copy events.
-	MemoryZeroStruct(&ui_state->events);
-	L1 event_pool_idx = 0;
-	OS_Event *event_pool = push_array_no_zero(ui_build_arena(), OS_Event, events.count);
-	for (OS_Event *e = events.first; e != 0; e = e->next) {
-		if (e->window == window) {
-			OS_Event *new_e = &event_pool[event_pool_idx];
-			event_pool_idx += 1;
-			memmove(new_e, e, sizeof(OS_Event));
-			new_e->prev = 0;
-			new_e->next = 0;
-			DLLPushBack(ui_state->events.first, ui_state->events.last, new_e);
-			ui_state->events.count += 1;
-		}
-	}
 
 	//- kti: Mouse movement.
 	for (OS_Event *e = ui_state->events.last; e != 0; e = e->prev) {
@@ -1396,6 +1539,18 @@ Internal F2 ui_box_text_pos(UI_Box *box) {
 	return result;
 }
 
+Internal L1 ui_box_char_pos_from_xy(UI_Box *box, F2 pos) {
+	String8 line = ui_box_display_string(box);
+	L1 result = fc_char_pos_from_tag_size_string_p(box->font, box->font_size, 0, box->tab_size, line, pos[0] - ui_box_text_pos(box)[0]);
+	return result;
+}
+
+Internal void ui_kill_action(void) {
+	for EachIndex(k, OS_MOUSE_BUTTON_COUNT) {
+		ui_state->active_box_key[k] = ui_key_zero();
+	}
+}
+
 Internal F2 ui_mouse(void) {
 	return ui_state->mouse;
 }
@@ -1747,22 +1902,130 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 	return signal;
 }
 
-// TODO(kti): Implement.
+Internal UI_Signal ui_label(String8 string) {
+  UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, (String8){0});
+  ui_box_equip_display_string(box, string);
+  UI_Signal interact = ui_signal_from_box(box);
+  return interact;
+}
+
 Internal void ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
+	//- kti: Makbox->e key.
 	UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 
+	//- kti: Calculate focus.
+	I1 is_auto_focus_hot = ui_is_key_auto_focus_hot(key);
+	I1 is_auto_focus_active = ui_is_key_auto_focus_active(key);
+	ui_push_focus_hot(is_auto_focus_hot ? UI_FOCUS_KIND__ON : UI_FOCUS_KIND__NULL);
+	ui_push_focus_active(is_auto_focus_active ? UI_FOCUS_KIND__ON : UI_FOCUS_KIND__NULL);
+	I1 is_focus_hot = ui_is_focus_hot();
+	I1 is_focus_active = ui_is_focus_active();
+	I1 is_focus_hot_disabled = (!is_focus_hot && ui_top_focus_hot() == UI_FOCUS_KIND__ON);
+	I1 is_focus_active_disabled = (!is_focus_active && ui_top_focus_active() == UI_FOCUS_KIND__ON);
+
+	//- kti: Build top level box.
 	ui_set_next_border_color(oklch(0.7f, 0.0f, 0.0f, 1.0f));
 	UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND |
-																				UI_BOX_FLAG__DRAW_BORDER |
-																				UI_BOX_FLAG__CLICKABLE |
-																				UI_BOX_FLAG__DRAW_HOT_EFFECTS |
-																				UI_BOX_FLAG__CLIP | UI_BOX_FLAG__ALLOW_OVERFLOW_X | UI_BOX_FLAG__VIEW_CLAMP,
-																				key);
-	UI_Parent(box) {
-		ui_set_next_text_padding(5.0f);
-		ui_set_next_pref_width(ui_text_dim(0.0f, 1.0f));
-		ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, pre_edit_value);
+																			UI_BOX_FLAG__DRAW_BORDER |
+																			UI_BOX_FLAG__MOUSE_CLICKABLE |
+																			UI_BOX_FLAG__CLICK_TO_FOCUS |
+																		  ((is_auto_focus_hot || is_auto_focus_active)*UI_BOX_FLAG__KEYBOARD_CLICKABLE) |
+																			UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+																		  (is_focus_active || is_focus_active_disabled)*(UI_BOX_FLAG__CLIP | UI_BOX_FLAG__ALLOW_OVERFLOW_X | UI_BOX_FLAG__VIEW_CLAMP),
+																			key);
+
+	//- kti: handle text manipulation.
+	if (is_focus_active) {
+		Temp_Arena scratch = scratch_begin(0, 0);
+		for (UI_Cmd *cmd = ui_state->cmds.first, *next; cmd != 0; cmd = next) {
+			next = cmd->next;
+
+			String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
+
+			//- kti: Skip non single-line operations.
+			if ((cmd->kind != UI_CMD_KIND__EDIT && cmd->kind != UI_CMD_KIND__NAVIGATE && cmd->kind != UI_CMD_KIND__TEXT) || cmd->delta_si2[1] != 0) {
+				continue;
+			}
+
+			UI_Txt_Op op = ui_single_line_txt_op_from_cmd(scratch.arena, cmd, edit_string, cursor[0], mark[0]);
+
+			if (!txt_pt_match(op.range.min, op.range.max) || op.replace.size != 0) {
+				String8 new_string = ui_push_string_replace_range(scratch.arena, edit_string, {op.range.min.column, op.range.max.column}, op.replace);
+				new_string.len = Min(edit_buffer_size, new_string.len);
+				memmove(edit_buffer, new_string.str, new_string.len);
+				edit_string_size_out[0] = new_string.len;
+			}
+
+			if (op.flags & UI_TXT_OP_FLAG__COPY) {
+				// TODO: Copy
+			}
+
+			cursor[0] = op.cursor;
+			mark[0] = op.mark;
+
+			ui_eat_cmd(cmd);
+		}
+		scratch_end(scratch);
 	}
+
+	//- kti: build contents
+	Txt_Pt mouse_pt = {0};
+	F1 cursor_off = 0;
+	UI_Parent(box) {
+		String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
+		if (!is_focus_active && !is_focus_active_disabled) {
+			String8 display_string = ui_display_part_from_key_string(string);
+			if (pre_edit_value.len != 0) {
+				display_string = pre_edit_value;
+			}
+			ui_label(display_string);
+		} else {
+			F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];
+			ui_set_next_pref_width(ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
+			// TODO: UI_BOX_FLAG__DISABLE_TEXT_TRUNC
+			UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("###editstr"));
+			ui_box_equip_display_string(editstr_box, edit_string);
+			// TODO: custom draw.
+			mouse_pt = (Txt_Pt){1, 1+ui_box_char_pos_from_xy(editstr_box, ui_mouse())};
+      cursor_off = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), str8_prefix(edit_string, cursor->column-1))[0];
+		}
+	}
+
+	//- kti: Interact
+	UI_Signal signal = ui_signal_from_box(box);
+	if (!is_focus_active && signal.flags&(UI_SIGNAL_FLAG__DOUBLE_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED)) {
+		String8 edit_string = pre_edit_value;
+		edit_string.len = Min(edit_buffer_size, pre_edit_value.len);
+		memmove(edit_buffer, edit_string.str, edit_string.len);
+		edit_string_size_out[0] = edit_string.len;
+		ui_set_auto_focus_active_key(key);
+		ui_kill_action();
+		cursor[0] = (Txt_Pt){1, edit_string.len+1};
+		mark[0] = (Txt_Pt){1, 1};
+	}
+	if (is_focus_active && signal.flags&UI_SIGNAL_FLAG__KEYBOARD_PRESSED) {
+		ui_set_auto_focus_active_key(ui_key_zero());
+		signal.flags |= UI_SIGNAL_FLAG__COMMIT;
+	}
+	if (is_focus_active && signal.flags&UI_SIGNAL_FLAG__DRAGGING) {
+		if (signal.flags&UI_SIGNAL_FLAG__PRESSED) {
+			mark[0] = mouse_pt;
+		}
+		cursor[0] = mouse_pt;
+	}
+
+	//- kti: Focus cursor.
+	F2 cursor_range_px = {cursor_off-ui_top_font_size()*2.0f, cursor_off+ui_top_font_size()*2.0f};
+	F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
+	cursor_range_px[0] = Max(0, cursor_range_px[0]);
+	cursor_range_px[1] = Max(0, cursor_range_px[1]);
+	F1 min_delta = Min(0, cursor_range_px[0]-visible_range_px[0]);
+	F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
+	box->view_off_target[0] += min_delta;
+	box->view_off_target[0] += max_delta;
+
+	ui_pop_focus_hot();
+	ui_pop_focus_active();
 }
 
 Internal void ui_draw(void) {

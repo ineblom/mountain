@@ -10,14 +10,20 @@ struct Random_State {
 	L1 inc;
 };
 
-typedef I1 Axis;
+typedef enum Side {
+	SIDE__INVALID = -1,
+	SIDE__MIN,
+	SIDE__MAX,
+	SIDE_COUNT,
+} Side;
+#define side_flip(s) ((Side)(!(s)))
 
-enum {
+typedef enum Axis {
 	AXIS__INVALID = -1,
 	AXIS__X,
 	AXIS__Y,
 	AXIS_COUNT,
-};
+} Axis;
 #define axis_flip(a) ((Axis)(!(a)))
 
 #endif

@@ -16,6 +16,13 @@ typedef I1 UI_Cmd_Flags;
 
 enum {
 	UI_CMD_FLAG__EXPLICIT_DIRECTIONAL = (1<<0),
+	UI_CMD_FLAG__ZERO_DELTA_ON_SELECT = (1<<1),
+	UI_CMD_FLAG__CAP_AT_LINE          = (1<<2),
+	UI_CMD_FLAG__PICK_SELECT_SIDE     = (1<<3),
+	UI_CMD_FLAG__COPY                 = (1<<4),
+	UI_CMD_FLAG__PASTE                = (1<<5),
+	UI_CMD_FLAG__DELETE               = (1<<6),
+	UI_CMD_FLAG__KEEP_MARK            = (1<<7),
 };
 
 typedef enum UI_Cmd_Delta_Unit {
@@ -52,21 +59,33 @@ struct UI_Cmd_List {
   L1 count;
 };
 
-typedef I1 UI_Txt_Op_Flags;
-enum {
-  UI_TxtOpFlag_Invalid = (1<<0),
-  UI_TxtOpFlag_Copy    = (1<<1),
+typedef struct Txt_Pt Txt_Pt;
+struct Txt_Pt {
+	L1 line;
+	L1 column;
 };
 
-typedef struct UI_TxtOp UI_TxtOp;
-struct UI_TxtOp
+typedef struct Txt_Range Txt_Range;
+struct Txt_Range {
+	Txt_Pt min;
+	Txt_Pt max;
+};
+
+typedef I1 UI_Txt_Op_Flags;
+enum {
+  UI_TXT_OP_FLAG__INVALID = (1<<0),
+  UI_TXT_OP_FLAG__COPY    = (1<<1),
+};
+
+typedef struct UI_Txt_Op UI_Txt_Op;
+struct UI_Txt_Op
 {
-  UI_TxtOpFlags flags;
+  UI_Txt_Op_Flags flags;
   String8 replace;
   String8 copy;
-  TxtRng range;
-  TxtPt cursor;
-  TxtPt mark;
+  Txt_Range range;
+  Txt_Pt cursor;
+  Txt_Pt mark;
 };
 
 typedef I1 UI_Text_Align;
@@ -282,12 +301,6 @@ struct UI_Signal {
 	UI_Signal_Flags flags;
 };
 
-typedef struct Txt_Pt Txt_Pt;
-struct Txt_Pt {
-	L1 line;
-	L1 column;
-};
-
 #include "ui.meta.h"
 
 typedef struct UI_State UI_State;
@@ -358,6 +371,37 @@ Internal Arena *ui_build_arena(void) {
 }
 
 #include "ui.meta.c"
+
+Internal I1 txt_pt_match(Txt_Pt a, Txt_Pt b) {
+	I1 result = (a.line == b.line && a.column == b.column);
+	return result;
+}
+
+Internal I1 txt_pt_less_than(Txt_Pt a, Txt_Pt b) {
+	I1 result = 0;
+	if (a.line < b.line) {
+		result = 1;
+	} else if (a.line == b.line) {
+		result = a.column < b.column;
+	}
+	return result;
+}
+
+Internal Txt_Pt txt_pt_min(Txt_Pt a, Txt_Pt b) {
+	Txt_Pt result = b;
+	if (txt_pt_less_than(a, b)) {
+		result = a;
+	}
+	return result;
+}
+
+Internal Txt_Pt txt_pt_max(Txt_Pt a, Txt_Pt b) {
+	Txt_Pt result = a;
+	if (txt_pt_less_than(a, b)) {
+		result = b;
+	}
+	return result;
+}
 
 Internal UI_Key ui_key_zero(void) {
 	UI_Key result = {0};
@@ -929,8 +973,8 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 	//- kti: View clamp.
 	if (box->flags & UI_BOX_FLAG__VIEW_CLAMP && view_scrolled) {
 		F2 max_view_off_target = {
-			ClampBot(0, box->view_bounds[0] - box->fixed_size[0]),
-			ClampBot(0, box->view_bounds[1] - box->fixed_size[1]),
+			Max(0, box->view_bounds[0] - box->fixed_size[0]),
+			Max(0, box->view_bounds[1] - box->fixed_size[1]),
 		};
 		if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_X) {
 			box->view_off_target[0] = Clamp(0, box->view_off_target[0], max_view_off_target[0]);
@@ -1379,7 +1423,7 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis) {
 				for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
 					if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
 						F1 fixup_size_this_child = child->fixed_size[axis] * (1 - child->pref_size[axis].strictness);
-						fixup_size_this_child = ClampBot(0, fixup_size_this_child);
+						fixup_size_this_child = Max(0, fixup_size_this_child);
 
 						F1 fixup_pct = (violation / total_weighted_size);
 						fixup_pct = Clamp(0, fixup_pct, 1);
@@ -1401,7 +1445,7 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis) {
 
 		//- kti: enforce clamps
 		for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
-			child->fixed_size[axis] = ClampBot(child->min_size[axis], child->fixed_size[axis]);
+			child->fixed_size[axis] = Max(child->min_size[axis], child->fixed_size[axis]);
 		}
 	}
 
@@ -1527,12 +1571,12 @@ Internal F2 ui_box_text_pos(UI_Box *box) {
 		case UI_TEXT_ALIGN__CENTER: {
 			F2 text_dim = box->display_fruns.dim;
 			result[0] = round_F1(box->rect[0]+box->rect[2]*0.5f - text_dim[0]*0.5f);
-			result[0] = ClampBot(result[0], box->rect[0]);
+			result[0] = Max(result[0], box->rect[0]);
 		} break;
 		case UI_TEXT_ALIGN__RIGHT: {
 			F2 text_dim = box->display_fruns.dim;
 			result[0] = round_F1(box->rect[0]+box->rect[2] - text_dim[0] - box->text_padding);
-			result[0] = ClampBot(result[0], box->rect[0]);
+			result[0] = Max(result[0], box->rect[0]);
 		} break;
 	}
 	result[0] = floor_F1(result[0]);
@@ -1885,7 +1929,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 				value[0] = !value[0];
 			}
 			if (!ui_box_is_nil(check) && signal.flags & UI_SIGNAL_FLAG__HOVERING) {
-				check->background_color[0] = ClampTop(1.0f, check->background_color[0]+0.1f);
+				check->background_color[0] = Min(1.0f, check->background_color[0]+0.1f);
 			}
 		}
 
@@ -1907,6 +1951,157 @@ Internal UI_Signal ui_label(String8 string) {
   ui_box_equip_display_string(box, string);
   UI_Signal interact = ui_signal_from_box(box);
   return interact;
+}
+
+Internal L1 ui_scanned_column_from_column(String8 string, L1 start_column, Side side) {
+	L1 new_column = start_column;
+	SL1 delta = (!!side)*2 - 1;
+	I1 found_text = 0;
+	I1 found_non_space = 0;
+	SL1 start_off = delta < 0 ? delta : 0;
+	for (SL1 col = start_column+start_off; 1 <= col && col <= string.len+1; col += delta) {
+		B1 byte = (col <= string.len) ? string.str[col-1] : 0;
+		I1 is_non_space = !char_is_space(byte);
+		I1 is_name = (char_is_alpha(byte) || char_is_digit(byte, 10) || byte == '_');
+		if (((side == SIDE__MIN) && (col == 1)) ||
+				((side == SIDE__MAX) && (col == string.len+1)) ||
+				(found_non_space && !is_non_space) ||
+				(found_text && !is_name)) {
+			new_column = col + (!side && col != 1);
+			break;
+		} else if (!found_text && is_name) {
+			found_text = 1;
+		} else if (!found_non_space && is_non_space) {
+			found_non_space = 1;
+		}
+	}
+	return new_column;
+}
+
+Internal String8 ui_push_string_replace_range(Arena *arena, String8 string, L1 min, L1 max, String8 replace) {
+	min -= 1;
+	max -= 1;
+
+	if (min > string.len) {
+		min = 0;
+	}
+	if (max > string.len) {
+		max = string.len;
+	}
+
+	L1 old_len = string.len;
+	L1 new_len = old_len - (max-min) + replace.len;
+
+	B1 *push_base = push_array(arena, B1, new_len);
+	memmove(push_base, string.str, min);
+	memmove(push_base+min+replace.len, string.str+max, string.len-max);
+	if (replace.str != 0) {
+		memmove(push_base+min, replace.str, replace.len);
+	}
+
+	String8 result = {push_base, new_len};
+	return result;
+}
+
+Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, String8 string, Txt_Pt cursor, Txt_Pt mark) {
+	Txt_Pt next_cursor = cursor;
+	Txt_Pt next_mark = mark;
+	Txt_Range range = {0};
+	String8 replace = {0};
+	String8 copy = {0};
+	UI_Txt_Op_Flags flags = 0;
+	SI2 delta = cmd->delta_si2;
+	SI2 original_delta = delta;
+
+	switch (cmd->delta_unit) {
+		default: {} break;
+		case UI_CMD_DELTA_UNIT__CHAR: {
+			// TODO: Multi byte characters in UTF-8.
+		} break;
+		case UI_CMD_DELTA_UNIT__WORD: {
+			delta[0] = ui_scanned_column_from_column(string, cursor.column, delta[0] > 0 ? SIDE__MAX : SIDE__MIN) - cursor.column;
+		} break;
+		case UI_CMD_DELTA_UNIT__LINE:
+		case UI_CMD_DELTA_UNIT__WHOLE:
+		case UI_CMD_DELTA_UNIT__PAGE: {
+			L1 first_nonwhitespace_column = 1;
+			for (L1 idx = 0; idx < string.len; idx += 1) {
+				if (!char_is_space(string.str[idx])) {
+					first_nonwhitespace_column = idx + 1;
+					break;
+				}
+			}
+			L1 home_dest_column = (cursor.column == first_nonwhitespace_column) ? 1 : first_nonwhitespace_column;
+			delta[0] = (delta[0] > 0) ? (string.len+1 - cursor.column) : (home_dest_column - cursor.column);
+		} break;
+	}
+
+	if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__ZERO_DELTA_ON_SELECT) {
+		delta = (SI2){0};
+	}
+
+	if (txt_pt_match(cursor, mark) || !(cmd->flags & UI_CMD_FLAG__ZERO_DELTA_ON_SELECT)) {
+		next_cursor.column += delta[0];
+	}
+
+	if (cmd->flags & UI_CMD_FLAG__CAP_AT_LINE) {
+		next_cursor.column = Clamp(1, next_cursor.column, string.len+1);
+	}
+
+	if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__PICK_SELECT_SIDE) {
+		if (original_delta[0] < 0 || original_delta[1] < 0) {
+			next_cursor = next_mark = txt_pt_min(cursor, mark);
+		} else if (original_delta[0] > 0 || original_delta[1] > 0) {
+			next_cursor = next_mark = txt_pt_max(cursor, mark);
+		}
+	}
+
+	if (cmd->flags & UI_CMD_FLAG__COPY) {
+		if (cursor.line == mark.line) {
+			copy = str8_substr(string, cursor.column-1, mark.column-1);
+			flags |= UI_TXT_OP_FLAG__COPY;
+		} else {
+			flags |= UI_TXT_OP_FLAG__INVALID;
+		}
+	}
+
+	if (cmd->flags & UI_CMD_FLAG__PASTE) {
+		range = (Txt_Range){cursor, mark};
+		// TODO: replace = <Get clipboard text>
+		next_cursor = next_mark = (Txt_Pt){cursor.line, cursor.column+replace.len};
+	}
+
+	if (cmd->flags & UI_CMD_FLAG__DELETE) {
+		Txt_Pt new_pos = txt_pt_min(next_cursor, next_mark);
+		range = (Txt_Range){next_cursor, next_mark};
+		replace = Str8_("");
+		next_cursor = next_mark = new_pos;
+	}
+
+	if (!(cmd->flags & UI_CMD_FLAG__KEEP_MARK)) {
+		next_mark = next_cursor;
+	}
+
+	if (cmd->string.len != 0) {
+		range = (Txt_Range){cursor, mark};
+		replace = push_str8_copy(arena, cmd->string);
+		next_cursor = next_mark = (Txt_Pt){range.min.line, range.min.column + cmd->string.len};
+	}
+
+	if (next_cursor.column > string.len+1 || 1 > next_cursor.column || cmd->delta_si2[1] != 0) {
+		flags |= UI_TXT_OP_FLAG__INVALID;
+	}
+	next_cursor.column = Clamp(1, next_cursor.column, string.len+replace.len+1);
+	next_mark.column = Clamp(1, next_mark.column, string.len+replace.len+1);
+
+	UI_Txt_Op op = {0};
+	op.flags = flags;
+	op.replace = replace;
+	op.copy = copy;
+	op.range = range;
+	op.cursor = next_cursor;
+	op.mark = next_mark;
+	return op;
 }
 
 Internal void ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
@@ -1949,8 +2144,8 @@ Internal void ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit
 
 			UI_Txt_Op op = ui_single_line_txt_op_from_cmd(scratch.arena, cmd, edit_string, cursor[0], mark[0]);
 
-			if (!txt_pt_match(op.range.min, op.range.max) || op.replace.size != 0) {
-				String8 new_string = ui_push_string_replace_range(scratch.arena, edit_string, {op.range.min.column, op.range.max.column}, op.replace);
+			if (!txt_pt_match(op.range.min, op.range.max) || op.replace.len != 0) {
+				String8 new_string = ui_push_string_replace_range(scratch.arena, edit_string, op.range.min.column, op.range.max.column, op.replace);
 				new_string.len = Min(edit_buffer_size, new_string.len);
 				memmove(edit_buffer, new_string.str, new_string.len);
 				edit_string_size_out[0] = new_string.len;
@@ -2077,11 +2272,11 @@ Internal void ui_draw(void) {
 			if (draw_active_effect) {
 				inst->colors[0][0] = inst->colors[0][0]*0.9f;
 				inst->colors[1][0] = inst->colors[1][0]*0.9f;
-				inst->colors[2][0] = ClampTop(inst->colors[2][0]+0.1f, 1.0f);
-				inst->colors[3][0] = ClampTop(inst->colors[3][0]+0.1f, 1.0f);
+				inst->colors[2][0] = Min(inst->colors[2][0]+0.1f, 1.0f);
+				inst->colors[3][0] = Min(inst->colors[3][0]+0.1f, 1.0f);
 			} else if (draw_hot_effect) {
-				inst->colors[0][0] = ClampTop(inst->colors[0][0]+0.1f, 1.0f);
-				inst->colors[1][0] = ClampTop(inst->colors[1][0]+0.1f, 1.0f);
+				inst->colors[0][0] = Min(inst->colors[0][0]+0.1f, 1.0f);
+				inst->colors[1][0] = Min(inst->colors[1][0]+0.1f, 1.0f);
 			}
 		}
 
@@ -2090,9 +2285,9 @@ Internal void ui_draw(void) {
 				F2 pos = ui_box_text_pos(box);
 				F4 color = box->text_color;
 				if (draw_active_effect) {
-					color[0] = ClampBot(color[0]-0.2f, 0.0f);
+					color[0] = Max(color[0]-0.2f, 0.0f);
 				} else if (draw_hot_effect) {
-					color[0] = ClampTop(color[0]+0.1f, 1.0f);
+					color[0] = Max(color[0]+0.1f, 1.0f);
 				}
 				dr_text_run(n->value.run, pos, color);
 			}

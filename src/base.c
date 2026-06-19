@@ -9,6 +9,7 @@
 #define Volatile     volatile
 #define ThreadLocal  _Thread_local
 #define W_           __attribute__((__stdcall__)) __attribute__((__force_align_arg_pointer__))
+#define Read_Only    const __attribute__((section(".rodata")))
 
 typedef float     F1;
 typedef double    D1;
@@ -118,8 +119,6 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 
 #define Min(a, b) ((a) < (b) ? (a) : (b))
 #define Max(a, b) ((a) > (b) ? (a) : (b))
-#define ClampTop(a, x) Min(a, x)
-#define ClampBot(x, b) Max(x, b)
 #define Clamp(a, x, b) (((x)<(a))?(a):((x)>(b))?(b):(x))
 
 #define Crash(x) __builtin_trap()

@@ -161,7 +161,6 @@ enum {
 	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X      = (1LLU<<29),
 	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y      = (1LLU<<30),
 	UI_BOX_FLAG__FOCUS_NAV_SKIP           = (1LLU<<31),
-	UI_BOX_FLAG__DEFAULT_FOCUS_NAV_EDIT   = (1LLU<<32),
 	UI_BOX_FLAG__KEYBOARD_CLICKABLE       = (1LLU<<33),
 	UI_BOX_FLAG__CLICK_TO_FOCUS           = (1LLU<<34),
 
@@ -169,7 +168,7 @@ enum {
 	UI_BOX_FLAG__FLOATING          = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
 	UI_BOX_FLAG__VIEW_SCROLL       = (UI_BOX_FLAG__VIEW_SCROLL_X|UI_BOX_FLAG__VIEW_SCROLL_Y),
 	UI_BOX_FLAG__VIEW_CLAMP        = (UI_BOX_FLAG__VIEW_CLAMP_X|UI_BOX_FLAG__VIEW_CLAMP_Y),
-	UI_BOX_FLAG__DEFAULT_FOCUS_NAV = (UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X|UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y|UI_BOX_FLAG__DEFAULT_FOCUS_NAV_EDIT),
+	UI_BOX_FLAG__DEFAULT_FOCUS_NAV = (UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X|UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y),
 };
 
 typedef struct UI_Box UI_Box;
@@ -1194,7 +1193,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 							UI_Box *prev_descendant = &ui_nil_box;
 							for (UI_Box *d = box->prev; !ui_box_is_nil(d); d = d->last) {
 								moved_in_axis[d->parent->child_layout_axis] += 1;
-								root_descendant = d;
+								prev_descendant = d;
 							}
 							if (!ui_box_is_nil(root_descendant)) {
 								box = root_descendant;

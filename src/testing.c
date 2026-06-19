@@ -101,6 +101,8 @@ struct State {
 
 	L1 name_edit_buffer_len;
 	B1 name_edit_buffer[512];
+	Txt_Pt name_cursor;
+	Txt_Pt name_mark;
 };
 
 #endif
@@ -443,28 +445,31 @@ Internal void lane(Arena *arena) {
 
 					//- kti: Build ui
 					if (panel->first == 0) {
-						ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
-						ui_set_next_child_layout_axis(AXIS__Y);
-						UI_Box *box = ui_build_box_from_stringf(
-								UI_BOX_FLAG__DRAW_BACKGROUND|
-								UI_BOX_FLAG__DRAW_BORDER|
-								UI_BOX_FLAG__CLICKABLE|
-								UI_BOX_FLAG__FLOATING|
-								UI_BOX_FLAG__CLIP,
-								"##panel_box_%p", panel);
-						UI_Parent(box)
-						UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
-							UI_Child_Layout_Axis(AXIS__X);
-							UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
-							UI_Parent((title_bar))
-							UI_Font_Size(10.0f) {
-								UI_Padding(ui_px(10.0f, 1.0f))
-								UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-								if (panel->view_count == 0) {
-									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
-								} else for EachIndex(i, panel->view_count) {
-									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
-								}
+						UI_Focus_Hot(UI_FOCUS_KIND__ON)
+						UI_Focus_Active(UI_FOCUS_KIND__ON) {
+							ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
+							ui_set_next_child_layout_axis(AXIS__Y);
+							UI_Box *box = ui_build_box_from_stringf(
+									UI_BOX_FLAG__DRAW_BACKGROUND|
+									UI_BOX_FLAG__DRAW_BORDER|
+									UI_BOX_FLAG__CLICKABLE|
+									UI_BOX_FLAG__FLOATING|
+									UI_BOX_FLAG__CLIP|
+									UI_BOX_FLAG__DEFAULT_FOCUS_NAV,
+									"##panel_box_%p", panel);
+							UI_Parent(box)
+							UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
+								UI_Child_Layout_Axis(AXIS__X);
+								UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
+								UI_Parent((title_bar))
+								UI_Font_Size(10.0f) {
+									UI_Padding(ui_px(10.0f, 1.0f))
+									UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+									if (panel->view_count == 0) {
+										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
+									} else for EachIndex(i, panel->view_count) {
+										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
+									}
 
 								ui_spacer(ui_pct(1.0f, 0.0f));
 
@@ -498,7 +503,6 @@ Internal void lane(Arena *arena) {
 								}
 							}
 
-
 							UI_Row()
 							UI_Padding(ui_px(10.0f, 1.0f)) {
 								UI_Column() {
@@ -521,27 +525,26 @@ Internal void lane(Arena *arena) {
 
 										View *view = &panel->views[panel->selected_view_idx];
 										switch (view->kind) {
-											case VIEW_KIND__TEST: {
-												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
+												case VIEW_KIND__TEST: {
+													UI_Pref_Width(ui_px(500.0f, 1.0f))
+													ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
 
-												ui_spacer(ui_px(10, 1.0f));
+													ui_spacer(ui_px(10, 1.0f));
 
-												UI_Pref_Width(ui_pct(1.0f, 0.0f))
-												ui_checkbox(Str8_("Check"), &view->checked);
+													UI_Pref_Width(ui_pct(1.0f, 0.0f))
+													ui_checkbox(Str8_("Check"), &view->checked);
 
-												ui_spacer(ui_px(10, 1.0f));
+													ui_spacer(ui_px(10, 1.0f));
 
-												Txt_Pt cursor = {1, 1};
-												Txt_Pt mark = {1, 1};
-												String8 name = Str8_("Theodor");
-												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												ui_textedit(&cursor, &mark, state->name_edit_buffer, sizeof(state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
-											} break;
-										}
+													String8 name = Str8_("Theodor");
+													UI_Pref_Width(ui_px(500.0f, 1.0f))
+													ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer, sizeof(state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
+												} break;
+											}
 									}
 								}
 							}
+						}
 						}
 					}
 				}

@@ -402,6 +402,11 @@ Internal Txt_Pt txt_pt_max(Txt_Pt a, Txt_Pt b) {
 	return result;
 }
 
+Internal Txt_Pange txt_range(Txt_Pt a, Txt_Pt b) {
+	Txt_Range result = {txt_pt_min(a, b), txt_pt_max(a, b)};
+	return result;
+}
+
 Internal UI_Key ui_key_zero(void) {
 	UI_Key result = {0};
 	return result;
@@ -2065,14 +2070,14 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 	}
 
 	if (cmd->flags & UI_CMD_FLAG__PASTE) {
-		range = (Txt_Range){cursor, mark};
+		range = txt_range(cursor, mark);
 		// TODO: replace = <Get clipboard text>
-		next_cursor = next_mark = (Txt_Pt){cursor.line, cursor.column+replace.len};
+		next_cursor = next_mark = (Txt_Pt){range.min.line, range.min.column+replace.len};
 	}
 
 	if (cmd->flags & UI_CMD_FLAG__DELETE) {
 		Txt_Pt new_pos = txt_pt_min(next_cursor, next_mark);
-		range = (Txt_Range){next_cursor, next_mark};
+		range = txt_range(next_cursor, next_mark);
 		replace = Str8_("");
 		next_cursor = next_mark = new_pos;
 	}
@@ -2082,7 +2087,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 	}
 
 	if (cmd->string.len != 0) {
-		range = (Txt_Range){cursor, mark};
+		range = txt_range(cursor, mark);
 		replace = push_str8_copy(arena, cmd->string);
 		next_cursor = next_mark = (Txt_Pt){range.min.line, range.min.column + cmd->string.len};
 	}

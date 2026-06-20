@@ -356,10 +356,32 @@ Internal void lane(Arena *arena) {
 					}
 				}
 				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ESC) {
+					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){ .kind = UI_CMD_KIND__CANCEL, .timestamp_ns = e->timestamp_ns, });
+				}
+				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__A) {
+					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){ .kind = UI_CMD_KIND__TEXT, .string = Str8_("a"), .timestamp_ns = e->timestamp_ns, });
+				}
+				if (e->kind == OS_EVENT_KIND__PRESS &&
+					(e->key == OS_KEY__LEFT || e->key == OS_KEY__RIGHT)) {
 					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
-						.kind = UI_CMD_KIND__CANCEL,
-						.timestamp_ns = os_clock(),
-					});
+							.kind = UI_CMD_KIND__NAVIGATE,
+							.delta_unit = UI_CMD_DELTA_UNIT__CHAR,
+							.flags =
+							UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__PICK_SELECT_SIDE,
+							.delta_si2 = {(e->key == OS_KEY__LEFT) ? -1 : 1, 0},
+							.timestamp_ns = e->timestamp_ns,
+						});
+				}
+				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__BACKSPACE) {
+					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
+											.kind = UI_CMD_KIND__EDIT,
+											.delta_unit = UI_CMD_DELTA_UNIT__CHAR,
+											.flags = UI_CMD_FLAG__CAP_AT_LINE |
+											UI_CMD_FLAG__ZERO_DELTA_ON_SELECT |
+											UI_CMD_FLAG__DELETE,
+											.delta_si2 = {-1, 0},
+											.timestamp_ns = e->timestamp_ns,
+											});
 				}
 			}
 		}

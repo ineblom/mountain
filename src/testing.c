@@ -120,7 +120,8 @@ Internal Panel_Rec panel_rec_depth_first_pre_order(Panel *panel) {
 	if (panel->first) {
 		rec.next = panel->first;
 		rec.push_count = 1;
-	} else for (Panel *p = panel; p != 0; p = p->parent) {
+	} else
+	for (Panel *p = panel; p != 0; p = p->parent) {
 		if (p->next) {
 			rec.next = p->next;
 			break;
@@ -136,9 +137,11 @@ Internal F4 panel_rect_from_parent_rect(Panel *child, F4 parent_rect) {
 	Panel *parent = child->parent;
 	if (parent) {
 		for (Panel *p = parent->first; p != child && p != 0; p = p->next) {
-			result[parent->split_axis] += p->pct_of_parent * parent_rect[2+parent->split_axis];
+			result[parent->split_axis] +=
+				p->pct_of_parent * parent_rect[2 + parent->split_axis];
 		}
-		result[2+parent->split_axis] = child->pct_of_parent * parent_rect[2+parent->split_axis];
+		result[2 + parent->split_axis] =
+			child->pct_of_parent * parent_rect[2 + parent->split_axis];
 	}
 	return result;
 }
@@ -189,7 +192,7 @@ Internal void panel_insert(Panel *panel, Panel *at, Dir dir) {
 	} else if (parent->split_axis == split_axis || parent->first == parent->last) {
 		parent->split_axis = split_axis;
 		panel->parent = parent;
-		panel->pct_of_parent = at->pct_of_parent = at->pct_of_parent*0.5f;
+		panel->pct_of_parent = at->pct_of_parent = at->pct_of_parent * 0.5f;
 		DLLInsert(parent->first, parent->last, at, panel);
 	} else {
 		Panel *container = panel_alloc();
@@ -326,7 +329,7 @@ Internal void lane(Arena *arena) {
 		state = push_array(arena, State, 1);
 		state->arena = arena;
 
-	  window_open();
+		window_open();
 	}
 
 	lane_sync();
@@ -336,11 +339,11 @@ Internal void lane(Arena *arena) {
 	////////////////////////////////
 	//~ kti: Main loop
 
-  while (running) {
+	while (running) {
 		ProfBegin("Frame");
 
 		L1 frame_begin_time = os_clock();
-		F1 time = (F1)(frame_begin_time/1000000ULL) / 1000.0f;
+		F1 time = (F1)(frame_begin_time / 1000000ULL) / 1000.0f;
 
 		Temp_Arena scratch = scratch_begin(0, 0);
 
@@ -409,8 +412,8 @@ Internal void lane(Arena *arena) {
 
 			state->cmd_count = 0;
 
-			FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-PropU_N.ttf"));
-			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/Bloomberg-FixedU_N.ttf"));
+			FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/" "Bloomberg-PropU_N.ttf"));
+			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/" "Bloomberg-FixedU_N.ttf"));
 
 			for (Window *w = state->first_window; w != 0; w = w->next) {
 				ui_state_equip(w->ui);
@@ -425,18 +428,20 @@ Internal void lane(Arena *arena) {
 				//- kti: Non leaf panel ui
 				F1 resize_box_w = 8;
 
-				for (Panel *panel = &w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
+				for (Panel *panel = &w->root_panel; panel != 0;
+				panel = panel_rec_depth_first_pre_order(panel) .next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
-					for (Panel *child = panel->first; child != 0 && child->next != 0; child = child->next) {
+					for (Panel *child = panel->first;
+					child != 0 && child->next != 0; child = child->next) {
 						F4 child_rect = panel_rect_from_parent_rect(child, panel_rect);
 
 						//- kti: Build separator box.
 						F4 boundary_rect = child_rect;
-						boundary_rect[panel->split_axis] += child_rect[2+panel->split_axis] - resize_box_w*0.5f;
-						boundary_rect[2+panel->split_axis] = resize_box_w;
+						boundary_rect[panel->split_axis] += child_rect[2 + panel->split_axis] - resize_box_w * 0.5f;
+						boundary_rect[2 + panel->split_axis] = resize_box_w;
 						ui_set_next_fixed_rect(boundary_rect);
-						UI_Box *boundary_box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__FLOATING, "##panel_boundary_%p", child);
+						UI_Box *boundary_box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__FLOATING, "##panel_boundary_%p", child);
 
 						//- kti: Handle resize.
 						UI_Signal sig = ui_signal_from_box(boundary_box);
@@ -447,16 +452,16 @@ Internal void lane(Arena *arena) {
 								F2 drag_data = {min_child->pct_of_parent, max_child->pct_of_parent};
 								ui_store_drag_struct(&drag_data);
 							}
-							F2 drag_data               = ui_get_drag_struct(F2)[0];
-							F2 drag_delta              = ui_drag_delta();
+							F2 drag_data = ui_get_drag_struct(F2)[0];
+							F2 drag_delta = ui_drag_delta();
 							F1 min_child_pct__pre_drag = drag_data[0];
 							F1 max_child_pct__pre_drag = drag_data[1];
-							F1 min_child_px__pre_drag  = min_child_pct__pre_drag*panel_rect[2+panel->split_axis];
-							F1 max_child_px__pre_drag  = max_child_pct__pre_drag*panel_rect[2+panel->split_axis];
+							F1 min_child_px__pre_drag = min_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
+							F1 max_child_px__pre_drag = max_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
 							F1 min_child_px__post_drag = min_child_px__pre_drag + drag_delta[panel->split_axis];
 							F1 max_child_px__post_drag = max_child_px__pre_drag - drag_delta[panel->split_axis];
-							min_child->pct_of_parent   = min_child_px__post_drag/panel_rect[2+panel->split_axis];
-							max_child->pct_of_parent   = max_child_px__post_drag/panel_rect[2+panel->split_axis];
+							min_child->pct_of_parent = min_child_px__post_drag / panel_rect[2 + panel->split_axis];
+							max_child->pct_of_parent = max_child_px__post_drag / panel_rect[2 + panel->split_axis];
 						}
 					}
 				}
@@ -472,73 +477,70 @@ Internal void lane(Arena *arena) {
 							ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
 							ui_set_next_child_layout_axis(AXIS__Y);
 							UI_Box *box = ui_build_box_from_stringf(
-									UI_BOX_FLAG__DRAW_BACKGROUND|
-									UI_BOX_FLAG__DRAW_BORDER|
-									UI_BOX_FLAG__CLICKABLE|
-									UI_BOX_FLAG__FLOATING|
-									UI_BOX_FLAG__CLIP|
-									UI_BOX_FLAG__DEFAULT_FOCUS_NAV,
-									"##panel_box_%p", panel);
+								UI_BOX_FLAG__DRAW_BACKGROUND |
+								UI_BOX_FLAG__DRAW_BORDER |
+								UI_BOX_FLAG__CLICKABLE |
+								UI_BOX_FLAG__FLOATING |
+								UI_BOX_FLAG__CLIP |
+								UI_BOX_FLAG__DEFAULT_FOCUS_NAV,
+								"##panel_box_%p", panel);
 							UI_Parent(box)
 							UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
 								UI_Child_Layout_Axis(AXIS__X);
-								UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
-								UI_Parent((title_bar))
-								UI_Font_Size(10.0f) {
+								UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
+								UI_Parent((title_bar)) UI_Font_Size(10.0f) {
 									UI_Padding(ui_px(10.0f, 1.0f))
-									UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-									if (panel->view_count == 0) {
+									UI_Pref_Width(ui_text_dim(0.0f, 1.0f)) if (panel->view_count == 0) {
 										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
 									} else for EachIndex(i, panel->view_count) {
 										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
 									}
 
-								ui_spacer(ui_pct(1.0f, 0.0f));
+									ui_spacer(ui_pct(1.0f, 0.0f));
 
-								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-								UI_Pref_Height(ui_pct(1.0f, 1.0f))
-								UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-								UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
-									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										cmd_push((Cmd){
-											.kind = CMD_KIND__OPEN_PANEL,
-											.window = w,
-											.panel = panel,
-											.dir = DIR__RIGHT,
-										});
-									}
-									if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										cmd_push((Cmd){
-											.kind = CMD_KIND__OPEN_PANEL,
-											.window = w,
-											.panel = panel,
-											.dir = DIR__DOWN,
-										});
-									}
-									if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-										cmd_push((Cmd){
-											.kind = CMD_KIND__CLOSE_PANEL,
-											.window = w,
-											.panel = panel,
-										});
+									UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+									UI_Pref_Height(ui_pct(1.0f, 1.0f))
+									UI_Text_Align((UI_TEXT_ALIGN__CENTER))
+									UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
+										if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+											cmd_push((Cmd){
+												.kind = CMD_KIND__OPEN_PANEL,
+												.window = w,
+												.panel = panel,
+												.dir = DIR__RIGHT,
+											});
+										}
+										if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+											cmd_push((Cmd){
+												.kind = CMD_KIND__OPEN_PANEL,
+												.window = w,
+												.panel = panel,
+												.dir = DIR__DOWN,
+											});
+										}
+										if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+											cmd_push((Cmd){
+												.kind = CMD_KIND__CLOSE_PANEL,
+												.window = w,
+												.panel = panel,
+											});
+										}
 									}
 								}
-							}
 
-							UI_Row()
-							UI_Padding(ui_px(10.0f, 1.0f)) {
-								UI_Column() {
-									if (panel->view_count == 0) {
-										UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
-										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Choose view kind."));
+								UI_Row() UI_Padding(ui_px(10.0f, 1.0f)) {
+									UI_Column() {
+										if (panel->view_count == 0) {
+											UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
+											ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Choose view kind."));
 
-										UI_Row()
-										UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
-										UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-										UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
-										UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-										for EachIndex(i, VIEW_KIND_COUNT) {
-											if (ui_button(view_kind_names[i]).flags & UI_SIGNAL_FLAG__PRESSED) {
+											UI_Row()
+											UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
+											UI_Text_Align((UI_TEXT_ALIGN__CENTER))
+											UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
+											UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+											for EachIndex(i, VIEW_KIND_COUNT) {
+											if (ui_button(view_kind_names [i]) .flags & UI_SIGNAL_FLAG__PRESSED) {
 												panel_push_view(panel, i);
 											}
 										}
@@ -547,110 +549,111 @@ Internal void lane(Arena *arena) {
 
 										View *view = &panel->views[panel->selected_view_idx];
 										switch (view->kind) {
-												case VIEW_KIND__TEST: {
-													UI_Pref_Width(ui_px(500.0f, 1.0f))
-													ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
+											case VIEW_KIND__TEST: {
+												UI_Pref_Width(ui_px(500.0f, 1.0f))
+												ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
 
-													ui_spacer(ui_px(10, 1.0f));
+												ui_spacer(ui_px(10, 1.0f));
 
-													UI_Pref_Width(ui_pct(1.0f, 0.0f))
-													ui_checkbox(Str8_("Check"), &view->checked);
+												UI_Pref_Width(ui_pct(1.0f, 0.0f))
+												ui_checkbox(Str8_("Check"), &view->checked);
 
-													ui_spacer(ui_px(10, 1.0f));
+												ui_spacer(ui_px(10, 1.0f));
 
-													String8 name = Str8_("Theodor");
-													UI_Pref_Width(ui_px(500.0f, 1.0f))
-													ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer, sizeof(state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
-												} break;
-											}
+												String8 name = Str8_("Theodor");
+												UI_Pref_Width(ui_px(500.0f, 1.0f))
+												ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer, sizeof( state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
+											} break;
+										}
 									}
 								}
 							}
 						}
-						}
 					}
 				}
+			}
 
-				if (w->root_panel.first == 0) {
-					UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-					UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
-						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
-						if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-							panel_insert(panel_alloc(), &w->root_panel, 0);
-						}
+			if (w->root_panel.first == 0) {
+				UI_Text_Align((UI_TEXT_ALIGN__CENTER))
+				UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
+					ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
+					if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+						panel_insert(panel_alloc(), &w->root_panel, 0);
 					}
 				}
-
-				ui_end_build();
-
-				fc_frame();
-				dr_begin_frame();
-				gfx_window_begin_frame(w->os, w->gfx);
-				DR_Bucket *bucket = dr_bucket_make();
-				dr_push_bucket(bucket);
-
-				// dr_rect((F4){0, 0, w->os->width, w->os->height}, (F4){0.15f, 0.0f, 0.0f, 1.0f}, 0.0f, 0.0f);
-
-				ui_draw();
-
-				dr_submit_bucket(w->os, w->gfx, bucket);
-				dr_pop_bucket();
-				gfx_window_end_frame(w->os, w->gfx);
 			}
+
+			ui_end_build();
+
+			fc_frame();
+			dr_begin_frame();
+			gfx_window_begin_frame(w->os, w->gfx);
+			DR_Bucket *bucket = dr_bucket_make();
+			dr_push_bucket(bucket);
+
+			// dr_rect((F4){0, 0, w->os->width, w->os->height},
+			// (F4){0.15f, 0.0f, 0.0f, 1.0f}, 0.0f, 0.0f);
+
+			ui_draw();
+
+			dr_submit_bucket(w->os, w->gfx, bucket);
+			dr_pop_bucket();
+			gfx_window_end_frame(w->os, w->gfx);
 		}
-
-		scratch_end(scratch);
-
-		ProfEnd();
-		ProfFlush();
-
-		//- kti: Calculate time spent and sleep until target frame time is met.
-		L1 target_frame_time = 1000000000ULL / 60;
-		L1 frame_end_time = os_clock();
-		L1 frame_time = frame_end_time - frame_begin_time;
-
-		if (lane_idx() == 0) {
-			frame_count += 1;
-			total_frame_time += frame_time;
-			min_frame_time = Min(min_frame_time, frame_time);
-			max_frame_time = Max(max_frame_time, frame_time);
-
-			if (frame_count % 60 == 0) {
-				F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
-				F1 min_ms = min_frame_time / 1000000.0f;
-				F1 max_ms = max_frame_time / 1000000.0f;
-				fps = 1000.0f/avg_ms;
-				printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
-				total_frame_time = 0;
-				min_frame_time = L1_MAX;
-				max_frame_time = 0;
-			}
-		}
-
-		//- kti: 0 lane sleeps if we haven't hit the target frame time. Others wait on the barrier.
-		if (lane_idx() == 0 && frame_time < target_frame_time) {
-			L1 remainder = target_frame_time - frame_time;
-			if (remainder > 50000ULL) {
-				os_sleep(remainder - 50000ULL);
-			}
-			while (os_clock() - frame_begin_time < target_frame_time) {}
-		}
-
-		lane_sync();
 	}
 
-	////////////////////////////////
-	//~ kti: Shutdown
+	scratch_end(scratch);
 
-	lane_sync();
+	ProfEnd();
+	ProfFlush();
+
+	//- kti: Calculate time spent and sleep until target frame time is met.
+	L1 target_frame_time = 1000000000ULL / 60;
+	L1 frame_end_time = os_clock();
+	L1 frame_time = frame_end_time - frame_begin_time;
 
 	if (lane_idx() == 0) {
-		while (state->first_window != 0) {
-			window_close(state->first_window);
-		}
+		frame_count += 1;
+		total_frame_time += frame_time;
+		min_frame_time = Min(min_frame_time, frame_time);
+		max_frame_time = Max(max_frame_time, frame_time);
 
-		ProfShutdown();
+		if (frame_count % 60 == 0) {
+			F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
+			F1 min_ms = min_frame_time / 1000000.0f;
+			F1 max_ms = max_frame_time / 1000000.0f;
+			fps = 1000.0f / avg_ms;
+			printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
+			total_frame_time = 0;
+			min_frame_time = L1_MAX;
+			max_frame_time = 0;
+		}
 	}
+
+	//- kti: 0 lane sleeps if we haven't hit the target frame time. Others wait on the barrier.
+	if (lane_idx() == 0 && frame_time < target_frame_time) {
+		L1 remainder = target_frame_time - frame_time;
+		if (remainder > 50000ULL) {
+			os_sleep(remainder - 50000ULL);
+		}
+		while (os_clock() - frame_begin_time < target_frame_time) { }
+	}
+
+	lane_sync();
+}
+
+////////////////////////////////
+//~ kti: Shutdown
+
+lane_sync();
+
+if (lane_idx() == 0) {
+	while (state->first_window != 0) {
+		window_close(state->first_window);
+	}
+
+	ProfShutdown();
+}
 }
 
 #endif

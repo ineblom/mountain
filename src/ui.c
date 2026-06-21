@@ -163,6 +163,8 @@ enum {
 	UI_BOX_FLAG__FOCUS_NAV_SKIP           = (1LLU<<31),
 	UI_BOX_FLAG__KEYBOARD_CLICKABLE       = (1LLU<<33),
 	UI_BOX_FLAG__CLICK_TO_FOCUS           = (1LLU<<34),
+	UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY    = (1LLU<<35),
+	UI_BOX_FLAG__DISABLE_FOCUS_BORDER     = (1LLU<<36),
 
 	UI_BOX_FLAG__CLICKABLE         = (UI_BOX_FLAG__MOUSE_CLICKABLE|UI_BOX_FLAG__KEYBOARD_CLICKABLE),
 	UI_BOX_FLAG__FLOATING          = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
@@ -402,7 +404,7 @@ Internal Txt_Pt txt_pt_max(Txt_Pt a, Txt_Pt b) {
 	return result;
 }
 
-Internal Txt_Pange txt_range(Txt_Pt a, Txt_Pt b) {
+Internal Txt_Range txt_range(Txt_Pt a, Txt_Pt b) {
 	Txt_Range result = {txt_pt_min(a, b), txt_pt_max(a, b)};
 	return result;
 }
@@ -1161,7 +1163,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 								moved_in_axis[box->child_layout_axis] += 1;
 								box = box->first;
 							} else for (UI_Box *p = box; !ui_box_is_nil(p) && p != nav_root; p = p->parent) {
-								if (!ui_box_is_nil(p->parent)) {
+								if (!ui_box_is_nil(p->next)) {
 									moved_in_axis[p->parent->child_layout_axis] += 1;
 									box = p->next;
 									break;
@@ -2238,16 +2240,10 @@ Internal void ui_draw(void) {
 
 		I1 hot_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_hot_key());
 		I1 active_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT));
-		I1 hot_by_group = (!ui_key_match(box->group_key, ui_key_zero()) &&
-				!ui_box_is_nil(hot_box) &&
-				ui_key_match(box->group_key, hot_box->group_key));
-		I1 active_by_group = (!ui_key_match(box->group_key, ui_key_zero()) &&
-				!ui_box_is_nil(active_box) &&
-				ui_key_match(box->group_key, active_box->group_key));
-		I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS &&
-				(active_by_key || active_by_group));
-		I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS &&
-				(hot_by_key || hot_by_group));
+		I1 hot_by_group = (!ui_key_match(box->group_key, ui_key_zero()) && !ui_box_is_nil(hot_box) && ui_key_match(box->group_key, hot_box->group_key));
+		I1 active_by_group = (!ui_key_match(box->group_key, ui_key_zero()) && !ui_box_is_nil(active_box) && ui_key_match(box->group_key, active_box->group_key));
+		I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS && (active_by_key || active_by_group));
+		I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS && (hot_by_key || hot_by_group));
 
 		if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
 			F4 shadow = {
@@ -2323,6 +2319,12 @@ Internal void ui_draw(void) {
 				inst->corner_radii = b->corner_radii;
 				inst->border_width = 1.0f;
 				inst->border_color = b->border_color;
+			}
+
+			I1 is_focus_hot = !!(b->flags & UI_BOX_FLAG__FOCUS_HOT) && !(b->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
+			if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot) {
+				GFX_Rect_Instance *inst = dr_rect(b->rect, (F4){1, 0, 0, 0.05f}, 0.0f, 0.0f);
+				inst->corner_radii = b->corner_radii;
 			}
 		}
 

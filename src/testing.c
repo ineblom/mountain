@@ -470,103 +470,101 @@ Internal void lane(Arena *arena) {
 
 					//- kti: Build ui
 					if (panel->first == 0) {
-						UI_Focus_Hot(UI_FOCUS_KIND__ON)
-						UI_Focus_Active(UI_FOCUS_KIND__ON) {
-							ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
-							ui_set_next_child_layout_axis(AXIS__Y);
-							UI_Box *box = ui_build_box_from_stringf(
-								UI_BOX_FLAG__DRAW_BACKGROUND |
-								UI_BOX_FLAG__DRAW_BORDER |
-								UI_BOX_FLAG__CLICKABLE |
-								UI_BOX_FLAG__FLOATING |
-								UI_BOX_FLAG__CLIP |
-								UI_BOX_FLAG__DEFAULT_FOCUS_NAV,
-								"##panel_box_%p", panel);
-							UI_Parent(box)
-							UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
-								UI_Child_Layout_Axis(AXIS__X);
-								UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
+						ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
+						ui_set_next_child_layout_axis(AXIS__Y);
+						ui_set_next_focus_hot(UI_FOCUS_KIND__ON);
+						ui_set_next_focus_active(UI_FOCUS_KIND__ON);
+						UI_Box *box = ui_build_box_from_stringf(
+							UI_BOX_FLAG__DRAW_BACKGROUND |
+							UI_BOX_FLAG__DRAW_BORDER |
+							UI_BOX_FLAG__FLOATING |
+							UI_BOX_FLAG__CLIP |
+							UI_BOX_FLAG__DEFAULT_FOCUS_NAV,
+							"##panel_box_%p", panel);
+						UI_Parent(box)
+						UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
+							UI_Child_Layout_Axis(AXIS__X);
+							UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
 
-								UI_Parent((title_bar))
-								UI_Font_Size(10.0f) {
-									UI_Padding(ui_px(10.0f, 1.0f))
-									UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-									if (panel->view_count == 0) {
-										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
-									} else for EachIndex(i, panel->view_count) {
-										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
-									}
-
-									ui_spacer(ui_pct(1.0f, 0.0f));
-
-									UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-									UI_Pref_Height(ui_pct(1.0f, 1.0f))
-									UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-									UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
-										if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-											cmd_push((Cmd){
-												.kind = CMD_KIND__OPEN_PANEL,
-												.window = w,
-												.panel = panel,
-												.dir = DIR__RIGHT,
-											});
-										}
-										if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-											cmd_push((Cmd){
-												.kind = CMD_KIND__OPEN_PANEL,
-												.window = w,
-												.panel = panel,
-												.dir = DIR__DOWN,
-											});
-										}
-										if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-											cmd_push((Cmd){
-												.kind = CMD_KIND__CLOSE_PANEL,
-												.window = w,
-												.panel = panel,
-											});
-										}
-									}
+							UI_Parent((title_bar))
+							UI_Font_Size(10.0f) {
+								UI_Padding(ui_px(10.0f, 1.0f))
+								UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+								if (panel->view_count == 0) {
+									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
+								} else for EachIndex(i, panel->view_count) {
+									ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
 								}
 
-								UI_Row()
-								UI_Padding(ui_px(10.0f, 1.0f)) {
-									UI_Column() {
-										if (panel->view_count == 0) {
-											UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
-											ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Choose view kind."));
+								ui_spacer(ui_pct(1.0f, 0.0f));
 
-											UI_Row()
-											UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
-											UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-											UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
-											UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-											for EachIndex(i, VIEW_KIND_COUNT) {
-												if (ui_button(view_kind_names [i]) .flags & UI_SIGNAL_FLAG__PRESSED) {
-													panel_push_view(panel, i);
-												}
+								UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+								UI_Pref_Height(ui_pct(1.0f, 1.0f))
+								UI_Text_Align((UI_TEXT_ALIGN__CENTER))
+								UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
+									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+										cmd_push((Cmd){
+											.kind = CMD_KIND__OPEN_PANEL,
+											.window = w,
+											.panel = panel,
+											.dir = DIR__RIGHT,
+										});
+									}
+									if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+										cmd_push((Cmd){
+											.kind = CMD_KIND__OPEN_PANEL,
+											.window = w,
+											.panel = panel,
+											.dir = DIR__DOWN,
+										});
+									}
+									if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+										cmd_push((Cmd){
+											.kind = CMD_KIND__CLOSE_PANEL,
+											.window = w,
+											.panel = panel,
+										});
+									}
+								}
+							}
+
+							UI_Row()
+							UI_Padding(ui_px(10.0f, 1.0f)) {
+								UI_Column() {
+									if (panel->view_count == 0) {
+										UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
+										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Choose view kind."));
+
+										UI_Row()
+										UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
+										UI_Text_Align((UI_TEXT_ALIGN__CENTER))
+										UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
+										UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+										for EachIndex(i, VIEW_KIND_COUNT) {
+											if (ui_button(view_kind_names [i]) .flags & UI_SIGNAL_FLAG__PRESSED) {
+												panel_push_view(panel, i);
 											}
-										} else {
-											ui_spacer(ui_px(10.0f, 1.0f));
+										}
+									} else {
+										ui_spacer(ui_px(10.0f, 1.0f));
 
-											View *view = &panel->views[panel->selected_view_idx];
-											switch (view->kind) {
-												case VIEW_KIND__TEST: {
-													UI_Pref_Width(ui_px(500.0f, 1.0f))
-													ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
+										View *view = &panel->views[panel->selected_view_idx];
+										switch (view->kind) {
+											case VIEW_KIND__TEST: {
+												UI_Pref_Width(ui_px(500.0f, 1.0f))
+												ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
 
-													ui_spacer(ui_px(10, 1.0f));
+												ui_spacer(ui_px(10, 1.0f));
 
-													UI_Pref_Width(ui_pct(1.0f, 0.0f))
-													ui_checkbox(Str8_("Check"), &view->checked);
+												UI_Pref_Width(ui_pct(1.0f, 0.0f))
+												ui_checkbox(Str8_("Check"), &view->checked);
 
-													ui_spacer(ui_px(10, 1.0f));
+												ui_spacer(ui_px(10, 1.0f));
 
-													String8 name = Str8_("Theodor");
-													UI_Pref_Width(ui_px(500.0f, 1.0f))
-													ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer, sizeof( state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
-												} break;
-											}
+												String8 name = Str8_("Theodor");
+												UI_Pref_Width(ui_px(500.0f, 1.0f))
+												ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer, sizeof( state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
+											} break;
 										}
 									}
 								}

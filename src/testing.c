@@ -428,12 +428,10 @@ Internal void lane(Arena *arena) {
 				//- kti: Non leaf panel ui
 				F1 resize_box_w = 8;
 
-				for (Panel *panel = &w->root_panel; panel != 0;
-				panel = panel_rec_depth_first_pre_order(panel) .next) {
+				for (Panel *panel = &w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
-					for (Panel *child = panel->first;
-					child != 0 && child->next != 0; child = child->next) {
+					for (Panel *child = panel->first; child != 0 && child->next != 0; child = child->next) {
 						F4 child_rect = panel_rect_from_parent_rect(child, panel_rect);
 
 						//- kti: Build separator box.
@@ -488,9 +486,12 @@ Internal void lane(Arena *arena) {
 							UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
 								UI_Child_Layout_Axis(AXIS__X);
 								UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
-								UI_Parent((title_bar)) UI_Font_Size(10.0f) {
+
+								UI_Parent((title_bar))
+								UI_Font_Size(10.0f) {
 									UI_Padding(ui_px(10.0f, 1.0f))
-									UI_Pref_Width(ui_text_dim(0.0f, 1.0f)) if (panel->view_count == 0) {
+									UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+									if (panel->view_count == 0) {
 										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
 									} else for EachIndex(i, panel->view_count) {
 										ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
@@ -528,7 +529,8 @@ Internal void lane(Arena *arena) {
 									}
 								}
 
-								UI_Row() UI_Padding(ui_px(10.0f, 1.0f)) {
+								UI_Row()
+								UI_Padding(ui_px(10.0f, 1.0f)) {
 									UI_Column() {
 										if (panel->view_count == 0) {
 											UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
@@ -540,30 +542,31 @@ Internal void lane(Arena *arena) {
 											UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
 											UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
 											for EachIndex(i, VIEW_KIND_COUNT) {
-											if (ui_button(view_kind_names [i]) .flags & UI_SIGNAL_FLAG__PRESSED) {
-												panel_push_view(panel, i);
+												if (ui_button(view_kind_names [i]) .flags & UI_SIGNAL_FLAG__PRESSED) {
+													panel_push_view(panel, i);
+												}
 											}
-										}
-									} else {
-										ui_spacer(ui_px(10.0f, 1.0f));
+										} else {
+											ui_spacer(ui_px(10.0f, 1.0f));
 
-										View *view = &panel->views[panel->selected_view_idx];
-										switch (view->kind) {
-											case VIEW_KIND__TEST: {
-												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
+											View *view = &panel->views[panel->selected_view_idx];
+											switch (view->kind) {
+												case VIEW_KIND__TEST: {
+													UI_Pref_Width(ui_px(500.0f, 1.0f))
+													ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
 
-												ui_spacer(ui_px(10, 1.0f));
+													ui_spacer(ui_px(10, 1.0f));
 
-												UI_Pref_Width(ui_pct(1.0f, 0.0f))
-												ui_checkbox(Str8_("Check"), &view->checked);
+													UI_Pref_Width(ui_pct(1.0f, 0.0f))
+													ui_checkbox(Str8_("Check"), &view->checked);
 
-												ui_spacer(ui_px(10, 1.0f));
+													ui_spacer(ui_px(10, 1.0f));
 
-												String8 name = Str8_("Theodor");
-												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer, sizeof( state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
-											} break;
+													String8 name = Str8_("Theodor");
+													UI_Pref_Width(ui_px(500.0f, 1.0f))
+													ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer, sizeof( state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
+												} break;
+											}
 										}
 									}
 								}
@@ -571,89 +574,88 @@ Internal void lane(Arena *arena) {
 						}
 					}
 				}
-			}
 
-			if (w->root_panel.first == 0) {
-				UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-				UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
-					ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
-					if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
-						panel_insert(panel_alloc(), &w->root_panel, 0);
+				if (w->root_panel.first == 0) {
+					UI_Text_Align((UI_TEXT_ALIGN__CENTER))
+					UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
+						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
+						if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+							panel_insert(panel_alloc(), &w->root_panel, 0);
+						}
 					}
 				}
+
+				ui_end_build();
+
+				fc_frame();
+				dr_begin_frame();
+				gfx_window_begin_frame(w->os, w->gfx);
+				DR_Bucket *bucket = dr_bucket_make();
+				dr_push_bucket(bucket);
+
+				// dr_rect((F4){0, 0, w->os->width, w->os->height},
+				// (F4){0.15f, 0.0f, 0.0f, 1.0f}, 0.0f, 0.0f);
+
+				ui_draw();
+
+				dr_submit_bucket(w->os, w->gfx, bucket);
+				dr_pop_bucket();
+				gfx_window_end_frame(w->os, w->gfx);
 			}
-
-			ui_end_build();
-
-			fc_frame();
-			dr_begin_frame();
-			gfx_window_begin_frame(w->os, w->gfx);
-			DR_Bucket *bucket = dr_bucket_make();
-			dr_push_bucket(bucket);
-
-			// dr_rect((F4){0, 0, w->os->width, w->os->height},
-			// (F4){0.15f, 0.0f, 0.0f, 1.0f}, 0.0f, 0.0f);
-
-			ui_draw();
-
-			dr_submit_bucket(w->os, w->gfx, bucket);
-			dr_pop_bucket();
-			gfx_window_end_frame(w->os, w->gfx);
 		}
+
+		scratch_end(scratch);
+
+		ProfEnd();
+		ProfFlush();
+
+		//- kti: Calculate time spent and sleep until target frame time is met.
+		L1 target_frame_time = 1000000000ULL / 60;
+		L1 frame_end_time = os_clock();
+		L1 frame_time = frame_end_time - frame_begin_time;
+
+		if (lane_idx() == 0) {
+			frame_count += 1;
+			total_frame_time += frame_time;
+			min_frame_time = Min(min_frame_time, frame_time);
+			max_frame_time = Max(max_frame_time, frame_time);
+
+			if (frame_count % 60 == 0) {
+				F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
+				F1 min_ms = min_frame_time / 1000000.0f;
+				F1 max_ms = max_frame_time / 1000000.0f;
+				fps = 1000.0f / avg_ms;
+				printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
+				total_frame_time = 0;
+				min_frame_time = L1_MAX;
+				max_frame_time = 0;
+			}
+		}
+
+		//- kti: 0 lane sleeps if we haven't hit the target frame time. Others wait on the barrier.
+		if (lane_idx() == 0 && frame_time < target_frame_time) {
+			L1 remainder = target_frame_time - frame_time;
+			if (remainder > 50000ULL) {
+				os_sleep(remainder - 50000ULL);
+			}
+			while (os_clock() - frame_begin_time < target_frame_time) { }
+		}
+
+		lane_sync();
 	}
 
-	scratch_end(scratch);
-
-	ProfEnd();
-	ProfFlush();
-
-	//- kti: Calculate time spent and sleep until target frame time is met.
-	L1 target_frame_time = 1000000000ULL / 60;
-	L1 frame_end_time = os_clock();
-	L1 frame_time = frame_end_time - frame_begin_time;
-
-	if (lane_idx() == 0) {
-		frame_count += 1;
-		total_frame_time += frame_time;
-		min_frame_time = Min(min_frame_time, frame_time);
-		max_frame_time = Max(max_frame_time, frame_time);
-
-		if (frame_count % 60 == 0) {
-			F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
-			F1 min_ms = min_frame_time / 1000000.0f;
-			F1 max_ms = max_frame_time / 1000000.0f;
-			fps = 1000.0f / avg_ms;
-			printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
-			total_frame_time = 0;
-			min_frame_time = L1_MAX;
-			max_frame_time = 0;
-		}
-	}
-
-	//- kti: 0 lane sleeps if we haven't hit the target frame time. Others wait on the barrier.
-	if (lane_idx() == 0 && frame_time < target_frame_time) {
-		L1 remainder = target_frame_time - frame_time;
-		if (remainder > 50000ULL) {
-			os_sleep(remainder - 50000ULL);
-		}
-		while (os_clock() - frame_begin_time < target_frame_time) { }
-	}
+	////////////////////////////////
+	//~ kti: Shutdown
 
 	lane_sync();
-}
 
-////////////////////////////////
-//~ kti: Shutdown
+	if (lane_idx() == 0) {
+		while (state->first_window != 0) {
+			window_close(state->first_window);
+		}
 
-lane_sync();
-
-if (lane_idx() == 0) {
-	while (state->first_window != 0) {
-		window_close(state->first_window);
+		ProfShutdown();
 	}
-
-	ProfShutdown();
-}
 }
 
 #endif

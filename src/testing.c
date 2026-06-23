@@ -74,6 +74,7 @@ enum {
 
 	CMD_KIND__OPEN_PANEL,
 	CMD_KIND__CLOSE_PANEL,
+	CMD_KIND__FOCUS_PANEL,
 
 	CMD_KIND_COUNT,
 };
@@ -95,6 +96,8 @@ struct State {
 	Window *last_window;
 	Window *free_window;
 	Panel *free_panel;
+
+	Panel *focused_panel;
 
 	Cmd cmds[512];
 	L1 cmd_count;
@@ -223,6 +226,10 @@ Internal void panel_close(Panel *root, Panel *panel) {
 		return;
 	}
 
+	if (state->focused_panel == panel) {
+		state->focused_panel = 0;
+	}
+
 	Panel *parent = panel->parent;
 
 	if (panel->prev) {
@@ -271,20 +278,24 @@ Internal Window *window_open(void) {
 	window->ui = ui_state_alloc();
 	window->arena = arena_alloc(MiB(32));
 	window->root_panel.split_axis = AXIS__X;
+
 	Panel *new_panel = panel_alloc();
 	panel_insert(new_panel, &window->root_panel, 0);
 	panel_push_view(new_panel, VIEW_KIND__TEST);
 
 	DLLPushBack(state->first_window, state->last_window, window);
+
 	return window;
 }
 
 Internal void window_close(Window *window) {
-	DLLRemove(state->first_window, state->last_window, window);
-	SLLStackPush(state->free_window, window);
-	ui_state_release(window->ui);
-	gfx_window_unequip(window->gfx);
-	os_window_close(window->os);
+	if (window != 0) {
+		DLLRemove(state->first_window, state->last_window, window);
+		SLLStackPush(state->free_window, window);
+		ui_state_release(window->ui);
+		gfx_window_unequip(window->gfx);
+		os_window_close(window->os);
+	}
 }
 
 Internal Window *window_from_os_window(OS_Window *os) {
@@ -354,37 +365,38 @@ Internal void lane(Arena *arena) {
 			for (OS_Event *e = events.first; e != 0; e = e->next) {
 				if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE) {
 					Window *window = window_from_os_window(e->window);
-					if (window != 0) {
-						window_close(window);
-					}
+					window_close(window);
 				}
 				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ESC) {
-					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){ .kind = UI_CMD_KIND__CANCEL, .timestamp_ns = e->timestamp_ns, });
+					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
+						.kind = UI_CMD_KIND__CANCEL,
+						.timestamp_ns = e->timestamp_ns
+					});
 				}
 				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__A) {
-					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){ .kind = UI_CMD_KIND__TEXT, .string = Str8_("a"), .timestamp_ns = e->timestamp_ns, });
+					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
+						.kind = UI_CMD_KIND__TEXT,
+						.string = Str8_("a"),
+						.timestamp_ns = e->timestamp_ns
+					});
 				}
-				if (e->kind == OS_EVENT_KIND__PRESS &&
-					(e->key == OS_KEY__LEFT || e->key == OS_KEY__RIGHT)) {
+				if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__LEFT || e->key == OS_KEY__RIGHT)) {
 					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
 							.kind = UI_CMD_KIND__NAVIGATE,
 							.delta_unit = UI_CMD_DELTA_UNIT__CHAR,
-							.flags =
-							UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__PICK_SELECT_SIDE,
+							.flags = UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__PICK_SELECT_SIDE,
 							.delta_si2 = {(e->key == OS_KEY__LEFT) ? -1 : 1, 0},
 							.timestamp_ns = e->timestamp_ns,
 						});
 				}
 				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__BACKSPACE) {
 					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
-											.kind = UI_CMD_KIND__EDIT,
-											.delta_unit = UI_CMD_DELTA_UNIT__CHAR,
-											.flags = UI_CMD_FLAG__CAP_AT_LINE |
-											UI_CMD_FLAG__ZERO_DELTA_ON_SELECT |
-											UI_CMD_FLAG__DELETE,
-											.delta_si2 = {-1, 0},
-											.timestamp_ns = e->timestamp_ns,
-											});
+						.kind = UI_CMD_KIND__EDIT,
+						.delta_unit = UI_CMD_DELTA_UNIT__CHAR,
+						.flags = UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__ZERO_DELTA_ON_SELECT | UI_CMD_FLAG__DELETE,
+						.delta_si2 = {-1, 0},
+						.timestamp_ns = e->timestamp_ns,
+					});
 				}
 			}
 		}
@@ -407,6 +419,9 @@ Internal void lane(Arena *arena) {
 					case CMD_KIND__CLOSE_PANEL: {
 						panel_close(&cmd.window->root_panel, cmd.panel);
 					} break;
+					case CMD_KIND__FOCUS_PANEL: {
+						state->focused_panel = cmd.panel;
+					}
 				}
 			}
 
@@ -467,21 +482,29 @@ Internal void lane(Arena *arena) {
 				//- kti: build all leaf panel ui
 				for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
 					F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
+					I1 panel_is_focused = state->focused_panel == panel;
 
 					//- kti: Build ui
-					if (panel->first == 0) {
-						ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
-						ui_set_next_child_layout_axis(AXIS__Y);
-						ui_set_next_focus_hot(UI_FOCUS_KIND__ON);
-						ui_set_next_focus_active(UI_FOCUS_KIND__ON);
-						UI_Box *box = ui_build_box_from_stringf(
-							UI_BOX_FLAG__DRAW_BACKGROUND |
-							UI_BOX_FLAG__DRAW_BORDER |
-							UI_BOX_FLAG__FLOATING |
-							UI_BOX_FLAG__CLIP |
-							UI_BOX_FLAG__DEFAULT_FOCUS_NAV,
-							"##panel_box_%p", panel);
-						UI_Parent(box)
+					if (panel->first == 0)
+					UI_Focus(panel_is_focused ? UI_FOCUS_KIND__NULL : UI_FOCUS_KIND__OFF) {
+						UI_Box *panel_box = 0;
+
+						UI_Focus(UI_FOCUS_KIND__ON) {
+							ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
+							ui_set_next_child_layout_axis(AXIS__Y);
+							panel_box = ui_build_box_from_stringf(
+								UI_BOX_FLAG__MOUSE_CLICKABLE |
+								UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY |
+								UI_BOX_FLAG__DRAW_BACKGROUND |
+								UI_BOX_FLAG__DRAW_BORDER |
+								UI_BOX_FLAG__FLOATING |
+								UI_BOX_FLAG__CLIP |
+								UI_BOX_FLAG__DEFAULT_FOCUS_NAV |
+								UI_BOX_FLAG__CLICK_TO_FOCUS,
+								"##panel_box_%p", panel);
+						}
+
+						UI_Parent(panel_box)
 						UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
 							UI_Child_Layout_Axis(AXIS__X);
 							UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
@@ -562,12 +585,22 @@ Internal void lane(Arena *arena) {
 												ui_spacer(ui_px(10, 1.0f));
 
 												String8 name = Str8_("Theodor");
-												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer, sizeof( state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
+												UI_Pref_Width(ui_px(500.0f, 1.0f)) {
+													UI_Signal signal = ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer,
+														sizeof(state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
+													if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+														cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+													}
+												}
 											} break;
 										}
 									}
 								}
+							}
+
+							UI_Signal signal = ui_signal_from_box(panel_box);
+							if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+								cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
 							}
 						}
 					}

@@ -175,7 +175,7 @@ Inline F1 random_bilateral(Random_State *rng) {
 	return result;
 }
 
-Inline F4 intersect_rects(F4 a, F4 b) {
+Inline F4 rect_overlap(F4 a, F4 b) {
 	F4 result = {0};
 
 	result[0] = Max(a[0], b[0]);

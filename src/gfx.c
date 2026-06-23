@@ -1506,7 +1506,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
     if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
         batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
 			F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
-			F4 intersection = intersect_rects(screen_rect, batch->clip_rect);
+			F4 intersection = rect_overlap(screen_rect, batch->clip_rect);
 			if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
 				scissor.offset.x = intersection[0];
 				scissor.offset.y = intersection[1];

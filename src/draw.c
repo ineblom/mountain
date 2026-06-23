@@ -166,6 +166,7 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
 		*result = (GFX_Rect_Instance){
 			.dst_rect = dst,
 			.colors = { color, color, color, color },
+			.border_color = color,
 			.corner_radii = (F4){corner_radius, corner_radius, corner_radius, corner_radius},
 			.softness = edge_softness,
 			.omit_texture = 1.0f,

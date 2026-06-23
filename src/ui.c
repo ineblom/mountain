@@ -1966,15 +1966,15 @@ Internal L1 ui_scanned_column_from_column(String8 string, L1 start_column, Side 
 	I1 found_text = 0;
 	I1 found_non_space = 0;
 	SL1 start_off = delta < 0 ? delta : 0;
-	for (SL1 col = start_column+start_off; 1 <= col && col <= string.len+1; col += delta) {
-		B1 byte = (col <= string.len) ? string.str[col-1] : 0;
+	for (SL1 col = (SL1)start_column+start_off; 0 <= col && col <= (SL1)string.len; col += delta) {
+		B1 byte = (col < (SL1)string.len) ? string.str[col] : 0;
 		I1 is_non_space = !char_is_space(byte);
 		I1 is_name = (char_is_alpha(byte) || char_is_digit(byte, 10) || byte == '_');
-		if (((side == SIDE__MIN) && (col == 1)) ||
-				((side == SIDE__MAX) && (col == string.len+1)) ||
+		if (((side == SIDE__MIN) && (col == 0)) ||
+				((side == SIDE__MAX) && (col == (SL1)string.len)) ||
 				(found_non_space && !is_non_space) ||
 				(found_text && !is_name)) {
-			new_column = col + (!side && col != 1);
+			new_column = col + (!side && col != 0);
 			break;
 		} else if (!found_text && is_name) {
 			found_text = 1;
@@ -1986,9 +1986,6 @@ Internal L1 ui_scanned_column_from_column(String8 string, L1 start_column, Side 
 }
 
 Internal String8 ui_push_string_replace_range(Arena *arena, String8 string, L1 min, L1 max, String8 replace) {
-	min -= 1;
-	max -= 1;
-
 	if (min > string.len) {
 		min = 0;
 	}
@@ -2026,20 +2023,20 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 			// TODO: Multi byte characters in UTF-8.
 		} break;
 		case UI_CMD_DELTA_UNIT__WORD: {
-			delta[0] = ui_scanned_column_from_column(string, cursor.column, delta[0] > 0 ? SIDE__MAX : SIDE__MIN) - cursor.column;
+			delta[0] = (SL1)ui_scanned_column_from_column(string, cursor.column, delta[0] > 0 ? SIDE__MAX : SIDE__MIN) - (SL1)cursor.column;
 		} break;
 		case UI_CMD_DELTA_UNIT__LINE:
 		case UI_CMD_DELTA_UNIT__WHOLE:
 		case UI_CMD_DELTA_UNIT__PAGE: {
-			L1 first_nonwhitespace_column = 1;
+			L1 first_nonwhitespace_column = 0;
 			for (L1 idx = 0; idx < string.len; idx += 1) {
 				if (!char_is_space(string.str[idx])) {
-					first_nonwhitespace_column = idx + 1;
+					first_nonwhitespace_column = idx;
 					break;
 				}
 			}
-			L1 home_dest_column = (cursor.column == first_nonwhitespace_column) ? 1 : first_nonwhitespace_column;
-			delta[0] = (delta[0] > 0) ? (string.len+1 - cursor.column) : (home_dest_column - cursor.column);
+			L1 home_dest_column = (cursor.column == first_nonwhitespace_column) ? 0 : first_nonwhitespace_column;
+			delta[0] = (SL1)((delta[0] > 0) ? string.len : home_dest_column) - (SL1)cursor.column;
 		} break;
 	}
 
@@ -2048,11 +2045,12 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 	}
 
 	if (txt_pt_match(cursor, mark) || !(cmd->flags & UI_CMD_FLAG__ZERO_DELTA_ON_SELECT)) {
-		next_cursor.column += delta[0];
+		SL1 next_column = (SL1)next_cursor.column + delta[0];
+		next_cursor.column = (L1)Max(0, next_column);
 	}
 
 	if (cmd->flags & UI_CMD_FLAG__CAP_AT_LINE) {
-		next_cursor.column = Clamp(1, next_cursor.column, string.len+1);
+		next_cursor.column = Clamp(0, next_cursor.column, string.len);
 	}
 
 	if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__PICK_SELECT_SIDE) {
@@ -2065,7 +2063,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 
 	if (cmd->flags & UI_CMD_FLAG__COPY) {
 		if (cursor.line == mark.line) {
-			copy = str8_substr(string, cursor.column-1, mark.column-1);
+			copy = str8_substr(string, cursor.column, mark.column);
 			flags |= UI_TXT_OP_FLAG__COPY;
 		} else {
 			flags |= UI_TXT_OP_FLAG__INVALID;
@@ -2095,11 +2093,11 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 		next_cursor = next_mark = (Txt_Pt){range.min.line, range.min.column + cmd->string.len};
 	}
 
-	if (next_cursor.column > string.len+1 || 1 > next_cursor.column || cmd->delta_si2[1] != 0) {
+	if (next_cursor.column > string.len || cmd->delta_si2[1] != 0) {
 		flags |= UI_TXT_OP_FLAG__INVALID;
 	}
-	next_cursor.column = Clamp(1, next_cursor.column, string.len+replace.len+1);
-	next_mark.column = Clamp(1, next_mark.column, string.len+replace.len+1);
+	next_cursor.column = Clamp(0, next_cursor.column, string.len+replace.len);
+	next_mark.column = Clamp(0, next_mark.column, string.len+replace.len);
 
 	UI_Txt_Op op = {0};
 	op.flags = flags;
@@ -2188,8 +2186,8 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 			UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("###editstr"));
 			ui_box_equip_display_string(editstr_box, edit_string);
 			// TODO: custom draw.
-			mouse_pt = (Txt_Pt){1, 1+ui_box_char_pos_from_xy(editstr_box, ui_mouse())};
-      cursor_off = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), str8_prefix(edit_string, cursor->column-1))[0];
+			mouse_pt = (Txt_Pt){0, ui_box_char_pos_from_xy(editstr_box, ui_mouse())};
+			cursor_off = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), str8_prefix(edit_string, cursor->column))[0];
 		}
 	}
 
@@ -2202,8 +2200,8 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 		edit_string_size_out[0] = edit_string.len;
 		ui_set_auto_focus_active_key(key);
 		ui_kill_action();
-		cursor[0] = (Txt_Pt){1, edit_string.len+1};
-		mark[0] = (Txt_Pt){1, 1};
+		cursor[0] = (Txt_Pt){0, edit_string.len};
+		mark[0] = (Txt_Pt){0, 0};
 	}
 	if (is_focus_active && signal.flags&UI_SIGNAL_FLAG__KEYBOARD_PRESSED) {
 		ui_set_auto_focus_active_key(ui_key_zero());

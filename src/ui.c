@@ -2185,6 +2185,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 			if (pre_edit_value.len != 0) {
 				display_string = pre_edit_value;
 			}
+			ui_set_next_pref_width(ui_text_dim(0.0f, 0.0f));
 			ui_label(display_string);
 		} else {
 			F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];

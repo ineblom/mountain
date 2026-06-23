@@ -833,6 +833,21 @@ Internal I1 ui_key_release(OS_Modifier_Flags modifiers, OS_Key key) {
 	return result;
 }
 
+Internal void box_view_clamp(UI_Box *box) {
+	if (box->flags & UI_BOX_FLAG__VIEW_CLAMP) {
+		F2 max_view_off_target = {
+			Max(0, box->view_bounds[0] - box->fixed_size[0]),
+			Max(0, box->view_bounds[1] - box->fixed_size[1]),
+		};
+		if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_X) {
+			box->view_off_target[0] = Clamp(0, box->view_off_target[0], max_view_off_target[0]);
+		}
+		if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_Y) {
+			box->view_off_target[1] = Clamp(0, box->view_off_target[1], max_view_off_target[1]);
+		}
+	}
+}
+
 Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 	// TODO: Get double click time from os.
 	L1 double_click_time = 500000000;
@@ -977,19 +992,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 		}
 	}
 
-	//- kti: View clamp.
-	if (box->flags & UI_BOX_FLAG__VIEW_CLAMP && view_scrolled) {
-		F2 max_view_off_target = {
-			Max(0, box->view_bounds[0] - box->fixed_size[0]),
-			Max(0, box->view_bounds[1] - box->fixed_size[1]),
-		};
-		if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_X) {
-			box->view_off_target[0] = Clamp(0, box->view_off_target[0], max_view_off_target[0]);
-		}
-		if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_Y) {
-			box->view_off_target[1] = Clamp(0, box->view_off_target[1], max_view_off_target[1]);
-		}
-	}
+	if (view_scrolled) { box_view_clamp(box); }
 
 	//- kti: Dragging
 	if (box->flags & UI_BOX_FLAG__CLICKABLE) {
@@ -1544,10 +1547,13 @@ Internal void ui_end_build(void) {
 		}
 	}
 
-	//- kti: Animate
+
 	for EachIndex(slot_idx, ui_state->box_table_size) {
 		UI_Box_HT_Slot *slot = &ui_state->box_table[slot_idx];
 		for (UI_Box *b = slot->first; !ui_box_is_nil(b); b = b->hash_next) {
+			box_view_clamp(b);
+		
+			//- kti: Animate view offset
 			F1 scroll_animation_rate = 0.2f;
 
 			b->view_off += scroll_animation_rate * (b->view_off_target - b->view_off);
@@ -2215,16 +2221,14 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 	}
 
 	//- kti: Focus cursor.
-	// if (is_focus_active && box->rect[2] > 0) {
-		F2 cursor_range_px = {cursor_off-ui_top_font_size()*2.0f, cursor_off+ui_top_font_size()*2.0f};
-		F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
-		cursor_range_px[0] = Max(0, cursor_range_px[0]);
-		cursor_range_px[1] = Max(0, cursor_range_px[1]);
-		F1 min_delta = Min(0, cursor_range_px[0]-visible_range_px[0]);
-		F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
-		box->view_off_target[0] += min_delta;
-		box->view_off_target[0] += max_delta;
-	// }
+	F2 cursor_range_px = {cursor_off-ui_top_font_size()*2.0f, cursor_off+ui_top_font_size()*2.0f};
+	F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
+	cursor_range_px[0] = Max(0, cursor_range_px[0]);
+	cursor_range_px[1] = Max(0, cursor_range_px[1]);
+	F1 min_delta = Min(0, cursor_range_px[0]-visible_range_px[0]);
+	F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
+	box->view_off_target[0] += min_delta;
+	box->view_off_target[0] += max_delta;
 
 	ui_pop_focus_hot();
 	ui_pop_focus_active();

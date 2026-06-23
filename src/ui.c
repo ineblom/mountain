@@ -165,6 +165,7 @@ enum {
 	UI_BOX_FLAG__CLICK_TO_FOCUS           = (1LLU<<34),
 	UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY    = (1LLU<<35),
 	UI_BOX_FLAG__DISABLE_FOCUS_BORDER     = (1LLU<<36),
+	UI_BOX_FLAG__DISABLE_TEXT_TRUNC       = (1LLU<<37),
 
 	UI_BOX_FLAG__CLICKABLE         = (UI_BOX_FLAG__MOUSE_CLICKABLE|UI_BOX_FLAG__KEYBOARD_CLICKABLE),
 	UI_BOX_FLAG__FLOATING          = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
@@ -2182,8 +2183,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 		} else {
 			F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];
 			ui_set_next_pref_width(ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
-			// TODO: UI_BOX_FLAG__DISABLE_TEXT_TRUNC
-			UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("###editstr"));
+			UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, Str8_("###editstr"));
 			ui_box_equip_display_string(editstr_box, edit_string);
 			// TODO: custom draw.
 			mouse_pt = (Txt_Pt){0, ui_box_char_pos_from_xy(editstr_box, ui_mouse())};
@@ -2215,14 +2215,16 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 	}
 
 	//- kti: Focus cursor.
-	F2 cursor_range_px = {cursor_off-ui_top_font_size()*2.0f, cursor_off+ui_top_font_size()*2.0f};
-	F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
-	cursor_range_px[0] = Max(0, cursor_range_px[0]);
-	cursor_range_px[1] = Max(0, cursor_range_px[1]);
-	F1 min_delta = Min(0, cursor_range_px[0]-visible_range_px[0]);
-	F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
-	box->view_off_target[0] += min_delta;
-	box->view_off_target[0] += max_delta;
+	// if (is_focus_active && box->rect[2] > 0) {
+		F2 cursor_range_px = {cursor_off-ui_top_font_size()*2.0f, cursor_off+ui_top_font_size()*2.0f};
+		F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
+		cursor_range_px[0] = Max(0, cursor_range_px[0]);
+		cursor_range_px[1] = Max(0, cursor_range_px[1]);
+		F1 min_delta = Min(0, cursor_range_px[0]-visible_range_px[0]);
+		F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
+		box->view_off_target[0] += min_delta;
+		box->view_off_target[0] += max_delta;
+	// }
 
 	ui_pop_focus_hot();
 	ui_pop_focus_active();
@@ -2282,6 +2284,15 @@ Internal void ui_draw(void) {
 		}
 
 		if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
+			I1 truncate_text = !(box->flags & UI_BOX_FLAG__DISABLE_TEXT_TRUNC);
+			if (truncate_text) {
+				F4 text_clip = box->rect;
+				F4 top_clip = dr_top_clip();
+				if (top_clip[2] != 0 || top_clip[3] != 0) {
+					text_clip = rect_overlap(text_clip, top_clip);
+				}
+				dr_push_clip(text_clip);
+			}
 			for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
 				F2 pos = ui_box_text_pos(box);
 				F4 color = box->text_color;
@@ -2291,6 +2302,9 @@ Internal void ui_draw(void) {
 					color[0] = Max(color[0]+0.1f, 1.0f);
 				}
 				dr_text_run(n->value.run, pos, color);
+			}
+			if (truncate_text) {
+				dr_pop_clip();
 			}
 		}
 

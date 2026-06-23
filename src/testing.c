@@ -502,7 +502,7 @@ Internal void lane(Arena *arena) {
 								UI_Pref_Height(ui_pct(1.0f, 1.0f))
 								UI_Text_Align((UI_TEXT_ALIGN__CENTER))
 								UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
-									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+									if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__CLICKED) {
 										cmd_push((Cmd){
 											.kind = CMD_KIND__OPEN_PANEL,
 											.window = w,
@@ -510,7 +510,7 @@ Internal void lane(Arena *arena) {
 											.dir = DIR__RIGHT,
 										});
 									}
-									if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+									if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__CLICKED) {
 										cmd_push((Cmd){
 											.kind = CMD_KIND__OPEN_PANEL,
 											.window = w,
@@ -518,7 +518,7 @@ Internal void lane(Arena *arena) {
 											.dir = DIR__DOWN,
 										});
 									}
-									if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+									if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__CLICKED) {
 										cmd_push((Cmd){
 											.kind = CMD_KIND__CLOSE_PANEL,
 											.window = w,
@@ -577,7 +577,7 @@ Internal void lane(Arena *arena) {
 					UI_Text_Align((UI_TEXT_ALIGN__CENTER))
 					UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
 						ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
-						if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+						if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__CLICKED) {
 							panel_insert(panel_alloc(), &w->root_panel, 0);
 						}
 					}

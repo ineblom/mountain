@@ -2323,7 +2323,7 @@ Internal void ui_draw(void) {
 
 			I1 is_focus_hot = !!(b->flags & UI_BOX_FLAG__FOCUS_HOT) && !(b->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
 			if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot) {
-				GFX_Rect_Instance *inst = dr_rect(b->rect, (F4){1, 0, 0, 0.05f}, 0.0f, 0.0f);
+				GFX_Rect_Instance *inst = dr_rect(b->rect, (F4){1, 0, 0, 0.01f}, 0.0f, 0.0f);
 				inst->corner_radii = b->corner_radii;
 			}
 		}

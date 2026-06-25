@@ -2127,7 +2127,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 }
 
 Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
-	//- kti: Makbox->e key.
+	//- kti: Make key.
 	UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 
 	//- kti: Calculate focus.
@@ -2257,8 +2257,8 @@ Internal void ui_draw(void) {
 		UI_Box *hot_box = ui_box_from_key(ui_hot_key());
 		UI_Box *active_box = ui_box_from_key(ui_active_key(OS_MOUSE_BUTTON__LEFT));
 
-		// F1 softness = (box->corner_radii[0] > 0 || box->corner_radii[1] > 0 || box->corner_radii[2] > 0 || box->corner_radii[3] > 0) ? 1.0f : 0.0f;
-		F1 softness = 1.0f;
+		F1 softness = (box->corner_radii[0] > 0 || box->corner_radii[1] > 0 || box->corner_radii[2] > 0 || box->corner_radii[3] > 0) ? 1.0f : 0.0f;
+		// F1 softness = 1.0f;
 
 		I1 hot_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_hot_key());
 		I1 active_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT));
@@ -2347,16 +2347,9 @@ Internal void ui_draw(void) {
 				dr_pop_clip();
 			}
 
-			if (b->flags & UI_BOX_FLAG__DRAW_BORDER) {
-				F4 border_rect = (F4){b->rect[0]-1, b->rect[1]-1, b->rect[2]+2, b->rect[3]+2};
-				GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, softness);
-				inst->corner_radii = b->corner_radii;
-				inst->border_width = 1.0f;
-				inst->border_color = b->border_color;
-			}
-
 			I1 is_focus_hot = !!(b->flags & UI_BOX_FLAG__FOCUS_HOT) && !(b->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
 			I1 is_focus_active = !!(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE) && !(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED);
+			I1 draw_focus_border = b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_BORDER) && is_focus_active;
 
 			//- kti: Focus Overlay
 			if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot) {
@@ -2364,15 +2357,14 @@ Internal void ui_draw(void) {
 				inst->corner_radii = b->corner_radii;
 			}
 
-			//- kti: Focus border
-			if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_BORDER) && is_focus_active) {
-				F4 rect = rect_pad(b->rect, 1.0f);
-				GFX_Rect_Instance *inst = dr_rect(rect, (F4){0}, 0.0f, softness);
-				inst->border_color = oklch(0.428f, 0.176f, 29.234f, 1.0f);
-				inst->border_width = 1.0f;
+			//- kti: Border
+			if (b->flags & UI_BOX_FLAG__DRAW_BORDER || draw_focus_border) {
+				F4 border_rect = rect_pad(b->rect, 1.0f);
+				GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, softness);
 				inst->corner_radii = b->corner_radii;
+				inst->border_width = 1.0f;
+				inst->border_color = draw_focus_border ? oklch(0.428f, 0.176f, 29.234f, 1.0f) : b->border_color;
 			}
-
 		}
 
 		box = rec.next;

@@ -2136,9 +2136,10 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 																			UI_BOX_FLAG__DRAW_BORDER |
 																			UI_BOX_FLAG__MOUSE_CLICKABLE |
 																			UI_BOX_FLAG__CLICK_TO_FOCUS |
+																			UI_BOX_FLAG__CLIP |
 																		  ((is_auto_focus_hot || is_auto_focus_active)*UI_BOX_FLAG__KEYBOARD_CLICKABLE) |
 																			UI_BOX_FLAG__DRAW_HOT_EFFECTS |
-																		  (is_focus_active || is_focus_active_disabled)*(UI_BOX_FLAG__CLIP | UI_BOX_FLAG__ALLOW_OVERFLOW_X | UI_BOX_FLAG__VIEW_CLAMP),
+																		  (is_focus_active || is_focus_active_disabled)*(UI_BOX_FLAG__ALLOW_OVERFLOW_X | UI_BOX_FLAG__VIEW_CLAMP),
 																			key);
 
 	//- kti: handle text manipulation.
@@ -2222,14 +2223,17 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 	}
 
 	//- kti: Focus cursor.
-	F2 cursor_range_px = {cursor_off-ui_top_font_size()*2.0f, cursor_off+ui_top_font_size()*2.0f};
-	F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
-	cursor_range_px[0] = Max(0, cursor_range_px[0]);
-	cursor_range_px[1] = Max(0, cursor_range_px[1]);
-	F1 min_delta = Min(0, cursor_range_px[0]-visible_range_px[0]);
-	F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
-	box->view_off_target[0] += min_delta;
-	box->view_off_target[0] += max_delta;
+	if (box->rect[0] > 0) {
+		F1 cursor_margin = Min(ui_top_font_size()*2.0f, box->rect[2]*0.5f);
+		F2 cursor_range_px = {cursor_off-cursor_margin, cursor_off+cursor_margin};
+		F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
+		cursor_range_px[0] = Max(0, cursor_range_px[0]);
+		cursor_range_px[1] = Max(0, cursor_range_px[1]);
+		F1 min_delta = Min(0, cursor_range_px[0]-visible_range_px[0]);
+		F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
+		box->view_off_target[0] += min_delta;
+		box->view_off_target[0] += max_delta;
+	}
 
 	ui_pop_focus_hot();
 	ui_pop_focus_active();

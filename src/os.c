@@ -2,6 +2,7 @@
 
 #include <wayland-client.h>
 #include <wayland-cursor.h>
+#include <xkbcommon/xkbcommon.h>
 #include "xdg-shell-protocol.c"
 #include "xdg-shell-protocol.h"
 
@@ -53,6 +54,7 @@ enum {
   OS_EVENT_KIND__NULL,
   OS_EVENT_KIND__PRESS,
   OS_EVENT_KIND__RELEASE,
+  OS_EVENT_KIND__TEXT,
   OS_EVENT_KIND__MOUSE_MOVE,
   OS_EVENT_KIND__SCROLL,
   OS_EVENT_KIND__WINDOW_CLOSE,
@@ -77,8 +79,10 @@ struct OS_Event {
   L1 timestamp_ns;
   I1 kind;
   OS_Key key;
+	I1 is_repeat;
+	B1 text[4];
+	L1 text_len;
   OS_Modifier_Flags modifiers;
-	// TODO: Are ints or doubles better here?
   D1 x, y;
 	D1 delta_x, delta_y;
 };
@@ -279,6 +283,17 @@ struct OS_GFX_State {
 
 	B1 key_states[OS_KEY_COUNT];
 	D1 mouse_x, mouse_y;
+
+	struct xkb_context *xkb_context;
+	struct xkb_keymap *xkb_keymap;
+	struct xkb_state *xkb_state;
+
+	SI1 key_repeat_rate;
+	SI1 key_repeat_delay_ms;
+	OS_Key repeat_key;
+	I1 repeat_wl_key;
+	OS_Window *repeat_window;
+	L1 next_repeat_ns;
 };
 
 #endif
@@ -573,6 +588,36 @@ Internal void os_push_event(OS_Event event) {
 	os_event_list_push(os_gfx_state->event_arena, &os_gfx_state->events, event);
 }
 
+Internal I1 os_xkb_keycode_from_wl_key(I1 wl_key) {
+	I1 result = wl_key + 8;
+	return result;
+}
+
+Internal void os_push_text_event(OS_Window *window, I1 wl_key, L1 timestamp_ns, I1 is_repeat) {
+	if (os_gfx_state->xkb_state != 0) {
+		char text[ArrayCount(Member(OS_Event, text))+1] = {0};
+		I1 text_len = xkb_state_key_get_utf8(os_gfx_state->xkb_state, os_xkb_keycode_from_wl_key(wl_key), text, sizeof(text));
+		if (text_len > 0 && text_len <= ArrayCount(Member(OS_Event, text)) && (B1)text[0] >= 0x20 && (B1)text[0] != 0x7F) {
+			OS_Event event = {
+				.window = window,
+				.timestamp_ns = timestamp_ns,
+				.kind = OS_EVENT_KIND__TEXT,
+				.is_repeat = is_repeat,
+				.text_len = text_len,
+			};
+			memmove(event.text, text, text_len);
+			os_push_event(event);
+		}
+	}
+}
+
+Internal void os_key_repeat_clear(void) {
+	os_gfx_state->repeat_key = OS_KEY__NULL;
+	os_gfx_state->repeat_wl_key = 0;
+	os_gfx_state->repeat_window = 0;
+	os_gfx_state->next_repeat_ns = 0;
+}
+
 Internal void registry_global_handler(void *data, struct wl_registry *registry, I1 name, CString interface, I1 version) {
   if (cstr_compare(interface, wl_compositor_interface.name)) {
     os_gfx_state->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
@@ -738,7 +783,36 @@ Internal void pointer_axis_discrete_handler(void *data, struct wl_pointer *point
 //~ kti: Keyboard Event Handlers
 
 Internal void keyboard_keymap_handler(void *data, struct wl_keyboard *keyboard, I1 format, SI1 fd, I1 size) {
-  close(fd);
+	if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
+		char *map = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
+		if (map != MAP_FAILED) {
+			if (os_gfx_state->xkb_context == 0) {
+				os_gfx_state->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+			}
+			if (os_gfx_state->xkb_context != 0) {
+				struct xkb_keymap *keymap = xkb_keymap_new_from_string(os_gfx_state->xkb_context, map, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+				if (keymap != 0) {
+					struct xkb_state *state = xkb_state_new(keymap);
+					if (state != 0) {
+						if (os_gfx_state->xkb_state != 0) {
+							xkb_state_unref(os_gfx_state->xkb_state);
+						}
+						if (os_gfx_state->xkb_keymap != 0) {
+							xkb_keymap_unref(os_gfx_state->xkb_keymap);
+						}
+						os_gfx_state->xkb_keymap = keymap;
+						os_gfx_state->xkb_state = state;
+						keymap = 0;
+					}
+					if (keymap != 0) {
+						xkb_keymap_unref(keymap);
+					}
+				}
+			}
+			munmap(map, size);
+		}
+	}
+	close(fd);
 }
 
 Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface, struct wl_array *keys) {
@@ -752,6 +826,7 @@ Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I
 
 Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface) {
   os_gfx_state->focused_window = 0;
+	os_key_repeat_clear();
 }
 
 Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 time, I1 key, I1 state) {
@@ -760,20 +835,47 @@ Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 
   I1 os_key = os_key_from_wl_key(key);
   if (os_key != OS_KEY__NULL) {
 		L1 kind = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
+		L1 timestamp_ns = (L1)time * 1000000LLU;
+		if (os_gfx_state->xkb_state != 0) {
+			xkb_state_update_key(os_gfx_state->xkb_state, os_xkb_keycode_from_wl_key(key), (kind == OS_EVENT_KIND__PRESS) ? XKB_KEY_DOWN : XKB_KEY_UP);
+		}
     OS_Event event = {
 			.window = window,
-      .timestamp_ns = (L1)time * 1000000LLU,
+      .timestamp_ns = timestamp_ns,
       .kind = kind,
       .key = os_key,
     };
     os_push_event(event);
 		os_gfx_state->key_states[os_key] = (kind == OS_EVENT_KIND__PRESS) ? 1 : 0;
+
+		//- kti: Repeat key
+		if (kind == OS_EVENT_KIND__PRESS) {
+			os_push_text_event(window, key, timestamp_ns, 0);
+			if (os_gfx_state->key_repeat_rate > 0 && (os_gfx_state->xkb_keymap == 0 || xkb_keymap_key_repeats(os_gfx_state->xkb_keymap, os_xkb_keycode_from_wl_key(key)))) {
+				os_gfx_state->repeat_key = os_key;
+				os_gfx_state->repeat_wl_key = key;
+				os_gfx_state->repeat_window = window;
+				os_gfx_state->next_repeat_ns = os_clock() + (L1)os_gfx_state->key_repeat_delay_ms * 1000000LLU;
+			}
+		} else if (os_gfx_state->repeat_key == os_key) {
+			os_key_repeat_clear();
+		}
   }
 }
 
-Internal void keyboard_modifiers_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 mods_depressed, I1 mods_latched, I1 mods_locked, I1 group) {}
+Internal void keyboard_modifiers_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 mods_depressed, I1 mods_latched, I1 mods_locked, I1 group) {
+	if (os_gfx_state->xkb_state != 0) {
+		xkb_state_update_mask(os_gfx_state->xkb_state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+	}
+}
 
-Internal void keyboard_repeat_info_handler(void *data, struct wl_keyboard *keyboard, SI1 rate, SI1 delay) {}
+Internal void keyboard_repeat_info_handler(void *data, struct wl_keyboard *keyboard, SI1 rate, SI1 delay) {
+	os_gfx_state->key_repeat_rate = rate;
+	os_gfx_state->key_repeat_delay_ms = delay;
+	if (rate <= 0) {
+		os_key_repeat_clear();
+	}
+}
 
 Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   if (os_gfx_state == 0) {
@@ -901,6 +1003,25 @@ Internal OS_Event_List os_poll_events(Arena *arena) {
   
   wl_display_dispatch_pending(os_gfx_state->display);
 
+	if (os_gfx_state->repeat_key != OS_KEY__NULL &&
+			os_gfx_state->key_repeat_rate > 0 &&
+			os_gfx_state->key_states[os_gfx_state->repeat_key]) {
+		L1 now = os_clock();
+		L1 repeat_interval_ns = 1000000000LLU / (L1)os_gfx_state->key_repeat_rate;
+		while (now >= os_gfx_state->next_repeat_ns) {
+			OS_Event event = {
+				.window = os_gfx_state->repeat_window,
+				.timestamp_ns = os_gfx_state->next_repeat_ns,
+				.kind = OS_EVENT_KIND__PRESS,
+				.key = os_gfx_state->repeat_key,
+				.is_repeat = 1,
+			};
+			os_push_event(event);
+			os_push_text_event(os_gfx_state->repeat_window, os_gfx_state->repeat_wl_key, os_gfx_state->next_repeat_ns, 1);
+			os_gfx_state->next_repeat_ns += repeat_interval_ns;
+		}
+	}
+
   return os_gfx_state->events;
 }
 
@@ -918,6 +1039,12 @@ Internal void os_window_close(OS_Window *window) {
       wl_pointer_destroy(os_gfx_state->pointer);
     if (os_gfx_state->keyboard)
       wl_keyboard_destroy(os_gfx_state->keyboard);
+		if (os_gfx_state->xkb_state)
+			xkb_state_unref(os_gfx_state->xkb_state);
+		if (os_gfx_state->xkb_keymap)
+			xkb_keymap_unref(os_gfx_state->xkb_keymap);
+		if (os_gfx_state->xkb_context)
+			xkb_context_unref(os_gfx_state->xkb_context);
     if (os_gfx_state->seat)
       wl_seat_destroy(os_gfx_state->seat);
     if (os_gfx_state->shm)

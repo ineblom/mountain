@@ -287,6 +287,21 @@ Internal String8 str8_list_join(Arena *arena, String8_List *list) {
 ////////////////////////////////
 //~ kti: UTF-8 Decode
 
+Internal I1 utf8_byte_is_continuation(B1 byte) {
+	I1 result = ((byte & 0xC0) == 0x80);
+	return result;
+}
+
+Internal L1 utf8_boundary_left_from_column(String8 string, L1 column) {
+	L1 result = Clamp(0, column, string.len);
+	if (result > 0) {
+		do {
+			result -= 1;
+		} while (result > 0 && utf8_byte_is_continuation(string.str[result]));
+	}
+	return result;
+}
+
 Internal Unicode_Decode utf8_decode(B1 *str, L1 cap) {
   LocalPersist B1 length[] =
   {
@@ -322,6 +337,18 @@ Internal Unicode_Decode utf8_decode(B1 *str, L1 cap) {
     }
   }
   return result;
+}
+
+Internal L1 utf8_boundary_right_from_column(String8 string, L1 column) {
+	L1 result = Clamp(0, column, string.len);
+	if (result < string.len) {
+		Unicode_Decode decode = utf8_decode(string.str+result, string.len-result);
+		result += decode.inc;
+		while (result < string.len && utf8_byte_is_continuation(string.str[result])) {
+			result += 1;
+		}
+	}
+	return result;
 }
 
 ////////////////////////////////

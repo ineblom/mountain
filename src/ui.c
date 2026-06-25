@@ -2027,7 +2027,17 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 	switch (cmd->delta_unit) {
 		default: {} break;
 		case UI_CMD_DELTA_UNIT__CHAR: {
-			// TODO: Multi byte characters in UTF-8.
+			L1 new_column = cursor.column;
+			if (delta[0] < 0) {
+				for (SL1 step = 0; step > delta[0]; step -= 1) {
+					new_column = utf8_boundary_left_from_column(string, new_column);
+				}
+			} else if (delta[0] > 0) {
+				for (SL1 step = 0; step < delta[0]; step += 1) {
+					new_column = utf8_boundary_right_from_column(string, new_column);
+				}
+			}
+			delta[0] = (SL1)new_column - (SL1)cursor.column;
 		} break;
 		case UI_CMD_DELTA_UNIT__WORD: {
 			delta[0] = (SL1)ui_scanned_column_from_column(string, cursor.column, delta[0] > 0 ? SIDE__MAX : SIDE__MIN) - (SL1)cursor.column;

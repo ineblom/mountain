@@ -4,7 +4,7 @@ COMPILER="gcc"
 WARN="-Wall -Wno-unused-function -Wno-unused-variable"
 DEFS="-DDEV=1"
 INC="-I/usr/include/freetype2"
-LIB="-lm -lwayland-client -lwayland-cursor -lfreetype"
+LIB="-lm -lwayland-client -lwayland-cursor -lxkbcommon -lfreetype"
 OPT="-g -maes -mssse3 -fno-omit-frame-pointer" # -march=native  
 
 echo Building...

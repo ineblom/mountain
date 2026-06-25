@@ -373,10 +373,10 @@ Internal void lane(Arena *arena) {
 						.timestamp_ns = e->timestamp_ns
 					});
 				}
-				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__A) {
+				if (e->kind == OS_EVENT_KIND__TEXT) {
 					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
 						.kind = UI_CMD_KIND__TEXT,
-						.string = Str8_("a"),
+						.string = {e->text, e->text_len},
 						.timestamp_ns = e->timestamp_ns
 					});
 				}

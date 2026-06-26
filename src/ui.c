@@ -2141,7 +2141,6 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 	I1 is_focus_active_disabled = (!is_focus_active && ui_top_focus_active() == UI_FOCUS_KIND__ON);
 
 	//- kti: Build top level box.
-	ui_set_next_border_color(oklch(0.7f, 0.0f, 0.0f, 1.0f));
 	UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND |
 																			UI_BOX_FLAG__DRAW_BORDER |
 																			UI_BOX_FLAG__MOUSE_CLICKABLE |

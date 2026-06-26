@@ -5,7 +5,8 @@ WARN="-Wall -Wno-unused-function -Wno-unused-variable"
 DEFS="-DDEV=1"
 INC="-I/usr/include/freetype2"
 LIB="-lm -lwayland-client -lwayland-cursor -lxkbcommon -lfreetype"
-OPT="-g -maes -mssse3 -fno-omit-frame-pointer" # -march=native  
+# OPT="-maes -mssse3 -fno-omit-frame-pointer" # -march=native  
+OPT="-O0 -g3 -gdwarf-4 -fno-omit-frame-pointer -fno-optimize-sibling-calls -maes -mssse3" # -march=native  
 
 echo Building...
 

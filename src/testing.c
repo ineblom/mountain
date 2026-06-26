@@ -382,10 +382,14 @@ Internal void lane(Arena *arena) {
 				}
 				if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__LEFT || e->key == OS_KEY__RIGHT)) {
 					UI_Cmd_Delta_Unit delta_unit = (e->modifiers&OS_MODIFIER_FLAG__CTRL) ? UI_CMD_DELTA_UNIT__WORD : UI_CMD_DELTA_UNIT__CHAR;
+					UI_Cmd_Flags flags = UI_CMD_FLAG__CAP_AT_LINE|UI_CMD_FLAG__PICK_SELECT_SIDE;
+					if (e->modifiers&OS_MODIFIER_FLAG__SHIFT) {
+						flags |= UI_CMD_FLAG__KEEP_MARK;
+					}
 					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
 							.kind = UI_CMD_KIND__NAVIGATE,
 							.delta_unit = delta_unit,
-							.flags = UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__PICK_SELECT_SIDE,
+							.flags = flags,
 							.delta_si2 = {(e->key == OS_KEY__LEFT) ? -1 : 1, 0},
 							.timestamp_ns = e->timestamp_ns,
 						});
@@ -428,6 +432,8 @@ Internal void lane(Arena *arena) {
 			}
 
 			state->cmd_count = 0;
+
+			fc_frame();
 
 			FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/" "Bloomberg-PropU_N.ttf"));
 			FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/" "Bloomberg-FixedU_N.ttf"));
@@ -587,9 +593,17 @@ Internal void lane(Arena *arena) {
 												ui_spacer(ui_px(10, 1.0f));
 
 												String8 name = Str8_("Theodor");
-												UI_Pref_Width(ui_px(500.0f, 1.0f)) {
-													UI_Signal signal = ui_textedit(&state->name_cursor, &state->name_mark, state->name_edit_buffer,
-														sizeof(state->name_edit_buffer), &state->name_edit_buffer_len, name, Str8_("name"));
+												UI_Pref_Width(ui_px(500.0f, 1.0f))
+												UI_Pref_Height(ui_em(2.4f, 1.0f))
+												UI_Corner_Radius(ui_top_font_size()*0.2f)
+												UI_Text_Padding(floor_F1(ui_top_font_size()*0.5f)) {
+													UI_Signal signal = ui_textedit(&state->name_cursor,
+																						&state->name_mark,
+																						state->name_edit_buffer,
+																						sizeof(state->name_edit_buffer),
+																						&state->name_edit_buffer_len,
+																						name,
+																						Str8_("name"));
 													if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
 														cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
 													}
@@ -620,7 +634,6 @@ Internal void lane(Arena *arena) {
 
 				ui_end_build();
 
-				fc_frame();
 				dr_begin_frame();
 				gfx_window_begin_frame(w->os, w->gfx);
 				DR_Bucket *bucket = dr_bucket_make();

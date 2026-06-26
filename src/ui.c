@@ -9,8 +9,7 @@ typedef enum UI_Cmd_Kind
   UI_CMD_KIND__FILEDROP,
   UI_CMD_KIND__CANCEL,
   UI_CMD_KIND_COUNT
-}
-UI_Cmd_Kind;
+} UI_Cmd_Kind;
 
 typedef I1 UI_Cmd_Flags;
 
@@ -127,6 +126,19 @@ enum {
 	UI_FOCUS_KIND_COUNT,
 };
 
+typedef I1 UI_Box_Custom_Draw_Kind;
+enum {
+	UI_BOX_CUSTOM_DRAW_KIND__NONE,
+	UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT,
+};
+
+typedef struct UI_Line_Edit_Draw_Data UI_Line_Edit_Draw_Data;
+struct UI_Line_Edit_Draw_Data {
+	String8 edited_string;
+	Txt_Pt cursor;
+	Txt_Pt mark;
+};
+
 typedef L1 UI_Box_Flags;
 enum {
 	UI_BOX_FLAG__MOUSE_CLICKABLE          = (1LLU<<0),
@@ -213,6 +225,8 @@ struct UI_Box {
 	F1 text_padding;
 	DR_FRun_List display_fruns;
 	DR_FStr_List display_fstrs;
+	UI_Box_Custom_Draw_Kind custom_draw_kind;
+	void *custom_draw_user_data;
 
 	UI_Key default_nav_focus_hot_key;
 	UI_Key default_nav_focus_active_key;
@@ -634,6 +648,8 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 	box->child_count = 0;
 	box->flags = 0;
 	MemoryZeroArray(box->pref_size);
+	box->custom_draw_kind = UI_BOX_CUSTOM_DRAW_KIND__NONE;
+	box->custom_draw_user_data = 0;
 
 	//- kti: Add to persistent table.
 	if (box_first_frame && !box_is_transient) {
@@ -729,6 +745,11 @@ Internal String8 ui_box_display_string(UI_Box *box) {
 		result = ui_display_part_from_key_string(result);
 	}
 	return result;
+}
+
+Internal void ui_box_equip_custom_draw(UI_Box *box, UI_Box_Custom_Draw_Kind kind, void *user_data) {
+	box->custom_draw_kind = kind;
+	box->custom_draw_user_data = user_data;
 }
 
 Internal void ui_box_equip_display_string(UI_Box *box, String8 string) {
@@ -2201,8 +2222,14 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 			F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];
 			ui_set_next_pref_width(ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
 			UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, Str8_("###editstr"));
+		
+			UI_Line_Edit_Draw_Data *draw_data = push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
+			draw_data->edited_string = push_str8_copy(ui_build_arena(), edit_string);
+			draw_data->cursor = cursor[0];
+			draw_data->mark = mark[0];
 			ui_box_equip_display_string(editstr_box, edit_string);
-			// TODO: custom draw.
+			ui_box_equip_custom_draw(editstr_box, UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT, draw_data);
+
 			mouse_pt = (Txt_Pt){0, ui_box_char_pos_from_xy(editstr_box, ui_mouse())};
 			cursor_off = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), str8_prefix(edit_string, cursor->column))[0];
 		}
@@ -2251,6 +2278,8 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 }
 
 Internal void ui_draw(void) {
+	F4 focus_border_color = oklch(0.428f, 0.176f, 29.234f, 1.0f);
+
 	for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
 		UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
 		UI_Box *hot_box = ui_box_from_key(ui_hot_key());
@@ -2335,6 +2364,41 @@ Internal void ui_draw(void) {
 			dr_push_clip(new_clip);
 		}
 
+		//- kti: Custom draw.
+		switch (box->custom_draw_kind) {
+			case UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT: {
+				UI_Line_Edit_Draw_Data *draw_data = box->custom_draw_user_data;
+				FC_Tag font = box->font;
+				F1 font_size = box->font_size;
+				F1 tab_size = box->tab_size;
+				F4 cursor_color = focus_border_color;
+				F4 select_color = {0.5f, 0.5f, 0.0f, 0.3f};
+				F2 text_pos = ui_box_text_pos(box);
+				String8 edited_string = draw_data->edited_string;
+				Txt_Pt cursor = draw_data->cursor;
+				Txt_Pt mark = draw_data->mark;
+				F1 cursor_pixel_off = fc_dim_from_tag_size_string(font, font_size, 0, tab_size, str8_prefix(edited_string, cursor.column))[0];
+				F1 mark_pixel_off = fc_dim_from_tag_size_string(font, font_size, 0, tab_size, str8_prefix(edited_string, mark.column))[0];
+				F1 cursor_thickness = Max(1.0f, floor_F1(font_size/10.0f));
+				UI_Box *edit_box = box->parent;
+				F1 cursor_top = edit_box->rect[1] + font_size*0.5f;
+				F1 cursor_height = edit_box->rect[3] - font_size;
+				F1 cursor_x = text_pos[0] + cursor_pixel_off;
+				F1 mark_x = text_pos[0] + mark_pixel_off - cursor_thickness;
+				F4 cursor_rect = {
+					cursor_x, cursor_top,
+					cursor_thickness, cursor_height,
+				};
+				F4 select_rect = {
+					Min(cursor_x, mark_x), cursor_top,
+					Max(cursor_x+cursor_thickness, mark_x+cursor_thickness*2.0f) - Min(cursor_x, mark_x), cursor_height,
+				};
+				dr_rect(select_rect, select_color, font_size*0.25f, 1.0f);
+				dr_rect(cursor_rect, cursor_color, 0.0f, 0.0f);
+			} break;
+		}
+
+		//- kti: Pop.
 		L1 pop_idx = 0;
 		for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent) {
 			pop_idx += 1;
@@ -2362,7 +2426,7 @@ Internal void ui_draw(void) {
 				GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, softness);
 				inst->corner_radii = b->corner_radii;
 				inst->border_width = 1.0f;
-				inst->border_color = draw_focus_border ? oklch(0.428f, 0.176f, 29.234f, 1.0f) : b->border_color;
+				inst->border_color = draw_focus_border ? focus_border_color : b->border_color;
 			}
 		}
 

@@ -391,9 +391,10 @@ Internal void lane(Arena *arena) {
 						});
 				}
 				if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__BACKSPACE) {
+					UI_Cmd_Delta_Unit delta_unit = (e->modifiers&OS_MODIFIER_FLAG__CTRL) ? UI_CMD_DELTA_UNIT__WORD : UI_CMD_DELTA_UNIT__CHAR;
 					ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
 						.kind = UI_CMD_KIND__EDIT,
-						.delta_unit = UI_CMD_DELTA_UNIT__CHAR,
+						.delta_unit = delta_unit,
 						.flags = UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__ZERO_DELTA_ON_SELECT | UI_CMD_FLAG__DELETE,
 						.delta_si2 = {-1, 0},
 						.timestamp_ns = e->timestamp_ns,

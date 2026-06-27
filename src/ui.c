@@ -2289,7 +2289,6 @@ Internal void ui_draw(void) {
 		UI_Box *active_box = ui_box_from_key(ui_active_key(OS_MOUSE_BUTTON__LEFT));
 
 		F1 softness = (box->corner_radii[0] > 0 || box->corner_radii[1] > 0 || box->corner_radii[2] > 0 || box->corner_radii[3] > 0) ? 1.0f : 0.0f;
-		// F1 softness = 1.0f;
 
 		I1 hot_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_hot_key());
 		I1 active_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT));

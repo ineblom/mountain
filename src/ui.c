@@ -2279,6 +2279,9 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 
 Internal void ui_draw(void) {
 	F4 focus_border_color = oklch(0.428f, 0.176f, 29.234f, 1.0f);
+	F4 cursor_color = focus_border_color;
+	cursor_color[0] += 0.2f;
+	F4 select_color = {0.5f, 0.5f, 0.0f, 0.05f};
 
 	for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
 		UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
@@ -2371,8 +2374,6 @@ Internal void ui_draw(void) {
 				FC_Tag font = box->font;
 				F1 font_size = box->font_size;
 				F1 tab_size = box->tab_size;
-				F4 cursor_color = focus_border_color;
-				F4 select_color = {0.5f, 0.5f, 0.0f, 0.3f};
 				F2 text_pos = ui_box_text_pos(box);
 				String8 edited_string = draw_data->edited_string;
 				Txt_Pt cursor = draw_data->cursor;

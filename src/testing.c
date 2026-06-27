@@ -17,6 +17,8 @@ typedef struct View View;
 struct View {
 	View_Kind kind;
 	String8 title;
+	L1 name_len;
+	B1 name[512];
 
 	F1 value;
 	I1 checked;
@@ -259,6 +261,9 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
 
 	view->kind = kind;
 	view->title = view_kind_names[kind];
+	String8 default_name = Str8_("Theodor");
+	view->name_len = Min(sizeof(view->name), default_name.len);
+	memmove(view->name, default_name.str, view->name_len);
 }
 
 ////////////////////////////////
@@ -607,9 +612,8 @@ Internal void lane(Arena *arena) {
 
 												ui_spacer(ui_px(10, 1.0f));
 
-												String8 name = Str8_("Theodor");
 												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												UI_Pref_Height(ui_em(2.4f, 1.0f))
+												UI_Pref_Height(ui_em(2.8f, 1.0f))
 												UI_Corner_Radius(ui_top_font_size()*0.2f)
 												UI_Text_Padding(floor_F1(ui_top_font_size()*0.5f)) {
 													UI_Signal signal = ui_textedit(&state->name_cursor,
@@ -617,8 +621,12 @@ Internal void lane(Arena *arena) {
 																						state->name_edit_buffer,
 																						sizeof(state->name_edit_buffer),
 																						&state->name_edit_buffer_len,
-																						name,
+																						(String8){view->name, view->name_len},
 																						Str8_("name"));
+													if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
+														view->name_len = Min(sizeof(view->name), state->name_edit_buffer_len);
+														memmove(view->name, state->name_edit_buffer, view->name_len);
+													}
 													if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
 														cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
 													}

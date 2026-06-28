@@ -1997,7 +1997,7 @@ Internal L1 ui_scanned_column_from_column(String8 string, L1 start_column, Side 
 	for (SL1 col = (SL1)start_column+start_off; 0 <= col && col <= (SL1)string.len; col += delta) {
 		B1 byte = (col < (SL1)string.len) ? string.str[col] : 0;
 		I1 is_non_space = !char_is_space(byte);
-		I1 is_name = (char_is_alpha(byte) || char_is_digit(byte, 10) || byte == '_');
+		I1 is_name = (char_is_alpha(byte) || char_is_digit(byte, 10) || byte == '_' || byte >= 128);
 		if (((side == SIDE__MIN) && (col == 0)) ||
 				((side == SIDE__MAX) && (col == (SL1)string.len)) ||
 				(found_non_space && !is_non_space) ||

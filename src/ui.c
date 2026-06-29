@@ -2235,8 +2235,9 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 		}
 	}
 
-	//- kti: Interact
+	//- kti: interact
 	UI_Signal signal = ui_signal_from_box(box);
+	I1 focus_cleared_this_frame = 0;
 	if (!is_focus_active && signal.flags&(UI_SIGNAL_FLAG__DOUBLE_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED)) {
 		String8 edit_string = pre_edit_value;
 		edit_string.len = Min(edit_buffer_size, pre_edit_value.len);
@@ -2250,6 +2251,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 	if (is_focus_active && signal.flags&UI_SIGNAL_FLAG__KEYBOARD_PRESSED) {
 		ui_set_auto_focus_active_key(ui_key_zero());
 		signal.flags |= UI_SIGNAL_FLAG__COMMIT;
+		focus_cleared_this_frame = 1;
 	}
 	if (is_focus_active && signal.flags&UI_SIGNAL_FLAG__DRAGGING) {
 		if (signal.flags&UI_SIGNAL_FLAG__PRESSED) {
@@ -2259,7 +2261,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 	}
 
 	//- kti: Focus cursor.
-	if (box->rect[0] > 0) {
+	if (is_focus_active && !focus_cleared_this_frame && box->rect[0] > 0) {
 		F1 cursor_margin = Min(ui_top_font_size()*2.0f, box->rect[2]*0.5f);
 		F2 cursor_range_px = {cursor_off-cursor_margin, cursor_off+cursor_margin};
 		F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
@@ -2269,6 +2271,9 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 		F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
 		box->view_off_target[0] += min_delta;
 		box->view_off_target[0] += max_delta;
+	} else {
+		box->view_off[0] = 0;
+		box->view_off_target[0] = 0;
 	}
 
 	ui_pop_focus_hot();

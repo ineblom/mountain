@@ -1,16 +1,17 @@
 #if (TYP_)
 
+////////////////////////////////
+//~ kti: UI
+
 typedef I1 View_Kind;
 enum {
-	VIEW_KIND__TEST = 0,
-	VIEW_KIND__OTHER,
+	VIEW_KIND__ENTITIES = 0,
 
 	VIEW_KIND_COUNT,
 };
 
 Global String8 view_kind_names[VIEW_KIND_COUNT] = {
-	[VIEW_KIND__TEST] = Str8_("Test"),
-	[VIEW_KIND__OTHER] = Str8_("Other"),
+	[VIEW_KIND__ENTITIES] = Str8_("Entities"),
 };
 
 typedef struct View View;
@@ -60,15 +61,8 @@ struct Window {
 	Panel root_panel;
 };
 
-typedef I1 Dir;
-enum {
-	DIR__RIGHT = 0,
-	DIR__UP,
-	DIR__LEFT,
-	DIR__DOWN,
-
-	DIR_COUNT,
-};
+////////////////////////////////
+//~ kti: Cmds
 
 typedef I1 Cmd_Kind;
 enum {
@@ -77,6 +71,8 @@ enum {
 	CMD_KIND__OPEN_PANEL,
 	CMD_KIND__CLOSE_PANEL,
 	CMD_KIND__FOCUS_PANEL,
+
+	CMD_KIND__CREATE_ENTITY,
 
 	CMD_KIND_COUNT,
 };
@@ -90,6 +86,34 @@ struct Cmd {
 
 	Dir dir;
 };
+
+////////////////////////////////
+//~ kti: Entity
+
+enum {
+	ENTITY_FLAG__SHAPE  = 1 << 0,
+	ENTITY_FLAG__CAMERA = 1 << 1,
+};
+
+enum {
+	SHAPE__BOX,
+	SHAPE__SPHERE,
+	SHAPE__COUNT,
+};
+
+typedef struct Entity Entity;
+struct Entity {
+	L1 flags;
+	B1 name[128];
+	L1 name_len;
+	L1 shape;
+	F3 pos;
+	F3 size;
+	L1 material_idx;
+};
+
+////////////////////////////////
+//~ kti: State
 
 typedef struct State State;
 struct State {
@@ -108,6 +132,11 @@ struct State {
 	B1 name_edit_buffer[512];
 	Txt_Pt name_cursor;
 	Txt_Pt name_mark;
+
+	//- kti: Entities.
+	L1 selected_entity_idx;
+	L1 entity_count;
+	Entity entities[128];
 };
 
 #endif
@@ -286,7 +315,6 @@ Internal Window *window_open(void) {
 
 	Panel *new_panel = panel_alloc();
 	panel_insert(new_panel, &window->root_panel, 0);
-	panel_push_view(new_panel, VIEW_KIND__TEST);
 
 	DLLPushBack(state->first_window, state->last_window, window);
 
@@ -316,7 +344,7 @@ Internal Window *window_from_os_window(OS_Window *os) {
 }
 
 ////////////////////////////////
-//~ Cmd
+//~ kti: Cmd
 
 Internal void cmd_push(Cmd cmd) {
 	if (state->cmd_count < ArrayCount(state->cmds)) {
@@ -324,6 +352,34 @@ Internal void cmd_push(Cmd cmd) {
 		state->cmds[idx] = cmd;
 	}
 }
+
+////////////////////////////////
+//~ kti: Entities
+
+Internal Entity *entity_push(L1 flags, String8 name) {
+	Entity *entity = 0;
+
+	L1 idx = state->entity_count;
+	if (idx < ArrayCount(state->entities)) {
+		state->entity_count += 1;
+
+		entity = &state->entities[idx];
+		entity[0] = (Entity){
+			.flags = flags,
+			.shape = SHAPE__BOX,
+			.pos = {0.0f, 0.0f, 0.0f},
+			.size = {0.5f, 0.5f, 0.5f},
+		};
+
+		entity->name_len = Min(name.len, sizeof(entity->name)),
+		memmove(entity->name, name.str, entity->name_len);
+
+	}
+	return entity;
+}
+
+////////////////////////////////
+//~ kti: Main
 
 Internal void lane(Arena *arena) {
 	L1 frame_count = 0;
@@ -366,6 +422,9 @@ Internal void lane(Arena *arena) {
 		UI_Cmd_List ui_cmds = {0};
 		OS_Event_List events = {0};
 		if (lane_idx() == 0) {
+
+			////////////////////////////////
+			//~ kti: Events
 			events = os_poll_events(scratch.arena);
 			for (OS_Event *e = events.first; e != 0; e = e->next) {
 				if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE) {
@@ -436,6 +495,8 @@ Internal void lane(Arena *arena) {
 		lane_sync();
 
 		if (lane_idx() == 0) {
+			////////////////////////////////
+			//~ kti: Execute Cmds
 			for EachIndex(i, state->cmd_count) {
 				Cmd cmd = state->cmds[i];
 				switch (cmd.kind) {
@@ -447,11 +508,17 @@ Internal void lane(Arena *arena) {
 					} break;
 					case CMD_KIND__FOCUS_PANEL: {
 						state->focused_panel = cmd.panel;
-					}
+					} break;
+
+					case CMD_KIND__CREATE_ENTITY: {
+						entity_push(ENTITY_FLAG__SHAPE, Str8_("New Entity"));
+					} break;
 				}
 			}
-
 			state->cmd_count = 0;
+
+			////////////////////////////////
+			//~ UI
 
 			fc_frame();
 
@@ -599,18 +666,58 @@ Internal void lane(Arena *arena) {
 									} else {
 										ui_spacer(ui_px(10.0f, 1.0f));
 
+										////////////////////////////////
+									  //~ Views.
+
 										View *view = &panel->views[panel->selected_view_idx];
 										switch (view->kind) {
-											case VIEW_KIND__TEST: {
-												UI_Pref_Width(ui_px(500.0f, 1.0f))
-												ui_slider_F1(Str8_("Value"), &view->value, 0.0f, 100.0f);
+											//- kti: Entities view.
+											case VIEW_KIND__ENTITIES: {
+												
+												ui_set_next_pref_height(ui_children_sum(1.0f));
+												ui_set_next_child_layout_axis(AXIS__Y);
+												UI_Box *entities_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, Str8_("entities"));
+												UI_Text_Padding(5.0f)
+												UI_Parent(entities_box) {
+													for EachIndex(i, state->entity_count) {
+														Entity *e = &state->entities[i];
+														String8 name = {e->name, e->name_len};
 
-												ui_spacer(ui_px(10, 1.0f));
+														UI_Box *row = ui_build_box_from_stringf(
+															UI_BOX_FLAG__DRAW_BACKGROUND|
+															UI_BOX_FLAG__DRAW_TEXT|
+															UI_BOX_FLAG__CLICKABLE|
+															UI_BOX_FLAG__CLICK_TO_FOCUS|
+															UI_BOX_FLAG__DRAW_HOT_EFFECTS,
+															"entity_%llu", i);
+														ui_box_equip_display_string(row, name);
 
-												UI_Pref_Width(ui_pct(1.0f, 0.0f))
-												ui_checkbox(Str8_("Check"), &view->checked);
+														UI_Signal sig = ui_signal_from_box(row);
 
-												ui_spacer(ui_px(10, 1.0f));
+														I1 row_is_focus_hot =
+															(row->flags&UI_BOX_FLAG__FOCUS_HOT) &&
+															!(row->flags&UI_BOX_FLAG__FOCUS_HOT_DISABLED);
+														if (row_is_focus_hot) {
+															state->selected_entity_idx = i;
+														}
+													}
+													if (state->entity_count == 0) {
+														ui_set_next_text_color((F4){0.4f, 0.0f, 0.0f, 1.0f});
+														ui_label(Str8_("No entities..."));
+													}
+												}
+
+												ui_spacer(ui_px(5.0f, 1.0f));
+
+												UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
+												UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+												UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+												UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+												if (ui_button(Str8_("Create")).flags & UI_SIGNAL_FLAG__PRESSED) {
+													cmd_push((Cmd){ .kind = CMD_KIND__CREATE_ENTITY });
+												}
+
+												ui_spacer(ui_px(15.0f, 1.0f));
 
 												UI_Pref_Width(ui_px(500.0f, 1.0f))
 												UI_Pref_Height(ui_em(2.8f, 1.0f))

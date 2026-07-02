@@ -26,6 +26,16 @@ typedef enum Axis {
 } Axis;
 #define axis_flip(a) ((Axis)(!(a)))
 
+typedef I1 Dir;
+enum {
+	DIR__RIGHT = 0,
+	DIR__UP,
+	DIR__LEFT,
+	DIR__DOWN,
+
+	DIR_COUNT,
+};
+
 #endif
 
 #if (ROM_)

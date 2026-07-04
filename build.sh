@@ -11,20 +11,20 @@ OPT="-maes -mssse3 -fno-omit-frame-pointer" # -march=native
 echo Building...
 
 if [ "$1" = "META" ]; then
-	cd src
-	$COMPILER $WARN $DEFS $INC $LIB $OPT -DMETA_APP=1 build.c -o ../meta
-	BUILD_STATUS=$?
-	cd ..
+  cd src
+  $COMPILER $WARN $DEFS $INC $LIB $OPT -DMETA_APP=1 build.c -o ../meta
+  BUILD_STATUS=$?
+  cd ..
 
-	if [ $BUILD_STATUS -eq 0 ]; then
-		echo META build successful, running...
-		./meta
-	else
-		echo META build failed
-		exit
-	fi
+  if [ $BUILD_STATUS -eq 0 ]; then
+    echo META build successful, running...
+    ./meta
+  else
+    echo META build failed
+    exit
+  fi
 
-	echo "Meta program done."
+  echo "Meta program done."
 fi
 
 cd src
@@ -33,8 +33,8 @@ BUILD_STATUS=$?
 cd ..
 
 if [ $BUILD_STATUS -eq 0 ]; then
-	echo Build successful, running...
-	./m
+  echo Build successful, running...
+  ./m
 else
-	echo Build failed
+  echo Build failed
 fi

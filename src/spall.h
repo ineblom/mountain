@@ -64,15 +64,15 @@ typedef enum {
     SpallEventType_Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
     SpallEventType_Pad_Skip            = 7,
 
-	SpallEventType_NameProcess         = 8,
-	SpallEventType_NameThread          = 9,
+  SpallEventType_NameProcess         = 8,
+  SpallEventType_NameThread          = 9,
 } SpallEventType;
 
 typedef struct SpallBufferHeader {
-	uint32_t size;
-	uint32_t tid;
-	uint32_t pid;
-	uint64_t first_ts;
+  uint32_t size;
+  uint32_t tid;
+  uint32_t pid;
+  uint64_t first_ts;
 } SpallBufferHeader;
 
 typedef struct SpallBeginEvent {
@@ -100,8 +100,8 @@ typedef struct SpallPadSkipEvent {
 } SpallPadSkipEvent;
 
 typedef struct SpallNameContainerEvent {
-	uint8_t type; // = SpallEventType_NameThread/Process
-	uint8_t name_length;
+  uint8_t type; // = SpallEventType_NameThread/Process
+  uint8_t name_length;
 } SpallNameContainerEvent;
 
 typedef struct SpallNameContainerEventMax {
@@ -131,12 +131,12 @@ struct SpallProfile {
 typedef struct SpallBuffer {
     void *data;
     size_t length;
-	uint32_t tid;
-	uint32_t pid;
+  uint32_t tid;
+  uint32_t pid;
 
     // Internal data - don't assign this
     size_t head;
-	uint64_t first_ts;
+  uint64_t first_ts;
 } SpallBuffer;
 
 #ifdef __cplusplus
@@ -157,18 +157,18 @@ SPALL_FN void spall__file_close(SpallProfile *ctx) {
 }
 
 SPALL_FN SPALL_FORCEINLINE bool spall__buffer_flush(SpallProfile *ctx, SpallBuffer *wb, uint64_t ts) {
-	wb->first_ts = SPALL_MAX(wb->first_ts, ts);
+  wb->first_ts = SPALL_MAX(wb->first_ts, ts);
 
-	SpallBufferHeader hdr;
-	hdr.size = wb->head - sizeof(SpallBufferHeader);
-	hdr.pid = wb->pid;
-	hdr.tid = wb->tid;
-	hdr.first_ts = wb->first_ts;
+  SpallBufferHeader hdr;
+  hdr.size = wb->head - sizeof(SpallBufferHeader);
+  hdr.pid = wb->pid;
+  hdr.tid = wb->tid;
+  hdr.first_ts = wb->first_ts;
 
-	memcpy(wb->data, &hdr, sizeof(hdr));
+  memcpy(wb->data, &hdr, sizeof(hdr));
 
-	if (!ctx->write(ctx, wb->data, wb->head)) return false;
-	if (!ctx->flush(ctx)) return false;
+  if (!ctx->write(ctx, wb->data, wb->head)) return false;
+  if (!ctx->flush(ctx)) return false;
     wb->head = sizeof(SpallBufferHeader);
     return true;
 }
@@ -251,11 +251,11 @@ SPALL_FN void spall_quit(SpallProfile *ctx) {
 }
 
 SPALL_FN bool spall_init_callbacks(double timestamp_unit,
-								   SpallWriteCallback write,
-								   SpallFlushCallback flush,
-								   SpallCloseCallback close,
-								   void *userdata,
-								   SpallProfile *ctx) {
+                   SpallWriteCallback write,
+                   SpallFlushCallback flush,
+                   SpallCloseCallback close,
+                   void *userdata,
+                   SpallProfile *ctx) {
 
     if (timestamp_unit < 0) return false;
 
@@ -266,12 +266,12 @@ SPALL_FN bool spall_init_callbacks(double timestamp_unit,
     ctx->flush = flush;
     ctx->close = close;
 
-	SpallHeader header;
-	size_t len = spall_build_header(&header, sizeof(header), timestamp_unit);
-	if (!ctx->write(ctx, &header, len)) {
-		spall_quit(ctx);
-		return false;
-	}
+  SpallHeader header;
+  size_t len = spall_build_header(&header, sizeof(header), timestamp_unit);
+  if (!ctx->write(ctx, &header, len)) {
+    spall_quit(ctx);
+    return false;
+  }
 
     return true;
 }
@@ -284,7 +284,7 @@ SPALL_FN bool spall_init_file(const char* filename, double timestamp_unit, Spall
         fclose(f);
         f = fopen(filename, "ab");
     }
-	if (!f) { return false; }
+  if (!f) { return false; }
 
     return spall_init_callbacks(timestamp_unit, spall__file_write, spall__file_flush, spall__file_close, (void *)f, ctx);
 }
@@ -295,24 +295,24 @@ SPALL_FN bool spall_flush(SpallProfile *ctx) {
 }
 
 SPALL_FN bool spall_buffer_init(SpallProfile *ctx, SpallBuffer *wb) {
-	// Fails if buffer is not big enough to contain at least one event!
-	if (wb->length < sizeof(SpallBufferHeader) + sizeof(SpallBeginEventMax)) {
-		return false;
-	}
+  // Fails if buffer is not big enough to contain at least one event!
+  if (wb->length < sizeof(SpallBufferHeader) + sizeof(SpallBeginEventMax)) {
+    return false;
+  }
 
-	wb->head = sizeof(SpallBufferHeader);
-	return true;
+  wb->head = sizeof(SpallBufferHeader);
+  return true;
 }
 
 
 SPALL_FN SPALL_FORCEINLINE bool spall_buffer_begin_args(SpallProfile *ctx, SpallBuffer *wb, const char *name, int32_t name_len, const char *args, int32_t args_len, uint64_t when) {
-	if ((wb->head + sizeof(SpallBeginEventMax)) > wb->length) {
-		if (!spall__buffer_flush(ctx, wb, when)) {
-			return false;
-		}
-	}
+  if ((wb->head + sizeof(SpallBeginEventMax)) > wb->length) {
+    if (!spall__buffer_flush(ctx, wb, when)) {
+      return false;
+    }
+  }
 
-	wb->head += spall_build_begin((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, args, args_len, when);
+  wb->head += spall_build_begin((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, args, args_len, when);
 
     return true;
 }
@@ -322,36 +322,36 @@ SPALL_FN bool spall_buffer_begin(SpallProfile *ctx, SpallBuffer *wb, const char 
 }
 
 SPALL_FN bool spall_buffer_end(SpallProfile *ctx, SpallBuffer *wb, uint64_t when) {
-	if ((wb->head + sizeof(SpallEndEvent)) > wb->length) {
-		if (!spall__buffer_flush(ctx, wb, when)) {
-			return false;
-		}
-	}
+  if ((wb->head + sizeof(SpallEndEvent)) > wb->length) {
+    if (!spall__buffer_flush(ctx, wb, when)) {
+      return false;
+    }
+  }
 
-	wb->head += spall_build_end((char *)wb->data + wb->head, wb->length - wb->head, when);
-	return true;
+  wb->head += spall_build_end((char *)wb->data + wb->head, wb->length - wb->head, when);
+  return true;
 }
 
 SPALL_FN bool spall_buffer_name_thread(SpallProfile *ctx, SpallBuffer *wb, const char *name, int32_t name_len) {
-	if ((wb->head + sizeof(SpallNameContainerEvent)) > wb->length) {
-		if (!spall__buffer_flush(ctx, wb, 0)) {
-			return false;
-		}
-	}
+  if ((wb->head + sizeof(SpallNameContainerEvent)) > wb->length) {
+    if (!spall__buffer_flush(ctx, wb, 0)) {
+      return false;
+    }
+  }
 
-	wb->head += spall_build_name((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, SpallEventType_NameThread);
-	return true;
+  wb->head += spall_build_name((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, SpallEventType_NameThread);
+  return true;
 }
 
 SPALL_FN bool spall_buffer_name_process(SpallProfile *ctx, SpallBuffer *wb, const char *name, int32_t name_len) {
-	if ((wb->head + sizeof(SpallNameContainerEvent)) > wb->length) {
-		if (!spall__buffer_flush(ctx, wb, 0)) {
-			return false;
-		}
-	}
+  if ((wb->head + sizeof(SpallNameContainerEvent)) > wb->length) {
+    if (!spall__buffer_flush(ctx, wb, 0)) {
+      return false;
+    }
+  }
 
-	wb->head += spall_build_name((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, SpallEventType_NameProcess);
-	return true;
+  wb->head += spall_build_name((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, SpallEventType_NameProcess);
+  return true;
 }
 
 #ifdef __cplusplus

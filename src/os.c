@@ -79,19 +79,19 @@ struct OS_Event {
   L1 timestamp_ns;
   I1 kind;
   OS_Key key;
-	I1 is_repeat;
-	B1 text[4];
-	L1 text_len;
+  I1 is_repeat;
+  B1 text[4];
+  L1 text_len;
   OS_Modifier_Flags modifiers;
   D1 x, y;
-	D1 delta_x, delta_y;
+  D1 delta_x, delta_y;
 };
 
 typedef struct OS_Event_List OS_Event_List;
 struct OS_Event_List {
-	OS_Event *first;
-	OS_Event *last;
-	L1 count;
+  OS_Event *first;
+  OS_Event *last;
+  L1 count;
 };
 
 Internal void *os_reserve(L1);
@@ -253,47 +253,47 @@ enum {
 
 typedef struct OS_GFX_State OS_GFX_State;
 struct OS_GFX_State {
-	Arena *arena;
+  Arena *arena;
 
-	OS_Window *hovered_window;
-	OS_Window *focused_window;
-	OS_Window *first_window;
+  OS_Window *hovered_window;
+  OS_Window *focused_window;
+  OS_Window *first_window;
 
-	struct wl_display *display;
+  struct wl_display *display;
 
-	struct wl_compositor *compositor;
-	struct wl_shm *shm;
-	struct xdg_wm_base *xdg_wm_base;
+  struct wl_compositor *compositor;
+  struct wl_shm *shm;
+  struct xdg_wm_base *xdg_wm_base;
 
-	struct wl_seat *seat;
-	struct wl_pointer *pointer;
-	struct wl_keyboard *keyboard;
+  struct wl_seat *seat;
+  struct wl_pointer *pointer;
+  struct wl_keyboard *keyboard;
 
-	struct wl_cursor_theme *cursor_theme;
-	struct wl_cursor *default_cursor;
-	struct wl_surface *cursor_surface;
+  struct wl_cursor_theme *cursor_theme;
+  struct wl_cursor *default_cursor;
+  struct wl_surface *cursor_surface;
 
-	struct xdg_wm_base_listener xdg_wm_base_listener;
-	struct wl_seat_listener seat_listener;
-	struct wl_pointer_listener pointer_listener;
-	struct wl_keyboard_listener keyboard_listener;
+  struct xdg_wm_base_listener xdg_wm_base_listener;
+  struct wl_seat_listener seat_listener;
+  struct wl_pointer_listener pointer_listener;
+  struct wl_keyboard_listener keyboard_listener;
 
-	Arena *event_arena;
-	OS_Event_List events;
+  Arena *event_arena;
+  OS_Event_List events;
 
-	B1 key_states[OS_KEY_COUNT];
-	D1 mouse_x, mouse_y;
+  B1 key_states[OS_KEY_COUNT];
+  D1 mouse_x, mouse_y;
 
-	struct xkb_context *xkb_context;
-	struct xkb_keymap *xkb_keymap;
-	struct xkb_state *xkb_state;
+  struct xkb_context *xkb_context;
+  struct xkb_keymap *xkb_keymap;
+  struct xkb_state *xkb_state;
 
-	SI1 key_repeat_rate;
-	SI1 key_repeat_delay_ms;
-	OS_Key repeat_key;
-	I1 repeat_wl_key;
-	OS_Window *repeat_window;
-	L1 next_repeat_ns;
+  SI1 key_repeat_rate;
+  SI1 key_repeat_delay_ms;
+  OS_Key repeat_key;
+  I1 repeat_wl_key;
+  OS_Window *repeat_window;
+  L1 next_repeat_ns;
 };
 
 #endif
@@ -561,61 +561,61 @@ Internal I1 os_key_from_wl_key(I1 wl_key) {
 }
 
 Internal OS_Modifier_Flags os_get_modifiers(void) {
-	OS_Modifier_Flags result = 0;
+  OS_Modifier_Flags result = 0;
 
-	if (os_gfx_state->key_states[OS_KEY__CTRL]) {
-		result |= OS_MODIFIER_FLAG__CTRL;
-	}
-	if (os_gfx_state->key_states[OS_KEY__SHIFT]) {
-		result |= OS_MODIFIER_FLAG__SHIFT;
-	}
-	if (os_gfx_state->key_states[OS_KEY__ALT]) {
-		result |= OS_MODIFIER_FLAG__ALT;
-	}
-	
-	return result;
+  if (os_gfx_state->key_states[OS_KEY__CTRL]) {
+    result |= OS_MODIFIER_FLAG__CTRL;
+  }
+  if (os_gfx_state->key_states[OS_KEY__SHIFT]) {
+    result |= OS_MODIFIER_FLAG__SHIFT;
+  }
+  if (os_gfx_state->key_states[OS_KEY__ALT]) {
+    result |= OS_MODIFIER_FLAG__ALT;
+  }
+  
+  return result;
 }
 
 Internal void os_event_list_push(Arena *arena, OS_Event_List *list, OS_Event event) {
   OS_Event *new_event = push_array(arena, OS_Event, 1);
-	memmove(new_event, &event, sizeof(OS_Event));
-	new_event->modifiers = os_get_modifiers();
+  memmove(new_event, &event, sizeof(OS_Event));
+  new_event->modifiers = os_get_modifiers();
   DLLPushBack(list->first, list->last, new_event);
-	list->count += 1;
+  list->count += 1;
 }
 
 Internal void os_push_event(OS_Event event) {
-	os_event_list_push(os_gfx_state->event_arena, &os_gfx_state->events, event);
+  os_event_list_push(os_gfx_state->event_arena, &os_gfx_state->events, event);
 }
 
 Internal I1 os_xkb_keycode_from_wl_key(I1 wl_key) {
-	I1 result = wl_key + 8;
-	return result;
+  I1 result = wl_key + 8;
+  return result;
 }
 
 Internal void os_push_text_event(OS_Window *window, I1 wl_key, L1 timestamp_ns, I1 is_repeat) {
-	if (os_gfx_state->xkb_state != 0) {
-		char text[ArrayCount(Member(OS_Event, text))+1] = {0};
-		I1 text_len = xkb_state_key_get_utf8(os_gfx_state->xkb_state, os_xkb_keycode_from_wl_key(wl_key), text, sizeof(text));
-		if (text_len > 0 && text_len <= ArrayCount(Member(OS_Event, text)) && (B1)text[0] >= 0x20 && (B1)text[0] != 0x7F) {
-			OS_Event event = {
-				.window = window,
-				.timestamp_ns = timestamp_ns,
-				.kind = OS_EVENT_KIND__TEXT,
-				.is_repeat = is_repeat,
-				.text_len = text_len,
-			};
-			memmove(event.text, text, text_len);
-			os_push_event(event);
-		}
-	}
+  if (os_gfx_state->xkb_state != 0) {
+    char text[ArrayCount(Member(OS_Event, text))+1] = {0};
+    I1 text_len = xkb_state_key_get_utf8(os_gfx_state->xkb_state, os_xkb_keycode_from_wl_key(wl_key), text, sizeof(text));
+    if (text_len > 0 && text_len <= ArrayCount(Member(OS_Event, text)) && (B1)text[0] >= 0x20 && (B1)text[0] != 0x7F) {
+      OS_Event event = {
+        .window = window,
+        .timestamp_ns = timestamp_ns,
+        .kind = OS_EVENT_KIND__TEXT,
+        .is_repeat = is_repeat,
+        .text_len = text_len,
+      };
+      memmove(event.text, text, text_len);
+      os_push_event(event);
+    }
+  }
 }
 
 Internal void os_key_repeat_clear(void) {
-	os_gfx_state->repeat_key = OS_KEY__NULL;
-	os_gfx_state->repeat_wl_key = 0;
-	os_gfx_state->repeat_window = 0;
-	os_gfx_state->next_repeat_ns = 0;
+  os_gfx_state->repeat_key = OS_KEY__NULL;
+  os_gfx_state->repeat_wl_key = 0;
+  os_gfx_state->repeat_window = 0;
+  os_gfx_state->next_repeat_ns = 0;
 }
 
 Internal void registry_global_handler(void *data, struct wl_registry *registry, I1 name, CString interface, I1 version) {
@@ -681,7 +681,7 @@ Internal void seat_name_handler(void *data, struct wl_seat *seat, CString name) 
 Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface, wl_fixed_t surface_x, wl_fixed_t surface_y) {
   for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next) {
     if (surface == it->surface) {
-			os_gfx_state->hovered_window = it;
+      os_gfx_state->hovered_window = it;
       break;
     }
   }
@@ -703,11 +703,11 @@ Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer, I1 s
 
 Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
   OS_Window *window = os_gfx_state->hovered_window;
-	D1 x = wl_fixed_to_double(surface_x);
-	D1 y = wl_fixed_to_double(surface_y);
+  D1 x = wl_fixed_to_double(surface_x);
+  D1 y = wl_fixed_to_double(surface_y);
 
   OS_Event event = {
-		.window = window,
+    .window = window,
     .timestamp_ns = (L1)time * 1000000LLU,
     .kind = OS_EVENT_KIND__MOUSE_MOVE,
     .x = x,
@@ -715,8 +715,8 @@ Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 
   };
   os_push_event(event);
 
-	os_gfx_state->mouse_x = x;
-	os_gfx_state->mouse_y = y;
+  os_gfx_state->mouse_x = x;
+  os_gfx_state->mouse_y = y;
 }
 
 Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 serial, I1 time, I1 button, I1 state) {
@@ -736,18 +736,18 @@ Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 
   }
 
   if (key != OS_KEY__NULL) {
-		L1 kind = (state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
+    L1 kind = (state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
     OS_Event event = {
-			.window = window,
+      .window = window,
       .timestamp_ns = (L1)time * 1000000LLU,
       .kind = kind,
       .key = key,
-			.x = os_gfx_state->mouse_x,
-			.y = os_gfx_state->mouse_y,
+      .x = os_gfx_state->mouse_x,
+      .y = os_gfx_state->mouse_y,
     };
     os_push_event(event);
 
-		os_gfx_state->key_states[key] = (kind == OS_EVENT_KIND__PRESS);
+    os_gfx_state->key_states[key] = (kind == OS_EVENT_KIND__PRESS);
   }
 }
 
@@ -755,11 +755,11 @@ Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer, I1 ti
   OS_Window *window = os_gfx_state->hovered_window;
 
   OS_Event event = {
-		.window = window,
+    .window = window,
     .timestamp_ns = (L1)time * 1000000LLU,
     .kind = OS_EVENT_KIND__SCROLL,
-		.x = os_gfx_state->mouse_x,
-		.y = os_gfx_state->mouse_y,
+    .x = os_gfx_state->mouse_x,
+    .y = os_gfx_state->mouse_y,
   };
   if (axis == 0) {
     event.delta_y = wl_fixed_to_double(value);
@@ -783,36 +783,36 @@ Internal void pointer_axis_discrete_handler(void *data, struct wl_pointer *point
 //~ kti: Keyboard Event Handlers
 
 Internal void keyboard_keymap_handler(void *data, struct wl_keyboard *keyboard, I1 format, SI1 fd, I1 size) {
-	if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
-		char *map = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
-		if (map != MAP_FAILED) {
-			if (os_gfx_state->xkb_context == 0) {
-				os_gfx_state->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-			}
-			if (os_gfx_state->xkb_context != 0) {
-				struct xkb_keymap *keymap = xkb_keymap_new_from_string(os_gfx_state->xkb_context, map, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
-				if (keymap != 0) {
-					struct xkb_state *state = xkb_state_new(keymap);
-					if (state != 0) {
-						if (os_gfx_state->xkb_state != 0) {
-							xkb_state_unref(os_gfx_state->xkb_state);
-						}
-						if (os_gfx_state->xkb_keymap != 0) {
-							xkb_keymap_unref(os_gfx_state->xkb_keymap);
-						}
-						os_gfx_state->xkb_keymap = keymap;
-						os_gfx_state->xkb_state = state;
-						keymap = 0;
-					}
-					if (keymap != 0) {
-						xkb_keymap_unref(keymap);
-					}
-				}
-			}
-			munmap(map, size);
-		}
-	}
-	close(fd);
+  if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
+    char *map = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map != MAP_FAILED) {
+      if (os_gfx_state->xkb_context == 0) {
+        os_gfx_state->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+      }
+      if (os_gfx_state->xkb_context != 0) {
+        struct xkb_keymap *keymap = xkb_keymap_new_from_string(os_gfx_state->xkb_context, map, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        if (keymap != 0) {
+          struct xkb_state *state = xkb_state_new(keymap);
+          if (state != 0) {
+            if (os_gfx_state->xkb_state != 0) {
+              xkb_state_unref(os_gfx_state->xkb_state);
+            }
+            if (os_gfx_state->xkb_keymap != 0) {
+              xkb_keymap_unref(os_gfx_state->xkb_keymap);
+            }
+            os_gfx_state->xkb_keymap = keymap;
+            os_gfx_state->xkb_state = state;
+            keymap = 0;
+          }
+          if (keymap != 0) {
+            xkb_keymap_unref(keymap);
+          }
+        }
+      }
+      munmap(map, size);
+    }
+  }
+  close(fd);
 }
 
 Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface, struct wl_array *keys) {
@@ -826,62 +826,62 @@ Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I
 
 Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface) {
   os_gfx_state->focused_window = 0;
-	os_key_repeat_clear();
+  os_key_repeat_clear();
 }
 
 Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 time, I1 key, I1 state) {
   OS_Window *window = os_gfx_state->focused_window;
-	
+  
   I1 os_key = os_key_from_wl_key(key);
   if (os_key != OS_KEY__NULL) {
-		L1 kind = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
-		L1 timestamp_ns = (L1)time * 1000000LLU;
-		if (os_gfx_state->xkb_state != 0) {
-			xkb_state_update_key(os_gfx_state->xkb_state, os_xkb_keycode_from_wl_key(key), (kind == OS_EVENT_KIND__PRESS) ? XKB_KEY_DOWN : XKB_KEY_UP);
-		}
+    L1 kind = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
+    L1 timestamp_ns = (L1)time * 1000000LLU;
+    if (os_gfx_state->xkb_state != 0) {
+      xkb_state_update_key(os_gfx_state->xkb_state, os_xkb_keycode_from_wl_key(key), (kind == OS_EVENT_KIND__PRESS) ? XKB_KEY_DOWN : XKB_KEY_UP);
+    }
     OS_Event event = {
-			.window = window,
+      .window = window,
       .timestamp_ns = timestamp_ns,
       .kind = kind,
       .key = os_key,
     };
     os_push_event(event);
-		os_gfx_state->key_states[os_key] = (kind == OS_EVENT_KIND__PRESS) ? 1 : 0;
+    os_gfx_state->key_states[os_key] = (kind == OS_EVENT_KIND__PRESS) ? 1 : 0;
 
-		//- kti: Repeat key
-		if (kind == OS_EVENT_KIND__PRESS) {
-			os_push_text_event(window, key, timestamp_ns, 0);
-			if (os_gfx_state->key_repeat_rate > 0 && (os_gfx_state->xkb_keymap == 0 || xkb_keymap_key_repeats(os_gfx_state->xkb_keymap, os_xkb_keycode_from_wl_key(key)))) {
-				os_gfx_state->repeat_key = os_key;
-				os_gfx_state->repeat_wl_key = key;
-				os_gfx_state->repeat_window = window;
-				os_gfx_state->next_repeat_ns = os_clock() + (L1)os_gfx_state->key_repeat_delay_ms * 1000000LLU;
-			}
-		} else if (os_gfx_state->repeat_key == os_key) {
-			os_key_repeat_clear();
-		}
+    //- kti: Repeat key
+    if (kind == OS_EVENT_KIND__PRESS) {
+      os_push_text_event(window, key, timestamp_ns, 0);
+      if (os_gfx_state->key_repeat_rate > 0 && (os_gfx_state->xkb_keymap == 0 || xkb_keymap_key_repeats(os_gfx_state->xkb_keymap, os_xkb_keycode_from_wl_key(key)))) {
+        os_gfx_state->repeat_key = os_key;
+        os_gfx_state->repeat_wl_key = key;
+        os_gfx_state->repeat_window = window;
+        os_gfx_state->next_repeat_ns = os_clock() + (L1)os_gfx_state->key_repeat_delay_ms * 1000000LLU;
+      }
+    } else if (os_gfx_state->repeat_key == os_key) {
+      os_key_repeat_clear();
+    }
   }
 }
 
 Internal void keyboard_modifiers_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 mods_depressed, I1 mods_latched, I1 mods_locked, I1 group) {
-	if (os_gfx_state->xkb_state != 0) {
-		xkb_state_update_mask(os_gfx_state->xkb_state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
-	}
+  if (os_gfx_state->xkb_state != 0) {
+    xkb_state_update_mask(os_gfx_state->xkb_state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+  }
 }
 
 Internal void keyboard_repeat_info_handler(void *data, struct wl_keyboard *keyboard, SI1 rate, SI1 delay) {
-	os_gfx_state->key_repeat_rate = rate;
-	os_gfx_state->key_repeat_delay_ms = delay;
-	if (rate <= 0) {
-		os_key_repeat_clear();
-	}
+  os_gfx_state->key_repeat_rate = rate;
+  os_gfx_state->key_repeat_delay_ms = delay;
+  if (rate <= 0) {
+    os_key_repeat_clear();
+  }
 }
 
 Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   if (os_gfx_state == 0) {
-		Arena *arena = arena_alloc(MiB(64));
-		os_gfx_state = push_array(arena, OS_GFX_State, 1);
-		os_gfx_state->arena = arena;
+    Arena *arena = arena_alloc(MiB(64));
+    os_gfx_state = push_array(arena, OS_GFX_State, 1);
+    os_gfx_state->arena = arena;
 
     os_gfx_state->display = wl_display_connect(0);
     Assert(os_gfx_state->display != 0);
@@ -983,7 +983,7 @@ Internal OS_Event_List os_poll_events(Arena *arena) {
   os_gfx_state->event_arena = arena;
   os_gfx_state->events.first = 0;
   os_gfx_state->events.last = 0;
-	os_gfx_state->events.count = 0;
+  os_gfx_state->events.count = 0;
 
   while (wl_display_prepare_read(os_gfx_state->display) != 0) {
     wl_display_dispatch_pending(os_gfx_state->display);
@@ -1003,24 +1003,24 @@ Internal OS_Event_List os_poll_events(Arena *arena) {
   
   wl_display_dispatch_pending(os_gfx_state->display);
 
-	if (os_gfx_state->repeat_key != OS_KEY__NULL &&
-			os_gfx_state->key_repeat_rate > 0 &&
-			os_gfx_state->key_states[os_gfx_state->repeat_key]) {
-		L1 now = os_clock();
-		L1 repeat_interval_ns = 1000000000LLU / (L1)os_gfx_state->key_repeat_rate;
-		while (now >= os_gfx_state->next_repeat_ns) {
-			OS_Event event = {
-				.window = os_gfx_state->repeat_window,
-				.timestamp_ns = os_gfx_state->next_repeat_ns,
-				.kind = OS_EVENT_KIND__PRESS,
-				.key = os_gfx_state->repeat_key,
-				.is_repeat = 1,
-			};
-			os_push_event(event);
-			os_push_text_event(os_gfx_state->repeat_window, os_gfx_state->repeat_wl_key, os_gfx_state->next_repeat_ns, 1);
-			os_gfx_state->next_repeat_ns += repeat_interval_ns;
-		}
-	}
+  if (os_gfx_state->repeat_key != OS_KEY__NULL &&
+      os_gfx_state->key_repeat_rate > 0 &&
+      os_gfx_state->key_states[os_gfx_state->repeat_key]) {
+    L1 now = os_clock();
+    L1 repeat_interval_ns = 1000000000LLU / (L1)os_gfx_state->key_repeat_rate;
+    while (now >= os_gfx_state->next_repeat_ns) {
+      OS_Event event = {
+        .window = os_gfx_state->repeat_window,
+        .timestamp_ns = os_gfx_state->next_repeat_ns,
+        .kind = OS_EVENT_KIND__PRESS,
+        .key = os_gfx_state->repeat_key,
+        .is_repeat = 1,
+      };
+      os_push_event(event);
+      os_push_text_event(os_gfx_state->repeat_window, os_gfx_state->repeat_wl_key, os_gfx_state->next_repeat_ns, 1);
+      os_gfx_state->next_repeat_ns += repeat_interval_ns;
+    }
+  }
 
   return os_gfx_state->events;
 }
@@ -1039,12 +1039,12 @@ Internal void os_window_close(OS_Window *window) {
       wl_pointer_destroy(os_gfx_state->pointer);
     if (os_gfx_state->keyboard)
       wl_keyboard_destroy(os_gfx_state->keyboard);
-		if (os_gfx_state->xkb_state)
-			xkb_state_unref(os_gfx_state->xkb_state);
-		if (os_gfx_state->xkb_keymap)
-			xkb_keymap_unref(os_gfx_state->xkb_keymap);
-		if (os_gfx_state->xkb_context)
-			xkb_context_unref(os_gfx_state->xkb_context);
+    if (os_gfx_state->xkb_state)
+      xkb_state_unref(os_gfx_state->xkb_state);
+    if (os_gfx_state->xkb_keymap)
+      xkb_keymap_unref(os_gfx_state->xkb_keymap);
+    if (os_gfx_state->xkb_context)
+      xkb_context_unref(os_gfx_state->xkb_context);
     if (os_gfx_state->seat)
       wl_seat_destroy(os_gfx_state->seat);
     if (os_gfx_state->shm)
@@ -1066,36 +1066,36 @@ Internal void os_window_close(OS_Window *window) {
 }
 
 Internal OS_Window *os_hovered_window(void) {
-	return os_gfx_state->hovered_window;
+  return os_gfx_state->hovered_window;
 }
 
 Internal OS_Window *os_focused_window(void) {
-	return os_gfx_state->focused_window;
+  return os_gfx_state->focused_window;
 }
 
 Internal I1 os_key_is_down(L1 key) {
-	I1 result = 0;
+  I1 result = 0;
 
-	if (key > OS_KEY__NULL && key < OS_KEY_COUNT) {
-		result = os_gfx_state->key_states[key];
-	}
+  if (key > OS_KEY__NULL && key < OS_KEY_COUNT) {
+    result = os_gfx_state->key_states[key];
+  }
 
-	return result;
+  return result;
 }
 
 Internal D1 os_mouse_x(void) {
-	D1 result = os_gfx_state->mouse_x;
-	return result;
+  D1 result = os_gfx_state->mouse_x;
+  return result;
 }
 
 Internal D1 os_mouse_y(void) {
-	D1 result = os_gfx_state->mouse_y;
-	return result;
+  D1 result = os_gfx_state->mouse_y;
+  return result;
 }
 
 Internal F2 os_mouse_pos(void) {
-	F2 result = {os_gfx_state->mouse_x, os_gfx_state->mouse_y};
-	return result;
+  F2 result = {os_gfx_state->mouse_x, os_gfx_state->mouse_y};
+  return result;
 }
 
 #endif

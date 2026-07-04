@@ -77,7 +77,7 @@
   X(vkFreeMemory) \
   X(vkDestroyFence) \
   X(vkGetDeviceProcAddr) \
-	X(vkDestroySemaphore)
+  X(vkDestroySemaphore)
 
 #define VK_EXTENSION_FUNCTIONS \
   X(vkCreateDebugReportCallbackEXT) \
@@ -142,8 +142,8 @@ struct GFX_Rect_Instance {
 
 typedef I1 GFX_Texture_Usage;
 enum {
-	GFX_TEXTURE_USAGE__DYNAMIC,
-	GFX_TEXTURE_USAGE__STATIC,
+  GFX_TEXTURE_USAGE__DYNAMIC,
+  GFX_TEXTURE_USAGE__STATIC,
 };
 
 typedef struct GFX_Texture GFX_Texture;
@@ -156,9 +156,9 @@ struct GFX_Texture {
   I1 width;
   I1 height;
 
-	VkBuffer staging_buffer;
-	VkDeviceMemory staging_buffer_memory;
-	void *staging_ptr;
+  VkBuffer staging_buffer;
+  VkDeviceMemory staging_buffer_memory;
+  void *staging_ptr;
 };
 
 typedef struct GFX_Batch GFX_Batch;
@@ -169,7 +169,7 @@ struct GFX_Batch {
   GFX_Texture *texture;
 
   GFX_Rect_Instance *instances;
-	L1 instance_cap;
+  L1 instance_cap;
   L1 instance_count;
 };
 
@@ -289,18 +289,18 @@ Internal void gfx_vk_transition_image_layout(
 
 Internal void gfx_vk_recycle_semaphore(VkSemaphore semaphore) {
   if (semaphore != VK_NULL_HANDLE) {
-		if (gfx_state->recycle_semaphores_count < ArrayCount(gfx_state->recycle_semaphores)) {
-			gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = semaphore;
-			gfx_state->recycle_semaphores_count += 1;
-		} else {
-			vkDestroySemaphore(gfx_state->device, semaphore, 0);
-		}
-	}
+    if (gfx_state->recycle_semaphores_count < ArrayCount(gfx_state->recycle_semaphores)) {
+      gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count] = semaphore;
+      gfx_state->recycle_semaphores_count += 1;
+    } else {
+      vkDestroySemaphore(gfx_state->device, semaphore, 0);
+    }
+  }
 }
 
 Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 height, void *pixels) {
   Assert(width > 0 && height > 0);
-	ProfFuncBegin();
+  ProfFuncBegin();
 
   GFX_Texture *texture = gfx_state->first_free_texture;
   if (texture == 0) {
@@ -313,7 +313,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
   VkResult result;
   L1 image_size = width * height * 4; // RGBA8
 
-	//- kti: Create Image
+  //- kti: Create Image
 
   VkImageCreateInfo image_ci = {
     .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -367,266 +367,266 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
   texture->width = width;
   texture->height = height;
 
-	////////////////////////////////
-	//~ kti: Upload
+  ////////////////////////////////
+  //~ kti: Upload
 
-	if (usage == GFX_TEXTURE_USAGE__DYNAMIC || pixels != 0) {
-		//- kti: Create staging buffer.
-		VkBuffer staging_buffer;
-		VkDeviceMemory staging_memory;
+  if (usage == GFX_TEXTURE_USAGE__DYNAMIC || pixels != 0) {
+    //- kti: Create staging buffer.
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_memory;
 
-		VkBufferCreateInfo staging_ci = {
-			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-			.size = image_size,
-			.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		};
-		result = vkCreateBuffer(gfx_state->device, &staging_ci, 0, &staging_buffer);
-		Assert(result == VK_SUCCESS);
+    VkBufferCreateInfo staging_ci = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = image_size,
+      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    result = vkCreateBuffer(gfx_state->device, &staging_ci, 0, &staging_buffer);
+    Assert(result == VK_SUCCESS);
 
-		VkMemoryRequirements staging_mem_reqs;
-		vkGetBufferMemoryRequirements(gfx_state->device, staging_buffer, &staging_mem_reqs);
+    VkMemoryRequirements staging_mem_reqs;
+    vkGetBufferMemoryRequirements(gfx_state->device, staging_buffer, &staging_mem_reqs);
 
-		VkMemoryAllocateInfo staging_alloc_info = {
-			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-			.allocationSize = staging_mem_reqs.size,
-			.memoryTypeIndex = gfx_find_memory_type(staging_mem_reqs,
-																							 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-		};
-		result = vkAllocateMemory(gfx_state->device, &staging_alloc_info, 0, &staging_memory);
-		Assert(result == VK_SUCCESS);
+    VkMemoryAllocateInfo staging_alloc_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = staging_mem_reqs.size,
+      .memoryTypeIndex = gfx_find_memory_type(staging_mem_reqs,
+                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+    };
+    result = vkAllocateMemory(gfx_state->device, &staging_alloc_info, 0, &staging_memory);
+    Assert(result == VK_SUCCESS);
 
-		result = vkBindBufferMemory(gfx_state->device, staging_buffer, staging_memory, 0);
-		Assert(result == VK_SUCCESS);
+    result = vkBindBufferMemory(gfx_state->device, staging_buffer, staging_memory, 0);
+    Assert(result == VK_SUCCESS);
 
-		void *staging_ptr;
-		result = vkMapMemory(gfx_state->device, staging_memory, 0, image_size, 0, &staging_ptr);
-		Assert(result == VK_SUCCESS);
+    void *staging_ptr;
+    result = vkMapMemory(gfx_state->device, staging_memory, 0, image_size, 0, &staging_ptr);
+    Assert(result == VK_SUCCESS);
 
-		VkCommandBuffer cmd;
-		VkCommandBufferAllocateInfo cmd_alloc_info = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = gfx_state->upload_command_pool,
-			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			.commandBufferCount = 1,
-		};
-		result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
-		Assert(result == VK_SUCCESS);
+    VkCommandBuffer cmd;
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = gfx_state->upload_command_pool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+    };
+    result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
+    Assert(result == VK_SUCCESS);
 
-		VkCommandBufferBeginInfo begin_info = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-		};
-		result = vkBeginCommandBuffer(cmd, &begin_info);
-		Assert(result == VK_SUCCESS);
+    VkCommandBufferBeginInfo begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    result = vkBeginCommandBuffer(cmd, &begin_info);
+    Assert(result == VK_SUCCESS);
 
-		if (pixels != 0) {
-			//- kti: Upload to staging buffer.
-			memmove(staging_ptr, pixels, image_size);
+    if (pixels != 0) {
+      //- kti: Upload to staging buffer.
+      memmove(staging_ptr, pixels, image_size);
 
-			//- kti: Upload via command buffer
+      //- kti: Upload via command buffer
 
-			gfx_vk_transition_image_layout(cmd, texture->image,
-				VK_IMAGE_LAYOUT_UNDEFINED,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				0, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-				VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+      gfx_vk_transition_image_layout(cmd, texture->image,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        0, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT);
 
-			VkBufferImageCopy region = {
-				.bufferOffset = 0,
-				.bufferRowLength = 0,
-				.bufferImageHeight = 0,
-				.imageSubresource = {
-					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-					.mipLevel = 0,
-					.baseArrayLayer = 0,
-					.layerCount = 1,
-				},
-				.imageOffset = {0, 0, 0},
-				.imageExtent = {width, height, 1},
-			};
-			vkCmdCopyBufferToImage(cmd, staging_buffer, texture->image,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+      VkBufferImageCopy region = {
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .mipLevel = 0,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+        },
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {width, height, 1},
+      };
+      vkCmdCopyBufferToImage(cmd, staging_buffer, texture->image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-			gfx_vk_transition_image_layout(cmd, texture->image,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-				VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
-		} else {
-			//- kti: Transition image.
-			gfx_vk_transition_image_layout(cmd, texture->image,
-				VK_IMAGE_LAYOUT_UNDEFINED,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				0, VK_ACCESS_2_SHADER_READ_BIT,
-				VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
-		}
+      gfx_vk_transition_image_layout(cmd, texture->image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+    } else {
+      //- kti: Transition image.
+      gfx_vk_transition_image_layout(cmd, texture->image,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        0, VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+    }
 
-		//- kti: Submit command buffer and wait.
+    //- kti: Submit command buffer and wait.
 
-		result = vkEndCommandBuffer(cmd);
-		Assert(result == VK_SUCCESS);
+    result = vkEndCommandBuffer(cmd);
+    Assert(result == VK_SUCCESS);
 
-		VkSubmitInfo submit = {
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-			.commandBufferCount = 1,
-			.pCommandBuffers = &cmd,
-		};
-		result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
-		Assert(result == VK_SUCCESS);
+    VkSubmitInfo submit = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &cmd,
+    };
+    result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
+    Assert(result == VK_SUCCESS);
 
-		vkQueueWaitIdle(gfx_state->queue);
+    vkQueueWaitIdle(gfx_state->queue);
 
-		//- kti: Reset command pool to free command buffer.
-		vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+    //- kti: Reset command pool to free command buffer.
+    vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
 
-		if (usage == GFX_TEXTURE_USAGE__DYNAMIC) {
-			//- kti: Keep staging buffer mapped for dynamic updates.
-			texture->staging_buffer = staging_buffer;
-			texture->staging_buffer_memory = staging_memory;
-			texture->staging_ptr = staging_ptr;
-		} else {
-			//- kti: Cleanup staging resources for static textures.
-			vkUnmapMemory(gfx_state->device, staging_memory);
-			vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
-			vkFreeMemory(gfx_state->device, staging_memory, 0);
-		}
-	}
+    if (usage == GFX_TEXTURE_USAGE__DYNAMIC) {
+      //- kti: Keep staging buffer mapped for dynamic updates.
+      texture->staging_buffer = staging_buffer;
+      texture->staging_buffer_memory = staging_memory;
+      texture->staging_ptr = staging_ptr;
+    } else {
+      //- kti: Cleanup staging resources for static textures.
+      vkUnmapMemory(gfx_state->device, staging_memory);
+      vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
+      vkFreeMemory(gfx_state->device, staging_memory, 0);
+    }
+  }
 
-	ProfEnd();
+  ProfEnd();
   return texture;
 }
 
 Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) {
-	Assert(pixels != 0);
-	Assert(region[0] >= 0 && region[1] >= 0);
-	Assert(region[0] + region[2] <= tex->width);
-	Assert(region[1] + region[3] <= tex->height);
-	ProfFuncBegin();
+  Assert(pixels != 0);
+  Assert(region[0] >= 0 && region[1] >= 0);
+  Assert(region[0] + region[2] <= tex->width);
+  Assert(region[1] + region[3] <= tex->height);
+  ProfFuncBegin();
 
-	VkResult result;
-	L1 region_size = region[2] * region[3] * 4; // RGBA8
+  VkResult result;
+  L1 region_size = region[2] * region[3] * 4; // RGBA8
 
-	VkBuffer staging_buffer;
-	VkDeviceMemory staging_memory;
-	void *staging_ptr;
+  VkBuffer staging_buffer;
+  VkDeviceMemory staging_memory;
+  void *staging_ptr;
 
-	//- kti: Use persistent staging buffer if available, otherwise create temporary.
-	I1 use_temp_staging = (tex->staging_buffer == VK_NULL_HANDLE);
+  //- kti: Use persistent staging buffer if available, otherwise create temporary.
+  I1 use_temp_staging = (tex->staging_buffer == VK_NULL_HANDLE);
 
-	if (use_temp_staging) {
-		//- kti: Create temporary staging buffer for static textures.
-		VkBufferCreateInfo staging_ci = {
-			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-			.size = region_size,
-			.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		};
-		result = vkCreateBuffer(gfx_state->device, &staging_ci, 0, &staging_buffer);
-		Assert(result == VK_SUCCESS);
+  if (use_temp_staging) {
+    //- kti: Create temporary staging buffer for static textures.
+    VkBufferCreateInfo staging_ci = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = region_size,
+      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    result = vkCreateBuffer(gfx_state->device, &staging_ci, 0, &staging_buffer);
+    Assert(result == VK_SUCCESS);
 
-		VkMemoryRequirements staging_mem_reqs;
-		vkGetBufferMemoryRequirements(gfx_state->device, staging_buffer, &staging_mem_reqs);
+    VkMemoryRequirements staging_mem_reqs;
+    vkGetBufferMemoryRequirements(gfx_state->device, staging_buffer, &staging_mem_reqs);
 
-		VkMemoryAllocateInfo staging_alloc_info = {
-			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-			.allocationSize = staging_mem_reqs.size,
-			.memoryTypeIndex = gfx_find_memory_type(staging_mem_reqs,
-																							 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-		};
-		result = vkAllocateMemory(gfx_state->device, &staging_alloc_info, 0, &staging_memory);
-		Assert(result == VK_SUCCESS);
+    VkMemoryAllocateInfo staging_alloc_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = staging_mem_reqs.size,
+      .memoryTypeIndex = gfx_find_memory_type(staging_mem_reqs,
+                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+    };
+    result = vkAllocateMemory(gfx_state->device, &staging_alloc_info, 0, &staging_memory);
+    Assert(result == VK_SUCCESS);
 
-		result = vkBindBufferMemory(gfx_state->device, staging_buffer, staging_memory, 0);
-		Assert(result == VK_SUCCESS);
+    result = vkBindBufferMemory(gfx_state->device, staging_buffer, staging_memory, 0);
+    Assert(result == VK_SUCCESS);
 
-		result = vkMapMemory(gfx_state->device, staging_memory, 0, region_size, 0, &staging_ptr);
-		Assert(result == VK_SUCCESS);
-	} else {
-		//- kti: Use persistent staging buffer for dynamic textures.
-		staging_buffer = tex->staging_buffer;
-		staging_memory = tex->staging_buffer_memory;
-		staging_ptr = tex->staging_ptr;
-	}
+    result = vkMapMemory(gfx_state->device, staging_memory, 0, region_size, 0, &staging_ptr);
+    Assert(result == VK_SUCCESS);
+  } else {
+    //- kti: Use persistent staging buffer for dynamic textures.
+    staging_buffer = tex->staging_buffer;
+    staging_memory = tex->staging_buffer_memory;
+    staging_ptr = tex->staging_ptr;
+  }
 
-	//- kti: Copy pixels to staging buffer.
-	memmove(staging_ptr, pixels, region_size);
+  //- kti: Copy pixels to staging buffer.
+  memmove(staging_ptr, pixels, region_size);
 
-	//- kti: Record and submit copy commands.
-	VkCommandBuffer cmd;
-	VkCommandBufferAllocateInfo cmd_alloc_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = gfx_state->upload_command_pool,
-		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandBufferCount = 1,
-	};
-	result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
-	Assert(result == VK_SUCCESS);
+  //- kti: Record and submit copy commands.
+  VkCommandBuffer cmd;
+  VkCommandBufferAllocateInfo cmd_alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .commandPool = gfx_state->upload_command_pool,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandBufferCount = 1,
+  };
+  result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
+  Assert(result == VK_SUCCESS);
 
-	VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	};
-	result = vkBeginCommandBuffer(cmd, &begin_info);
-	Assert(result == VK_SUCCESS);
+  VkCommandBufferBeginInfo begin_info = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  result = vkBeginCommandBuffer(cmd, &begin_info);
+  Assert(result == VK_SUCCESS);
 
-	gfx_vk_transition_image_layout(cmd, tex->image,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_ACCESS_2_SHADER_READ_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-		VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+  gfx_vk_transition_image_layout(cmd, tex->image,
+    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    VK_ACCESS_2_SHADER_READ_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+    VK_PIPELINE_STAGE_2_TRANSFER_BIT);
 
-	VkBufferImageCopy copy_region = {
-		.bufferOffset = 0,
-		.bufferRowLength = 0,
-		.bufferImageHeight = 0,
-		.imageSubresource = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.mipLevel = 0,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		},
-		.imageOffset = {region[0], region[1], 0},
-		.imageExtent = {region[2], region[3], 1},
-	};
-	vkCmdCopyBufferToImage(cmd, staging_buffer, tex->image,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+  VkBufferImageCopy copy_region = {
+    .bufferOffset = 0,
+    .bufferRowLength = 0,
+    .bufferImageHeight = 0,
+    .imageSubresource = {
+      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .mipLevel = 0,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+    },
+    .imageOffset = {region[0], region[1], 0},
+    .imageExtent = {region[2], region[3], 1},
+  };
+  vkCmdCopyBufferToImage(cmd, staging_buffer, tex->image,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
-	gfx_vk_transition_image_layout(cmd, tex->image,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-		VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-		VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+  gfx_vk_transition_image_layout(cmd, tex->image,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
 
-	result = vkEndCommandBuffer(cmd);
-	Assert(result == VK_SUCCESS);
+  result = vkEndCommandBuffer(cmd);
+  Assert(result == VK_SUCCESS);
 
-	VkSubmitInfo submit = {
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &cmd,
-	};
-	result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
-	Assert(result == VK_SUCCESS);
+  VkSubmitInfo submit = {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 1,
+    .pCommandBuffers = &cmd,
+  };
+  result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
+  Assert(result == VK_SUCCESS);
 
-	vkQueueWaitIdle(gfx_state->queue);
+  vkQueueWaitIdle(gfx_state->queue);
 
-	//- kti: Reset command pool to free command buffer.
-	vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+  //- kti: Reset command pool to free command buffer.
+  vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
 
-	//- kti: Cleanup temporary staging buffer.
-	if (use_temp_staging) {
-		vkUnmapMemory(gfx_state->device, staging_memory);
-		vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
-		vkFreeMemory(gfx_state->device, staging_memory, 0);
-	}
+  //- kti: Cleanup temporary staging buffer.
+  if (use_temp_staging) {
+    vkUnmapMemory(gfx_state->device, staging_memory);
+    vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
+    vkFreeMemory(gfx_state->device, staging_memory, 0);
+  }
 
-	ProfEnd();
+  ProfEnd();
 }
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {
@@ -1348,7 +1348,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
 }
 
 Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
-	ProfFuncBegin();
+  ProfFuncBegin();
 
   ////////////////////////////////
   //~ kti: Acquire image
@@ -1401,7 +1401,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   gfx_state->image_idx = image_idx;
   vkw->frame_active = 1;
 
-	// TODO(kti): Look into whether or not we need to release resources.
+  // TODO(kti): Look into whether or not we need to release resources.
   vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 
   ////////////////////////////////
@@ -1470,7 +1470,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   vkw->per_frame[image_idx].rect_instances_count = 0;
 
-	ProfEnd();
+  ProfEnd();
 }
 
 Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch_List batches) {
@@ -1505,17 +1505,17 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
     };
     if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
         batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
-			F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
-			F4 intersection = rect_overlap(screen_rect, batch->clip_rect);
-			if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
-				scissor.offset.x = intersection[0];
-				scissor.offset.y = intersection[1];
-				scissor.extent.width = intersection[2];
-				scissor.extent.height = intersection[3];
-			} else {
-				// NOTE(kti): Clip and screen rect don't overlap, we can skip the batch.
-				continue;
-			}
+      F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+      F4 intersection = rect_overlap(screen_rect, batch->clip_rect);
+      if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
+        scissor.offset.x = intersection[0];
+        scissor.offset.y = intersection[1];
+        scissor.extent.width = intersection[2];
+        scissor.extent.height = intersection[3];
+      } else {
+        // NOTE(kti): Clip and screen rect don't overlap, we can skip the batch.
+        continue;
+      }
     }
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
@@ -1557,7 +1557,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
 }
 
 Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
-	ProfFuncBegin();
+  ProfFuncBegin();
   if (!vkw->frame_active) { ProfEnd(); return; }
 
   I1 image_idx = gfx_state->image_idx;
@@ -1619,7 +1619,7 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     printf("Failed to present swapchain image.\n");
   }
 
-	ProfEnd();
+  ProfEnd();
 }
 
 #endif

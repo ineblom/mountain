@@ -11,16 +11,16 @@ struct String8 {
 
 typedef struct String8_Node String8_Node;
 struct String8_Node {
-	String8_Node *next;
-	String8_Node *prev;
-	String8 value;
+  String8_Node *next;
+  String8_Node *prev;
+  String8 value;
 };
 
 typedef struct String8_List String8_List;
 struct String8_List {
-	String8_Node *first;
-	String8_Node *last;
-	L1 total_length;
+  String8_Node *first;
+  String8_Node *last;
+  L1 total_length;
 };
 
 typedef struct String16 String16;
@@ -116,28 +116,28 @@ Internal I1 cstr_compare(CString a, CString b) {
 }
 
 Internal I1 char_is_space(char c) {
-	I1 result = (c == ' ' ||  c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
-	return result;
+  I1 result = (c == ' ' ||  c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
+  return result;
 }
 
 Internal I1 char_is_upper(B1 c) {
   I1 result = ('A' <= c && c <= 'Z');
-	return result;
+  return result;
 }
 
 Internal I1 char_is_lower(B1 c) {
   I1 result = ('a' <= c && c <= 'z');
-	return result;
+  return result;
 }
 
 Internal I1 char_is_alpha(B1 c) {
   I1 result = (char_is_upper(c) || char_is_lower(c));
-	return result;
+  return result;
 }
 
 Internal I1 char_is_slash(B1 c) {
   I1 result = (c == '/' || c == '\\');
-	return result;
+  return result;
 }
 
 Internal I1 char_is_digit(B1 c, I1 base) {
@@ -230,35 +230,35 @@ Internal String8 push_str8_copy(Arena *arena, String8 str) {
 }
 
 Internal I1 str8_match(String8 a, String8 b) {
-	L1 result = 0;
+  L1 result = 0;
 
-	if (a.len == b.len) {
-		result = (memcmp(a.str, b.str, a.len) == 0);
-	}
+  if (a.len == b.len) {
+    result = (memcmp(a.str, b.str, a.len) == 0);
+  }
 
-	return result;
+  return result;
 }
 
 Internal String8 str8_prefix(String8 str, L1 len) {
-	str.len = Min(len, str.len);
-	return str;
+  str.len = Min(len, str.len);
+  return str;
 }
 
 Internal String8 str8_substr(String8 str, L1 min, L1 max) {
-	String8 result = str;
-	min = Min(min, str.len);
-	max = Min(max, str.len);
-	result.str += min;
-	result.len = max - min;
-	return result;
+  String8 result = str;
+  min = Min(min, str.len);
+  max = Min(max, str.len);
+  result.str += min;
+  result.len = max - min;
+  return result;
 }
 
 Internal String8_Node *str8_list_push(Arena *arena, String8_List *list, String8 str) {
-	String8_Node *node = push_array(arena, String8_Node, 1);
-	node->value = str;
-	DLLPushBack(list->first, list->last, node);
-	list->total_length += str.len;
-	return node;
+  String8_Node *node = push_array(arena, String8_Node, 1);
+  node->value = str;
+  DLLPushBack(list->first, list->last, node);
+  list->total_length += str.len;
+  return node;
 }
 
 Internal String8_Node *str8_list_pushf(Arena *arena, String8_List *list, CString fmt, ...) {
@@ -267,20 +267,20 @@ Internal String8_Node *str8_list_pushf(Arena *arena, String8_List *list, CString
   String8 string = str8fv(arena, fmt, args);
   va_end(args);
 
-	String8_Node *node = str8_list_push(arena, list, string);
-	return node;
+  String8_Node *node = str8_list_push(arena, list, string);
+  return node;
 }
 
 Internal String8 str8_list_join(Arena *arena, String8_List *list) {
-	String8 result = {0};
+  String8 result = {0};
 
-	result.str = push_array(arena, B1, list->total_length);
-	for (String8_Node *n = list->first; n != 0; n = n->next) {
-		memmove(result.str+result.len, n->value.str, n->value.len);
-		result.len += n->value.len;
-	}
+  result.str = push_array(arena, B1, list->total_length);
+  for (String8_Node *n = list->first; n != 0; n = n->next) {
+    memmove(result.str+result.len, n->value.str, n->value.len);
+    result.len += n->value.len;
+  }
 
-	return result;
+  return result;
 }
 
 
@@ -288,18 +288,18 @@ Internal String8 str8_list_join(Arena *arena, String8_List *list) {
 //~ kti: UTF-8 Decode
 
 Internal I1 utf8_byte_is_continuation(B1 byte) {
-	I1 result = ((byte & 0xC0) == 0x80);
-	return result;
+  I1 result = ((byte & 0xC0) == 0x80);
+  return result;
 }
 
 Internal L1 utf8_boundary_left_from_column(String8 string, L1 column) {
-	L1 result = Clamp(0, column, string.len);
-	if (result > 0) {
-		do {
-			result -= 1;
-		} while (result > 0 && utf8_byte_is_continuation(string.str[result]));
-	}
-	return result;
+  L1 result = Clamp(0, column, string.len);
+  if (result > 0) {
+    do {
+      result -= 1;
+    } while (result > 0 && utf8_byte_is_continuation(string.str[result]));
+  }
+  return result;
 }
 
 Internal Unicode_Decode utf8_decode(B1 *str, L1 cap) {
@@ -340,15 +340,15 @@ Internal Unicode_Decode utf8_decode(B1 *str, L1 cap) {
 }
 
 Internal L1 utf8_boundary_right_from_column(String8 string, L1 column) {
-	L1 result = Clamp(0, column, string.len);
-	if (result < string.len) {
-		Unicode_Decode decode = utf8_decode(string.str+result, string.len-result);
-		result += decode.inc;
-		while (result < string.len && utf8_byte_is_continuation(string.str[result])) {
-			result += 1;
-		}
-	}
-	return result;
+  L1 result = Clamp(0, column, string.len);
+  if (result < string.len) {
+    Unicode_Decode decode = utf8_decode(string.str+result, string.len-result);
+    result += decode.inc;
+    while (result < string.len && utf8_byte_is_continuation(string.str[result])) {
+      result += 1;
+    }
+  }
+  return result;
 }
 
 ////////////////////////////////

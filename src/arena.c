@@ -50,7 +50,7 @@ Inline void arena_pop(Arena *arena, L1 amount) {
 }
 
 Inline void arena_clear(Arena *arena) {
-	arena_pop_to(arena, 0);
+  arena_pop_to(arena, 0);
 }
 
 Internal void *arena_push(Arena *arena, L1 size, L1 align, I1 zero) {
@@ -59,7 +59,7 @@ Internal void *arena_push(Arena *arena, L1 size, L1 align, I1 zero) {
   void *result = (void *)((B1 *)arena + aligned_pos);
   arena->pos = aligned_pos + size;
 
-	Assert(arena->pos < arena->reserved);
+  Assert(arena->pos < arena->reserved);
 
   if (zero != 0) {
     memset(result, 0, size);

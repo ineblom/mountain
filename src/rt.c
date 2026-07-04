@@ -14,70 +14,70 @@
 
 typedef struct RT_Material RT_Material;
 struct RT_Material {
-	F3 base_color;
-	F1 metallic;
-	F1 roughness;
-	F3 emissive;
+  F3 base_color;
+  F1 metallic;
+  F1 roughness;
+  F3 emissive;
 };
 
 typedef struct RT_Sphere RT_Sphere;
 struct RT_Sphere {
-	F3 p;
-	F1 r;
-	I1 material_idx;
+  F3 p;
+  F1 r;
+  I1 material_idx;
 };
 
 typedef struct RT_Plane RT_Plane;
 struct RT_Plane {
-	F3 n;
-	F1 d;
-	I1 material_idx;
+  F3 n;
+  F1 d;
+  I1 material_idx;
 };
 
 typedef struct RT_Box RT_Box;
 struct RT_Box {
-	F3 min;
-	F3 max;
-	I1 material_idx;
+  F3 min;
+  F3 max;
+  I1 material_idx;
 };
 
 typedef struct RT_Camera RT_Camera;
 struct RT_Camera {
-	F3 pos;
-	F3 forward;
-	F1 aperture_radius;
-	F1 focal_distance;
+  F3 pos;
+  F3 forward;
+  F1 aperture_radius;
+  F1 focal_distance;
 };
 
 typedef struct RT_Scene RT_Scene;
 struct RT_Scene {
-	String8 output_filename;
-	L1 output_width;
-	L1 output_height;
-	L1 rays_per_pixel;
+  String8 output_filename;
+  L1 output_width;
+  L1 output_height;
+  L1 rays_per_pixel;
 
-	L1 max_num_bounces;
+  L1 max_num_bounces;
 
   L1 bloom_pass_count;
-	F1 bloom_threshold;
-	F1 bloom_strength;
-	F1 bloom_knee;
-	String8 bloom_overlay_filename;
-	F1 bloom_overlay_strength;
+  F1 bloom_threshold;
+  F1 bloom_strength;
+  F1 bloom_knee;
+  String8 bloom_overlay_filename;
+  F1 bloom_overlay_strength;
 
-	RT_Camera camera;
+  RT_Camera camera;
 
-	L1 material_count;
-	RT_Material *materials;
+  L1 material_count;
+  RT_Material *materials;
 
-	L1 plane_count;
-	RT_Plane *planes;
+  L1 plane_count;
+  RT_Plane *planes;
 
-	L1 sphere_count;
-	RT_Sphere *spheres;
+  L1 sphere_count;
+  RT_Sphere *spheres;
 
-	L1 box_count;
-	RT_Box *boxes;
+  L1 box_count;
+  RT_Box *boxes;
 };
 
 #endif
@@ -177,219 +177,219 @@ Inline F1 pdf_GGX(F3 n, F3 h, F3 v, F1 alpha) {
 }
 
 Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
-	F1 min_hit_distance = 0.001f;
-	F1 tolerance = 0.0001f;
+  F1 min_hit_distance = 0.001f;
+  F1 tolerance = 0.0001f;
 
-	F3 result = {0};
-	F3 attenuation = {1, 1, 1};
-	for EachIndex(ray_index, scene.max_num_bounces) {
-		F1 hit_distance = F1_MAX;
+  F3 result = {0};
+  F3 attenuation = {1, 1, 1};
+  for EachIndex(ray_index, scene.max_num_bounces) {
+    F1 hit_distance = F1_MAX;
 
-		I1 hit_material_idx = -1;
-		F3 next_origin;
-		F3 next_normal;
+    I1 hit_material_idx = -1;
+    F3 next_origin;
+    F3 next_normal;
 
-		// Check planes
-		for EachIndex(plane_index, scene.plane_count) {
-			RT_Plane plane = scene.planes[plane_index];
+    // Check planes
+    for EachIndex(plane_index, scene.plane_count) {
+      RT_Plane plane = scene.planes[plane_index];
 
-			F1 denom = F3_dot(plane.n, ray_direction);
-			if (denom < -tolerance || denom > tolerance) {
-				F1 t = (-plane.d - F3_dot(plane.n, ray_origin)) / denom;
-				if (t > min_hit_distance && t < hit_distance) {
-					hit_distance = t;
-					hit_material_idx = plane.material_idx;
+      F1 denom = F3_dot(plane.n, ray_direction);
+      if (denom < -tolerance || denom > tolerance) {
+        F1 t = (-plane.d - F3_dot(plane.n, ray_origin)) / denom;
+        if (t > min_hit_distance && t < hit_distance) {
+          hit_distance = t;
+          hit_material_idx = plane.material_idx;
 
-					next_origin = ray_origin + t*ray_direction;
-					next_normal = plane.n;
-				}
-			}
-		}
+          next_origin = ray_origin + t*ray_direction;
+          next_normal = plane.n;
+        }
+      }
+    }
 
-		// Check spheres
-		for EachIndex(sphere_index, scene.sphere_count) {
-			RT_Sphere sphere = scene.spheres[sphere_index];
+    // Check spheres
+    for EachIndex(sphere_index, scene.sphere_count) {
+      RT_Sphere sphere = scene.spheres[sphere_index];
 
-			F3 sphere_relative_ray_origin = ray_origin - sphere.p;
-			F1 b = 2.0f * F3_dot(ray_direction, sphere_relative_ray_origin);
-			F1 c = F3_dot(sphere_relative_ray_origin, sphere_relative_ray_origin) - sphere.r*sphere.r;
+      F3 sphere_relative_ray_origin = ray_origin - sphere.p;
+      F1 b = 2.0f * F3_dot(ray_direction, sphere_relative_ray_origin);
+      F1 c = F3_dot(sphere_relative_ray_origin, sphere_relative_ray_origin) - sphere.r*sphere.r;
 
-			F1 root_term = sqrtf(b*b - 4.0f*c);
-			if (root_term > tolerance) {
-				F1 tp = (-b + root_term) / 2.0f;
-				F1 tn = (-b - root_term) / 2.0f;
+      F1 root_term = sqrtf(b*b - 4.0f*c);
+      if (root_term > tolerance) {
+        F1 tp = (-b + root_term) / 2.0f;
+        F1 tn = (-b - root_term) / 2.0f;
 
-				F1 t = tp;
-				if (tn > min_hit_distance && tn < tp) {
-					t = tn;
-				}
+        F1 t = tp;
+        if (tn > min_hit_distance && tn < tp) {
+          t = tn;
+        }
 
-				if (t > min_hit_distance && t < hit_distance) {
-					hit_distance = t;
-					hit_material_idx = sphere.material_idx;
+        if (t > min_hit_distance && t < hit_distance) {
+          hit_distance = t;
+          hit_material_idx = sphere.material_idx;
 
-					next_origin = ray_origin + t*ray_direction;
-					next_normal = F3_normalize(next_origin - sphere.p);
-				}
-			}
-		}
+          next_origin = ray_origin + t*ray_direction;
+          next_normal = F3_normalize(next_origin - sphere.p);
+        }
+      }
+    }
 
-		// Check boxes
-		for EachIndex(box_index, scene.box_count) {
-			RT_Box box = scene.boxes[box_index];
+    // Check boxes
+    for EachIndex(box_index, scene.box_count) {
+      RT_Box box = scene.boxes[box_index];
 
-			F1 t_min = (box.min.x - ray_origin.x) / ray_direction.x;
-			F1 t_max = (box.max.x - ray_origin.x) / ray_direction.x;
-			if (t_min > t_max) Swap(t_min, t_max);
+      F1 t_min = (box.min.x - ray_origin.x) / ray_direction.x;
+      F1 t_max = (box.max.x - ray_origin.x) / ray_direction.x;
+      if (t_min > t_max) Swap(t_min, t_max);
 
-			F1 ty_min = (box.min.y - ray_origin.y) / ray_direction.y;
-			F1 ty_max = (box.max.y - ray_origin.y) / ray_direction.y;
-			if (ty_min > ty_max) Swap(ty_min, ty_max);
+      F1 ty_min = (box.min.y - ray_origin.y) / ray_direction.y;
+      F1 ty_max = (box.max.y - ray_origin.y) / ray_direction.y;
+      if (ty_min > ty_max) Swap(ty_min, ty_max);
 
-			t_min = Max(t_min, ty_min);
-			t_max = Min(t_max, ty_max);
+      t_min = Max(t_min, ty_min);
+      t_max = Min(t_max, ty_max);
 
-			if (t_min > t_max) continue;
+      if (t_min > t_max) continue;
 
-			F1 tz_min = (box.min.z - ray_origin.z) / ray_direction.z;
-			F1 tz_max = (box.max.z - ray_origin.z) / ray_direction.z;
-			if (tz_min > tz_max) Swap(tz_min, tz_max);
+      F1 tz_min = (box.min.z - ray_origin.z) / ray_direction.z;
+      F1 tz_max = (box.max.z - ray_origin.z) / ray_direction.z;
+      if (tz_min > tz_max) Swap(tz_min, tz_max);
 
-			t_min = Max(t_min, tz_min);
-			t_max = Min(t_max, tz_max);
+      t_min = Max(t_min, tz_min);
+      t_max = Min(t_max, tz_max);
 
-			if (t_min > t_max) continue;
+      if (t_min > t_max) continue;
 
-			if (t_min > min_hit_distance && t_min < hit_distance) {
-				next_origin = ray_origin + t_min * ray_direction;
-				F3 center = (box.min + box.max) * 0.5f;
-				F3 local_hit = next_origin - center;
-				F3 box_size = box.max - box.min;
+      if (t_min > min_hit_distance && t_min < hit_distance) {
+        next_origin = ray_origin + t_min * ray_direction;
+        F3 center = (box.min + box.max) * 0.5f;
+        F3 local_hit = next_origin - center;
+        F3 box_size = box.max - box.min;
 
-    		F3 d = F3_abs(local_hit) / (box_size * 0.5f);
-    		if (d.x > d.y && d.x > d.z) next_normal = F1_sign(local_hit.x) * (F3){1,0,0};
-    		else if (d.y > d.z) next_normal = F1_sign(local_hit.y) * (F3){0,1,0};
-    		else next_normal = F1_sign(local_hit.z) * (F3){0,0,1};
+        F3 d = F3_abs(local_hit) / (box_size * 0.5f);
+        if (d.x > d.y && d.x > d.z) next_normal = F1_sign(local_hit.x) * (F3){1,0,0};
+        else if (d.y > d.z) next_normal = F1_sign(local_hit.y) * (F3){0,1,0};
+        else next_normal = F1_sign(local_hit.z) * (F3){0,0,1};
 
-    		hit_distance = t_min;
-    		hit_material_idx = box.material_idx;
-			}
+        hit_distance = t_min;
+        hit_material_idx = box.material_idx;
+      }
 
-		}
+    }
 
-		if (hit_material_idx != I1_(-1)) {
-			RT_Material mat = scene.materials[hit_material_idx];
+    if (hit_material_idx != I1_(-1)) {
+      RT_Material mat = scene.materials[hit_material_idx];
 
-			result += attenuation * mat.emissive;
+      result += attenuation * mat.emissive;
 
-			F1 roughness = Max(0.05f, F1_clamp01(mat.roughness));
-			F1 alpha = roughness * roughness;
-			F1 metallic = F1_clamp01(mat.metallic);
+      F1 roughness = Max(0.05f, F1_clamp01(mat.roughness));
+      F1 alpha = roughness * roughness;
+      F1 metallic = F1_clamp01(mat.metallic);
 
-			F3 f0 = F3_lerp((F3){0.04f,0.04f,0.04f}, metallic, mat.base_color);
+      F3 f0 = F3_lerp((F3){0.04f,0.04f,0.04f}, metallic, mat.base_color);
 
-			F1 specular_prob = 0.5f; // keep constant; MIS handles weighting
-			if (random_unilateral(rng) < specular_prob) {
-				F3 v = -ray_direction;
-				F3 h = sample_GGX_half(next_normal, alpha);
-				F3 l = F3_reflect(-v, h);
+      F1 specular_prob = 0.5f; // keep constant; MIS handles weighting
+      if (random_unilateral(rng) < specular_prob) {
+        F3 v = -ray_direction;
+        F3 h = sample_GGX_half(next_normal, alpha);
+        F3 l = F3_reflect(-v, h);
 
-				F1 NoL = F1_saturate(F3_dot(next_normal, l));
-				F1 NoV = F1_saturate(F3_dot(next_normal, v));
-				F1 NoH = F1_saturate(F3_dot(next_normal, h));
-				F1 VoH = F1_saturate(F3_dot(v, h));
+        F1 NoL = F1_saturate(F3_dot(next_normal, l));
+        F1 NoV = F1_saturate(F3_dot(next_normal, v));
+        F1 NoH = F1_saturate(F3_dot(next_normal, h));
+        F1 VoH = F1_saturate(F3_dot(v, h));
 
-				if (NoL > 0.0f) {
-					F1 D = D_GGX(NoH, alpha);
-					F1 G = G_Smith(NoV, NoL, alpha);
-					F3 F = fresnel_schlick(VoH, f0);
+        if (NoL > 0.0f) {
+          F1 D = D_GGX(NoH, alpha);
+          F1 G = G_Smith(NoV, NoL, alpha);
+          F3 F = fresnel_schlick(VoH, f0);
 
-					F1 denom = Max(4.0f * NoV * NoL, 1e-6f);
-					F3 f_spec = (F * (D * G)) / denom;
+          F1 denom = Max(4.0f * NoV * NoL, 1e-6f);
+          F3 f_spec = (F * (D * G)) / denom;
 
-					// Fresnel-weighted diffuse with metallic energy conservation
-					F3 kd_color = (1.0f - metallic) * (((F3){1,1,1}) - F);
-					F3 f_diff = (kd_color * mat.base_color) / PI;
+          // Fresnel-weighted diffuse with metallic energy conservation
+          F3 kd_color = (1.0f - metallic) * (((F3){1,1,1}) - F);
+          F3 f_diff = (kd_color * mat.base_color) / PI;
 
-					F1 pdf_spec = pdf_GGX(next_normal, h, v, alpha);
-					F1 pdf_diff = NoL / PI;
-					F1 pdf_total = specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
-					F1 inv_pdf = 1.0f / Max(pdf_total, 1e-6f);
+          F1 pdf_spec = pdf_GGX(next_normal, h, v, alpha);
+          F1 pdf_diff = NoL / PI;
+          F1 pdf_total = specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
+          F1 inv_pdf = 1.0f / Max(pdf_total, 1e-6f);
 
-					attenuation *= (f_spec + f_diff) * (NoL * inv_pdf);
-					ray_direction = l;
-				} else {
-					break; // absorb
-				}
-			} else {
-				F3 v = -ray_direction;
-				F3 l = sample_cosine_hemisphere(next_normal);
-				F1 NoL = F1_saturate(F3_dot(next_normal, l));
-				if (NoL > 0.0f) {
-					F3 h = F3_normalize(v + l);
-					F1 NoV = F1_saturate(F3_dot(next_normal, v));
-					F1 NoH = F1_saturate(F3_dot(next_normal, h));
-					F1 VoH = F1_saturate(F3_dot(v, h));
+          attenuation *= (f_spec + f_diff) * (NoL * inv_pdf);
+          ray_direction = l;
+        } else {
+          break; // absorb
+        }
+      } else {
+        F3 v = -ray_direction;
+        F3 l = sample_cosine_hemisphere(next_normal);
+        F1 NoL = F1_saturate(F3_dot(next_normal, l));
+        if (NoL > 0.0f) {
+          F3 h = F3_normalize(v + l);
+          F1 NoV = F1_saturate(F3_dot(next_normal, v));
+          F1 NoH = F1_saturate(F3_dot(next_normal, h));
+          F1 VoH = F1_saturate(F3_dot(v, h));
 
-					F1 D = D_GGX(NoH, alpha);
-					F1 G = G_Smith(NoV, NoL, alpha);
-					F3 F = fresnel_schlick(VoH, f0);
+          F1 D = D_GGX(NoH, alpha);
+          F1 G = G_Smith(NoV, NoL, alpha);
+          F3 F = fresnel_schlick(VoH, f0);
 
-					F1 denom = Max(4.0f * NoV * NoL, 1e-6f);
-					F3 f_spec = (F * (D * G)) / denom;
+          F1 denom = Max(4.0f * NoV * NoL, 1e-6f);
+          F3 f_spec = (F * (D * G)) / denom;
 
-					F3 kd_color = (1.0f - metallic) * (((F3){1,1,1}) - F);
-					F3 f_diff = (kd_color * mat.base_color) / PI;
+          F3 kd_color = (1.0f - metallic) * (((F3){1,1,1}) - F);
+          F3 f_diff = (kd_color * mat.base_color) / PI;
 
-					F1 pdf_spec = pdf_GGX(next_normal, h, v, alpha);
-					F1 pdf_diff = NoL / PI;
-					F1 pdf_total = specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
-					F1 inv_pdf = 1.0f / Max(pdf_total, 1e-6f);
+          F1 pdf_spec = pdf_GGX(next_normal, h, v, alpha);
+          F1 pdf_diff = NoL / PI;
+          F1 pdf_total = specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
+          F1 inv_pdf = 1.0f / Max(pdf_total, 1e-6f);
 
-					attenuation *= (f_spec + f_diff) * (NoL * inv_pdf);
-					ray_direction = l;
-				} else {
-					break; // absorb
-				}
-			}
+          attenuation *= (f_spec + f_diff) * (NoL * inv_pdf);
+          ray_direction = l;
+        } else {
+          break; // absorb
+        }
+      }
 
-			ray_origin = next_origin + next_normal * min_hit_distance;
-		} else {
-			// F1 height = (ray_direction.z + 1) * 0.5;
-			// F3 sky_color = F3_lerp((F3){1.0f, 1.0f, 1.0f}, height, (F3){0.2f, 0.4f, 1.0f});
-			// result += attenuation * sky_color;
-			break;
-		}
-	}
+      ray_origin = next_origin + next_normal * min_hit_distance;
+    } else {
+      // F1 height = (ray_direction.z + 1) * 0.5;
+      // F3 sky_color = F3_lerp((F3){1.0f, 1.0f, 1.0f}, height, (F3){0.2f, 0.4f, 1.0f});
+      // result += attenuation * sky_color;
+      break;
+    }
+  }
 
-	return result;
+  return result;
 }
 
 Inline F1 linear_to_srgb(F1 l) {
-	if (l < 0.0f) l = 0.0f;
-	if (l > 1.0f) l = 1.0f;
+  if (l < 0.0f) l = 0.0f;
+  if (l > 1.0f) l = 1.0f;
 
-	F1 s = l * 12.92f;
-	if (l > 0.0031308f) {
-		s = 1.055f*powf(l, 1.0f/2.4f) - 0.055f;
-	}
+  F1 s = l * 12.92f;
+  if (l > 0.0031308f) {
+    s = 1.055f*powf(l, 1.0f/2.4f) - 0.055f;
+  }
 
-	return s;
+  return s;
 }
 
 Inline F3 tonemap_aces(F3 v) {
-	const F1 a = 2.51f;
-	const F1 b = 0.03f;
-	const F1 c = 2.43f;
-	const F1 d = 0.59f;
-	const F1 e = 0.14f;
-	F3 result = F3_clamp01((v * (a * v + b)) / (v * (c * v + d) + e));
-	return result;
+  const F1 a = 2.51f;
+  const F1 b = 0.03f;
+  const F1 c = 2.43f;
+  const F1 d = 0.59f;
+  const F1 e = 0.14f;
+  F3 result = F3_clamp01((v * (a * v + b)) / (v * (c * v + d) + e));
+  return result;
 }
 
 Inline F3 tonemap_reinhard(F3 v) {
-	F3 result = v / (1.0f + v);
-	return result;
+  F3 result = v / (1.0f + v);
+  return result;
 }
 
 Inline F3 tonemap_lottes(F3 v) {
@@ -415,382 +415,382 @@ Inline F3 tonemap_lottes(F3 v) {
 #define tonemap tonemap_lottes
 
 Internal void trace_scene(Arena *arena, RT_Scene scene) {
-	L1 start_time = os_clock();
+  L1 start_time = os_clock();
 
-	if (lane_idx() == 0) {
-		ramR->ray_image = image_alloc(arena, scene.output_width, scene.output_height, sizeof(F3));
+  if (lane_idx() == 0) {
+    ramR->ray_image = image_alloc(arena, scene.output_width, scene.output_height, sizeof(F3));
 
-		ramR->section_count = lane_count() * 8;
-		ramR->current_section_idx = 0;
-		ramR->complete_sections_count = 0;
-		ramR->total_memory_usage = 0;
+    ramR->section_count = lane_count() * 8;
+    ramR->current_section_idx = 0;
+    ramR->complete_sections_count = 0;
+    ramR->total_memory_usage = 0;
 
-		ramR->bloom_overlay_image = image_read_from_file(arena, scene.bloom_overlay_filename);
-	}
+    ramR->bloom_overlay_image = image_read_from_file(arena, scene.bloom_overlay_filename);
+  }
 
-	lane_sync();
+  lane_sync();
 
-	F3 camera_p = scene.camera.pos;
-	F3 camera_z = scene.camera.forward;
-	F3 camera_x = F3_normalize(F3_cross((F3){0, 0, 1}, camera_z));
-	F3 camera_y = F3_normalize(F3_cross(camera_z, camera_x));
+  F3 camera_p = scene.camera.pos;
+  F3 camera_z = scene.camera.forward;
+  F3 camera_x = F3_normalize(F3_cross((F3){0, 0, 1}, camera_z));
+  F3 camera_y = F3_normalize(F3_cross(camera_z, camera_x));
 
-	F1 film_dist   = 1.0f;
-	F1 film_w      = F1_(scene.output_width)/F1_(scene.output_height);
-	F1 film_h      = 1.0f;
-	F1 half_film_w = film_w*0.5f;
-	F1 half_film_h = film_h*0.5f;
-	F3 film_center = camera_p - film_dist * camera_z;
-
-	F1 half_pixel_w = 0.5f/F1_(scene.output_width);
-	F1 half_pixel_h = 0.5f/F1_(scene.output_height);
-
-	L1 lane_begin_time = os_clock();
-
-	L1 section_pixel_count = scene.output_width*scene.output_height/ramR->section_count;
-	F3 *ray_pixels = push_array(arena, F3, section_pixel_count);
-
-	while (ramR->current_section_idx < ramR->section_count) {
-		L1 section_idx = atomic_add_L1(&ramV->current_section_idx, 1);
-		if (section_idx >= ramR->section_count) break;
-		Range pixels_range = {
-			.min = section_pixel_count * section_idx,
-			.max = section_pixel_count * (section_idx + 1)
-		};
-
-		F3 *out = ray_pixels;
-		for EachInRange(pixel_index, pixels_range) {
-			I1 x = pixel_index%scene.output_width;
-			I1 y = pixel_index/scene.output_width;
-			F1 film_y = -1 + 2 * F1_(y)/F1_(scene.output_height);
-			F1 film_x = -1 + 2 * F1_(x)/F1_(scene.output_width);
+  F1 film_dist   = 1.0f;
+  F1 film_w      = F1_(scene.output_width)/F1_(scene.output_height);
+  F1 film_h      = 1.0f;
+  F1 half_film_w = film_w*0.5f;
+  F1 half_film_h = film_h*0.5f;
+  F3 film_center = camera_p - film_dist * camera_z;
+
+  F1 half_pixel_w = 0.5f/F1_(scene.output_width);
+  F1 half_pixel_h = 0.5f/F1_(scene.output_height);
+
+  L1 lane_begin_time = os_clock();
+
+  L1 section_pixel_count = scene.output_width*scene.output_height/ramR->section_count;
+  F3 *ray_pixels = push_array(arena, F3, section_pixel_count);
+
+  while (ramR->current_section_idx < ramR->section_count) {
+    L1 section_idx = atomic_add_L1(&ramV->current_section_idx, 1);
+    if (section_idx >= ramR->section_count) break;
+    Range pixels_range = {
+      .min = section_pixel_count * section_idx,
+      .max = section_pixel_count * (section_idx + 1)
+    };
+
+    F3 *out = ray_pixels;
+    for EachInRange(pixel_index, pixels_range) {
+      I1 x = pixel_index%scene.output_width;
+      I1 y = pixel_index/scene.output_width;
+      F1 film_y = -1 + 2 * F1_(y)/F1_(scene.output_height);
+      F1 film_x = -1 + 2 * F1_(x)/F1_(scene.output_width);
 
-			F3 color = {};
-			F1 contrib = 1.0f / F1_(scene.rays_per_pixel);
-			for EachIndex(ray_index, scene.rays_per_pixel) {
-				F1 off_x  = film_x + random_bilateral(rng)*half_pixel_w;
-				F1 off_y  = film_y + random_bilateral(rng)*half_pixel_h;
-				F3 film_p = film_center +
-										off_x*half_film_w*camera_x +
-										off_y*half_film_h*camera_y;
-
-				F1 r = scene.camera.aperture_radius * sqrtf(random_unilateral(rng));
-				F1 theta = 2.0f * PI * random_unilateral(rng);
-				F3 aperture_offset = r * cosf(theta) * camera_x + r * sinf(theta) * camera_y;
-				F3 ray_origin = camera_p + aperture_offset;
+      F3 color = {};
+      F1 contrib = 1.0f / F1_(scene.rays_per_pixel);
+      for EachIndex(ray_index, scene.rays_per_pixel) {
+        F1 off_x  = film_x + random_bilateral(rng)*half_pixel_w;
+        F1 off_y  = film_y + random_bilateral(rng)*half_pixel_h;
+        F3 film_p = film_center +
+                    off_x*half_film_w*camera_x +
+                    off_y*half_film_h*camera_y;
+
+        F1 r = scene.camera.aperture_radius * sqrtf(random_unilateral(rng));
+        F1 theta = 2.0f * PI * random_unilateral(rng);
+        F3 aperture_offset = r * cosf(theta) * camera_x + r * sinf(theta) * camera_y;
+        F3 ray_origin = camera_p + aperture_offset;
 
-				F3 focus_point = camera_p + scene.camera.focal_distance  * F3_normalize(film_p - camera_p);
-				F3 ray_direction = F3_normalize(focus_point - ray_origin);
+        F3 focus_point = camera_p + scene.camera.focal_distance  * F3_normalize(film_p - camera_p);
+        F3 ray_direction = F3_normalize(focus_point - ray_origin);
 
-				color += ray_cast(scene, ray_origin, ray_direction) * contrib;
-			}
+        color += ray_cast(scene, ray_origin, ray_direction) * contrib;
+      }
 
-			out[0] = color;
-			out += 1;
+      out[0] = color;
+      out += 1;
 
-		}
+    }
 
-		B1 *dest = ramR->ray_image.pixels + sizeof(F3)*pixels_range.min;
-		memmove(dest, ray_pixels, sizeof(F3)*section_pixel_count);
+    B1 *dest = ramR->ray_image.pixels + sizeof(F3)*pixels_range.min;
+    memmove(dest, ray_pixels, sizeof(F3)*section_pixel_count);
 
-		atomic_add_L1(&ramV->complete_sections_count, 1);
+    atomic_add_L1(&ramV->complete_sections_count, 1);
 
-		L1 now         = os_clock();
-		L1 duration_ms = (now - lane_begin_time)/1000000;
-		F1 duration_s  = F1_(duration_ms)/1000.0f;
-		F1 percent     = F1_(ramR->complete_sections_count) / F1_(ramR->section_count) * 100.0f;
-		printf("\r[%.2fs]: %.2f%%", duration_s, percent);
-		fflush(stdout);
-	}
+    L1 now         = os_clock();
+    L1 duration_ms = (now - lane_begin_time)/1000000;
+    F1 duration_s  = F1_(duration_ms)/1000.0f;
+    F1 percent     = F1_(ramR->complete_sections_count) / F1_(ramR->section_count) * 100.0f;
+    printf("\r[%.2fs]: %.2f%%", duration_s, percent);
+    fflush(stdout);
+  }
 
-	lane_sync();
-
-	if (lane_idx() == 0) {
-		printf("\nRay tracing complete. Postprocessing...\n");
+  lane_sync();
+
+  if (lane_idx() == 0) {
+    printf("\nRay tracing complete. Postprocessing...\n");
 
-		// TODO: Multithread
-
-		Image *bloom_passes = push_array(arena, Image, scene.bloom_pass_count);
+    // TODO: Multithread
+
+    Image *bloom_passes = push_array(arena, Image, scene.bloom_pass_count);
 
-		bloom_passes[0] = image_alloc(arena, scene.output_width, scene.output_height, sizeof(F3));
+    bloom_passes[0] = image_alloc(arena, scene.output_width, scene.output_height, sizeof(F3));
 
-		// Filter on bright pixels
-		F3 *in = (F3 *)ramR->ray_image.pixels;
-		F3 *out = (F3 *)bloom_passes[0].pixels;
-		for EachIndex(pixel_index, bloom_passes[0].width*bloom_passes[0].height) {
-			F3 color = in[0];
-
-			F1 luminance = F3_luminance(color);
-
-			F1 soft_threshold = scene.bloom_threshold - scene.bloom_knee;
-			F1 knee_range = 2.0f*scene.bloom_knee;
-			F1 contrib = 0.0f;
-
-			if (luminance > scene.bloom_threshold + scene.bloom_knee) {
-				contrib = 1.0f;
-			} else if (luminance > soft_threshold) {
-				F1 x = luminance - soft_threshold;
-				F1 knee_contrib = (x*x) / (4.0f*knee_range*knee_range);
-				contrib = knee_contrib;
-			}
-
-			if (contrib > 0.0f && luminance > 1e-6f) {
-				F1 excess_luminance = Max(0.0f, luminance - scene.bloom_threshold);
-				color = color * (excess_luminance/luminance)*contrib;
-			} else {
-				color = (F3){0};
-			}
-
-			out[0] = color;
-
-			in  += 1;
-			out += 1;
-		}
-
-		// Downsample
-		for EachIndex(pass_index, scene.bloom_pass_count-1) {
-			Image in = bloom_passes[pass_index];
-			Image out = image_alloc(arena, in.width/2, in.height/2, sizeof(F3));
-
-			bloom_passes[pass_index+1] = out;
-
-			for EachIndex(y, out.height) {
-				L1 sy = y*2;
-				for EachIndex(x, out.width) {
-					L1 sx = x*2;
-
-					// TODO: look into 13-tap bilinear tent filter.
-
-					F3 sum = {0};
-					F3 *in_p = (F3 *)in.pixels;
-
-					// Center (4)
-					sum += in_p[image_xy_to_index(in,sx+0,sy+0)] * 4.0f;
-					sum += in_p[image_xy_to_index(in,sx+1,sy+0)] * 4.0f;
-					sum += in_p[image_xy_to_index(in,sx+1,sy+1)] * 4.0f;
-					sum += in_p[image_xy_to_index(in,sx+0,sy+1)] * 4.0f;
-
-					// Edges (2)
-					sum += in_p[image_xy_to_index(in,sx-1,sy+0)] * 2.0f;
-					sum += in_p[image_xy_to_index(in,sx-1,sy+1)] * 2.0f;
-
-					sum += in_p[image_xy_to_index(in,sx+2,sy+0)] * 2.0f;
-					sum += in_p[image_xy_to_index(in,sx+2,sy+1)] * 2.0f;
-
-					sum += in_p[image_xy_to_index(in,sx+0,sy-1)] * 2.0f;
-					sum += in_p[image_xy_to_index(in,sx+1,sy-1)] * 2.0f;
-
-					sum += in_p[image_xy_to_index(in,sx+0,sy+2)] * 2.0f;
-					sum += in_p[image_xy_to_index(in,sx+1,sy+2)] * 2.0f;
-
-					// Corners (1)
-					sum += in_p[image_xy_to_index(in,sx-1,sy-1)] * 1.0f;
-					sum += in_p[image_xy_to_index(in,sx+2,sy-1)] * 1.0f;
-					sum += in_p[image_xy_to_index(in,sx-1,sy+2)] * 1.0f;
-					sum += in_p[image_xy_to_index(in,sx+2,sy+2)] * 1.0f;
-
-					sum /= 36.0f;
-					F3 karis_average = sum / (1.0f + F3_luminance(sum));
-
-					((F3 *)out.pixels)[x + y*out.width] = karis_average;
-				}
-			}
-		}
-
-		// Upsample and sum
-		for (L1 pass_index = scene.bloom_pass_count-1; pass_index >= 1; pass_index -= 1) {
-			Image in = bloom_passes[pass_index];
-			Image out = bloom_passes[pass_index-1];
-
-			for EachIndex(y, out.height) {
-				L1 sy = y/2;
-				for EachIndex(x, out.width) {
-					L1 sx = x/2;
-
-					F3 sum = {0};
-					F3 *in_p = (F3 *)in.pixels;
-
-					// center
-					sum += in_p[image_xy_to_index(in,sx,sy)]*4.0f;
-
-					// edges
-					sum += in_p[image_xy_to_index(in,sx-1,sy)]*2.0f;
-					sum += in_p[image_xy_to_index(in,sx+1,sy)]*2.0f;
-					sum += in_p[image_xy_to_index(in,sx,sy-1)]*2.0f;
-					sum += in_p[image_xy_to_index(in,sx,sy+1)]*2.0f;
-
-					// corners
-					sum += in_p[image_xy_to_index(in,sx-1,sy-1)]*1.0f;
-					sum += in_p[image_xy_to_index(in,sx+1,sy-1)]*1.0f;
-					sum += in_p[image_xy_to_index(in,sx-1,sy+1)]*1.0f;
-					sum += in_p[image_xy_to_index(in,sx+1,sy+1)]*1.0f;
-
-					sum /= 16.0f;
-
-					((F3 *)out.pixels)[x + y*out.width] += sum;
-				}
-			}
-		}
-
-		ramR->final_image = image_alloc(arena, scene.output_width, scene.output_height, sizeof(I1));
-
-		// Composit & Tonemap
-		F3 *in_ray    = (F3 *)ramR->ray_image.pixels;
-		F3 *in_bloom  = (F3 *)bloom_passes[0].pixels;
-		I1 *final_out = (I1 *)ramR->final_image.pixels;
-		for EachIndex(y, scene.output_height) {
-			for EachIndex(x, scene.output_width) {
-				F1 u = F1_(x) / F1_(scene.output_width);
-				F1 v = F1_(y) / F1_(scene.output_height);
-
-				F3 bloom_overlay = image_sample_bilinear_I1_to_F3(ramR->bloom_overlay_image, u, v);
-				F3 ray           = in_ray[0];
-				F3 bloom         = in_bloom[0];
-
-				bloom *= 1.0f + F3_luminance(bloom_overlay)*scene.bloom_overlay_strength;
-
-				F3 color = ray * (1.0f - 0.5f*scene.bloom_strength) + scene.bloom_strength*bloom;
-
-				// color += dirt_color * F3_luminance(bloom) * 0.5f;
-
-				F3 tonemapped_color = tonemap(color);
-				F4 bmp_color = {
-					255.0f*linear_to_srgb(tonemapped_color.x),
-					255.0f*linear_to_srgb(tonemapped_color.y),
-					255.0f*linear_to_srgb(tonemapped_color.z),
-					255.0f
-				};
-
-				final_out[0] = 0xFF000000 |
-													I1_(bmp_color.x) << 16 |
-													I1_(bmp_color.y) << 8 |
-													I1_(bmp_color.z) << 0;
-
-				in_ray    += 1;
-				in_bloom  += 1;
-				final_out += 1;
-			}
-		}
-	}
-
-	L1 memory_usage = arena_pos(arena);
-	atomic_add_L1(&ramV->total_memory_usage, memory_usage);
-
-	if (lane_idx() == 0) {
-		image_write_to_file(ramR->final_image, scene.output_filename);
-
-		L1 end_time    = os_clock();
-		L1 duration_ms = (end_time - start_time)/1000000;
-		F1 duration_s  = F1_(duration_ms)/1000.0f;
-
-		L1 kib_used = ramR->total_memory_usage / KiB(1);
-		L1 mib_used = ramR->total_memory_usage / MiB(1);
-
-		printf("[%.2fs] Done, Used %llu KiB (%llu MiB)\n", duration_s, kib_used, mib_used);
-	}
+    // Filter on bright pixels
+    F3 *in = (F3 *)ramR->ray_image.pixels;
+    F3 *out = (F3 *)bloom_passes[0].pixels;
+    for EachIndex(pixel_index, bloom_passes[0].width*bloom_passes[0].height) {
+      F3 color = in[0];
+
+      F1 luminance = F3_luminance(color);
+
+      F1 soft_threshold = scene.bloom_threshold - scene.bloom_knee;
+      F1 knee_range = 2.0f*scene.bloom_knee;
+      F1 contrib = 0.0f;
+
+      if (luminance > scene.bloom_threshold + scene.bloom_knee) {
+        contrib = 1.0f;
+      } else if (luminance > soft_threshold) {
+        F1 x = luminance - soft_threshold;
+        F1 knee_contrib = (x*x) / (4.0f*knee_range*knee_range);
+        contrib = knee_contrib;
+      }
+
+      if (contrib > 0.0f && luminance > 1e-6f) {
+        F1 excess_luminance = Max(0.0f, luminance - scene.bloom_threshold);
+        color = color * (excess_luminance/luminance)*contrib;
+      } else {
+        color = (F3){0};
+      }
+
+      out[0] = color;
+
+      in  += 1;
+      out += 1;
+    }
+
+    // Downsample
+    for EachIndex(pass_index, scene.bloom_pass_count-1) {
+      Image in = bloom_passes[pass_index];
+      Image out = image_alloc(arena, in.width/2, in.height/2, sizeof(F3));
+
+      bloom_passes[pass_index+1] = out;
+
+      for EachIndex(y, out.height) {
+        L1 sy = y*2;
+        for EachIndex(x, out.width) {
+          L1 sx = x*2;
+
+          // TODO: look into 13-tap bilinear tent filter.
+
+          F3 sum = {0};
+          F3 *in_p = (F3 *)in.pixels;
+
+          // Center (4)
+          sum += in_p[image_xy_to_index(in,sx+0,sy+0)] * 4.0f;
+          sum += in_p[image_xy_to_index(in,sx+1,sy+0)] * 4.0f;
+          sum += in_p[image_xy_to_index(in,sx+1,sy+1)] * 4.0f;
+          sum += in_p[image_xy_to_index(in,sx+0,sy+1)] * 4.0f;
+
+          // Edges (2)
+          sum += in_p[image_xy_to_index(in,sx-1,sy+0)] * 2.0f;
+          sum += in_p[image_xy_to_index(in,sx-1,sy+1)] * 2.0f;
+
+          sum += in_p[image_xy_to_index(in,sx+2,sy+0)] * 2.0f;
+          sum += in_p[image_xy_to_index(in,sx+2,sy+1)] * 2.0f;
+
+          sum += in_p[image_xy_to_index(in,sx+0,sy-1)] * 2.0f;
+          sum += in_p[image_xy_to_index(in,sx+1,sy-1)] * 2.0f;
+
+          sum += in_p[image_xy_to_index(in,sx+0,sy+2)] * 2.0f;
+          sum += in_p[image_xy_to_index(in,sx+1,sy+2)] * 2.0f;
+
+          // Corners (1)
+          sum += in_p[image_xy_to_index(in,sx-1,sy-1)] * 1.0f;
+          sum += in_p[image_xy_to_index(in,sx+2,sy-1)] * 1.0f;
+          sum += in_p[image_xy_to_index(in,sx-1,sy+2)] * 1.0f;
+          sum += in_p[image_xy_to_index(in,sx+2,sy+2)] * 1.0f;
+
+          sum /= 36.0f;
+          F3 karis_average = sum / (1.0f + F3_luminance(sum));
+
+          ((F3 *)out.pixels)[x + y*out.width] = karis_average;
+        }
+      }
+    }
+
+    // Upsample and sum
+    for (L1 pass_index = scene.bloom_pass_count-1; pass_index >= 1; pass_index -= 1) {
+      Image in = bloom_passes[pass_index];
+      Image out = bloom_passes[pass_index-1];
+
+      for EachIndex(y, out.height) {
+        L1 sy = y/2;
+        for EachIndex(x, out.width) {
+          L1 sx = x/2;
+
+          F3 sum = {0};
+          F3 *in_p = (F3 *)in.pixels;
+
+          // center
+          sum += in_p[image_xy_to_index(in,sx,sy)]*4.0f;
+
+          // edges
+          sum += in_p[image_xy_to_index(in,sx-1,sy)]*2.0f;
+          sum += in_p[image_xy_to_index(in,sx+1,sy)]*2.0f;
+          sum += in_p[image_xy_to_index(in,sx,sy-1)]*2.0f;
+          sum += in_p[image_xy_to_index(in,sx,sy+1)]*2.0f;
+
+          // corners
+          sum += in_p[image_xy_to_index(in,sx-1,sy-1)]*1.0f;
+          sum += in_p[image_xy_to_index(in,sx+1,sy-1)]*1.0f;
+          sum += in_p[image_xy_to_index(in,sx-1,sy+1)]*1.0f;
+          sum += in_p[image_xy_to_index(in,sx+1,sy+1)]*1.0f;
+
+          sum /= 16.0f;
+
+          ((F3 *)out.pixels)[x + y*out.width] += sum;
+        }
+      }
+    }
+
+    ramR->final_image = image_alloc(arena, scene.output_width, scene.output_height, sizeof(I1));
+
+    // Composit & Tonemap
+    F3 *in_ray    = (F3 *)ramR->ray_image.pixels;
+    F3 *in_bloom  = (F3 *)bloom_passes[0].pixels;
+    I1 *final_out = (I1 *)ramR->final_image.pixels;
+    for EachIndex(y, scene.output_height) {
+      for EachIndex(x, scene.output_width) {
+        F1 u = F1_(x) / F1_(scene.output_width);
+        F1 v = F1_(y) / F1_(scene.output_height);
+
+        F3 bloom_overlay = image_sample_bilinear_I1_to_F3(ramR->bloom_overlay_image, u, v);
+        F3 ray           = in_ray[0];
+        F3 bloom         = in_bloom[0];
+
+        bloom *= 1.0f + F3_luminance(bloom_overlay)*scene.bloom_overlay_strength;
+
+        F3 color = ray * (1.0f - 0.5f*scene.bloom_strength) + scene.bloom_strength*bloom;
+
+        // color += dirt_color * F3_luminance(bloom) * 0.5f;
+
+        F3 tonemapped_color = tonemap(color);
+        F4 bmp_color = {
+          255.0f*linear_to_srgb(tonemapped_color.x),
+          255.0f*linear_to_srgb(tonemapped_color.y),
+          255.0f*linear_to_srgb(tonemapped_color.z),
+          255.0f
+        };
+
+        final_out[0] = 0xFF000000 |
+                          I1_(bmp_color.x) << 16 |
+                          I1_(bmp_color.y) << 8 |
+                          I1_(bmp_color.z) << 0;
+
+        in_ray    += 1;
+        in_bloom  += 1;
+        final_out += 1;
+      }
+    }
+  }
+
+  L1 memory_usage = arena_pos(arena);
+  atomic_add_L1(&ramV->total_memory_usage, memory_usage);
+
+  if (lane_idx() == 0) {
+    image_write_to_file(ramR->final_image, scene.output_filename);
+
+    L1 end_time    = os_clock();
+    L1 duration_ms = (end_time - start_time)/1000000;
+    F1 duration_s  = F1_(duration_ms)/1000.0f;
+
+    L1 kib_used = ramR->total_memory_usage / KiB(1);
+    L1 mib_used = ramR->total_memory_usage / MiB(1);
+
+    printf("[%.2fs] Done, Used %llu KiB (%llu MiB)\n", duration_s, kib_used, mib_used);
+  }
 }
 
 #ifdef RT_APP
 Internal void lane(Arena *arena) {
-	RT_Material materials[] = {
-		{ // ground
-			.base_color  = (F3){0.63f, 0.53f, 0.13f},
-			.metallic = 0.3f,
-			.roughness = 0.5f,
-		},
-		{ // left
-			.base_color  = (F3){1.0f, 1.0f, 1.0f},
-			.metallic = 1.0f,
-			.roughness = 0.40f,
-		},
-		{ // right
-			.base_color  = (F3){0.1f, 1.0f, 1.0f},
-			.metallic = 0.0f,
-			.roughness = 0.10f,
-		},
-		{ // pink glow
-			.base_color  = (F3){1.0f, 0.2f, 1.0f},
-			.emissive = (F3){2.0f, 0.6f, 2.0f},
-			.metallic = 0.1f,
-			.roughness = 1.00f,
-		},
-		{ // blue glow
-			.base_color  = (F3){1.0f, 1.0f, 1.0f},
-			.emissive = (F3){1.0f, 1.0f, 6.0f},
-		},
-	};
+  RT_Material materials[] = {
+    { // ground
+      .base_color  = (F3){0.63f, 0.53f, 0.13f},
+      .metallic = 0.3f,
+      .roughness = 0.5f,
+    },
+    { // left
+      .base_color  = (F3){1.0f, 1.0f, 1.0f},
+      .metallic = 1.0f,
+      .roughness = 0.40f,
+    },
+    { // right
+      .base_color  = (F3){0.1f, 1.0f, 1.0f},
+      .metallic = 0.0f,
+      .roughness = 0.10f,
+    },
+    { // pink glow
+      .base_color  = (F3){1.0f, 0.2f, 1.0f},
+      .emissive = (F3){2.0f, 0.6f, 2.0f},
+      .metallic = 0.1f,
+      .roughness = 1.00f,
+    },
+    { // blue glow
+      .base_color  = (F3){1.0f, 1.0f, 1.0f},
+      .emissive = (F3){1.0f, 1.0f, 6.0f},
+    },
+  };
 
-	RT_Plane planes[] = {
-		{
-			.n = (F3){0, 0, 1},
-			.d = 1.0f,
-			.material_idx = 0
-		}
-	};
+  RT_Plane planes[] = {
+    {
+      .n = (F3){0, 0, 1},
+      .d = 1.0f,
+      .material_idx = 0
+    }
+  };
 
-	RT_Sphere spheres[] = {
-		{
-			.p = (F3){-2.0f, 2.0f, 0.0f},
-			.r = 1.0f,
-			.material_idx = 1,
-		},
-		{
-			.p = (F3){2.0f, 0.0f, 0.0f},
-			.r = 1.0f,
-			.material_idx = 2,
-		},
-		{
-			.p = (F3){0.0f, 20.0f, 0.0f},
-			.r = 1.0f,
-			.material_idx = 3,
-		},
-	};
+  RT_Sphere spheres[] = {
+    {
+      .p = (F3){-2.0f, 2.0f, 0.0f},
+      .r = 1.0f,
+      .material_idx = 1,
+    },
+    {
+      .p = (F3){2.0f, 0.0f, 0.0f},
+      .r = 1.0f,
+      .material_idx = 2,
+    },
+    {
+      .p = (F3){0.0f, 20.0f, 0.0f},
+      .r = 1.0f,
+      .material_idx = 3,
+    },
+  };
 
-	RT_Box boxes[] = {
-		{
-			.min = {-2.6f, -2.0f,-1.0},
-			.max = {-2.5f,  0.7f,-0.5},
-			.material_idx = 4,
-	 	}
-	};
+  RT_Box boxes[] = {
+    {
+      .min = {-2.6f, -2.0f,-1.0},
+      .max = {-2.5f,  0.7f,-0.5},
+      .material_idx = 4,
+    }
+  };
 
-	RT_Camera camera = {0};
-	camera.pos = (F3){0.0f, -5.0f, 0.5f};
-	camera.forward = F3_normalize(camera.pos);
-	camera.aperture_radius =  0.02f;
-	camera.focal_distance = 5.0f;
+  RT_Camera camera = {0};
+  camera.pos = (F3){0.0f, -5.0f, 0.5f};
+  camera.forward = F3_normalize(camera.pos);
+  camera.aperture_radius =  0.02f;
+  camera.focal_distance = 5.0f;
 
-	RT_Scene scene = {
-		.output_filename = Str8_("output.bmp"),
-		.output_width    = 1280,
-		.output_height   = 720,
+  RT_Scene scene = {
+    .output_filename = Str8_("output.bmp"),
+    .output_width    = 1280,
+    .output_height   = 720,
 
-		.rays_per_pixel  = 128,
-		.max_num_bounces = 8,
+    .rays_per_pixel  = 128,
+    .max_num_bounces = 8,
 
-		.bloom_pass_count       = 8,
-		.bloom_threshold        = 0.5f,
-		.bloom_strength         = 0.4f,
-		.bloom_knee             = 0.5f,
-		.bloom_overlay_filename = Str8_("lens-dirt.bmp"),
-		.bloom_overlay_strength = 2.0f,
+    .bloom_pass_count       = 8,
+    .bloom_threshold        = 0.5f,
+    .bloom_strength         = 0.4f,
+    .bloom_knee             = 0.5f,
+    .bloom_overlay_filename = Str8_("lens-dirt.bmp"),
+    .bloom_overlay_strength = 2.0f,
 
-		.camera = camera,
+    .camera = camera,
 
-		.materials = materials,
-		.material_count = ArrayCount(materials),
+    .materials = materials,
+    .material_count = ArrayCount(materials),
 
-		.spheres = spheres,
-		.sphere_count = ArrayCount(spheres),
+    .spheres = spheres,
+    .sphere_count = ArrayCount(spheres),
 
-		.planes = planes,
-		.plane_count = ArrayCount(planes),
+    .planes = planes,
+    .plane_count = ArrayCount(planes),
 
-		.boxes = boxes,
-		.box_count = ArrayCount(boxes),
-	};
+    .boxes = boxes,
+    .box_count = ArrayCount(boxes),
+  };
 
-	trace_scene(arena, scene);
+  trace_scene(arena, scene);
 }
 #endif
 

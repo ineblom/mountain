@@ -66,44 +66,44 @@ Inline void BarW(void) { __builtin_ia32_sfence();}      // Write Barrier
 // TODO(kti): Use rdtsc for faster clock query.
 // https://github.com/colrdavidson/spall-web/blob/master/examples/manual_tracing/advanced_threads_example_linux.c
 /*Inline I1 ClockI1(void) {
-	I1 aa, dd;
-	asm volatile("rdtsc":"=a"(aa),"=d"(dd));
-	return aa;
+  I1 aa, dd;
+  asm volatile("rdtsc":"=a"(aa),"=d"(dd));
+  return aa;
 }
 Inline L1 ClockL1(void) {
-	I1 aa, dd;
-	asm volatile("rdtsc":"=a"(aa),"=d"(dd));
-	return (L1_(dd) << 32) | L1_(aa);
+  I1 aa, dd;
+  asm volatile("rdtsc":"=a"(aa),"=d"(dd));
+  return (L1_(dd) << 32) | L1_(aa);
 }*/
 Inline void Pause(void) { asm volatile("pause":::"memory"); }
 
 Inline I1 atomic_add_I1(I1 *a, I1 v) {
-	asm volatile("lock xaddl %0,%1"
-							 : "=r"(v),"=m"(*a)
-							 : "0"(v),"m"(*a)
-							 : "memory","cc");
-	return v;
+  asm volatile("lock xaddl %0,%1"
+               : "=r"(v),"=m"(*a)
+               : "0"(v),"m"(*a)
+               : "memory","cc");
+  return v;
 }
 Inline L1 atomic_add_L1(L1 *a, L1 v) {
-	asm volatile("lock xaddq %0,%1"
-							 : "=r"(v),"=m"(*a)
-							 : "0"(v),"m"(*a)
-							 : "memory","cc");
-	return v;
+  asm volatile("lock xaddq %0,%1"
+               : "=r"(v),"=m"(*a)
+               : "0"(v),"m"(*a)
+               : "memory","cc");
+  return v;
 }
 Inline I1 atomic_swap_I1(I1 *a, I1 v) {
-	asm volatile("xchgl %0,%1"
-							 : "=r"(v),"=m"(*a)
-							 : "0"(v),"m"(*a)
-							 : "memory");
-	return v;
+  asm volatile("xchgl %0,%1"
+               : "=r"(v),"=m"(*a)
+               : "0"(v),"m"(*a)
+               : "memory");
+  return v;
 }
 Inline L1 atomic_swap_L1(L1 *a, L1 v) {
-	asm volatile("xchgq %0,%1"
-							 : "=r"(v),"=m"(*a)
-							 : "0"(v),"m"(*a)
-							 : "memory");
-	return v;
+  asm volatile("xchgq %0,%1"
+               : "=r"(v),"=m"(*a)
+               : "0"(v),"m"(*a)
+               : "memory");
+  return v;
 }
 
 #define DeferLoop(a, b) for (int _i_ = ((a), 0); !_i_; _i_ += 1, (b))
@@ -124,10 +124,10 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 #define Crash(x) __builtin_trap()
 #define StaticAssert(x) _Static_assert(x, "")
 #define Assert(x) do { if (!(x)) {\
-	fprintf(stderr, "Assert Failed (%s:%d) %s\n", __FILE__, __LINE__, #x);\
-	fflush(stderr); \
-	Crash(-1); \
-	} } while (0)
+  fprintf(stderr, "Assert Failed (%s:%d) %s\n", __FILE__, __LINE__, #x);\
+  fflush(stderr); \
+  Crash(-1); \
+  } } while (0)
 
 #define Swap(a, b) do { typeof(a) temp = a; a = b; b = temp; } while(0)
 
@@ -156,25 +156,25 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 
 //- kti: doubly-linked-lists
 #define DLLInsert_NPZ(nil,f,l,p,n,next,prev) (CheckNil(nil,f) ? \
-	((f) = (l) = (n), SetNil(nil,(n)->next), SetNil(nil,(n)->prev)) :\
-	CheckNil(nil,p) ? \
-	((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil,(n)->prev)) :\
-	((p)==(l)) ? \
-	((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next)) :\
-	(((!CheckNil(nil,p) && CheckNil(nil,(p)->next)) ? (0) : ((p)->next->prev = (n))), ((n)->next = (p)->next), ((p)->next = (n)), ((n)->prev = (p))))
+  ((f) = (l) = (n), SetNil(nil,(n)->next), SetNil(nil,(n)->prev)) :\
+  CheckNil(nil,p) ? \
+  ((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil,(n)->prev)) :\
+  ((p)==(l)) ? \
+  ((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next)) :\
+  (((!CheckNil(nil,p) && CheckNil(nil,(p)->next)) ? (0) : ((p)->next->prev = (n))), ((n)->next = (p)->next), ((p)->next = (n)), ((n)->prev = (p))))
 #define DLLPushBack_NPZ(nil,f,l,n,next,prev) DLLInsert_NPZ(nil,f,l,l,n,next,prev)
 #define DLLPushFront_NPZ(nil,f,l,n,next,prev) DLLInsert_NPZ(nil,l,f,f,n,prev,next)
 #define DLLRemove_NPZ(nil,f,l,n,next,prev) (((n) == (f) ? (f) = (n)->next : (0)),\
-	((n) == (l) ? (l) = (l)->prev : (0)),\
-	(CheckNil(nil,(n)->prev) ? (0) :\
-	((n)->prev->next = (n)->next)),\
-	(CheckNil(nil,(n)->next) ? (0) :\
-	((n)->next->prev = (n)->prev)))
+  ((n) == (l) ? (l) = (l)->prev : (0)),\
+  (CheckNil(nil,(n)->prev) ? (0) :\
+  ((n)->prev->next = (n)->next)),\
+  (CheckNil(nil,(n)->next) ? (0) :\
+  ((n)->next->prev = (n)->prev)))
 
 //- kti: singly-linked, doubly-headed lists (queues)
 #define SLLQueuePush_NZ(nil,f,l,n,next) (CheckNil(nil,f)?\
-	((f)=(l)=(n),SetNil(nil,(n)->next)):\
-	((l)->next=(n),(l)=(n),SetNil(nil,(n)->next)))
+  ((f)=(l)=(n),SetNil(nil,(n)->next)):\
+  ((l)->next=(n),(l)=(n),SetNil(nil,(n)->next)))
 #define SLLQueuePushFront_NZ(nil,f,l,n,next) (CheckNil(nil,f)?\
 ((f)=(l)=(n),SetNil(nil,(n)->next)):\
 ((n)->next=(f),(f)=(n)))

@@ -682,23 +682,20 @@ Internal void lane(Arena *arena) {
 													for EachIndex(i, state->entity_count) {
 														Entity *e = &state->entities[i];
 														String8 name = {e->name, e->name_len};
+														I1 selected = (i == state->selected_entity_idx);
 
+														ui_set_next_focus_hot(selected ? UI_FOCUS_KIND__ON : UI_FOCUS_KIND__OFF);
 														UI_Box *row = ui_build_box_from_stringf(
 															UI_BOX_FLAG__DRAW_BACKGROUND|
 															UI_BOX_FLAG__DRAW_TEXT|
-															UI_BOX_FLAG__CLICKABLE|
-															UI_BOX_FLAG__CLICK_TO_FOCUS|
-															UI_BOX_FLAG__DRAW_HOT_EFFECTS,
+															UI_BOX_FLAG__CLICKABLE,
 															"entity_%llu", i);
 														ui_box_equip_display_string(row, name);
 
 														UI_Signal sig = ui_signal_from_box(row);
-
-														I1 row_is_focus_hot =
-															(row->flags&UI_BOX_FLAG__FOCUS_HOT) &&
-															!(row->flags&UI_BOX_FLAG__FOCUS_HOT_DISABLED);
-														if (row_is_focus_hot) {
-															state->selected_entity_idx = i;
+														if (sig.flags & UI_SIGNAL_FLAG__PRESSED) {
+															state->selected_entity_idx = i; // TODO: cmd?
+															cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
 														}
 													}
 													if (state->entity_count == 0) {
@@ -714,7 +711,8 @@ Internal void lane(Arena *arena) {
 												UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
 												UI_Text_Align(UI_TEXT_ALIGN__CENTER)
 												if (ui_button(Str8_("Create")).flags & UI_SIGNAL_FLAG__PRESSED) {
-													cmd_push((Cmd){ .kind = CMD_KIND__CREATE_ENTITY });
+													cmd_push((Cmd){.kind = CMD_KIND__CREATE_ENTITY});
+													cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
 												}
 
 												ui_spacer(ui_px(15.0f, 1.0f));

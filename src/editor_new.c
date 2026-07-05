@@ -725,7 +725,10 @@ Internal void lane(Arena *arena) {
                         ui_set_next_pref_height(ui_children_sum(1.0f));
                         ui_set_next_child_layout_axis(AXIS__Y);
                         ui_set_next_corner_radius(ui_top_font_size()*0.2f);
-                        UI_Box *entities_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, Str8_("entities"));
+                        UI_Box *entities_box = ui_build_box_from_string(
+                          UI_BOX_FLAG__DRAW_BORDER|
+                          UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT,
+                          Str8_("entities"));
                         UI_Text_Padding(5.0f)
                         UI_Parent(entities_box) {
                           for EachIndex(i, state->entity_count) {

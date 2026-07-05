@@ -6,12 +6,14 @@
 typedef I1 View_Kind;
 enum {
   VIEW_KIND__ENTITIES = 0,
+  VIEW_KIND__ENTITY,
 
   VIEW_KIND_COUNT,
 };
 
 Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__ENTITIES] = Str8_("Entities"),
+  [VIEW_KIND__ENTITY] = Str8_("Entity"),
 };
 
 typedef struct View View;
@@ -90,6 +92,12 @@ struct Cmd {
 ////////////////////////////////
 //~ kti: Entity
 
+typedef struct Entity_Handle Entity_Handle;
+struct Entity_Handle {
+  L1 idx;
+  L1 id;
+};
+
 enum {
   ENTITY_FLAG__SHAPE  = 1 << 0,
   ENTITY_FLAG__CAMERA = 1 << 1,
@@ -103,6 +111,8 @@ enum {
 
 typedef struct Entity Entity;
 struct Entity {
+  Entity_Handle handle;
+
   L1 flags;
   B1 name[128];
   L1 name_len;
@@ -134,9 +144,12 @@ struct State {
   Txt_Pt name_mark;
 
   //- kti: Entities.
-  L1 selected_entity_idx;
   L1 entity_count;
+  L1 last_entity_id;
   Entity entities[128];
+  Entity nil_entity;
+
+  Entity_Handle selected_entity;
 };
 
 #endif
@@ -313,9 +326,6 @@ Internal Window *window_open(void) {
   window->arena = arena_alloc(MiB(32));
   window->root_panel.split_axis = AXIS__X;
 
-  Panel *new_panel = panel_alloc();
-  panel_insert(new_panel, &window->root_panel, 0);
-
   DLLPushBack(state->first_window, state->last_window, window);
 
   return window;
@@ -356,21 +366,48 @@ Internal void cmd_push(Cmd cmd) {
 ////////////////////////////////
 //~ kti: Entities
 
-Internal Entity *entity_push(L1 flags, String8 name) {
+Internal Entity_Handle entity_handle_zero() {
+  Entity_Handle result = {0};
+  return result;
+}
+
+Internal I1 entity_is_nil(Entity *entity) {
+  I1 result = (entity == 0 || entity == &state->nil_entity);
+  return result;
+}
+
+Internal I1 entity_handle_match(Entity_Handle a, Entity_Handle b) {
+  I1 result = (a.idx == b.idx && a.id == b.id);
+  return result;
+}
+
+Internal Entity *entity_from_handle(Entity_Handle handle) {
+  Entity *result = &state->nil_entity;
+
+  if (handle.idx < state->entity_count && handle.id != 0) {
+    Entity *candidate = &state->entities[handle.idx];
+    if (candidate->handle.id == handle.id) {
+      result = candidate;
+    }
+  }
+
+  return result;
+}
+
+Internal Entity *entity_create(L1 flags, String8 name) {
   Entity *entity = 0;
 
   L1 idx = state->entity_count;
   if (idx < ArrayCount(state->entities)) {
     state->entity_count += 1;
+    state->last_entity_id += 1;
+    L1 id = state->last_entity_id;
 
     entity = &state->entities[idx];
-    entity[0] = (Entity){
-      .flags = flags,
-      .shape = SHAPE__BOX,
-      .pos = {0.0f, 0.0f, 0.0f},
-      .size = {0.5f, 0.5f, 0.5f},
-    };
-
+    MemoryZeroStruct(entity);
+    entity->handle.idx = idx;
+    entity->handle.id = id;
+    entity->flags = flags;
     entity->name_len = Min(name.len, sizeof(entity->name)),
     memmove(entity->name, name.str, entity->name_len);
 
@@ -401,7 +438,19 @@ Internal void lane(Arena *arena) {
     state = push_array(arena, State, 1);
     state->arena = arena;
 
-    window_open();
+    Window *window = window_open();
+
+    //- kti: Create initial state.
+    Panel *entities_panel = panel_alloc();
+    panel_push_view(entities_panel, VIEW_KIND__ENTITIES);
+    panel_insert(entities_panel, &window->root_panel, 0);
+
+    Panel *entity_panel = panel_alloc();
+    panel_push_view(entity_panel, VIEW_KIND__ENTITY);
+    panel_insert(entity_panel, entities_panel, DIR__RIGHT);
+
+    Entity *starting_entity = entity_create(0, Str8_("Starting Entity"));
+    state->selected_entity = starting_entity->handle;
   }
 
   lane_sync();
@@ -511,7 +560,7 @@ Internal void lane(Arena *arena) {
           } break;
 
           case CMD_KIND__CREATE_ENTITY: {
-            entity_push(ENTITY_FLAG__SHAPE, Str8_("New Entity"));
+            entity_create(ENTITY_FLAG__SHAPE, Str8_("New Entity"));
           } break;
         }
       }
@@ -682,7 +731,7 @@ Internal void lane(Arena *arena) {
                           for EachIndex(i, state->entity_count) {
                             Entity *e = &state->entities[i];
                             String8 name = {e->name, e->name_len};
-                            I1 selected = (i == state->selected_entity_idx);
+                            I1 selected = entity_handle_match(e->handle, state->selected_entity);
 
                             ui_set_next_focus_hot(selected ? UI_FOCUS_KIND__ON : UI_FOCUS_KIND__OFF);
                             UI_Box *row = ui_build_box_from_stringf(
@@ -694,7 +743,7 @@ Internal void lane(Arena *arena) {
 
                             UI_Signal sig = ui_signal_from_box(row);
                             if (sig.flags & UI_SIGNAL_FLAG__PRESSED) {
-                              state->selected_entity_idx = i; // TODO: cmd?
+                              state->selected_entity = e->handle;
                               cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                             }
                           }
@@ -735,6 +784,16 @@ Internal void lane(Arena *arena) {
                           if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
                             cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                           }
+                        }
+                      } break;
+
+                      case VIEW_KIND__ENTITY: {
+                        Entity *entity = entity_from_handle(state->selected_entity);
+                        if (entity_is_nil(entity)) {
+                          ui_label(Str8_("Select an entity..."));
+                        } else {
+                          String8 name = {.str = entity->name, .len = entity->name_len};
+                          ui_label(name);
                         }
                       } break;
                     }

@@ -765,7 +765,6 @@ Internal void ui_box_equip_display_string(UI_Box *box, String8 string) {
   }
 }
 
-
 Internal UI_Box *ui_build_box_from_string(UI_Box_Flags flags, String8 string) {
   UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
   UI_Box *box = ui_build_box_from_key(flags, key);
@@ -2419,16 +2418,18 @@ Internal void ui_draw(void) {
       I1 is_focus_active = !!(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE) && !(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED);
       I1 draw_focus_border = b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_BORDER) && is_focus_active;
 
+      F1 b_softness = (b->corner_radii[0] > 0 || b->corner_radii[1] > 0 || b->corner_radii[2] > 0 || b->corner_radii[3] > 0) ? 1.0f : 0.0f;
+
       //- kti: Focus Overlay
       if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot) {
-        GFX_Rect_Instance *inst = dr_rect(b->rect, (F4){1, 0, 0, 0.01f}, 0.0f, 0.0f);
+        GFX_Rect_Instance *inst = dr_rect(b->rect, oklch(0.624f, 0.279f, 30, 0.02f), 0.0f, b_softness);
         inst->corner_radii = b->corner_radii;
       }
 
       //- kti: Border
       if (b->flags & UI_BOX_FLAG__DRAW_BORDER || draw_focus_border) {
         F4 border_rect = rect_pad(b->rect, 1.0f);
-        GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, softness);
+        GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, b_softness);
         inst->corner_radii = b->corner_radii;
         inst->border_width = 1.0f;
         inst->border_color = draw_focus_border ? focus_border_color : b->border_color;

@@ -722,9 +722,9 @@ Internal void lane(Arena *arena) {
                     switch (view->kind) {
                       //- kti: Entities view.
                       case VIEW_KIND__ENTITIES: {
-                        
                         ui_set_next_pref_height(ui_children_sum(1.0f));
                         ui_set_next_child_layout_axis(AXIS__Y);
+                        ui_set_next_corner_radius(ui_top_font_size()*0.2f);
                         UI_Box *entities_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, Str8_("entities"));
                         UI_Text_Padding(5.0f)
                         UI_Parent(entities_box) {
@@ -733,11 +733,13 @@ Internal void lane(Arena *arena) {
                             String8 name = {e->name, e->name_len};
                             I1 selected = entity_handle_match(e->handle, state->selected_entity);
 
-                            ui_set_next_focus_hot(selected ? UI_FOCUS_KIND__ON : UI_FOCUS_KIND__OFF);
+                            ui_set_next_background_color(selected ? (F4){0.3f, 0.0f, 0.0f, 1.0f} : (F4){0.0f, 0.0f, 0.0f, 1.0f});
                             UI_Box *row = ui_build_box_from_stringf(
                               UI_BOX_FLAG__DRAW_BACKGROUND|
                               UI_BOX_FLAG__DRAW_TEXT|
-                              UI_BOX_FLAG__CLICKABLE,
+                              UI_BOX_FLAG__CLICKABLE|
+                              UI_BOX_FLAG__CLICK_TO_FOCUS|
+                              (selected*UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY),
                               "entity_%llu", i);
                             ui_box_equip_display_string(row, name);
 

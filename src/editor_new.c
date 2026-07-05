@@ -793,7 +793,7 @@ Internal void lane(Arena *arena) {
                                                            sizeof(entity->name),
                                                            &state->name_edit_buffer_len,
                                                            name,
-                                                           Str8_("name"));
+                                                           Str8_("name_textedit"));
                             if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
                               entity->name_len = Min(sizeof(entity->name), state->name_edit_buffer_len);
                               memmove(entity->name, state->name_edit_buffer, entity->name_len);

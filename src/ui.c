@@ -2013,11 +2013,10 @@ Internal L1 ui_scanned_column_from_column(String8 string, L1 start_column, Side 
 }
 
 Internal String8 ui_push_string_replace_range(Arena *arena, String8 string, L1 min, L1 max, String8 replace) {
-  if (min > string.len) {
-    min = 0;
-  }
-  if (max > string.len) {
-    max = string.len;
+  min = Clamp(0, min, string.len);
+  max = Clamp(0, max, string.len);
+  if (max < min) {
+    max = min;
   }
 
   L1 old_len = string.len;
@@ -2147,6 +2146,10 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 }
 
 Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
+  edit_string_size_out[0] = Min(edit_string_size_out[0], edit_buffer_size);
+  cursor->column = Min(cursor->column, edit_string_size_out[0]);
+  mark->column = Min(mark->column, edit_string_size_out[0]);
+
   //- kti: Make key.
   UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 
@@ -2178,6 +2181,8 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
       next = cmd->next;
 
       String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
+      cursor->column = Min(cursor->column, edit_string.len);
+      mark->column = Min(mark->column, edit_string.len);
 
       //- kti: Skip non single-line operations.
       if ((cmd->kind != UI_CMD_KIND__EDIT && cmd->kind != UI_CMD_KIND__NAVIGATE && cmd->kind != UI_CMD_KIND__TEXT) || cmd->delta_si2[1] != 0) {
@@ -2199,6 +2204,8 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 
       cursor[0] = op.cursor;
       mark[0] = op.mark;
+      cursor->column = Min(cursor->column, edit_string_size_out[0]);
+      mark->column = Min(mark->column, edit_string_size_out[0]);
 
       ui_eat_cmd(cmd);
     }

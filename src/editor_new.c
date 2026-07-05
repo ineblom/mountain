@@ -722,6 +722,8 @@ Internal void lane(Arena *arena) {
                     switch (view->kind) {
                       //- kti: Entities view.
                       case VIEW_KIND__ENTITIES: {
+
+                        //- kti: Build entities box.
                         ui_set_next_pref_height(ui_children_sum(1.0f));
                         ui_set_next_child_layout_axis(AXIS__Y);
                         ui_set_next_corner_radius(ui_top_font_size()*0.2f);
@@ -729,6 +731,8 @@ Internal void lane(Arena *arena) {
                           UI_BOX_FLAG__DRAW_BORDER|
                           UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT,
                           Str8_("entities"));
+
+                        //- kti: Fill entries
                         UI_Text_Padding(5.0f)
                         UI_Parent(entities_box) {
                           for EachIndex(i, state->entity_count) {
@@ -736,7 +740,7 @@ Internal void lane(Arena *arena) {
                             String8 name = {e->name, e->name_len};
                             I1 selected = entity_handle_match(e->handle, state->selected_entity);
 
-                            ui_set_next_background_color(selected ? (F4){0.3f, 0.0f, 0.0f, 1.0f} : (F4){0.0f, 0.0f, 0.0f, 1.0f});
+                            ui_set_next_background_color(selected ? (F4){0.2f, 0.0f, 0.0f, 1.0f} : (F4){0.0f, 0.0f, 0.0f, 1.0f});
                             UI_Box *row = ui_build_box_from_stringf(
                               UI_BOX_FLAG__DRAW_BACKGROUND|
                               UI_BOX_FLAG__DRAW_TEXT|
@@ -768,28 +772,6 @@ Internal void lane(Arena *arena) {
                           cmd_push((Cmd){.kind = CMD_KIND__CREATE_ENTITY});
                           cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                         }
-
-                        ui_spacer(ui_px(15.0f, 1.0f));
-
-                        UI_Pref_Width(ui_px(500.0f, 1.0f))
-                        UI_Pref_Height(ui_em(2.8f, 1.0f))
-                        UI_Corner_Radius(ui_top_font_size()*0.2f)
-                        UI_Text_Padding(floor_F1(ui_top_font_size()*0.5f)) {
-                          UI_Signal signal = ui_textedit(&state->name_cursor,
-                                            &state->name_mark,
-                                            state->name_edit_buffer,
-                                            sizeof(state->name_edit_buffer),
-                                            &state->name_edit_buffer_len,
-                                            (String8){view->name, view->name_len},
-                                            Str8_("name"));
-                          if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
-                            view->name_len = Min(sizeof(view->name), state->name_edit_buffer_len);
-                            memmove(view->name, state->name_edit_buffer, view->name_len);
-                          }
-                          if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-                            cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                          }
-                        }
                       } break;
 
                       case VIEW_KIND__ENTITY: {
@@ -798,7 +780,28 @@ Internal void lane(Arena *arena) {
                           ui_label(Str8_("Select an entity..."));
                         } else {
                           String8 name = {.str = entity->name, .len = entity->name_len};
+                          UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
                           ui_label(name);
+
+                          UI_Pref_Width(ui_px(500.0f, 1.0f))
+                          UI_Pref_Height(ui_em(2.8f, 1.0f))
+                          UI_Corner_Radius(ui_top_font_size()*0.2f)
+                          UI_Text_Padding(floor_F1(ui_top_font_size()*0.5f)) {
+                            UI_Signal signal = ui_textedit(&state->name_cursor,
+                                                           &state->name_mark,
+                                                           state->name_edit_buffer,
+                                                           sizeof(entity->name),
+                                                           &state->name_edit_buffer_len,
+                                                           name,
+                                                           Str8_("name"));
+                            if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
+                              entity->name_len = Min(sizeof(entity->name), state->name_edit_buffer_len);
+                              memmove(entity->name, state->name_edit_buffer, entity->name_len);
+                            }
+                            if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+                              cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                            }
+                          }
                         }
                       } break;
                     }

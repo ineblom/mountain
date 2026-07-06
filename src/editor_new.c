@@ -822,11 +822,15 @@ Internal void lane(Arena *arena) {
                             ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
                             ui_label(Str8_("Postiion"));
 
-                            ui_label(str8f(scratch.arena, "%.2f %.2f %.2f", pos[0], pos[1], pos[2]));
-
-                            ui_set_next_pref_width(ui_px(100.0f, 1.0f));
-                            ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-                            ui_drag_F1(Str8_("X"), &entity->pos[0]);
+                            UI_Row()
+                            UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                            UI_Corner_Radius(ui_top_font_size()*0.2f) {
+                              ui_drag_F1(Str8_("X"), &entity->pos[0], 20.0f);
+                              ui_spacer(ui_px(5.0f, 1.0f));
+                              ui_drag_F1(Str8_("Y"), &entity->pos[1], 20.0f);
+                              ui_spacer(ui_px(5.0f, 1.0f));
+                              ui_drag_F1(Str8_("Z"), &entity->pos[2], 20.0f);
+                            }
                           }
                         }
                       } break;

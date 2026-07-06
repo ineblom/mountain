@@ -1921,7 +1921,7 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
   return signal;
 }
 
-Internal UI_Signal ui_drag_F1(String8 str, F1 *value) {
+Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 pixels_per_unit) {
   UI_Box *box = ui_build_box_from_stringf(
     UI_BOX_FLAG__CLICKABLE|
     UI_BOX_FLAG__DRAW_BACKGROUND|
@@ -1940,7 +1940,7 @@ Internal UI_Signal ui_drag_F1(String8 str, F1 *value) {
     }
 
     F1 initial_value = ui_get_drag_struct(F1)[0];
-    F1 change = ui_drag_delta()[0] / 35.0f;
+    F1 change = ui_drag_delta()[0] / pixels_per_unit;
     value[0] = initial_value + change;
   }
 

@@ -682,7 +682,7 @@ Internal void gfx_init() {
   vkEnumerateInstanceLayerProperties(&layer_count, layers);
 
   L1 found_validation = 0;
-  for EachIndex(i, layer_count) {
+  for (L1 i = 0; i < layer_count; i += 1) {
     if (cstr_compare(layers[i].layerName, "VK_LAYER_KHRONOS_validation")) {
       found_validation = 1;
     }
@@ -695,8 +695,8 @@ Internal void gfx_init() {
 
   const char *required_extensions[] = {"VK_KHR_surface", "VK_KHR_wayland_surface", "VK_EXT_debug_report"};
   I1 found_extension_count = 0;
-  for EachIndex(i, extension_count) {
-    for EachIndex(j, ArrayCount(required_extensions)) {
+  for (L1 i = 0; i < extension_count; i += 1) {
+    for (L1 j = 0; j < ArrayCount(required_extensions); j += 1) {
       if (cstr_compare(required_extensions[j], extensions[i].extensionName)) {
         found_extension_count += 1;
       }
@@ -751,7 +751,7 @@ Internal void gfx_init() {
   VkPhysicalDevice *physical_devices = push_array(arena, VkPhysicalDevice, device_count);
   vkEnumeratePhysicalDevices(gfx_state->instance, &device_count, physical_devices);
 
-  for EachIndex(i, device_count) {
+  for (L1 i = 0; i < device_count; i += 1) {
     VkPhysicalDeviceProperties props = {0};
     vkGetPhysicalDeviceProperties(physical_devices[i], &props);
 
@@ -760,7 +760,7 @@ Internal void gfx_init() {
     VkQueueFamilyProperties *queue_family_properties = push_array(arena, VkQueueFamilyProperties, queue_family_count);
     vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_family_count, queue_family_properties);
 
-    for EachIndex(j, queue_family_count) {
+    for (L1 j = 0; j < queue_family_count; j += 1) {
       // VkBool32 supports_present = 0;
       // vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[i], j, )
       if (queue_family_properties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
@@ -1093,7 +1093,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
     vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
     vkw->swapchain = VK_NULL_HANDLE;
   }
-  for EachIndex(i, vkw->image_count) {
+  for (L1 i = 0; i < vkw->image_count; i += 1) {
     vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
   }
 
@@ -1103,7 +1103,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
   if (vkw->surface_format_count == 1 || vkw->surface_formats[0].format == VK_FORMAT_UNDEFINED) {
     color_format = VK_FORMAT_B8G8R8A8_SRGB;
   } else {
-    for EachIndex(i, vkw->surface_format_count) {
+    for (L1 i = 0; i < vkw->surface_format_count; i += 1) {
       if (vkw->surface_formats[i].format == VK_FORMAT_B8G8R8A8_SRGB) {
         color_format = VK_FORMAT_B8G8R8A8_SRGB;
         break;
@@ -1137,7 +1137,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
 
   //- kti: FIFO is always supported.
   VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-  for EachIndex(i, vkw->present_mode_count) {
+  for (L1 i = 0; i < vkw->present_mode_count; i += 1) {
     if (vkw->present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
       present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
       break;
@@ -1178,7 +1178,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
   }
   vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
 
-  for EachIndex(i, vkw->image_count) {
+  for (L1 i = 0; i < vkw->image_count; i += 1) {
     VkImageViewCreateInfo image_view_ci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .image = vkw->swapchain_images[i],
@@ -1235,7 +1235,7 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
 
   vkw->per_frame = push_array(gfx_state->arena, GFX_Per_Frame, vkw->image_count);
 
-  for EachIndex(i, vkw->image_count) {
+  for (L1 i = 0; i < vkw->image_count; i += 1) {
     GFX_Per_Frame *frame = &vkw->per_frame[i];
 
     //- kti: Fence
@@ -1309,7 +1309,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   vkQueueWaitIdle(gfx_state->queue);
 
   //- kti: Free per frame resources.
-  for EachIndex(i, vkw->image_count) {
+  for (L1 i = 0; i < vkw->image_count; i += 1) {
     GFX_Per_Frame *frame = &vkw->per_frame[i];
 
     if (frame->queue_submit_fence != VK_NULL_HANDLE) {
@@ -1372,7 +1372,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   //- kti: Grab the next image.
   I1 image_idx = 0;
   VkResult img_acquire_result = VK_RESULT_MAX_ENUM;
-  for EachIndex(try, 2) {
+  for (L1 try = 0; try < 2; try += 1) {
     img_acquire_result = vkAcquireNextImageKHR(gfx_state->device, vkw->swapchain, L1_MAX, acquire_semaphore, VK_NULL_HANDLE, &image_idx);
     if (img_acquire_result == VK_SUBOPTIMAL_KHR || img_acquire_result == VK_ERROR_OUT_OF_DATE_KHR) {
       gfx_vk_recreate_swapchain(os_window, vkw);

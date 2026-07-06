@@ -30,7 +30,7 @@ Internal Line *parse_line(Arena *arena, String8 str) {
   I1 in_backtick = 0;
   L1 param_begin_idx = L1_MAX;
 
-  for EachIndex(i, str.len) {
+  for (L1 i = 0; i < str.len; i += 1) {
     char c = str.str[i];
 
     if (c == ' ' || c == '\t') {
@@ -89,7 +89,7 @@ Internal void lane(Arena *arena) {
   Line_List lines = {0};
   Range range = lane_range(content.len);
   L1 line_start = 0;
-  for EachInRange(i, range) {
+  for (L1 i = range.min; i < range.max; i += 1) {
     if (content.str[i] == '\n') {
       line_start = i;
       while (line_start > 0 && content.str[line_start-1] != '\n') {
@@ -110,13 +110,13 @@ Internal void lane(Arena *arena) {
   ////////////////////////////////
   //~ kti: Print parse result.
 #if 0
-  for EachIndex(i, lane_count()) {
+  for (L1 i = 0; i < lane_count(); i += 1) {
     if (i == lane_idx()) {
 
       for (Line *line = lines.first; line != 0; line = line->next) {
         printf("LINE: %.*s", (I1)line->str.len, line->str.str);
         
-        for EachIndex(param_idx, line->param_count) {
+        for (L1 param_idx = 0; param_idx < line->param_count; param_idx += 1) {
           String8 param = line->params[param_idx];
           printf("  PARAM: %.*s\n", (I1)param.len, param.str);
         }
@@ -259,7 +259,7 @@ Internal %4$s ui_top_%3$s(void) {
   lane_sync();
 
   //- kti: Write types and functions.
-  for EachIndex(i, lane_count()) {
+  for (L1 i = 0; i < lane_count(); i += 1) {
     if (i == lane_idx()) {
       memmove(final_header.str+final_header.len, header_result.str, header_result.len);
       memmove(final_impl.str+final_impl.len, impl_result.str, impl_result.len);
@@ -270,7 +270,7 @@ Internal %4$s ui_top_%3$s(void) {
   }
 
   //- kti: Write UIStacks macro.
-  for EachIndex(i, lane_count()) {
+  for (L1 i = 0; i < lane_count(); i += 1) {
     if (i == lane_idx()) {
       memmove(final_header.str+final_header.len, stacks_result.str, stacks_result.len);
       final_header.len += stacks_result.len;
@@ -280,7 +280,7 @@ Internal %4$s ui_top_%3$s(void) {
   lane_sync();
 
   //- kti: Write UIResetStacks macro.
-  for EachIndex(i, lane_count()) {
+  for (L1 i = 0; i < lane_count(); i += 1) {
     if (i == lane_idx()) {
       memmove(final_header.str+final_header.len, reset_stacks_result.str, reset_stacks_result.len);
       final_header.len += reset_stacks_result.len;
@@ -289,7 +289,7 @@ Internal %4$s ui_top_%3$s(void) {
   }
 
   //- kti: Write UIInitNil macro.
-  for EachIndex(i, lane_count()) {
+  for (L1 i = 0; i < lane_count(); i += 1) {
     if (i == lane_idx()) {
       memmove(final_header.str+final_header.len, init_nil_stacks_result.str, init_nil_stacks_result.len);
       final_header.len += init_nil_stacks_result.len;
@@ -298,7 +298,7 @@ Internal %4$s ui_top_%3$s(void) {
   }
 
   //- kti: Write UIAutoPopStacks macro.
-  for EachIndex(i, lane_count()) {
+  for (L1 i = 0; i < lane_count(); i += 1) {
     if (i == lane_idx()) {
       memmove(final_header.str+final_header.len, auto_pop_stacks_result.str, auto_pop_stacks_result.len);
       final_header.len += auto_pop_stacks_result.len;

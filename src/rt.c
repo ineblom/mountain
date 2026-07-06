@@ -182,7 +182,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
 
   F3 result = {0};
   F3 attenuation = {1, 1, 1};
-  for EachIndex(ray_index, scene.max_num_bounces) {
+  for (L1 ray_index = 0; ray_index < scene.max_num_bounces; ray_index += 1) {
     F1 hit_distance = F1_MAX;
 
     I1 hit_material_idx = -1;
@@ -190,7 +190,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
     F3 next_normal;
 
     // Check planes
-    for EachIndex(plane_index, scene.plane_count) {
+    for (L1 plane_index = 0; plane_index < scene.plane_count; plane_index += 1) {
       RT_Plane plane = scene.planes[plane_index];
 
       F1 denom = F3_dot(plane.n, ray_direction);
@@ -207,7 +207,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
     }
 
     // Check spheres
-    for EachIndex(sphere_index, scene.sphere_count) {
+    for (L1 sphere_index = 0; sphere_index < scene.sphere_count; sphere_index += 1) {
       RT_Sphere sphere = scene.spheres[sphere_index];
 
       F3 sphere_relative_ray_origin = ray_origin - sphere.p;
@@ -235,7 +235,7 @@ Internal F3 ray_cast(RT_Scene scene, F3 ray_origin, F3 ray_direction) {
     }
 
     // Check boxes
-    for EachIndex(box_index, scene.box_count) {
+    for (L1 box_index = 0; box_index < scene.box_count; box_index += 1) {
       RT_Box box = scene.boxes[box_index];
 
       F1 t_min = (box.min.x - ray_origin.x) / ray_direction.x;
@@ -459,7 +459,7 @@ Internal void trace_scene(Arena *arena, RT_Scene scene) {
     };
 
     F3 *out = ray_pixels;
-    for EachInRange(pixel_index, pixels_range) {
+    for (L1 pixel_index = pixels_range.min; pixel_index < pixels_range.max; pixel_index += 1) {
       I1 x = pixel_index%scene.output_width;
       I1 y = pixel_index/scene.output_width;
       F1 film_y = -1 + 2 * F1_(y)/F1_(scene.output_height);
@@ -467,7 +467,7 @@ Internal void trace_scene(Arena *arena, RT_Scene scene) {
 
       F3 color = {};
       F1 contrib = 1.0f / F1_(scene.rays_per_pixel);
-      for EachIndex(ray_index, scene.rays_per_pixel) {
+      for (L1 ray_index = 0; ray_index < scene.rays_per_pixel; ray_index += 1) {
         F1 off_x  = film_x + random_bilateral(rng)*half_pixel_w;
         F1 off_y  = film_y + random_bilateral(rng)*half_pixel_h;
         F3 film_p = film_center +
@@ -517,7 +517,7 @@ Internal void trace_scene(Arena *arena, RT_Scene scene) {
     // Filter on bright pixels
     F3 *in = (F3 *)ramR->ray_image.pixels;
     F3 *out = (F3 *)bloom_passes[0].pixels;
-    for EachIndex(pixel_index, bloom_passes[0].width*bloom_passes[0].height) {
+    for (L1 pixel_index = 0; pixel_index < bloom_passes[0].width*bloom_passes[0].height; pixel_index += 1) {
       F3 color = in[0];
 
       F1 luminance = F3_luminance(color);
@@ -548,15 +548,15 @@ Internal void trace_scene(Arena *arena, RT_Scene scene) {
     }
 
     // Downsample
-    for EachIndex(pass_index, scene.bloom_pass_count-1) {
+    for (L1 pass_index = 0; pass_index < scene.bloom_pass_count-1; pass_index += 1) {
       Image in = bloom_passes[pass_index];
       Image out = image_alloc(arena, in.width/2, in.height/2, sizeof(F3));
 
       bloom_passes[pass_index+1] = out;
 
-      for EachIndex(y, out.height) {
+      for (L1 y, = 0; y < out.height; y += 1) {
         L1 sy = y*2;
-        for EachIndex(x, out.width) {
+        for (L1 x, = 0; x < out.width; x += 1) {
           L1 sx = x*2;
 
           // TODO: look into 13-tap bilinear tent filter.
@@ -602,9 +602,9 @@ Internal void trace_scene(Arena *arena, RT_Scene scene) {
       Image in = bloom_passes[pass_index];
       Image out = bloom_passes[pass_index-1];
 
-      for EachIndex(y, out.height) {
+      for (L1 y, = 0; y < out.height; y += 1) {
         L1 sy = y/2;
-        for EachIndex(x, out.width) {
+        for (L1 x, = 0; x < out.width; x += 1) {
           L1 sx = x/2;
 
           F3 sum = {0};
@@ -638,8 +638,8 @@ Internal void trace_scene(Arena *arena, RT_Scene scene) {
     F3 *in_ray    = (F3 *)ramR->ray_image.pixels;
     F3 *in_bloom  = (F3 *)bloom_passes[0].pixels;
     I1 *final_out = (I1 *)ramR->final_image.pixels;
-    for EachIndex(y, scene.output_height) {
-      for EachIndex(x, scene.output_width) {
+    for (L1 y, = 0; y < scene.output_height; y += 1) {
+      for (L1 x, = 0; x < scene.output_width; x += 1) {
         F1 u = F1_(x) / F1_(scene.output_width);
         F1 v = F1_(y) / F1_(scene.output_height);
 

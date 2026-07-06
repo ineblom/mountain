@@ -60,9 +60,9 @@ Internal Range lane_range_for_section(L1 section_idx, L1 section_count, L1 count
 Internal Arena *lane_get_scratch_arena(Arena **conflicts, L1 count) {
   Arena *result = 0;
 
-  for EachIndex(i, ArrayCount(lane_ctx->scratch_arenas)) {
+  for (L1 i = 0; i < ArrayCount(lane_ctx->scratch_arenas); i += 1) {
     I1 has_conflict = 0;
-    for EachIndex(j, count) {
+    for (L1 j = 0; j < count; j += 1) {
       if (conflicts[j] == lane_ctx->scratch_arenas[i]) {
         has_conflict = 1;
         break;
@@ -104,30 +104,30 @@ SI1 main(void) {
 
   LaneCtx *lane_contexts = push_array(threads_arena, LaneCtx, thread_count);
 
-  for EachIndex(i, thread_count) {
+  for (L1 i = 0; i < thread_count; i += 1) {
     LaneCtx ctx = {
       .arena = arena_alloc(GiB(1)),
       .lane_idx = i,
       .lane_count = thread_count,
       .barrier = &barrier,
     };
-    for EachIndex(j, ArrayCount(ctx.scratch_arenas)) {
+    for (L1 j = 0; j < ArrayCount(ctx.scratch_arenas); j += 1) {
       ctx.scratch_arenas[j] = arena_alloc(MiB(64));
     }
     lane_contexts[i] = ctx;
   }
 
   OS_Thread *threads = push_array(threads_arena, OS_Thread, thread_count);
-  for EachIndex(i, thread_count) {
+  for (L1 i = 0; i < thread_count; i += 1) {
     LaneCtx *lane_ctx = lane_contexts + i;
     threads[i] = os_thread_launch(&lane_thread_entrypoint, lane_ctx);
   }
 
-  for EachIndex(i, thread_count) {
+  for (L1 i = 0; i < thread_count; i += 1) {
     os_thread_join(threads[i]);
   }
 
-  for EachIndex(i, thread_count) {
+  for (L1 i = 0; i < thread_count; i += 1) {
     arena_release(lane_contexts[i].arena);
   }
 

@@ -1016,7 +1016,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
 
   //- kti: Dragging
   if (box->flags & UI_BOX_FLAG__CLICKABLE) {
-    for EachIndex(k, OS_MOUSE_BUTTON_COUNT) {
+    for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
       if (ui_key_match(box->key, ui_state->active_box_key[k]) || signal.flags & (UI_SIGNAL_FLAG__LEFT_PRESSED<<k)) {
         signal.flags |= (UI_SIGNAL_FLAG__LEFT_DRAGGING<<k);
 
@@ -1522,7 +1522,7 @@ Internal void ui_layout_root(UI_Box *root, Axis axis) {
 
 Internal void ui_end_build(void) {
   //- kti: Prune untouched or transient boxes.
-  for EachIndex(slot_idx, ui_state->box_table_size) {
+  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1) {
     UI_Box_HT_Slot *slot = &ui_state->box_table[slot_idx];
     for (UI_Box *box = slot->first; !ui_box_is_nil(box); box = box->hash_next) {
       if (box->last_touch_build_index < ui_state->build_index ||
@@ -1533,12 +1533,12 @@ Internal void ui_end_build(void) {
     }
   }
 
-  for EachIndex(axis, AXIS_COUNT) {
+  for (L1 axis = 0; axis < AXIS_COUNT; axis += 1) {
     ui_layout_root(ui_state->root, axis);
   }
 
   //- kti: Enforce child rounding.
-  for EachIndex(slot_idx, ui_state->box_table_size) {
+  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1) {
     for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next) {
       if (box->flags & UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT) {
         for (UI_Box *b = box; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, box).next) {
@@ -1568,7 +1568,7 @@ Internal void ui_end_build(void) {
   }
 
 
-  for EachIndex(slot_idx, ui_state->box_table_size) {
+  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1) {
     UI_Box_HT_Slot *slot = &ui_state->box_table[slot_idx];
     for (UI_Box *b = slot->first; !ui_box_is_nil(b); b = b->hash_next) {
       box_view_clamp(b);
@@ -1623,7 +1623,7 @@ Internal L1 ui_box_char_pos_from_xy(UI_Box *box, F2 pos) {
 }
 
 Internal void ui_kill_action(void) {
-  for EachIndex(k, OS_MOUSE_BUTTON_COUNT) {
+  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
     ui_state->active_box_key[k] = ui_key_zero();
   }
 }

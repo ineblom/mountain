@@ -546,7 +546,7 @@ Internal void lane(Arena *arena) {
     if (lane_idx() == 0) {
       ////////////////////////////////
       //~ kti: Execute Cmds
-      for EachIndex(i, state->cmd_count) {
+      for (L1 i = 0; i < state->cmd_count; i += 1) {
         Cmd cmd = state->cmds[i];
         switch (cmd.kind) {
           case CMD_KIND__OPEN_PANEL: {
@@ -659,7 +659,7 @@ Internal void lane(Arena *arena) {
                 UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
                 if (panel->view_count == 0) {
                   ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
-                } else for EachIndex(i, panel->view_count) {
+                } else for (L1 i = 0; i < panel->view_count; i += 1) {
                   ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
                 }
 
@@ -707,7 +707,7 @@ Internal void lane(Arena *arena) {
                     UI_Text_Align((UI_TEXT_ALIGN__CENTER))
                     UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
                     UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                    for EachIndex(i, VIEW_KIND_COUNT) {
+                    for (L1 i = 0; i < VIEW_KIND_COUNT; i += 1) {
                       if (ui_button(view_kind_names [i]) .flags & UI_SIGNAL_FLAG__PRESSED) {
                         panel_push_view(panel, i);
                       }
@@ -735,7 +735,7 @@ Internal void lane(Arena *arena) {
                         //- kti: Fill entries
                         UI_Text_Padding(10.0f)
                         UI_Parent(entities_box) {
-                          for EachIndex(i, state->entity_count) {
+                          for (L1 i = 0; i < state->entity_count; i += 1) {
                             Entity *e = &state->entities[i];
                             String8 name = {e->name, e->name_len};
                             I1 selected = entity_handle_match(e->handle, state->selected_entity);
@@ -777,6 +777,7 @@ Internal void lane(Arena *arena) {
                         }
                       } break;
 
+                      //- kti: Entity view.
                       case VIEW_KIND__ENTITY: {
                         Entity *entity = entity_from_handle(state->selected_entity);
                         if (entity_is_nil(entity)) {

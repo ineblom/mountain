@@ -87,7 +87,7 @@ Internal void fp_select_size(FT_Face face, FT_UInt pixel_size) {
   if (face->num_fixed_sizes > 0) {
     L1 best_idx = 0;
     I1 best_diff = I1_MAX;
-    for EachIndex(i, face->num_fixed_sizes) {
+    for (L1 i = 0; i < face->num_fixed_sizes; i += 1) {
       I1 diff = abs_SI1((SI1)face->available_sizes[i].height - (SI1)pixel_size);
       if (diff < best_diff) {
         best_diff = diff;
@@ -154,7 +154,7 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
     }
 
     SI1 total_width = 0;
-    for EachIndex(i, string32.len) {
+    for (L1 i = 0; i < string32.len; i += 1) {
       FT_Load_Char(face, string32.str[i], load_flags);
       total_width += face->glyph->advance.x >> 6;
     }
@@ -165,7 +165,7 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
     B1 *atlas = push_array(arena, B1, atlas_size);
     SI1 baseline = ascent;
     SI1 atlas_write_x = 0;
-    for EachIndex(i, string32.len) {
+    for (L1 i = 0; i < string32.len; i += 1) {
       if (FT_Load_Char(face, string32.str[i], load_flags) != 0) {
         continue;
       }

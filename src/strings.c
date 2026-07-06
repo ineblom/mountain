@@ -212,7 +212,7 @@ Internal String8 str8f(Arena *arena, CString fmt, ...) {
 Internal L1 str8_hash(String8 string) {
   L1 hash = 5281;
 
-  for EachIndex(i, string.len) {
+  for (L1 i = 0; i < string.len; i += 1) {
     I1 c = string.str[i];
     hash = ((hash << 5) + hash) + c;
   }

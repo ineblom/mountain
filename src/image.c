@@ -153,7 +153,7 @@ Internal Image image_read_from_file(Arena *arena, String8 filename) {
 
     B1 *src = contents.str + header->bitmap_offset;
     B1 *dst = result.pixels;
-    for EachIndex(pixel_index, pixel_count) {
+    for (L1 pixel_index = 0; pixel_index < pixel_count; pixel_index += 1) {
       B1 b = src[0];
       B1 g = src[1];
       B1 r = src[2];

@@ -223,7 +223,7 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
 }
 
 Internal void dr_text_run(FC_Run run, F2 pos, F4 color) {
-  for EachIndex(i, run.pieces.count) {
+  for (L1 i = 0; i < run.pieces.count; i += 1) {
     FC_Piece *piece = &run.pieces.v[i];
     SW4 subrect = piece->subrect;
     SW2 offset = piece->offset;

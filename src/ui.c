@@ -386,12 +386,9 @@ Internal Arena *ui_build_arena(void) {
   return arena;
 }
 
-Internal F4 ui_color_for_hover(F4 color) {
-  F4 result = {0};
-  result[0] = Clamp(0.22f, color[0] + 0.1f, 1.0f);
-  result[1] = color[1];
-  result[2] = color[2];
-  result[3] = color[3];
+Internal F4 ui_brighten(F4 color) {
+  F4 result = color;
+  result[0] = Clamp(0.22f, result[0] + 0.1f, 1.0f);
 
   return result;
 }
@@ -2000,7 +1997,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
         value[0] = !value[0];
       }
       if (!ui_box_is_nil(check) && signal.flags & UI_SIGNAL_FLAG__HOVERING) {
-        check->background_color = ui_color_for_hover(check->background_color);
+        check->background_color = ui_brighten(check->background_color);
       }
     }
 
@@ -2372,11 +2369,11 @@ Internal void ui_draw(void) {
       if (draw_active_effect) {
         inst->colors[0][0] = inst->colors[0][0]*0.9f;
         inst->colors[1][0] = inst->colors[1][0]*0.9f;
-        inst->colors[2][0] = Min(inst->colors[2][0]+0.1f, 1.0f);
-        inst->colors[3][0] = Min(inst->colors[3][0]+0.1f, 1.0f);
+        inst->colors[2] = ui_brighten(inst->colors[2]);
+        inst->colors[3] = ui_brighten(inst->colors[3]);
       } else if (draw_hot_effect) {
-        inst->colors[0] = ui_color_for_hover(inst->colors[0]);
-        inst->colors[1] = ui_color_for_hover(inst->colors[1]);
+        inst->colors[0] = ui_brighten(inst->colors[0]);
+        inst->colors[1] = ui_brighten(inst->colors[1]);
       }
     }
 
@@ -2396,7 +2393,7 @@ Internal void ui_draw(void) {
         if (draw_active_effect) {
           color[0] = Max(color[0]-0.2f, 0.0f);
         } else if (draw_hot_effect) {
-          color = ui_color_for_hover(color);
+          color = ui_brighten(color);
         }
         dr_text_run(n->value.run, pos, color);
       }

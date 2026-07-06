@@ -1855,7 +1855,7 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
       UI_Pref_Height(ui_px(height, 1.0f))
       UI_Corner_Radius(height*0.5f-1.0f)
       UI_Border_Color(oklch(0.5f, 0.0f, 0.0f, 1.0f)) {
-        UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%.*s", (int)str.len, str.str);
+        UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%.*s", str.len, str.str);
         UI_Key bg_key = ui_key_from_string(box->key, Str8_("bg"));
         UI_Key knob_key = ui_key_from_string(box->key, Str8_("knob"));
 
@@ -1916,6 +1916,32 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
         }
       }
     }
+  }
+
+  return signal;
+}
+
+Internal UI_Signal ui_drag_F1(String8 str, F1 *value) {
+  UI_Box *box = ui_build_box_from_stringf(
+    UI_BOX_FLAG__CLICKABLE|
+    UI_BOX_FLAG__DRAW_BACKGROUND|
+    UI_BOX_FLAG__DRAW_BORDER|
+    UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+    UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
+    UI_BOX_FLAG__DRAW_TEXT,
+    "drag_%p", value);
+  ui_box_equip_display_string(box, str8f(ui_build_arena(), "%.*s %.2f", str.len, str.str, value[0]));
+
+  UI_Signal signal = ui_signal_from_box(box);
+
+  if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+      ui_store_drag_struct(value);
+    }
+
+    F1 initial_value = ui_get_drag_struct(F1)[0];
+    F1 change = ui_drag_delta()[0] / 35.0f;
+    value[0] = initial_value + change;
   }
 
   return signal;

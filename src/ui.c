@@ -386,6 +386,25 @@ Internal Arena *ui_build_arena(void) {
   return arena;
 }
 
+Internal F1 ui_lightness_for_hover(F1 l) {
+  F1 delta = 0.1f;
+  F1 min_visible_l = 0.22f;
+  F1 result = 0.0f;
+
+  if (l <= 1.0f - delta) {
+    result = Max(l + delta, min_visible_l);
+  } else {
+    result = Max(l - delta, 0.0f);
+  }
+
+  return result;
+}
+
+Internal F4 ui_color_for_hover(F4 color) {
+  color[0] = ui_lightness_for_hover(color[0]);
+  return color;
+}
+
 #include "ui.meta.c"
 
 Internal I1 txt_pt_match(Txt_Pt a, Txt_Pt b) {
@@ -1990,7 +2009,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
         value[0] = !value[0];
       }
       if (!ui_box_is_nil(check) && signal.flags & UI_SIGNAL_FLAG__HOVERING) {
-        check->background_color[0] = Min(1.0f, check->background_color[0]+0.1f);
+        check->background_color = ui_color_for_hover(check->background_color);
       }
     }
 
@@ -2365,8 +2384,8 @@ Internal void ui_draw(void) {
         inst->colors[2][0] = Min(inst->colors[2][0]+0.1f, 1.0f);
         inst->colors[3][0] = Min(inst->colors[3][0]+0.1f, 1.0f);
       } else if (draw_hot_effect) {
-        inst->colors[0][0] = Min(inst->colors[0][0]+0.1f, 1.0f);
-        inst->colors[1][0] = Min(inst->colors[1][0]+0.1f, 1.0f);
+        inst->colors[0] = ui_color_for_hover(inst->colors[0]);
+        inst->colors[1] = ui_color_for_hover(inst->colors[1]);
       }
     }
 
@@ -2386,7 +2405,7 @@ Internal void ui_draw(void) {
         if (draw_active_effect) {
           color[0] = Max(color[0]-0.2f, 0.0f);
         } else if (draw_hot_effect) {
-          color[0] = Max(color[0]+0.1f, 1.0f);
+          color = ui_color_for_hover(color);
         }
         dr_text_run(n->value.run, pos, color);
       }

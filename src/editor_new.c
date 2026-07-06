@@ -874,7 +874,8 @@ Internal void lane(Arena *arena) {
                                   UI_BOX_FLAG__DRAW_BORDER|
                                   UI_BOX_FLAG__DRAW_TEXT|
                                   UI_BOX_FLAG__CLICKABLE|
-                                  (selected*UI_BOX_FLAG__DRAW_BACKGROUND),
+                                  UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+                                  UI_BOX_FLAG__DRAW_BACKGROUND,
                                   name);
                                 UI_Signal signal = ui_signal_from_box(box);
                                 if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {

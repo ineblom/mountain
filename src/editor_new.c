@@ -785,6 +785,7 @@ Internal void lane(Arena *arena) {
                         } else {
                           ui_set_next_child_layout_axis(AXIS__Y);
                           UI_Parent(ui_build_box_from_stringf(0, "entity_%p", entity)) {
+                            //- kti: Name edit
                             ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
                             ui_set_next_font_size(ui_top_font_size()*0.8f);
                             ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
@@ -810,6 +811,18 @@ Internal void lane(Arena *arena) {
                                 cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                               }
                             }
+
+                            ui_spacer(ui_px(10.0f, 1.0f));
+
+                            //- kti: Position
+                            F3 pos = entity->pos;
+
+                            ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
+                            ui_set_next_font_size(ui_top_font_size()*0.8f);
+                            ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
+                            ui_label(Str8_("Postiion"));
+
+                            ui_label(str8f(scratch.arena, "%.2f %.2f %.2f", pos[0], pos[1], pos[2]));
                           }
                         }
                       } break;

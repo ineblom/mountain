@@ -2217,7 +2217,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
   F1 cursor_off = 0;
   UI_Parent(box) {
     String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
-    if (!is_focus_active && !is_focus_active_disabled) {
+    if (!is_focus_active || is_focus_active_disabled) {
       String8 display_string = ui_display_part_from_key_string(string);
       if (pre_edit_value.len != 0) {
         display_string = pre_edit_value;

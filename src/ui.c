@@ -386,23 +386,14 @@ Internal Arena *ui_build_arena(void) {
   return arena;
 }
 
-Internal F1 ui_lightness_for_hover(F1 l) {
-  F1 delta = 0.1f;
-  F1 min_visible_l = 0.22f;
-  F1 result = 0.0f;
-
-  if (l <= 1.0f - delta) {
-    result = Max(l + delta, min_visible_l);
-  } else {
-    result = Max(l - delta, 0.0f);
-  }
+Internal F4 ui_color_for_hover(F4 color) {
+  F4 result = {0};
+  result[0] = Clamp(0.22f, color[0] + 0.1f, 1.0f);
+  result[1] = color[1];
+  result[2] = color[2];
+  result[3] = color[3];
 
   return result;
-}
-
-Internal F4 ui_color_for_hover(F4 color) {
-  color[0] = ui_lightness_for_hover(color[0]);
-  return color;
 }
 
 #include "ui.meta.c"

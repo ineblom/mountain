@@ -389,7 +389,6 @@ Internal Arena *ui_build_arena(void) {
 Internal F4 ui_brighten(F4 color) {
   F4 result = color;
   result[0] = Clamp(0.22f, result[0] + 0.1f, 1.0f);
-
   return result;
 }
 
@@ -2323,7 +2322,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 }
 
 Internal void ui_draw(void) {
-  F4 focus_border_color = oklch(0.428f, 0.176f, 29.234f, 1.0f);
+  F4 focus_border_color = oklch(0.849f, 0.107f, 252, 1.0f);
   F4 cursor_color = focus_border_color;
   cursor_color[0] += 0.2f;
   F4 select_color = {0.5f, 0.5f, 0.0f, 0.05f};

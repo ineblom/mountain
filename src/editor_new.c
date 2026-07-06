@@ -190,11 +190,9 @@ Internal F4 panel_rect_from_parent_rect(Panel *child, F4 parent_rect) {
   Panel *parent = child->parent;
   if (parent) {
     for (Panel *p = parent->first; p != child && p != 0; p = p->next) {
-      result[parent->split_axis] +=
-        p->pct_of_parent * parent_rect[2 + parent->split_axis];
+      result[parent->split_axis] += p->pct_of_parent * parent_rect[2 + parent->split_axis];
     }
-    result[2 + parent->split_axis] =
-      child->pct_of_parent * parent_rect[2 + parent->split_axis];
+    result[2 + parent->split_axis] = child->pct_of_parent * parent_rect[2 + parent->split_axis];
   }
   return result;
 }
@@ -207,15 +205,15 @@ Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect) {
     Walk_Node *next;
     Panel *child;
   };
-  Walk_Node *first_walk_node = 0;
+  Walk_Node *top_walk_node = 0;
   for (Panel *p = panel; p != 0 && p->parent != 0; p = p->parent) {
     Walk_Node *node = push_array(scratch.arena, Walk_Node, 1);
     node->child = p;
-    SLLStackPush(first_walk_node, node);
+    SLLStackPush(top_walk_node, node);
   }
 
   F4 result = root_rect;
-  for (Walk_Node *n = first_walk_node; n != 0; n = n->next) {
+  for (Walk_Node *n = top_walk_node; n != 0; n = n->next) {
     result = panel_rect_from_parent_rect(n->child, result);
   }
 
@@ -705,7 +703,7 @@ Internal void lane(Arena *arena) {
               UI_Padding(ui_px(10.0f, 1.0f)) {
                 UI_Column() {
                   if (panel->view_count == 0) {
-                    UI_Text_Color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f))
+                    UI_Text_Color(oklch(0.682f, 0.176f, 252, 1.0f))
                     ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Choose view kind."));
 
                     UI_Row()
@@ -748,7 +746,7 @@ Internal void lane(Arena *arena) {
 
                             if (selected) {
                               ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
-                              ui_set_next_text_color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f));
+                              ui_set_next_text_color(oklch(0.682f, 0.176f, 252, 1.0f));
                             }
                             UI_Box *row = ui_build_box_from_stringf(
                               UI_BOX_FLAG__DRAW_BACKGROUND|
@@ -868,7 +866,7 @@ Internal void lane(Arena *arena) {
                                 
                                 if (selected) {
                                   ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
-                                  ui_set_next_text_color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f));
+                                  ui_set_next_text_color(oklch(0.682f, 0.176f, 252, 1.0f));
                                 }
                                 UI_Box *box = ui_build_box_from_string(
                                   UI_BOX_FLAG__DRAW_BORDER|
@@ -947,8 +945,8 @@ Internal void lane(Arena *arena) {
         F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
         F1 min_ms = min_frame_time / 1000000.0f;
         F1 max_ms = max_frame_time / 1000000.0f;
-        fps = 1000.0f / avg_ms;
-        printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
+        // fps = 1000.0f / avg_ms;
+        // printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
         total_frame_time = 0;
         min_frame_time = L1_MAX;
         max_frame_time = 0;

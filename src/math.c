@@ -49,7 +49,7 @@ enum {
 #define ceil_F1(x) ceilf(x)
 
 Inline F1 clamp01_F1(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
-Inline F1 saturate_F(F1 x) { return clamp01_F1(x); }
+Inline F1 saturate_F1(F1 x) { return clamp01_F1(x); }
 
 Inline F1 sign_F1(F1 a) {
   F1 result = -1.0f;

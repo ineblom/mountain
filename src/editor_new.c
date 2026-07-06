@@ -103,10 +103,16 @@ enum {
   ENTITY_FLAG__CAMERA = 1 << 1,
 };
 
+typedef I1 Shape;
 enum {
-  SHAPE__BOX,
+  SHAPE__BOX = 0,
   SHAPE__SPHERE,
   SHAPE__COUNT,
+};
+
+Global String8 shape_names[SHAPE__COUNT] = {
+  [SHAPE__BOX] = Str8_("Box"),
+  [SHAPE__SPHERE] = Str8_("Sphere"),
 };
 
 typedef struct Entity Entity;
@@ -116,10 +122,10 @@ struct Entity {
   L1 flags;
   B1 name[128];
   L1 name_len;
-  L1 shape;
   F3 pos;
   F3 size;
-  L1 material_idx;
+  Shape shape;
+  RT_Material material;
 };
 
 ////////////////////////////////
@@ -408,9 +414,9 @@ Internal Entity *entity_create(L1 flags, String8 name) {
     entity->handle.idx = idx;
     entity->handle.id = id;
     entity->flags = flags;
-    entity->name_len = Min(name.len, sizeof(entity->name)),
+    entity->size = (F3){1.0f, 1.0f, 1.0f};
+    entity->name_len = Min(name.len, sizeof(entity->name));
     memmove(entity->name, name.str, entity->name_len);
-
   }
   return entity;
 }
@@ -815,8 +821,6 @@ Internal void lane(Arena *arena) {
                             ui_spacer(ui_px(10.0f, 1.0f));
 
                             //- kti: Position
-                            F3 pos = entity->pos;
-
                             ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
                             ui_set_next_font_size(ui_top_font_size()*0.8f);
                             ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
@@ -831,6 +835,30 @@ Internal void lane(Arena *arena) {
                               ui_spacer(ui_px(5.0f, 1.0f));
                               ui_drag_F1(Str8_("Z"), &entity->pos[2], 20.0f);
                             }
+                            
+                            ui_spacer(ui_px(10.0f, 1.0f));
+
+                            //- kti: Size
+                            ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
+                            ui_set_next_font_size(ui_top_font_size()*0.8f);
+                            ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
+                            ui_label(Str8_("Size"));
+
+                            UI_Row()
+                            UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                            UI_Corner_Radius(ui_top_font_size()*0.2f) {
+                              ui_drag_F1(Str8_("X"), &entity->size[0], 50.0f);
+                              ui_spacer(ui_px(5.0f, 1.0f));
+                              ui_drag_F1(Str8_("Y"), &entity->size[1], 50.0f);
+                              ui_spacer(ui_px(5.0f, 1.0f));
+                              ui_drag_F1(Str8_("Z"), &entity->size[2], 50.0f);
+                            }
+
+                            ui_spacer(ui_px(10.0f, 1.0f));
+
+                            //- kti: Shape
+                            // ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, "");
+
                           }
                         }
                       } break;

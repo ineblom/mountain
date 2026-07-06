@@ -1922,14 +1922,15 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 }
 
 Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 pixels_per_unit) {
-  UI_Box *box = ui_build_box_from_stringf(
+  UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_%p", value));
+  UI_Box *box = ui_build_box_from_key(
     UI_BOX_FLAG__CLICKABLE|
     UI_BOX_FLAG__DRAW_BACKGROUND|
     UI_BOX_FLAG__DRAW_BORDER|
     UI_BOX_FLAG__DRAW_HOT_EFFECTS|
     UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
     UI_BOX_FLAG__DRAW_TEXT,
-    "drag_%p", value);
+    key);
   ui_box_equip_display_string(box, str8f(ui_build_arena(), "%.*s %.2f", str.len, str.str, value[0]));
 
   UI_Signal signal = ui_signal_from_box(box);

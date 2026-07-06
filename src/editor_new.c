@@ -107,10 +107,10 @@ typedef I1 Shape;
 enum {
   SHAPE__BOX = 0,
   SHAPE__SPHERE,
-  SHAPE__COUNT,
+  SHAPE_COUNT,
 };
 
-Global String8 shape_names[SHAPE__COUNT] = {
+Global String8 shape_names[SHAPE_COUNT] = {
   [SHAPE__BOX] = Str8_("Box"),
   [SHAPE__SPHERE] = Str8_("Sphere"),
 };
@@ -857,8 +857,31 @@ Internal void lane(Arena *arena) {
                             ui_spacer(ui_px(10.0f, 1.0f));
 
                             //- kti: Shape
-                            // ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, "");
-
+                            ui_set_next_child_layout_axis(AXIS__X);
+                            ui_set_next_pref_height(ui_children_sum(1.0f));
+                            UI_Box *shape_selection = ui_build_box_from_string(0, Str8_("shape_selection"));
+                            UI_Parent(shape_selection) 
+                            UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
+                              for (L1 shape = 0; shape < SHAPE_COUNT; shape += 1) {
+                                I1 selected = (shape == entity->shape);
+                                String8 name = shape_names[shape];
+                                
+                                if (selected) {
+                                  ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
+                                  ui_set_next_text_color(oklch(0.7706f, 0.1537f, 67.64f, 1.0f));
+                                }
+                                UI_Box *box = ui_build_box_from_string(
+                                  UI_BOX_FLAG__DRAW_BORDER|
+                                  UI_BOX_FLAG__DRAW_TEXT|
+                                  UI_BOX_FLAG__CLICKABLE|
+                                  (selected*UI_BOX_FLAG__DRAW_BACKGROUND),
+                                  name);
+                                UI_Signal signal = ui_signal_from_box(box);
+                                if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
+                                  entity->shape = shape;
+                                }
+                              }
+                            }
                           }
                         }
                       } break;

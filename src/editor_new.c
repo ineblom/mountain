@@ -837,9 +837,9 @@ Internal void lane(Arena *arena) {
                             ui_spacer(ui_px(10.0f, 1.0f));
 
                             //- kti: Size
-                            ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
-                            ui_set_next_font_size(ui_top_font_size()*0.8f);
-                            ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
+                            UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+                            UI_Font_Size(ui_top_font_size()*0.8f)
+                            UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
                             ui_label(Str8_("Size"));
 
                             UI_Row()
@@ -855,6 +855,11 @@ Internal void lane(Arena *arena) {
                             ui_spacer(ui_px(10.0f, 1.0f));
 
                             //- kti: Shape
+                            UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+                            UI_Font_Size(ui_top_font_size()*0.8f)
+                            UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
+                            ui_label(Str8_("Shape"));
+
                             ui_set_next_child_layout_axis(AXIS__X);
                             ui_set_next_pref_height(ui_children_sum(1.0f));
                             UI_Box *shape_selection = ui_build_box_from_string(0, Str8_("shape_selection"));
@@ -880,6 +885,46 @@ Internal void lane(Arena *arena) {
                                   entity->shape = shape;
                                 }
                               }
+                            }
+
+                            ui_spacer(ui_px(10.0f, 1.0f));
+
+                            //- kti: Material
+
+                            UI_Font_Size(ui_top_font_size()*0.8f)
+                            UI_Text_Color(((F4){1.0f, 0.0f, 0.0f, 1.0f}))
+                            ui_label(Str8_("Material"));
+
+                            UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+                            UI_Font_Size(ui_top_font_size()*0.8f)
+                            UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
+                            ui_label(Str8_("Base Color"));
+
+                            UI_Row()
+                            UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                            UI_Corner_Radius(ui_top_font_size()*0.2f) {
+                              F4 color = oklch_from_linear_rgb(F4_from_F3(entity->material.base_color, 1.0f));
+                              UI_Background_Color(color)
+                              UI_Pref_Width(ui_px(50.0f, 1.0f))
+                              UI_Corner_Radius(0)
+                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("color"));
+                              ui_spacer(ui_px(5.0f, 1.0f));
+
+                              UI_Background_Color(oklch(0.3f, 0.15f, 35, 1.0f))
+                              UI_Border_Color(oklch(0.5f, 0.2f, 35, 1.0f))
+                              ui_drag_F1(Str8_("R"), &entity->material.base_color[0], 200.0f);
+                              ui_spacer(ui_px(5.0f, 1.0f));
+
+                              UI_Background_Color(oklch(0.272f, 0.076f, 145, 1.0f))
+                              UI_Border_Color(oklch(0.484f, 0.164f, 145, 1.0f))
+                              ui_drag_F1(Str8_("G"), &entity->material.base_color[1], 200.0f);
+                              ui_spacer(ui_px(5.0f, 1.0f));
+
+                              UI_Background_Color(oklch(0.277f, 0.077f, 252, 1.0f))
+                              UI_Border_Color(oklch(0.493f, 0.172f, 252, 1.0f))
+                              ui_drag_F1(Str8_("B"), &entity->material.base_color[2], 200.0f);
+
+                              entity->material.base_color = clamp01_F3(entity->material.base_color);
                             }
                           }
                         }

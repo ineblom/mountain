@@ -221,12 +221,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags
   return VK_FALSE;
 }
 
-F4 oklch(F1 l, F1 c, F1 h, F1 alpha) {
-  F1 h_rad = h * (PI / 180.0f);
-  F4 result = { l, c, h_rad, alpha };
-  return result;
-}
-
 Internal I1 gfx_find_memory_type(VkMemoryRequirements mem_reqs, VkMemoryPropertyFlags required_properties) {
   VkPhysicalDeviceMemoryProperties mem_properties;
   vkGetPhysicalDeviceMemoryProperties(gfx_state->physical_device, &mem_properties);

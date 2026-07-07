@@ -1,4 +1,3 @@
-
 #if (TYP_)
 
 #define PI 3.141592653598979f
@@ -40,6 +39,9 @@ enum {
 
 #if (ROM_)
 
+////////////////////////////////
+//~ F1
+
 #define abs_F1(x) fabsf(x)
 #define abs_SI1(x) abs(x)
 #define abs_SL1(x) llabs(x)
@@ -57,6 +59,9 @@ Inline F1 sign_F1(F1 a) {
   return result;
 }
 
+////////////////////////////////
+//~ F2
+
 Inline F1 dot_F2(F2 v) {
   F1 result = v[0]*v[0] + v[1]*v[1];
   return result;
@@ -71,6 +76,9 @@ Inline F1 length_F2(F2 v) {
   F1 result = sqrtf(length_sq_F2(v));
   return result;
 }
+
+////////////////////////////////
+//~ F3
 
 Inline F1 dot_F3(F3 a, F3 b) {
   F1 result = a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
@@ -140,6 +148,17 @@ Inline F3 reflect_F3(F3 v, F3 normal) {
   return result;
 }
 
+////////////////////////////////
+//~ F4
+
+Inline F4 F4_from_F3(F3 v, F1 w) {
+  F4 result = {v[0], v[1], v[2], w};
+  return result;
+}
+
+////////////////////////////////
+//~ Ray
+
 Internal F1 ray_aabb_intersect(F3 ray_origin, F3 ray_direction, F3 aabb_min, F3 aabb_max) {
   F1 t_min = (aabb_min[0] - ray_origin[0]) / ray_direction[0];
   F1 t_max = (aabb_max[0] - ray_origin[0]) / ray_direction[0];
@@ -166,6 +185,9 @@ Internal F1 ray_aabb_intersect(F3 ray_origin, F3 ray_direction, F3 aabb_min, F3 
   return t_min;
 }
 
+////////////////////////////////
+//~ Random
+
 Inline I1 rand_pcg(Random_State *rng) {
   L1 oldstate = rng->state;
   rng->state = oldstate * 6364136223846793005ULL + (rng->inc|1);
@@ -184,6 +206,9 @@ Inline F1 random_bilateral(Random_State *rng) {
   F1 result = -1 + 2 * random_unilateral(rng);
   return result;
 }
+
+////////////////////////////////
+//~ Rectangle
 
 Inline F4 rect_overlap(F4 a, F4 b) {
   F4 result = {0};
@@ -226,5 +251,41 @@ Inline F2 rect_center(F4 rect) {
   };
   return result;
 }
+
+////////////////////////////////
+//~ kti: Colors
+
+F4 oklch(F1 l, F1 c, F1 h, F1 alpha) {
+  F1 h_rad = h * (PI / 180.0f);
+  F4 result = { l, c, h_rad, alpha };
+  return result;
+}
+
+F4 oklch_from_linear_rgb(F4 rgba) {
+  F1 r = rgba[0];
+  F1 g = rgba[1];
+  F1 b = rgba[2];
+  F1 a = rgba[3];
+
+  F1 l = 0.4122214708f*r + 0.5363325363f*g + 0.0514459929f*b;
+  F1 m = 0.2119034982f*r + 0.6806995451f*g + 0.1073969566f*b;
+  F1 s = 0.0883024619f*r + 0.2817188376f*g + 0.6299787005f*b;
+
+  F1 l_ = cbrtf(l);
+  F1 m_ = cbrtf(m);
+  F1 s_ = cbrtf(s);
+
+  F1 ok_l = 0.2104542553f*l_ + 0.7936177850f*m_ - 0.0040720468f*s_;
+  F1 ok_a = 1.9779984951f*l_ - 2.4285922050f*m_ + 0.4505937099f*s_;
+  F1 ok_b = 0.0259040371f*l_ + 0.7827717662f*m_ - 0.8086757660f*s_;
+
+  F1 chroma = sqrtf(ok_a*ok_a + ok_b*ok_b);
+  F1 hue = atan2f(ok_b, ok_a);
+  if (hue < 0.0f) hue += 2.0f*PI;
+
+  F4 result = { ok_l, chroma, hue, a };
+  return result;
+}
+
 
 #endif

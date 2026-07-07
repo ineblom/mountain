@@ -10,7 +10,7 @@
 // SIMD
 // BVH (for larger scenes)
 
-#if (TYP_)
+#if (HEADER)
 
 typedef struct RT_Material RT_Material;
 struct RT_Material {
@@ -95,7 +95,7 @@ struct RT_State {
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 ThreadLocal Random_State *rng;
 Global RT_State *rt_state;
@@ -701,19 +701,19 @@ Internal void widget_rgb_edit(String8 label, F3 *rgb) {
 
     UI_Background_Color(oklch(0.3f, 0.15f, 35, 1.0f))
     UI_Border_Color(oklch(0.5f, 0.2f, 35, 1.0f)) {
-      ui_drag_F1(Str8_("R"), &rgb[0][0], 200.0f);
+      ui_drag_F1(str8("R"), &rgb[0][0], 200.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
     UI_Background_Color(oklch(0.272f, 0.076f, 145, 1.0f))
     UI_Border_Color(oklch(0.484f, 0.164f, 145, 1.0f)) {
-      ui_drag_F1(Str8_("G"), &rgb[0][1], 200.0f);
+      ui_drag_F1(str8("G"), &rgb[0][1], 200.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
     UI_Background_Color(oklch(0.277f, 0.077f, 252, 1.0f))
     UI_Border_Color(oklch(0.493f, 0.172f, 252, 1.0f)) {
-      ui_drag_F1(Str8_("B"), &rgb[0][2], 200.0f);
+      ui_drag_F1(str8("B"), &rgb[0][2], 200.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
@@ -721,7 +721,7 @@ Internal void widget_rgb_edit(String8 label, F3 *rgb) {
     UI_Background_Color(color)
     UI_Pref_Width(ui_px(50.0f, 1.0f))
     UI_Corner_Radius(0) {
-      ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("color"));
+      ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, str8("color"));
     }
 
     ui_pop_text_align();
@@ -801,7 +801,7 @@ Internal void lane(Arena *arena) {
   camera.focal_distance = 5.0f;
 
   RT_Scene scene = {
-    .output_filename = Str8_("output.bmp"),
+    .output_filename = str8("output.bmp"),
     .output_width    = 1280,
     .output_height   = 720,
 
@@ -812,7 +812,7 @@ Internal void lane(Arena *arena) {
     .bloom_threshold        = 0.5f,
     .bloom_strength         = 0.4f,
     .bloom_knee             = 0.5f,
-    .bloom_overlay_filename = Str8_("lens-dirt.bmp"),
+    .bloom_overlay_filename = str8("lens-dirt.bmp"),
     .bloom_overlay_strength = 2.0f,
 
     .camera = camera,

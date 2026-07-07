@@ -20,7 +20,7 @@
 
 #endif
 
-#if (TYP_)
+#if (HEADER)
 
 typedef void *ThreadFunc(void *);
 
@@ -298,7 +298,7 @@ struct OS_GFX_State {
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 Global OS_GFX_State *os_gfx_state = 0;
 

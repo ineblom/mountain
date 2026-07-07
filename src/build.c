@@ -6,8 +6,8 @@
 #endif
 
 #define DEF_ 0
-#define TYP_ 0
-#define ROM_ 0
+#define HEADER 0
+#define SOURCE 0
 
 # include "base.c"
 #endif
@@ -20,19 +20,19 @@
 # undef DEF_
 # define DEF_ 0
 
-# undef TYP_
-# define TYP_ 1
+# undef HEADER
+# define HEADER 1
 # include __FILE__
-# undef TYP_
-# define TYP_ 0
+# undef HEADER
+# define HEADER 0
 
-# undef ROM_
-# define ROM_ 1
+# undef SOURCE
+# define SOURCE 1
 NoInline void WrmBas(void) { Crash(0); }
 # include __FILE__
 NoInline void WrmEnd(void) { Crash(1); }
-# undef ROM_
-# define ROM_ 0
+# undef SOURCE
+# define SOURCE 0
 
 #endif
 

@@ -1,4 +1,4 @@
-#if (TYP_)
+#if (HEADER)
 
 ////////////////////////////////
 //~ kti: UI
@@ -7,13 +7,15 @@ typedef I1 View_Kind;
 enum {
   VIEW_KIND__ENTITIES = 0,
   VIEW_KIND__ENTITY,
+  VIEW_KIND__VIEWPORT,
 
   VIEW_KIND_COUNT,
 };
 
 Global String8 view_kind_names[VIEW_KIND_COUNT] = {
-  [VIEW_KIND__ENTITIES] = Str8_("Entities"),
-  [VIEW_KIND__ENTITY] = Str8_("Entity"),
+  [VIEW_KIND__ENTITIES] = str8("Entities"),
+  [VIEW_KIND__ENTITY] = str8("Entity"),
+  [VIEW_KIND__VIEWPORT] = str8("Viewport"),
 };
 
 typedef struct View View;
@@ -111,8 +113,8 @@ enum {
 };
 
 Global String8 shape_names[SHAPE_COUNT] = {
-  [SHAPE__BOX] = Str8_("Box"),
-  [SHAPE__SPHERE] = Str8_("Sphere"),
+  [SHAPE__BOX] = str8("Box"),
+  [SHAPE__SPHERE] = str8("Sphere"),
 };
 
 typedef struct Entity Entity;
@@ -160,7 +162,7 @@ struct State {
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 Global State *state = 0;
 
@@ -307,7 +309,7 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
 
   view->kind = kind;
   view->title = view_kind_names[kind];
-  String8 default_name = Str8_("Theodor");
+  String8 default_name = str8("Theodor");
   view->name_len = Min(sizeof(view->name), default_name.len);
   memmove(view->name, default_name.str, view->name_len);
 }
@@ -324,7 +326,7 @@ Internal Window *window_open(void) {
     window = push_array(state->arena, Window, 1);
   }
 
-  window->os = os_window_open(Str8_("Testing"), 1280, 720);
+  window->os = os_window_open(str8("Testing"), 1280, 720);
   window->gfx = gfx_window_equip(window->os);
   window->ui = ui_state_alloc();
   window->arena = arena_alloc(MiB(32));
@@ -450,11 +452,19 @@ Internal void lane(Arena *arena) {
     panel_push_view(entities_panel, VIEW_KIND__ENTITIES);
     panel_insert(entities_panel, &window->root_panel, 0);
 
+    Panel *viewport_panel = panel_alloc();
+    panel_push_view(viewport_panel, VIEW_KIND__VIEWPORT);
+    panel_insert(viewport_panel, entities_panel, DIR__RIGHT);
+
     Panel *entity_panel = panel_alloc();
     panel_push_view(entity_panel, VIEW_KIND__ENTITY);
-    panel_insert(entity_panel, entities_panel, DIR__RIGHT);
+    panel_insert(entity_panel, viewport_panel, DIR__RIGHT);
 
-    Entity *starting_entity = entity_create(0, Str8_("Starting Entity"));
+    entities_panel->pct_of_parent = 0.2f;
+    viewport_panel->pct_of_parent = 0.5f;
+    entity_panel->pct_of_parent = 0.3f;
+
+    Entity *starting_entity = entity_create(0, str8("Starting Entity"));
     state->selected_entity = starting_entity->handle;
   }
 
@@ -565,7 +575,7 @@ Internal void lane(Arena *arena) {
           } break;
 
           case CMD_KIND__CREATE_ENTITY: {
-            entity_create(ENTITY_FLAG__SHAPE, Str8_("New Entity"));
+            entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
           } break;
         }
       }
@@ -576,8 +586,8 @@ Internal void lane(Arena *arena) {
 
       fc_frame();
 
-      FC_Tag prop_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/" "Bloomberg-PropU_N.ttf"));
-      FC_Tag fixed_fnt = fc_tag_from_path(Str8_("/usr/share/fonts/bloomberg/" "Bloomberg-FixedU_N.ttf"));
+      FC_Tag prop_fnt = fc_tag_from_path(str8("/usr/share/fonts/bloomberg/" "Bloomberg-PropU_N.ttf"));
+      FC_Tag fixed_fnt = fc_tag_from_path(str8("/usr/share/fonts/bloomberg/" "Bloomberg-FixedU_N.ttf"));
 
       for (Window *w = state->first_window; w != 0; w = w->next) {
         ui_state_equip(w->ui);
@@ -663,7 +673,7 @@ Internal void lane(Arena *arena) {
                 UI_Padding(ui_px(10.0f, 1.0f))
                 UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
                 if (panel->view_count == 0) {
-                  ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("<no view>"));
+                  ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("<no view>"));
                 } else for (L1 i = 0; i < panel->view_count; i += 1) {
                   ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
                 }
@@ -674,7 +684,7 @@ Internal void lane(Arena *arena) {
                 UI_Pref_Height(ui_pct(1.0f, 1.0f))
                 UI_Text_Align((UI_TEXT_ALIGN__CENTER))
                 UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
-                  if (ui_button(Str8_("Split X")).flags & UI_SIGNAL_FLAG__CLICKED) {
+                  if (ui_button(str8("Split X")).flags & UI_SIGNAL_FLAG__CLICKED) {
                     cmd_push((Cmd){
                       .kind = CMD_KIND__OPEN_PANEL,
                       .window = w,
@@ -682,7 +692,7 @@ Internal void lane(Arena *arena) {
                       .dir = DIR__RIGHT,
                     });
                   }
-                  if (ui_button(Str8_("Split Y")).flags & UI_SIGNAL_FLAG__CLICKED) {
+                  if (ui_button(str8("Split Y")).flags & UI_SIGNAL_FLAG__CLICKED) {
                     cmd_push((Cmd){
                       .kind = CMD_KIND__OPEN_PANEL,
                       .window = w,
@@ -690,7 +700,7 @@ Internal void lane(Arena *arena) {
                       .dir = DIR__DOWN,
                     });
                   }
-                  if (ui_button(Str8_("Close")).flags & UI_SIGNAL_FLAG__CLICKED) {
+                  if (ui_button(str8("Close")).flags & UI_SIGNAL_FLAG__CLICKED) {
                     cmd_push((Cmd){
                       .kind = CMD_KIND__CLOSE_PANEL,
                       .window = w,
@@ -705,7 +715,7 @@ Internal void lane(Arena *arena) {
                 UI_Column() {
                   if (panel->view_count == 0) {
                     UI_Text_Color(oklch(0.682f, 0.176f, 252, 1.0f))
-                    ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Choose view kind."));
+                    ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Choose view kind."));
 
                     UI_Row()
                     UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
@@ -735,7 +745,7 @@ Internal void lane(Arena *arena) {
                         UI_Box *entities_box = ui_build_box_from_string(
                           UI_BOX_FLAG__DRAW_BORDER|
                           UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT,
-                          Str8_("entities"));
+                          str8("entities"));
 
                         //- kti: Fill entries
                         UI_Text_Padding(10.0f)
@@ -766,7 +776,7 @@ Internal void lane(Arena *arena) {
                           }
                           if (state->entity_count == 0) {
                             ui_set_next_text_color((F4){0.4f, 0.0f, 0.0f, 1.0f});
-                            ui_label(Str8_("No entities..."));
+                            ui_label(str8("No entities..."));
                           }
                         }
 
@@ -776,7 +786,7 @@ Internal void lane(Arena *arena) {
                         UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
                         UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
                         UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                        if (ui_button(Str8_("Create")).flags & UI_SIGNAL_FLAG__PRESSED) {
+                        if (ui_button(str8("Create")).flags & UI_SIGNAL_FLAG__PRESSED) {
                           cmd_push((Cmd){.kind = CMD_KIND__CREATE_ENTITY});
                           cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                         }
@@ -786,7 +796,7 @@ Internal void lane(Arena *arena) {
                       case VIEW_KIND__ENTITY: {
                         Entity *entity = entity_from_handle(state->selected_entity);
                         if (entity_is_nil(entity)) {
-                          ui_label(Str8_("Select an entity..."));
+                          ui_label(str8("Select an entity..."));
                         } else {
                           ui_set_next_child_layout_axis(AXIS__Y);
                           UI_Parent(ui_build_box_from_stringf(0, "entity_%p", entity)) {
@@ -794,7 +804,7 @@ Internal void lane(Arena *arena) {
                             ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
                             ui_set_next_font_size(ui_top_font_size()*0.8f);
                             ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
-                            ui_label(Str8_("Name"));
+                            ui_label(str8("Name"));
 
                             String8 name = {.str = entity->name, .len = entity->name_len};
                             UI_Pref_Width(ui_px(500.0f, 1.0f))
@@ -807,7 +817,7 @@ Internal void lane(Arena *arena) {
                                                              sizeof(entity->name),
                                                              &state->name_edit_buffer_len,
                                                              name,
-                                                             Str8_("name_textedit"));
+                                                             str8("name_textedit"));
                               if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
                                 entity->name_len = Min(sizeof(entity->name), state->name_edit_buffer_len);
                                 memmove(entity->name, state->name_edit_buffer, Min(entity->name_len, sizeof(entity->name)));
@@ -823,16 +833,16 @@ Internal void lane(Arena *arena) {
                             ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
                             ui_set_next_font_size(ui_top_font_size()*0.8f);
                             ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
-                            ui_label(Str8_("Postiion"));
+                            ui_label(str8("Postiion"));
 
                             UI_Row()
                             UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                             UI_Corner_Radius(ui_top_font_size()*0.2f) {
-                              ui_drag_F1(Str8_("X"), &entity->pos[0], 20.0f);
+                              ui_drag_F1(str8("X"), &entity->pos[0], 20.0f);
                               ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(Str8_("Y"), &entity->pos[1], 20.0f);
+                              ui_drag_F1(str8("Y"), &entity->pos[1], 20.0f);
                               ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(Str8_("Z"), &entity->pos[2], 20.0f);
+                              ui_drag_F1(str8("Z"), &entity->pos[2], 20.0f);
                             }
                             
                             ui_spacer(ui_px(10.0f, 1.0f));
@@ -841,16 +851,16 @@ Internal void lane(Arena *arena) {
                             UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
                             UI_Font_Size(ui_top_font_size()*0.8f)
                             UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
-                            ui_label(Str8_("Size"));
+                            ui_label(str8("Size"));
 
                             UI_Row()
                             UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                             UI_Corner_Radius(ui_top_font_size()*0.2f) {
-                              ui_drag_F1(Str8_("X"), &entity->size[0], 50.0f);
+                              ui_drag_F1(str8("X"), &entity->size[0], 50.0f);
                               ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(Str8_("Y"), &entity->size[1], 50.0f);
+                              ui_drag_F1(str8("Y"), &entity->size[1], 50.0f);
                               ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(Str8_("Z"), &entity->size[2], 50.0f);
+                              ui_drag_F1(str8("Z"), &entity->size[2], 50.0f);
                             }
 
                             ui_spacer(ui_px(10.0f, 1.0f));
@@ -859,11 +869,11 @@ Internal void lane(Arena *arena) {
                             UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
                             UI_Font_Size(ui_top_font_size()*0.8f)
                             UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
-                            ui_label(Str8_("Shape"));
+                            ui_label(str8("Shape"));
 
                             ui_set_next_child_layout_axis(AXIS__X);
                             ui_set_next_pref_height(ui_children_sum(1.0f));
-                            UI_Box *shape_selection = ui_build_box_from_string(0, Str8_("shape_selection"));
+                            UI_Box *shape_selection = ui_build_box_from_string(0, str8("shape_selection"));
                             UI_Parent(shape_selection) 
                             UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
                               for (L1 shape = 0; shape < SHAPE_COUNT; shape += 1) {
@@ -895,17 +905,17 @@ Internal void lane(Arena *arena) {
 
                             UI_Text_Color(oklch(1.0f, 0.0f, 0.0f, 1.0f))
                             UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                            ui_label(Str8_("Material"));
+                            ui_label(str8("Material"));
                             ui_spacer(ui_px(spacing*0.5f, 1.0f));
 
                             //- kti: Base Color
-                            widget_rgb_edit(Str8_("Base Color"), &entity->material.base_color);
+                            widget_rgb_edit(str8("Base Color"), &entity->material.base_color);
                             ui_spacer(ui_px(spacing, 1.0f));
 
                             //- kti: Metallic
                             UI_Row() {
                               UI_Pref_Width(ui_pct(0.15f, 1.0f))
-                              ui_label(Str8_("Metallic"));
+                              ui_label(str8("Metallic"));
                               ui_spacer(ui_px(10.0f, 1.0f));
                               ui_slider_F1(&entity->material.metallic, 0.0f, 1.0f); 
                             }
@@ -914,14 +924,14 @@ Internal void lane(Arena *arena) {
                             //- kti: Roughness
                             UI_Row() {
                               UI_Pref_Width(ui_pct(0.15f, 1.0f))
-                              ui_label(Str8_("Roughness"));
+                              ui_label(str8("Roughness"));
                               ui_spacer(ui_px(10.0f, 1.0f));
                               ui_slider_F1(&entity->material.roughness, 0.0f, 1.0f); 
                             }
                             ui_spacer(ui_px(spacing, 1.0f));
 
                             //- kti: Emissive
-                            widget_rgb_edit(Str8_("Emissive"), &entity->material.emissive);
+                            widget_rgb_edit(str8("Emissive"), &entity->material.emissive);
                             ui_spacer(ui_px(spacing, 1.0f));
                           }
                         }
@@ -942,8 +952,8 @@ Internal void lane(Arena *arena) {
         if (w->root_panel.first == 0) {
           UI_Text_Align((UI_TEXT_ALIGN__CENTER))
           UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
-            ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, Str8_("Last panel closed."));
-            if (ui_button(Str8_("Open Panel")).flags & UI_SIGNAL_FLAG__CLICKED) {
+            ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Last panel closed."));
+            if (ui_button(str8("Open Panel")).flags & UI_SIGNAL_FLAG__CLICKED) {
               panel_insert(panel_alloc(), &w->root_panel, 0);
             }
           }

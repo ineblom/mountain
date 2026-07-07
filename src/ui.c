@@ -1,4 +1,4 @@
-#if (TYP_)
+#if (HEADER)
 
 typedef enum UI_Cmd_Kind
 {
@@ -357,7 +357,7 @@ struct UI_State {
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 Global UI_Box ui_nil_box = {
   &ui_nil_box,
@@ -479,7 +479,7 @@ Internal UI_State *ui_state_alloc(void) {
   UI_State *prev_state = ui_state;
   ui_state = push_array(arena, UI_State, 1);
   ui_state->arena = arena;
-  ui_state->external_key = ui_key_from_string(ui_key_zero(), Str8_("external_interaction_key"));
+  ui_state->external_key = ui_key_from_string(ui_key_zero(), str8("external_interaction_key"));
   ui_state->build_arenas[0] = arena_alloc(MiB(64));
   ui_state->build_arenas[1] = arena_alloc(MiB(64));
   ui_state->drag_arena = arena_alloc(MiB(64));
@@ -1782,8 +1782,8 @@ Internal UI_Signal ui_named_row_end(void) {
   return signal;
 }
 
-Internal UI_Box *ui_column_begin(void) { return ui_named_column_begin(Str8_("")); }
-Internal UI_Box *ui_row_begin(void) { return ui_named_row_begin(Str8_("")); }
+Internal UI_Box *ui_column_begin(void) { return ui_named_column_begin(str8("")); }
+Internal UI_Box *ui_row_begin(void) { return ui_named_row_begin(str8("")); }
 Internal UI_Signal ui_column_end(void) { return ui_named_column_end(); }
 Internal UI_Signal ui_row_end(void) { return ui_named_row_end(); }
 
@@ -1855,8 +1855,8 @@ Internal UI_Signal ui_slider_F1(F1 *value, F1 min, F1 max) {
       UI_Corner_Radius(height*0.5f-1.0f)
       UI_Border_Color(oklch(0.5f, 0.0f, 0.0f, 1.0f)) {
         UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%p", value);
-        UI_Key bg_key = ui_key_from_string(box->key, Str8_("bg"));
-        UI_Key knob_key = ui_key_from_string(box->key, Str8_("knob"));
+        UI_Key bg_key = ui_key_from_string(box->key, str8("bg"));
+        UI_Key knob_key = ui_key_from_string(box->key, str8("knob"));
 
         box->group_key = box->key;
 
@@ -2141,7 +2141,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
   if (cmd->flags & UI_CMD_FLAG__DELETE) {
     Txt_Pt new_pos = txt_pt_min(next_cursor, next_mark);
     range = txt_range(next_cursor, next_mark);
-    replace = Str8_("");
+    replace = str8("");
     next_cursor = next_mark = new_pos;
   }
 
@@ -2253,7 +2253,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
     } else {
       F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];
       ui_set_next_pref_width(ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
-      UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, Str8_("###editstr"));
+      UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, str8("###editstr"));
     
       UI_Line_Edit_Draw_Data *draw_data = push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
       draw_data->edited_string = push_str8_copy(ui_build_arena(), edit_string);

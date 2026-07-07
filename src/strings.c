@@ -1,5 +1,5 @@
 
-#if (TYP_)
+#if (HEADER)
 
 typedef const char * CString;
 
@@ -41,11 +41,11 @@ struct Unicode_Decode {
   I1 codepoint;
 };
 
-#define Str8_(x) (String8){ .str = (B1 *)x, .len = sizeof(x) - 1 }
+#define str8(x) (String8){ .str = (B1 *)x, .len = sizeof(x) - 1 }
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 ////////////////////////////////
 //~ kti: String <-> Integer Tables

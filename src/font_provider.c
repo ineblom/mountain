@@ -3,7 +3,7 @@
 #include FT_FREETYPE_H
 #endif
 
-#if (TYP_)
+#if (HEADER)
 
 typedef struct FP_Handle FP_Handle;
 struct FP_Handle {
@@ -34,7 +34,7 @@ struct FP_State {
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 Global FP_State *fp_state = 0;
 

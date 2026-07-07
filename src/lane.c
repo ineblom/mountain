@@ -1,4 +1,4 @@
-#if (TYP_)
+#if (HEADER)
 typedef struct LaneCtx LaneCtx;
 struct LaneCtx {
   Arena *arena;
@@ -19,7 +19,7 @@ Inline Temp_Arena scratch_begin(Arena **conflicts, L1 count);
 Inline void scratch_end(Temp_Arena temp);
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 Global L1 sync_L1_val = 0;
 Global ThreadLocal LaneCtx *lane_ctx = 0;

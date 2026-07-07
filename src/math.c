@@ -1,4 +1,4 @@
-#if (TYP_)
+#if (HEADER)
 
 #define PI 3.141592653598979f
 #define GOLDEN_RATIO 1.61803398875f
@@ -37,7 +37,7 @@ enum {
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 ////////////////////////////////
 //~ F1

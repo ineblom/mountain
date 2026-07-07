@@ -1,5 +1,5 @@
 
-#if (TYP_)
+#if (HEADER)
 
 #pragma pack(push, 1)
 typedef struct Bitmap_Header Bitmap_Header;
@@ -33,7 +33,7 @@ struct Image {
 #endif
 
 
-#if (ROM_)
+#if (SOURCE)
 
 Inline L1 image_pixels_size(Image image) {
   return image.bytes_per_pixel * image.width * image.height;

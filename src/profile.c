@@ -27,7 +27,7 @@ Global ThreadLocal SpallBuffer spall_buffer;
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 Internal void prof_begin(const char *str, L1 length) {
   if (spall_buffer.data == 0) {

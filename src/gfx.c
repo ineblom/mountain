@@ -94,7 +94,7 @@ VK_EXTENSION_FUNCTIONS
 // Dynamically allocate new buffers if needed.
 #define MAX_RECTANGLE_COUNT 8192
 
-#if (TYP_)
+#if (HEADER)
 
 typedef struct GFX_Per_Frame GFX_Per_Frame;
 struct GFX_Per_Frame {
@@ -209,7 +209,7 @@ struct GFX_State {
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 Global GFX_State *gfx_state = 0;
 Global PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR = 0;
@@ -651,10 +651,10 @@ Internal void gfx_init() {
   ////////////////////////////////
   //~ kti: Load Core Procedures
 
-  void *lib = os_library_open(Str8_("libvulkan.so.1"));
+  void *lib = os_library_open(str8("libvulkan.so.1"));
   Assert(lib != 0);
 
-#define X(name) *(void **)&name = os_library_load_proc(lib, Str8_(#name));
+#define X(name) *(void **)&name = os_library_load_proc(lib, str8(#name));
   VK_CORE_FUNCTIONS
 #undef X
 
@@ -972,8 +972,8 @@ Internal void gfx_init() {
     .pDynamicStates = dynamic_states,
   };
 
-  String8 vert_shader_code = os_read_entire_file(arena, Str8_("./shaders/shader.vert.spv"));
-  String8 frag_shader_code = os_read_entire_file(arena, Str8_("./shaders/shader.frag.spv"));
+  String8 vert_shader_code = os_read_entire_file(arena, str8("./shaders/shader.vert.spv"));
+  String8 frag_shader_code = os_read_entire_file(arena, str8("./shaders/shader.frag.spv"));
 
   Assert(vert_shader_code.len != 0);
   Assert(frag_shader_code.len != 0);

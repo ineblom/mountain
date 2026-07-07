@@ -6,7 +6,7 @@
 
 #endif
 
-#if (CPU_ && TYP_)
+#if (CPU_ && HEADER)
 
 enum {
   ENTITY_FLAG__SHAPE = 1 << 0,
@@ -77,11 +77,11 @@ I1 axis_mode;
 
 #endif
 
-#if (CPU_ && ROM_)
+#if (CPU_ && SOURCE)
 
 String8 shape_strs[] = {
-  [SHAPE__BOX] = Str8_("BOX"),
-  [SHAPE__SPHERE] = Str8_("SPHERE"),
+  [SHAPE__BOX] = str8("BOX"),
+  [SHAPE__SPHERE] = str8("SPHERE"),
 };
 StaticAssert(ArrayCount(shape_strs) == SHAPE__COUNT);
 
@@ -718,7 +718,7 @@ Internal void lane(Arena *arena) {
   OS_Window *window = 0;
 
   if (lane_idx() == 0) {
-    window = os_window_open(arena, Str8_("Editor"), 1280, 720);
+    window = os_window_open(arena, str8("Editor"), 1280, 720);
     os_window_get_context(window);
 
     ramR->cam_dist = 3.0f;
@@ -729,10 +729,10 @@ Internal void lane(Arena *arena) {
     //~ kti: Materials
 
     //- kti: Default
-    material_create(Str8_("DEFAULT"));
+    material_create(str8("DEFAULT"));
 
     //- kti: Cube
-    L1 cube_material_idx = material_create(Str8_("CUBE"));
+    L1 cube_material_idx = material_create(str8("CUBE"));
     ramR->materials[cube_material_idx] = (RT_Material){
       .base_color = (F3){1.0f, 0.5f, 0.0f},
       .metallic = 0.0f,
@@ -740,7 +740,7 @@ Internal void lane(Arena *arena) {
     };
 
     //- kti: Light Material
-    L1 light_material_idx = material_create(Str8_("LIGHT"));
+    L1 light_material_idx = material_create(str8("LIGHT"));
     ramR->materials[light_material_idx].emissive = (F3){3.0f, 3.0f, 3.0f};
     ramR->selected_material_idx = L1_MAX;
 
@@ -748,24 +748,24 @@ Internal void lane(Arena *arena) {
     //~ kti: Entities
 
     //- kti: Camera
-    L1 camera = entity_create(ENTITY_FLAG__CAMERA, Str8_("CAMERA"));
+    L1 camera = entity_create(ENTITY_FLAG__CAMERA, str8("CAMERA"));
     ramR->entities[camera].pos = (F3){0.0f, 1.5f, 3.0f};
 
     //- kti: Cube
-    L1 cube_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("CUBE"));
+    L1 cube_idx = entity_create(ENTITY_FLAG__SHAPE, str8("CUBE"));
     ramR->entities[cube_idx].pos = (F3){0.0f, 0.0f, 0.0f};
     ramR->entities[cube_idx].material_idx = cube_material_idx;
     ramR->selected_entity_idx = cube_idx;
 
     //- kti: Floor
 
-    L1 floor_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("FLOOR"));
+    L1 floor_idx = entity_create(ENTITY_FLAG__SHAPE, str8("FLOOR"));
     ramR->entities[floor_idx].pos = (F3){0.0f,-0.55f, 0.0f};
     ramR->entities[floor_idx].size = (F3){5.0f, 0.05f, 5.0f};
 
     //- kti: Light
 
-    L1 light_idx = entity_create(ENTITY_FLAG__SHAPE, Str8_("LIGHT"));
+    L1 light_idx = entity_create(ENTITY_FLAG__SHAPE, str8("LIGHT"));
     Entity *light = &ramV->entities[light_idx];
     light->pos = (F3){0.0f, 6.0f, 0.0f};
     light->size = (F3){2.0f, 0.05f, 2.0f};
@@ -1227,17 +1227,17 @@ Internal void lane(Arena *arena) {
         ramR->panel_current_y = 0.0f;
         ramR->hot_hash = 0;
 
-        if (ui_button(Str8_("RENDER"))) {
+        if (ui_button(str8("RENDER"))) {
           should_render = 1;
           break;
         }
 
-        if (ui_button(Str8_("CREATE MATERIAL"))) {
+        if (ui_button(str8("CREATE MATERIAL"))) {
           String8 new_material_name = str8f(arena, "%d", ramR->material_count);
           material_create(new_material_name);
         }
 
-        if (ui_button(Str8_("CREATE ENTITY"))) {
+        if (ui_button(str8("CREATE ENTITY"))) {
           String8 new_entity_name = str8f(arena, "%d", ramR->entity_count);
           entity_create(ENTITY_FLAG__SHAPE, new_entity_name);
         }
@@ -1247,64 +1247,64 @@ Internal void lane(Arena *arena) {
 
           ui_textedit(e->name, &e->name_len, MAX_NAME_LEN);
 
-          if (ui_button(Str8_("DELETE"))) {
+          if (ui_button(str8("DELETE"))) {
             ramR->entities[ramR->selected_entity_idx] = ramR->entities[ramR->entity_count-1];
             ramR->selected_entity_idx = L1_MAX;
             ramR->selected_material_idx = L1_MAX;
             ramR->entity_count -= 1;
           }
 
-          ui_text(Str8_("POSITION"));
+          ui_text(str8("POSITION"));
           F1 x = e->pos.x, y = e->pos.y, z = e->pos.z;
-          ui_drag(Str8_(" X##pos"), &x);
-          ui_drag(Str8_(" Y##pos"), &y);
-          ui_drag(Str8_(" Z##pos"), &z);
+          ui_drag(str8(" X##pos"), &x);
+          ui_drag(str8(" Y##pos"), &y);
+          ui_drag(str8(" Z##pos"), &z);
           e->pos = (F3){x, y, z};
 
           if (e->flags & ENTITY_FLAG__SHAPE) {
-            ui_text(Str8_("SIZE"));
+            ui_text(str8("SIZE"));
             x = e->size.x, y = e->size.y, z = e->size.z;
-            ui_drag(Str8_(" X##size"), &x);
+            ui_drag(str8(" X##size"), &x);
             if (e->shape != SHAPE__SPHERE) {
-              ui_drag(Str8_(" Y##size"), &y);
-              ui_drag(Str8_(" Z##size"), &z);
+              ui_drag(str8(" Y##size"), &y);
+              ui_drag(str8(" Z##size"), &z);
             }
             e->size = (F3){Max(0, x), Max(0, y), Max(z, 0)};
 
-            if (ui_button(Str8_("OPEN MATERIAL"))) {
+            if (ui_button(str8("OPEN MATERIAL"))) {
               ramR->selected_entity_idx = L1_MAX;
               ramR->active_hash = 0;
               ramR->selected_material_idx = e->material_idx;
             }
-            ui_select(Str8_("MATERIAL"), ramR->material_names, ramR->material_count, &e->material_idx);
+            ui_select(str8("MATERIAL"), ramR->material_names, ramR->material_count, &e->material_idx);
 
-            ui_select(Str8_("SHAPE"), shape_strs, ArrayCount(shape_strs), &e->shape);
+            ui_select(str8("SHAPE"), shape_strs, ArrayCount(shape_strs), &e->shape);
           }
 
         } else if(ramR->selected_material_idx != L1_MAX) {
           RT_Material *mat = &ramR->materials[ramR->selected_material_idx];
 
-          ui_text(Str8_("MATERIAL"));
+          ui_text(str8("MATERIAL"));
 
           F1 x = mat->base_color.x, y = mat->base_color.y, z = mat->base_color.z;
-          ui_drag(Str8_(" R##color"), &x);
-          ui_drag(Str8_(" G##color"), &y);
-          ui_drag(Str8_(" B##color"), &z);
+          ui_drag(str8(" R##color"), &x);
+          ui_drag(str8(" G##color"), &y);
+          ui_drag(str8(" B##color"), &z);
           mat->base_color = (F3){x, y, z};
           mat->base_color = F3_clamp01(mat->base_color);
 
-          ui_drag(Str8_("METALLIC"), &mat->metallic);
-          ui_drag(Str8_("ROUGHNESS"), &mat->roughness);
+          ui_drag(str8("METALLIC"), &mat->metallic);
+          ui_drag(str8("ROUGHNESS"), &mat->roughness);
           mat->metallic = F1_clamp01(mat->metallic);
           mat->roughness = F1_clamp01(mat->roughness);
 
           x = mat->emissive.x, y = mat->emissive.y, z = mat->emissive.z;
-          ui_drag(Str8_(" R##emissive"), &x);
-          ui_drag(Str8_(" G##emissive"), &y);
-          ui_drag(Str8_(" B##emissive"), &z);
+          ui_drag(str8(" R##emissive"), &x);
+          ui_drag(str8(" G##emissive"), &y);
+          ui_drag(str8(" B##emissive"), &z);
           mat->emissive = (F3){Max(0, x), Max(0, y), Max(0, z)};
 
-          ui_text(Str8_("ENTITIES"));
+          ui_text(str8("ENTITIES"));
 
           for EachIndex(entity_idx, ramR->entity_count) {
             Entity *e = &ramR->entities[entity_idx];
@@ -1316,7 +1316,7 @@ Internal void lane(Arena *arena) {
             }
           }
         } else {
-          ui_select(Str8_("MATERIALS"), ramR->material_names, ramR->material_count, &ramR->selected_material_idx);
+          ui_select(str8("MATERIALS"), ramR->material_names, ramR->material_count, &ramR->selected_material_idx);
 
           String8 *entity_names = push_array(frame_arena.arena, String8, ramR->entity_count);
 
@@ -1325,7 +1325,7 @@ Internal void lane(Arena *arena) {
             entity_names[entity_index] = (String8){ e->name, e->name_len};
           }
 
-          ui_select(Str8_("ENTITIES"), entity_names, ramR->entity_count, &ramR->selected_entity_idx);
+          ui_select(str8("ENTITIES"), entity_names, ramR->entity_count, &ramR->selected_entity_idx);
 
         }
 
@@ -1393,7 +1393,7 @@ Internal void lane(Arena *arena) {
       camera.focal_distance = 3.0f;
 
       RT_Scene scene = {
-        .output_filename = Str8_("output.bmp"),
+        .output_filename = str8("output.bmp"),
         .output_width    = 1280,
         .output_height   = 720,
 
@@ -1404,7 +1404,7 @@ Internal void lane(Arena *arena) {
         .bloom_threshold        = 0.5f,
         .bloom_strength         = 0.4f,
         .bloom_knee             = 0.5f,
-        .bloom_overlay_filename = Str8_("lens-dirt.bmp"),
+        .bloom_overlay_filename = str8("lens-dirt.bmp"),
         .bloom_overlay_strength = 2.0f,
 
         .camera = camera,

@@ -4,7 +4,7 @@
 
 #endif
 
-#if (TYP_)
+#if (HEADER)
 
 typedef struct FC_Tag FC_Tag;
 struct FC_Tag {
@@ -183,7 +183,7 @@ struct FC_State {
 
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 
 Global FC_State *fc_state = 0;
 
@@ -512,7 +512,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
       I1 is_tab = (piece_substring.len == 1 && piece_substring.str[0] == '\t');
       if (is_tab) {
         run_is_cacheable = 0;
-        piece_substring = Str8_(" ");
+        piece_substring = str8(" ");
       }
 
       //- kti: Get raster info..

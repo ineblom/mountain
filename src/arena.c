@@ -1,4 +1,4 @@
-#if (TYP_)
+#if (HEADER)
 typedef struct Arena Arena;
 struct Arena {
   L1 pos;
@@ -12,7 +12,7 @@ struct Temp_Arena {
 };
 #endif
 
-#if (ROM_)
+#if (SOURCE)
 Internal Arena *arena_alloc(L1 max_size) {
   Assert(max_size > sizeof(Arena));
 

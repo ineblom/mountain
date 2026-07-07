@@ -1812,7 +1812,7 @@ Internal UI_Signal ui_buttonf(CString fmt, ...) {
 }
 
 // TODO(kti): Look at alignment.
-Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
+Internal UI_Signal ui_slider_F1(F1 *value, F1 min, F1 max) {
   UI_Signal signal = {0};
 
   F1 range = max - min;
@@ -1821,13 +1821,6 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
 
   ui_set_next_pref_height(ui_px(height, 1.0f));
   UI_Row() {
-    //- kti: Label
-    UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-    UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
-      ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str);
-      ui_spacer(ui_em(1.0f, 1.0f));
-    }
-
     //- kti: Value
     Temp_Arena scratch = scratch_begin(0, 0);
     F1 value_font_size = 10.0f;
@@ -1861,7 +1854,7 @@ Internal UI_Signal ui_slider_F1(String8 str, F1 *value, F1 min, F1 max) {
       UI_Pref_Height(ui_px(height, 1.0f))
       UI_Corner_Radius(height*0.5f-1.0f)
       UI_Border_Color(oklch(0.5f, 0.0f, 0.0f, 1.0f)) {
-        UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%.*s", str.len, str.str);
+        UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%p", value);
         UI_Key bg_key = ui_key_from_string(box->key, Str8_("bg"));
         UI_Key knob_key = ui_key_from_string(box->key, Str8_("knob"));
 

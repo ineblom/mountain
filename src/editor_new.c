@@ -903,11 +903,21 @@ Internal void lane(Arena *arena) {
                             ui_spacer(ui_px(spacing, 1.0f));
 
                             //- kti: Metallic
-                            ui_slider_F1(Str8_("Metallic"), &entity->material.metallic, 0.0f, 1.0f); 
+                            UI_Row() {
+                              UI_Pref_Width(ui_pct(0.15f, 1.0f))
+                              ui_label(Str8_("Metallic"));
+                              ui_spacer(ui_px(10.0f, 1.0f));
+                              ui_slider_F1(&entity->material.metallic, 0.0f, 1.0f); 
+                            }
                             ui_spacer(ui_px(spacing, 1.0f));
 
                             //- kti: Roughness
-                            ui_slider_F1(Str8_("Roughness"), &entity->material.roughness, 0.0f, 1.0f); 
+                            UI_Row() {
+                              UI_Pref_Width(ui_pct(0.15f, 1.0f))
+                              ui_label(Str8_("Roughness"));
+                              ui_spacer(ui_px(10.0f, 1.0f));
+                              ui_slider_F1(&entity->material.roughness, 0.0f, 1.0f); 
+                            }
                             ui_spacer(ui_px(spacing, 1.0f));
 
                             //- kti: Emissive

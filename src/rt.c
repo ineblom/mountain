@@ -692,11 +692,12 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene scene) {
 
 Internal void widget_rgb_edit(String8 label, F3 *rgb) {
   UI_Row()
-  UI_Text_Align(UI_TEXT_ALIGN__CENTER)
   UI_Corner_Radius(ui_top_font_size()*0.2f) {
-    UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+    UI_Pref_Width(ui_pct(0.15f, 1.0f))
     ui_label(label);
     ui_spacer(ui_px(10.0f, 1.0f));
+    
+    ui_push_text_align(UI_TEXT_ALIGN__CENTER);
 
     UI_Background_Color(oklch(0.3f, 0.15f, 35, 1.0f))
     UI_Border_Color(oklch(0.5f, 0.2f, 35, 1.0f)) {
@@ -722,6 +723,8 @@ Internal void widget_rgb_edit(String8 label, F3 *rgb) {
     UI_Corner_Radius(0) {
       ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("color"));
     }
+
+    ui_pop_text_align();
 
     rgb[0] = clamp01_F3(rgb[0]);
   }

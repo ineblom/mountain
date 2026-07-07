@@ -414,6 +414,7 @@ Internal Entity *entity_create(L1 flags, String8 name) {
     entity->flags = flags;
     entity->size = (F3){1.0f, 1.0f, 1.0f};
     entity->name_len = Min(name.len, sizeof(entity->name));
+    entity->material.base_color = (F3){0.9f, 0.9f, 0.9f};
     memmove(entity->name, name.str, entity->name_len);
   }
   return entity;
@@ -887,45 +888,31 @@ Internal void lane(Arena *arena) {
                               }
                             }
 
-                            ui_spacer(ui_px(10.0f, 1.0f));
+                            ui_spacer(ui_px(15.0f, 1.0f));
 
                             //- kti: Material
+                            F1 spacing = 20.0f;
 
-                            UI_Font_Size(ui_top_font_size()*0.8f)
-                            UI_Text_Color(((F4){1.0f, 0.0f, 0.0f, 1.0f}))
-                            ui_label(Str8_("Material"));
-
-                            UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                            UI_Font_Size(ui_top_font_size()*0.8f)
-                            UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
-                            ui_label(Str8_("Base Color"));
-
-                            UI_Row()
+                            UI_Text_Color(oklch(1.0f, 0.0f, 0.0f, 1.0f))
                             UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                            UI_Corner_Radius(ui_top_font_size()*0.2f) {
-                              F4 color = oklch_from_linear_rgb(F4_from_F3(entity->material.base_color, 1.0f));
-                              UI_Background_Color(color)
-                              UI_Pref_Width(ui_px(50.0f, 1.0f))
-                              UI_Corner_Radius(0)
-                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, Str8_("color"));
-                              ui_spacer(ui_px(5.0f, 1.0f));
+                            ui_label(Str8_("Material"));
+                            ui_spacer(ui_px(spacing*0.5f, 1.0f));
 
-                              UI_Background_Color(oklch(0.3f, 0.15f, 35, 1.0f))
-                              UI_Border_Color(oklch(0.5f, 0.2f, 35, 1.0f))
-                              ui_drag_F1(Str8_("R"), &entity->material.base_color[0], 200.0f);
-                              ui_spacer(ui_px(5.0f, 1.0f));
+                            //- kti: Base Color
+                            widget_rgb_edit(Str8_("Base Color"), &entity->material.base_color);
+                            ui_spacer(ui_px(spacing, 1.0f));
 
-                              UI_Background_Color(oklch(0.272f, 0.076f, 145, 1.0f))
-                              UI_Border_Color(oklch(0.484f, 0.164f, 145, 1.0f))
-                              ui_drag_F1(Str8_("G"), &entity->material.base_color[1], 200.0f);
-                              ui_spacer(ui_px(5.0f, 1.0f));
+                            //- kti: Metallic
+                            ui_slider_F1(Str8_("Metallic"), &entity->material.metallic, 0.0f, 1.0f); 
+                            ui_spacer(ui_px(spacing, 1.0f));
 
-                              UI_Background_Color(oklch(0.277f, 0.077f, 252, 1.0f))
-                              UI_Border_Color(oklch(0.493f, 0.172f, 252, 1.0f))
-                              ui_drag_F1(Str8_("B"), &entity->material.base_color[2], 200.0f);
+                            //- kti: Roughness
+                            ui_slider_F1(Str8_("Roughness"), &entity->material.roughness, 0.0f, 1.0f); 
+                            ui_spacer(ui_px(spacing, 1.0f));
 
-                              entity->material.base_color = clamp01_F3(entity->material.base_color);
-                            }
+                            //- kti: Emissive
+                            widget_rgb_edit(Str8_("Emissive"), &entity->material.emissive);
+                            ui_spacer(ui_px(spacing, 1.0f));
                           }
                         }
                       } break;

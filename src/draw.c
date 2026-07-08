@@ -143,6 +143,9 @@ Internal GFX_Pass *dr_pass_from_kind(DR_Bucket *bucket, GFX_Pass_Kind kind) {
     pass->kind = kind;
     pass->next = 0;
     MemoryZeroStruct(&pass->rect);
+    if (kind == GFX_PASS_KIND__MESH) {
+      pass->mesh.view_projection = identity_M4F();
+    }
     SLLQueuePush(bucket->passes.first, bucket->passes.last, pass);
   }
 
@@ -157,6 +160,26 @@ Internal GFX_Rect_Batch *dr_rect_batch_push(DR_Bucket *bucket, GFX_Rect_Pass *pa
   batch->instances = push_array(dr_state->arena, GFX_Rect_Instance, batch->instance_cap);
   SLLQueuePush(pass->first_batch, pass->last_batch, batch);
   return batch;
+}
+
+Internal GFX_Mesh_Batch *dr_mesh_batch_push(DR_Bucket *bucket, GFX_Mesh_Pass *pass, GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count) {
+  GFX_Mesh_Batch *batch = push_array(dr_state->arena, GFX_Mesh_Batch, 1);
+  batch->vertices = vertices;
+  batch->vertex_count = vertex_count;
+  batch->indices = indices;
+  batch->index_count = index_count;
+  batch->instance_cap = 256;
+  batch->instances = push_array(dr_state->arena, GFX_Mesh_Instance, batch->instance_cap);
+  SLLQueuePush(pass->first_batch, pass->last_batch, batch);
+  return batch;
+}
+
+Internal void dr_mesh_view_projection(M4F view_projection) {
+  DR_Bucket *bucket = dr_state->top_bucket;
+  if (bucket != 0) {
+    GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__MESH);
+    pass_n->mesh.view_projection = view_projection;
+  }
 }
 
 Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_softness) {
@@ -237,6 +260,44 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
       .colors = { color, color, color, color },
       .corner_radii = (F4){corner_radius, corner_radius, corner_radius, corner_radius},
       .softness = edge_softness,
+    };
+  }
+
+  ProfEnd();
+  return result;
+}
+
+Internal GFX_Mesh_Instance *dr_mesh(GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count, M4F transform, F4 color) {
+  ProfFuncBegin();
+
+  GFX_Mesh_Instance *result = 0;
+
+  DR_Bucket *bucket = dr_state->top_bucket;
+  if (bucket != 0 && vertices != 0 && indices != 0 && vertex_count > 0 && index_count > 0) {
+    GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__MESH);
+    GFX_Mesh_Pass *pass = &pass_n->mesh;
+    GFX_Mesh_Batch *batch = pass->last_batch;
+
+    I1 out_of_space = 0;
+    I1 mesh_requires_new_batch = 0;
+    if (batch) {
+      out_of_space = batch->instance_count >= batch->instance_cap;
+      mesh_requires_new_batch = batch->vertices != vertices ||
+                                batch->vertex_count != vertex_count ||
+                                batch->indices != indices ||
+                                batch->index_count != index_count;
+    }
+
+    if (batch == 0 || out_of_space || mesh_requires_new_batch) {
+      batch = dr_mesh_batch_push(bucket, pass, vertices, vertex_count, indices, index_count);
+    }
+
+    result = &batch->instances[batch->instance_count];
+    batch->instance_count += 1;
+
+    *result = (GFX_Mesh_Instance){
+      .transform = transform,
+      .color = color,
     };
   }
 

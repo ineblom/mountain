@@ -59,7 +59,9 @@
   X(vkGetPhysicalDeviceMemoryProperties) \
   X(vkBindBufferMemory) \
   X(vkCmdBindVertexBuffers) \
+  X(vkCmdBindIndexBuffer) \
   X(vkCmdDraw) \
+  X(vkCmdDrawIndexed) \
   X(vkCreateWaylandSurfaceKHR) \
   X(vkGetPhysicalDeviceWaylandPresentationSupportKHR) \
   X(vkCmdPushConstants) \
@@ -93,6 +95,9 @@ VK_EXTENSION_FUNCTIONS
 // TODO(kti): Find a way to avoid this.
 // Dynamically allocate new buffers if needed.
 #define MAX_RECTANGLE_COUNT 8192
+#define MAX_MESH_VERTEX_COUNT 65536
+#define MAX_MESH_INDEX_COUNT 196608
+#define MAX_MESH_INSTANCE_COUNT 8192
 
 #if (HEADER)
 
@@ -108,6 +113,21 @@ struct GFX_Per_Frame {
   VkDeviceMemory instance_buffer_memory;
   void *rect_instances;
   L1 rect_instances_count;
+
+  VkBuffer mesh_vertex_buffer;
+  VkDeviceMemory mesh_vertex_buffer_memory;
+  void *mesh_vertices;
+  L1 mesh_vertex_count;
+
+  VkBuffer mesh_index_buffer;
+  VkDeviceMemory mesh_index_buffer_memory;
+  void *mesh_indices;
+  L1 mesh_index_count;
+
+  VkBuffer mesh_instance_buffer;
+  VkDeviceMemory mesh_instance_buffer_memory;
+  void *mesh_instances;
+  L1 mesh_instance_count;
 };
 
 typedef struct GFX_Window GFX_Window;
@@ -168,12 +188,15 @@ struct GFX_Rect_Instance {
 typedef struct GFX_Mesh_Vertex GFX_Mesh_Vertex;
 struct GFX_Mesh_Vertex {
   F4 pos;
+  F4 normal;
+  F2 uv;
   F4 color;
 };
 
 typedef struct GFX_Mesh_Instance GFX_Mesh_Instance;
 struct GFX_Mesh_Instance {
   M4F transform;
+  F4 color;
 };
 
 typedef struct GFX_Rect_Batch GFX_Rect_Batch;
@@ -190,8 +213,14 @@ struct GFX_Rect_Batch {
 
 typedef struct GFX_Mesh_Batch GFX_Mesh_Batch;
 struct GFX_Mesh_Batch {
-  // vertices
-  // indices
+  GFX_Mesh_Batch *next;
+
+  GFX_Mesh_Vertex *vertices;
+  L1 vertex_count;
+
+  I1 *indices;
+  L1 index_count;
+
   GFX_Mesh_Instance *instances;
   L1 instance_cap;
   L1 instance_count;
@@ -205,6 +234,7 @@ struct GFX_Rect_Pass {
 
 typedef struct GFX_Mesh_Pass GFX_Mesh_Pass;
 struct GFX_Mesh_Pass {
+  M4F view_projection;
   GFX_Mesh_Batch *first_batch;
   GFX_Mesh_Batch *last_batch;
 };
@@ -244,6 +274,8 @@ struct GFX_State {
   L1 present_queue_index;
   VkPipelineLayout pipeline_layout;
   VkPipeline pipeline;
+  VkPipelineLayout mesh_pipeline_layout;
+  VkPipeline mesh_pipeline;
 
   L1 recycle_semaphores_count;
   VkSemaphore recycle_semaphores[16];
@@ -283,6 +315,34 @@ Internal I1 gfx_find_memory_type(VkMemoryRequirements mem_reqs, VkMemoryProperty
   }
   Assert(0); // Memory type not found
   return 0;
+}
+
+Internal void gfx_vk_create_mapped_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buffer, VkDeviceMemory *memory, void **ptr) {
+  VkBufferCreateInfo buffer_ci = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .size = size,
+    .usage = usage,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  VkResult result = vkCreateBuffer(gfx_state->device, &buffer_ci, 0, buffer);
+  Assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements memory_requirements = {0};
+  vkGetBufferMemoryRequirements(gfx_state->device, *buffer, &memory_requirements);
+
+  VkMemoryAllocateInfo alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = memory_requirements.size,
+    .memoryTypeIndex = gfx_find_memory_type(memory_requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+  };
+  result = vkAllocateMemory(gfx_state->device, &alloc_info, 0, memory);
+  Assert(result == VK_SUCCESS);
+
+  result = vkBindBufferMemory(gfx_state->device, *buffer, *memory, 0);
+  Assert(result == VK_SUCCESS);
+
+  result = vkMapMemory(gfx_state->device, *memory, 0, size, 0, ptr);
+  Assert(result == VK_SUCCESS);
 }
 
 ////////////////////////////////
@@ -1092,6 +1152,119 @@ Internal void gfx_init() {
   vkDestroyShaderModule(gfx_state->device, frag_shader, 0);
 
   ////////////////////////////////
+  //~ kti: Mesh Pipeline
+
+  VkPushConstantRange mesh_push_constants_range = {
+    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+    .offset = 0,
+    .size = sizeof(M4F),
+  };
+
+  VkPipelineLayoutCreateInfo mesh_layout_ci = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    .pushConstantRangeCount = 1,
+    .pPushConstantRanges = &mesh_push_constants_range,
+  };
+  result = vkCreatePipelineLayout(gfx_state->device, &mesh_layout_ci, 0, &gfx_state->mesh_pipeline_layout);
+  Assert(result == VK_SUCCESS);
+
+  VkVertexInputBindingDescription mesh_binding_descriptions[] = {
+    {
+      .binding = 0,
+      .stride = sizeof(GFX_Mesh_Vertex),
+      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+    },
+    {
+      .binding = 1,
+      .stride = sizeof(GFX_Mesh_Instance),
+      .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE,
+    },
+  };
+
+  VkVertexInputAttributeDescription mesh_attribute_descriptions[] = {
+    {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, pos)},
+    {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, normal)},
+    {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT,       .offset = offsetof(GFX_Mesh_Vertex, uv)},
+    {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, color)},
+    {.location = 4, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.c[0])},
+    {.location = 5, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.c[1])},
+    {.location = 6, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.c[2])},
+    {.location = 7, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.c[3])},
+    {.location = 8, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, color)},
+  };
+
+  VkPipelineVertexInputStateCreateInfo mesh_vertex_input = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    .vertexBindingDescriptionCount = ArrayCount(mesh_binding_descriptions),
+    .pVertexBindingDescriptions = mesh_binding_descriptions,
+    .vertexAttributeDescriptionCount = ArrayCount(mesh_attribute_descriptions),
+    .pVertexAttributeDescriptions = mesh_attribute_descriptions,
+  };
+
+  String8 mesh_vert_shader_code = os_read_entire_file(arena, str8("./shaders/mesh.vert.spv"));
+  String8 mesh_frag_shader_code = os_read_entire_file(arena, str8("./shaders/mesh.frag.spv"));
+
+  Assert(mesh_vert_shader_code.len != 0);
+  Assert(mesh_frag_shader_code.len != 0);
+
+  VkShaderModuleCreateInfo mesh_vert_shader_ci = {
+    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+    .codeSize = mesh_vert_shader_code.len,
+    .pCode = (const uint32_t *)mesh_vert_shader_code.str,
+  };
+  VkShaderModuleCreateInfo mesh_frag_shader_ci = {
+    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+    .codeSize = mesh_frag_shader_code.len,
+    .pCode = (const uint32_t *)mesh_frag_shader_code.str,
+  };
+
+  VkShaderModule mesh_vert_shader, mesh_frag_shader;
+
+  result = vkCreateShaderModule(gfx_state->device, &mesh_vert_shader_ci, 0, &mesh_vert_shader);
+  Assert(result == VK_SUCCESS);
+  result = vkCreateShaderModule(gfx_state->device, &mesh_frag_shader_ci, 0, &mesh_frag_shader);
+  Assert(result == VK_SUCCESS);
+
+  VkPipelineShaderStageCreateInfo mesh_shader_stages[] = {
+    {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_VERTEX_BIT,
+      .module = mesh_vert_shader,
+      .pName = "main",
+    },
+    {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+      .module = mesh_frag_shader,
+      .pName = "main",
+    },
+  };
+
+  VkGraphicsPipelineCreateInfo mesh_pipeline_ci = {
+    .sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+    .pNext               = &pipeline_rendering,
+    .stageCount          = ArrayCount(mesh_shader_stages),
+    .pStages             = mesh_shader_stages,
+    .pVertexInputState   = &mesh_vertex_input,
+    .pInputAssemblyState = &input_assembly,
+    .pViewportState      = &viewport,
+    .pRasterizationState = &raster,
+    .pMultisampleState   = &multisample,
+    .pDepthStencilState  = &depth_stencil,
+    .pColorBlendState    = &blend,
+    .pDynamicState       = &dynamic_state_ci,
+    .layout              = gfx_state->mesh_pipeline_layout,
+    .renderPass          = VK_NULL_HANDLE,
+    .subpass             = 0,
+  };
+
+  result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_pipeline_ci, 0, &gfx_state->mesh_pipeline);
+  Assert(result == VK_SUCCESS);
+
+  vkDestroyShaderModule(gfx_state->device, mesh_vert_shader, 0);
+  vkDestroyShaderModule(gfx_state->device, mesh_frag_shader, 0);
+
+  ////////////////////////////////
   //~ kti: Sampler
 
   VkSamplerCreateInfo sampler_ci = {
@@ -1341,6 +1514,29 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
 
     result = vkMapMemory(gfx_state->device, frame->instance_buffer_memory, 0, instance_buffer_ci.size, 0, &frame->rect_instances);
     Assert(result == VK_SUCCESS);
+
+    //- kti: Mesh Stream Buffers
+
+    gfx_vk_create_mapped_buffer(
+      sizeof(GFX_Mesh_Vertex) * MAX_MESH_VERTEX_COUNT,
+      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+      &frame->mesh_vertex_buffer,
+      &frame->mesh_vertex_buffer_memory,
+      &frame->mesh_vertices);
+
+    gfx_vk_create_mapped_buffer(
+      sizeof(I1) * MAX_MESH_INDEX_COUNT,
+      VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+      &frame->mesh_index_buffer,
+      &frame->mesh_index_buffer_memory,
+      &frame->mesh_indices);
+
+    gfx_vk_create_mapped_buffer(
+      sizeof(GFX_Mesh_Instance) * MAX_MESH_INSTANCE_COUNT,
+      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+      &frame->mesh_instance_buffer,
+      &frame->mesh_instance_buffer_memory,
+      &frame->mesh_instances);
   }
 
   return vkw;
@@ -1376,6 +1572,37 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
     }
     if (frame->instance_buffer_memory != VK_NULL_HANDLE) {
       vkFreeMemory(gfx_state->device, frame->instance_buffer_memory, 0);
+    }
+
+    //- kti: Free mesh stream buffers.
+    if (frame->mesh_vertex_buffer_memory != VK_NULL_HANDLE) {
+      vkUnmapMemory(gfx_state->device, frame->mesh_vertex_buffer_memory);
+    }
+    if (frame->mesh_vertex_buffer != VK_NULL_HANDLE) {
+      vkDestroyBuffer(gfx_state->device, frame->mesh_vertex_buffer, 0);
+    }
+    if (frame->mesh_vertex_buffer_memory != VK_NULL_HANDLE) {
+      vkFreeMemory(gfx_state->device, frame->mesh_vertex_buffer_memory, 0);
+    }
+
+    if (frame->mesh_index_buffer_memory != VK_NULL_HANDLE) {
+      vkUnmapMemory(gfx_state->device, frame->mesh_index_buffer_memory);
+    }
+    if (frame->mesh_index_buffer != VK_NULL_HANDLE) {
+      vkDestroyBuffer(gfx_state->device, frame->mesh_index_buffer, 0);
+    }
+    if (frame->mesh_index_buffer_memory != VK_NULL_HANDLE) {
+      vkFreeMemory(gfx_state->device, frame->mesh_index_buffer_memory, 0);
+    }
+
+    if (frame->mesh_instance_buffer_memory != VK_NULL_HANDLE) {
+      vkUnmapMemory(gfx_state->device, frame->mesh_instance_buffer_memory);
+    }
+    if (frame->mesh_instance_buffer != VK_NULL_HANDLE) {
+      vkDestroyBuffer(gfx_state->device, frame->mesh_instance_buffer, 0);
+    }
+    if (frame->mesh_instance_buffer_memory != VK_NULL_HANDLE) {
+      vkFreeMemory(gfx_state->device, frame->mesh_instance_buffer_memory, 0);
     }
 
     //- kti: Recycle semaphores.
@@ -1510,6 +1737,9 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
     vkw->per_frame[image_idx].rect_instances_count = 0;
+    vkw->per_frame[image_idx].mesh_vertex_count = 0;
+    vkw->per_frame[image_idx].mesh_index_count = 0;
+    vkw->per_frame[image_idx].mesh_instance_count = 0;
   }
 
   vkw->image_idx = image_idx;
@@ -1520,16 +1750,23 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_List passes) {
   I1 image_idx = vkw->image_idx;
   if (image_idx < vkw->image_count) {
-    VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
-    VkBuffer instance_buffer = vkw->per_frame[image_idx].instance_buffer;
-    GFX_Rect_Instance *rect_instances = (GFX_Rect_Instance *)vkw->per_frame[image_idx].rect_instances;
-    L1 rect_instances_count = vkw->per_frame[image_idx].rect_instances_count;
-
-    VkDeviceSize offset = {0};
-    vkCmdBindVertexBuffers(cmd, 0, 1, &instance_buffer, &offset);
+    GFX_Per_Frame *frame = &vkw->per_frame[image_idx];
+    VkCommandBuffer cmd = frame->command_buffer;
+    GFX_Rect_Instance *rect_instances = (GFX_Rect_Instance *)frame->rect_instances;
+    L1 rect_instances_count = frame->rect_instances_count;
+    GFX_Mesh_Vertex *mesh_vertices = (GFX_Mesh_Vertex *)frame->mesh_vertices;
+    I1 *mesh_indices = (I1 *)frame->mesh_indices;
+    GFX_Mesh_Instance *mesh_instances = (GFX_Mesh_Instance *)frame->mesh_instances;
+    L1 mesh_vertex_count = frame->mesh_vertex_count;
+    L1 mesh_index_count = frame->mesh_index_count;
+    L1 mesh_instance_count = frame->mesh_instance_count;
 
     for (GFX_Pass *pass = passes.first; pass != 0; pass = pass->next) {
       if (pass->kind == GFX_PASS_KIND__RECT) {
+        VkDeviceSize offset = {0};
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline);
+        vkCmdBindVertexBuffers(cmd, 0, 1, &frame->instance_buffer, &offset);
+
         GFX_Rect_Pass rect_pass = pass->rect;
         for (GFX_Rect_Batch *batch = rect_pass.first_batch; batch != 0; batch = batch->next) {
           // TODO(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
@@ -1598,10 +1835,64 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
           rect_instances_count += batch->instance_count;
         }
+      } else if (pass->kind == GFX_PASS_KIND__MESH) {
+        GFX_Mesh_Pass mesh_pass = pass->mesh;
+
+        VkRect2D scissor = {
+          .offset = {
+            .x = 0,
+            .y = 0,
+          },
+          .extent = {
+            .width  = vkw->swapchain_extent.width,
+            .height = vkw->swapchain_extent.height,
+          },
+        };
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_pipeline);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(M4F), &mesh_pass.view_projection);
+
+        for (GFX_Mesh_Batch *batch = mesh_pass.first_batch; batch != 0; batch = batch->next) {
+          if (batch->vertex_count == 0 || batch->index_count == 0 || batch->instance_count == 0) {
+            continue;
+          }
+
+          if (mesh_vertex_count + batch->vertex_count > MAX_MESH_VERTEX_COUNT ||
+              mesh_index_count + batch->index_count > MAX_MESH_INDEX_COUNT ||
+              mesh_instance_count + batch->instance_count > MAX_MESH_INSTANCE_COUNT) {
+            printf("Max mesh stream buffer count reached for frame. Skipping batch.\n");
+            continue;
+          }
+
+          memmove(mesh_vertices + mesh_vertex_count, batch->vertices, batch->vertex_count*sizeof(GFX_Mesh_Vertex));
+          memmove(mesh_indices + mesh_index_count, batch->indices, batch->index_count*sizeof(I1));
+          memmove(mesh_instances + mesh_instance_count, batch->instances, batch->instance_count*sizeof(GFX_Mesh_Instance));
+
+          VkBuffer vertex_buffers[] = {
+            frame->mesh_vertex_buffer,
+            frame->mesh_instance_buffer,
+          };
+          VkDeviceSize vertex_offsets[] = {
+            mesh_vertex_count * sizeof(GFX_Mesh_Vertex),
+            mesh_instance_count * sizeof(GFX_Mesh_Instance),
+          };
+          vkCmdBindVertexBuffers(cmd, 0, ArrayCount(vertex_buffers), vertex_buffers, vertex_offsets);
+          vkCmdBindIndexBuffer(cmd, frame->mesh_index_buffer, mesh_index_count * sizeof(I1), VK_INDEX_TYPE_UINT32);
+
+          vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
+
+          mesh_vertex_count += batch->vertex_count;
+          mesh_index_count += batch->index_count;
+          mesh_instance_count += batch->instance_count;
+        }
       }
     }
 
-    vkw->per_frame[image_idx].rect_instances_count = rect_instances_count;
+    frame->rect_instances_count = rect_instances_count;
+    frame->mesh_vertex_count = mesh_vertex_count;
+    frame->mesh_index_count = mesh_index_count;
+    frame->mesh_instance_count = mesh_instance_count;
   }
 }
 

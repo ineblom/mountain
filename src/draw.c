@@ -138,15 +138,14 @@ Internal void dr_begin_frame(void) {
 
 Internal GFX_Pass *dr_pass_from_kind(DR_Bucket *bucket, GFX_Pass_Kind kind) {
   GFX_Pass *pass = bucket->passes.last;
-  if (pass != 0 && pass->kind == kind) {
-    return pass;
+  if (pass == 0 || pass->kind != kind) {
+    pass = push_array(dr_state->arena, GFX_Pass, 1);
+    pass->kind = kind;
+    pass->next = 0;
+    MemoryZeroStruct(&pass->rect);
+    SLLQueuePush(bucket->passes.first, bucket->passes.last, pass);
   }
 
-  pass = push_array(dr_state->arena, GFX_Pass, 1);
-  pass->kind = kind;
-  pass->next = 0;
-  MemoryZeroStruct(&pass->rect);
-  SLLQueuePush(bucket->passes.first, bucket->passes.last, pass);
   return pass;
 }
 

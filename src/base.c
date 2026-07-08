@@ -34,6 +34,13 @@ typedef float F2 VEC_TYPE(2, float);
 typedef float F3 VEC_TYPE(4, float);
 typedef float F4 VEC_TYPE(4, float);
 
+typedef union M4F M4F;
+union M4F {
+  F4 c[4];
+  F1 m[4][4];
+  F1 v[16];
+};
+
 typedef int SI2 VEC_TYPE(2, int);
 typedef int SI4 VEC_TYPE(4, int);
 

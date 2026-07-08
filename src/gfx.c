@@ -128,23 +128,10 @@ struct GFX_Window {
   I1 frame_active;
 };
 
-typedef struct GFX_Rect_Instance GFX_Rect_Instance;
-struct GFX_Rect_Instance {
-  F4 dst_rect;
-  F4 src_rect;
-  F4 colors[4];
-  F4 corner_radii;
-  F4 border_color;
-  F1 border_width;
-  F1 softness;
-  F1 omit_texture;
-};
-
-typedef I1 GFX_Texture_Usage;
-enum {
+typedef enum GFX_Texture_Usage {
   GFX_TEXTURE_USAGE__DYNAMIC,
   GFX_TEXTURE_USAGE__STATIC,
-};
+} GFX_Texture_Usage;
 
 typedef struct GFX_Texture GFX_Texture;
 struct GFX_Texture {
@@ -161,9 +148,28 @@ struct GFX_Texture {
   void *staging_ptr;
 };
 
-typedef struct GFX_Batch GFX_Batch;
-struct GFX_Batch {
-  GFX_Batch *next;
+
+typedef struct GFX_Rect_Instance GFX_Rect_Instance;
+struct GFX_Rect_Instance {
+  F4 dst_rect;
+  F4 src_rect;
+  F4 colors[4];
+  F4 corner_radii;
+  F4 border_color;
+  F1 border_width;
+  F1 softness;
+  F1 omit_texture;
+};
+
+typedef struct GFX_Mesh_Instance GFX_Mesh_Instance;
+struct GFX_Mesh_Instance {
+  M4F transform;
+  F4 color;
+};
+
+typedef struct GFX_Rect_Batch GFX_Rect_Batch;
+struct GFX_Rect_Batch {
+  GFX_Rect_Batch *next;
 
   F4 clip_rect;
   GFX_Texture *texture;
@@ -173,10 +179,47 @@ struct GFX_Batch {
   L1 instance_count;
 };
 
-typedef struct GFX_Batch_List GFX_Batch_List;
-struct GFX_Batch_List {
-  GFX_Batch *first;
-  GFX_Batch *last;
+typedef struct GFX_Mesh_Batch GFX_Mesh_Batch;
+struct GFX_Mesh_Batch {
+  // vertices
+  // indices
+  GFX_Mesh_Instance *instances;
+  L1 instance_cap;
+  L1 instance_count;
+};
+
+typedef struct GFX_Rect_Pass GFX_Rect_Pass;
+struct GFX_Rect_Pass {
+  GFX_Rect_Batch *first_batch;
+  GFX_Rect_Batch *last_batch;
+};
+
+typedef struct GFX_Mesh_Pass GFX_Mesh_Pass;
+struct GFX_Mesh_Pass {
+  GFX_Mesh_Batch *first_batch;
+  GFX_Mesh_Batch *last_batch;
+};
+
+typedef enum GFX_Pass_Kind  {
+  GFX_PASS_KIND__RECT,
+  GFX_PASS_KIND__MESH,
+} GFX_Pass_Kind;
+
+typedef struct GFX_Pass GFX_Pass;
+struct GFX_Pass {
+  GFX_Pass *next;
+  GFX_Pass_Kind kind;
+
+  union {
+    GFX_Rect_Pass rect;
+    GFX_Mesh_Pass mesh;
+  };
+};
+
+typedef struct GFX_Pass_List GFX_Pass_List;
+struct GFX_Pass_List {
+  GFX_Pass *first;
+  GFX_Pass *last;
 };
 
 typedef struct GFX_State GFX_State;
@@ -1467,8 +1510,10 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   ProfEnd();
 }
 
-Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch_List batches) {
+Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_List passes) {
+  // TODO: Look into if this is necessary.
   if (!vkw->frame_active) return;
+
   I1 image_idx = gfx_state->image_idx;
   VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
   VkBuffer instance_buffer = vkw->per_frame[image_idx].instance_buffer;
@@ -1478,72 +1523,78 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Batch
   VkDeviceSize offset = {0};
   vkCmdBindVertexBuffers(cmd, 0, 1, &instance_buffer, &offset);
 
-  for (GFX_Batch *batch = batches.first; batch != 0; batch = batch->next) {
-    // TODO(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
-    // Alternatively we could allocate a buffer that could contain the entire batch. This would allow for "infinite" rectangle counts.
-    if (rect_instances_count + batch->instance_count > MAX_RECTANGLE_COUNT) {
-      printf("Max number of rectangle instances reached for frame. Skipping batch.\n");
-      continue;
-    }
+  for (GFX_Pass *pass = passes.first; pass != 0; pass = pass->next) {
+    if (pass->kind == GFX_PASS_KIND__RECT) {
+      GFX_Rect_Pass rect_pass = pass->rect;
 
-    //- kti: Clip
-    VkRect2D scissor = {
-      .offset = {
-        .x = 0,
-        .y = 0,
-      },
-      .extent = {
-        .width  = vkw->swapchain_extent.width,
-        .height = vkw->swapchain_extent.height,
-      },
-    };
-    if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
-        batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
-      F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
-      F4 intersection = rect_overlap(screen_rect, batch->clip_rect);
-      if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
-        scissor.offset.x = intersection[0];
-        scissor.offset.y = intersection[1];
-        scissor.extent.width = intersection[2];
-        scissor.extent.height = intersection[3];
-      } else {
-        // NOTE(kti): Clip and screen rect don't overlap, we can skip the batch.
-        continue;
+      for (GFX_Rect_Batch *batch = rect_pass.first_batch; batch != 0; batch = batch->next) {
+        // TODO(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
+        // Alternatively we could allocate a buffer that could contain the entire batch. This would allow for "infinite" rectangle counts.
+        if (rect_instances_count + batch->instance_count > MAX_RECTANGLE_COUNT) {
+          printf("Max number of rectangle instances reached for frame. Skipping batch.\n");
+          continue;
+        }
+
+        //- kti: Clip
+        VkRect2D scissor = {
+          .offset = {
+            .x = 0,
+            .y = 0,
+          },
+          .extent = {
+            .width  = vkw->swapchain_extent.width,
+            .height = vkw->swapchain_extent.height,
+          },
+        };
+        if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
+            batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
+          F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+          F4 intersection = rect_overlap(screen_rect, batch->clip_rect);
+          if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
+            scissor.offset.x = intersection[0];
+            scissor.offset.y = intersection[1];
+            scissor.extent.width = intersection[2];
+            scissor.extent.height = intersection[3];
+          } else {
+            // NOTE(kti): Clip and screen rect don't overlap, we can skip the batch.
+            continue;
+          }
+        }
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        //- kti: Texture
+        GFX_Texture *texture = batch->texture;
+        if (texture == 0) {
+          texture = gfx_state->white_texture;
+        }
+        VkDescriptorImageInfo image_info = {
+          .sampler = gfx_state->texture_sampler,
+          .imageView = texture->image_view,
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkWriteDescriptorSet write = {
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstBinding = 0,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .pImageInfo = &image_info,
+        };
+        vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline_layout, 0, 1, &write);
+
+        //- kti: Push Constants
+        F1 push_data[4] = {
+          vkw->swapchain_extent.width, vkw->swapchain_extent.height,
+          (F1)texture->width, (F1)texture->height
+        };
+        vkCmdPushConstants(cmd, gfx_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
+
+        //- kti: Draw
+        memmove(rect_instances + rect_instances_count, batch->instances, batch->instance_count*sizeof(GFX_Rect_Instance));
+        vkCmdDraw(cmd, 6, batch->instance_count, 0, rect_instances_count);
+
+        rect_instances_count += batch->instance_count;
       }
     }
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-    //- kti: Texture
-    GFX_Texture *texture = batch->texture;
-    if (texture == 0) {
-      texture = gfx_state->white_texture;
-    }
-    VkDescriptorImageInfo image_info = {
-      .sampler = gfx_state->texture_sampler,
-      .imageView = texture->image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkWriteDescriptorSet write = {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstBinding = 0,
-      .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .pImageInfo = &image_info,
-    };
-    vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline_layout, 0, 1, &write);
-
-    //- kti: Push Constants
-    F1 push_data[4] = {
-      vkw->swapchain_extent.width, vkw->swapchain_extent.height,
-      (F1)texture->width, (F1)texture->height
-    };
-    vkCmdPushConstants(cmd, gfx_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
-
-    //- kti: Draw
-    memmove(rect_instances + rect_instances_count, batch->instances, batch->instance_count*sizeof(GFX_Rect_Instance));
-    vkCmdDraw(cmd, 6, batch->instance_count, 0, rect_instances_count);
-
-    rect_instances_count += batch->instance_count;
   }
 
   vkw->per_frame[image_idx].rect_instances_count = rect_instances_count;

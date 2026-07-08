@@ -157,6 +157,118 @@ Inline F4 F4_from_F3(F3 v, F1 w) {
 }
 
 ////////////////////////////////
+//~ M4F
+
+Inline M4F identity_M4F(void) {
+  M4F result = {0};
+  result.m[0][0] = 1.0f;
+  result.m[1][1] = 1.0f;
+  result.m[2][2] = 1.0f;
+  result.m[3][3] = 1.0f;
+  return result;
+}
+
+Inline M4F mul_M4F(M4F a, M4F b) {
+  M4F result = {0};
+  for (I1 col = 0; col < 4; col += 1) {
+    for (I1 row = 0; row < 4; row += 1) {
+      F1 sum = 0.0f;
+      for (I1 i = 0; i < 4; i += 1) {
+        sum += a.m[i][row] * b.m[col][i];
+      }
+      result.m[col][row] = sum;
+    }
+  }
+  return result;
+}
+
+Inline M4F translate_M4F(F3 p) {
+  M4F result = identity_M4F();
+  result.m[3][0] = p[0];
+  result.m[3][1] = p[1];
+  result.m[3][2] = p[2];
+  return result;
+}
+
+Inline M4F scale_M4F(F3 s) {
+  M4F result = identity_M4F();
+  result.m[0][0] = s[0];
+  result.m[1][1] = s[1];
+  result.m[2][2] = s[2];
+  return result;
+}
+
+Inline M4F rotate_x_M4F(F1 angle_rad) {
+  F1 c = cosf(angle_rad);
+  F1 s = sinf(angle_rad);
+  M4F result = identity_M4F();
+  result.m[1][1] = c;
+  result.m[1][2] = s;
+  result.m[2][1] = -s;
+  result.m[2][2] = c;
+  return result;
+}
+
+Inline M4F rotate_y_M4F(F1 angle_rad) {
+  F1 c = cosf(angle_rad);
+  F1 s = sinf(angle_rad);
+  M4F result = identity_M4F();
+  result.m[0][0] = c;
+  result.m[0][2] = -s;
+  result.m[2][0] = s;
+  result.m[2][2] = c;
+  return result;
+}
+
+Inline M4F rotate_z_M4F(F1 angle_rad) {
+  F1 c = cosf(angle_rad);
+  F1 s = sinf(angle_rad);
+  M4F result = identity_M4F();
+  result.m[0][0] = c;
+  result.m[0][1] = s;
+  result.m[1][0] = -s;
+  result.m[1][1] = c;
+  return result;
+}
+
+Inline M4F frustum_M4F(F1 left, F1 right, F1 bottom, F1 top, F1 near_z, F1 far_z) {
+  M4F result = {0};
+  result.m[0][0] = (2.0f * near_z) / (right - left);
+  result.m[1][1] = (2.0f * near_z) / (top - bottom);
+  result.m[2][0] = (right + left) / (right - left);
+  result.m[2][1] = (top + bottom) / (top - bottom);
+  result.m[2][2] = -(far_z + near_z) / (far_z - near_z);
+  result.m[2][3] = -1.0f;
+  result.m[3][2] = -(2.0f * far_z * near_z) / (far_z - near_z);
+  return result;
+}
+
+Inline F4 mul_M4F_F4(M4F m, F4 v) {
+  F4 result = {0};
+  for (I1 row = 0; row < 4; row += 1) {
+    result[row] =
+      m.m[0][row] * v[0] +
+      m.m[1][row] * v[1] +
+      m.m[2][row] * v[2] +
+      m.m[3][row] * v[3];
+  }
+  return result;
+}
+
+Inline F3 transform_point_M4F(M4F m, F3 p) {
+  F4 transformed = mul_M4F_F4(m, F4_from_F3(p, 1.0f));
+  F1 inv_w = 1.0f / transformed[3];
+  F3 result = {transformed[0] * inv_w, transformed[1] * inv_w, transformed[2] * inv_w};
+  return result;
+}
+
+Inline F3 transform_vector_M4F(M4F m, F3 v) {
+  F4 transformed = mul_M4F_F4(m, F4_from_F3(v, 0.0f));
+  F3 result = {transformed[0], transformed[1], transformed[2]};
+  return result;
+}
+
+////////////////////////////////
 //~ Ray
 
 Internal F1 ray_aabb_intersect(F3 ray_origin, F3 ray_direction, F3 aabb_min, F3 aabb_max) {

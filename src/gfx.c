@@ -117,13 +117,17 @@ struct GFX_Window {
   VkSurfaceKHR surface;
   I1 surface_format_count;
   VkSurfaceFormatKHR *surface_formats;
+
   I1 present_mode_count;
   VkPresentModeKHR *present_modes;
+
   VkSwapchainKHR swapchain;
   VkExtent2D swapchain_extent;
+
   I1 image_count;
   VkImage *swapchain_images;
   VkImageView *swapchain_image_views;
+
   GFX_Per_Frame *per_frame;
   I1 image_idx;
 };
@@ -161,10 +165,15 @@ struct GFX_Rect_Instance {
   F1 omit_texture;
 };
 
+typedef struct GFX_Mesh_Vertex GFX_Mesh_Vertex;
+struct GFX_Mesh_Vertex {
+  F4 pos;
+  F4 color;
+};
+
 typedef struct GFX_Mesh_Instance GFX_Mesh_Instance;
 struct GFX_Mesh_Instance {
   M4F transform;
-  F4 color;
 };
 
 typedef struct GFX_Rect_Batch GFX_Rect_Batch;
@@ -1522,7 +1531,6 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
     for (GFX_Pass *pass = passes.first; pass != 0; pass = pass->next) {
       if (pass->kind == GFX_PASS_KIND__RECT) {
         GFX_Rect_Pass rect_pass = pass->rect;
-
         for (GFX_Rect_Batch *batch = rect_pass.first_batch; batch != 0; batch = batch->next) {
           // TODO(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
           // Alternatively we could allocate a buffer that could contain the entire batch. This would allow for "infinite" rectangle counts.

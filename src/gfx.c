@@ -1423,7 +1423,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     // - kti: Recycle the semaphore we never used.
     gfx_vk_recycle_semaphore(acquire_semaphore);
     vkQueueWaitIdle(gfx_state->queue);
-    vkw->image_idx = I1_MAX;
+    image_idx = I1_MAX;
   } else {
     //- kti: Wait for previous work submitted to this image is complete.
     vkWaitForFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence, VK_TRUE, L1_MAX);

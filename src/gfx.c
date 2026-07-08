@@ -125,7 +125,7 @@ struct GFX_Window {
   VkImage *swapchain_images;
   VkImageView *swapchain_image_views;
   GFX_Per_Frame *per_frame;
-  I1 frame_active;
+  I1 image_idx;
 };
 
 typedef enum GFX_Texture_Usage {
@@ -235,8 +235,6 @@ struct GFX_State {
   L1 present_queue_index;
   VkPipelineLayout pipeline_layout;
   VkPipeline pipeline;
-
-  I1 image_idx;
 
   L1 recycle_semaphores_count;
   VkSemaphore recycle_semaphores[16];
@@ -1239,6 +1237,7 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
     SLLStackPop(gfx_state->first_free_window);
     MemoryZeroStruct(vkw);
   }
+  vkw->image_idx = I1_MAX;
 
   ////////////////////////////////
   //~ kti: Surface
@@ -1402,8 +1401,8 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     VkResult result = vkCreateSemaphore(gfx_state->device, &semaphore_ci, 0, &acquire_semaphore);
     Assert(result == VK_SUCCESS);
   } else {
-    acquire_semaphore = gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count - 1];
     gfx_state->recycle_semaphores_count -= 1;
+    acquire_semaphore = gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count];
   }
 
   //- kti: Grab the next image.
@@ -1418,250 +1417,248 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     }
   }
 
+
   //- kti: If grabbing image failed we return early.
   if (img_acquire_result != VK_SUCCESS) {
     // - kti: Recycle the semaphore we never used.
     gfx_vk_recycle_semaphore(acquire_semaphore);
     vkQueueWaitIdle(gfx_state->queue);
-    vkw->frame_active = 0;
-    return;
+    vkw->image_idx = I1_MAX;
+  } else {
+    //- kti: Wait for previous work submitted to this image is complete.
+    vkWaitForFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence, VK_TRUE, L1_MAX);
+    vkResetFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence);
+
+    //- kti: Recycle old semaphore and store new one.
+    gfx_vk_recycle_semaphore(vkw->per_frame[image_idx].swapchain_acquire_semaphore);
+    vkw->per_frame[image_idx].swapchain_acquire_semaphore = acquire_semaphore;
+
+    // TODO(kti): Look into whether or not we need to release resources.
+    vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+
+    ////////////////////////////////
+    //~ kti: Begin Rendering
+
+    VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
+    VkCommandBufferBeginInfo begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+
+    VkResult result = vkBeginCommandBuffer(cmd, &begin_info);
+    Assert(result == VK_SUCCESS);
+
+    gfx_vk_transition_image_layout(
+      cmd,
+      vkw->swapchain_images[image_idx],
+      VK_IMAGE_LAYOUT_UNDEFINED,
+      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      0,
+      VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+      VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+    VkClearValue clear_value = {.color= {{0.0f, 0.0f, 0.0f, 1.0f}}};
+
+    VkRenderingAttachmentInfo color_attachment = {
+      .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView   = vkw->swapchain_image_views[image_idx],
+      .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue  = clear_value,
+    };
+
+    VkRenderingInfo rendering_info = {
+      .sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
+      .renderArea = {
+        .offset = {0, 0},
+        .extent = {
+          .width = vkw->swapchain_extent.width,
+          .height = vkw->swapchain_extent.height,
+        }
+      },
+      .layerCount = 1,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &color_attachment
+    };
+
+    vkCmdBeginRendering(cmd, &rendering_info);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline);
+
+    VkViewport viewport = {
+      .width = vkw->swapchain_extent.width,
+      .height = vkw->swapchain_extent.height,
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+    };
+
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
+    vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
+    vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+    vkw->per_frame[image_idx].rect_instances_count = 0;
   }
 
-  //- kti: Wait for previous work submitted to this image is complete.
-  vkWaitForFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence, VK_TRUE, L1_MAX);
-  vkResetFences(gfx_state->device, 1, &vkw->per_frame[image_idx].queue_submit_fence);
-
-  //- kti: Recycle old semaphore and store new one.
-  gfx_vk_recycle_semaphore(vkw->per_frame[image_idx].swapchain_acquire_semaphore);
-  vkw->per_frame[image_idx].swapchain_acquire_semaphore = acquire_semaphore;
-
-  gfx_state->image_idx = image_idx;
-  vkw->frame_active = 1;
-
-  // TODO(kti): Look into whether or not we need to release resources.
-  vkResetCommandPool(gfx_state->device, vkw->per_frame[image_idx].command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
-
-  ////////////////////////////////
-  //~ kti: Begin Rendering
-
-  VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
-  VkCommandBufferBeginInfo begin_info = {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-
-  VkResult result = vkBeginCommandBuffer(cmd, &begin_info);
-  Assert(result == VK_SUCCESS);
-
-  gfx_vk_transition_image_layout(
-    cmd,
-    vkw->swapchain_images[image_idx],
-    VK_IMAGE_LAYOUT_UNDEFINED,
-    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    0,
-    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-    VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-
-  VkClearValue clear_value = {.color= {{0.0f, 0.0f, 0.0f, 1.0f}}};
-
-  VkRenderingAttachmentInfo color_attachment = {
-    .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-    .imageView   = vkw->swapchain_image_views[image_idx],
-    .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
-    .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
-    .clearValue  = clear_value,
-  };
-
-  VkRenderingInfo rendering_info = {
-    .sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
-    .renderArea = {
-      .offset = {0, 0},
-      .extent = {
-        .width = vkw->swapchain_extent.width,
-        .height = vkw->swapchain_extent.height,
-      }
-    },
-    .layerCount = 1,
-    .colorAttachmentCount = 1,
-    .pColorAttachments = &color_attachment
-  };
-
-  vkCmdBeginRendering(cmd, &rendering_info);
-
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline);
-
-  VkViewport viewport = {
-    .width = vkw->swapchain_extent.width,
-    .height = vkw->swapchain_extent.height,
-    .minDepth = 0.0f,
-    .maxDepth = 1.0f,
-  };
-
-  vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-  vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
-  vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
-  vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-
-  vkw->per_frame[image_idx].rect_instances_count = 0;
+  vkw->image_idx = image_idx;
 
   ProfEnd();
 }
 
 Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_List passes) {
-  // TODO: Look into if this is necessary.
-  if (!vkw->frame_active) return;
+  I1 image_idx = vkw->image_idx;
+  if (image_idx < vkw->image_count) {
+    VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
+    VkBuffer instance_buffer = vkw->per_frame[image_idx].instance_buffer;
+    GFX_Rect_Instance *rect_instances = (GFX_Rect_Instance *)vkw->per_frame[image_idx].rect_instances;
+    L1 rect_instances_count = vkw->per_frame[image_idx].rect_instances_count;
 
-  I1 image_idx = gfx_state->image_idx;
-  VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
-  VkBuffer instance_buffer = vkw->per_frame[image_idx].instance_buffer;
-  GFX_Rect_Instance *rect_instances = (GFX_Rect_Instance *)vkw->per_frame[image_idx].rect_instances;
-  L1 rect_instances_count = vkw->per_frame[image_idx].rect_instances_count;
+    VkDeviceSize offset = {0};
+    vkCmdBindVertexBuffers(cmd, 0, 1, &instance_buffer, &offset);
 
-  VkDeviceSize offset = {0};
-  vkCmdBindVertexBuffers(cmd, 0, 1, &instance_buffer, &offset);
+    for (GFX_Pass *pass = passes.first; pass != 0; pass = pass->next) {
+      if (pass->kind == GFX_PASS_KIND__RECT) {
+        GFX_Rect_Pass rect_pass = pass->rect;
 
-  for (GFX_Pass *pass = passes.first; pass != 0; pass = pass->next) {
-    if (pass->kind == GFX_PASS_KIND__RECT) {
-      GFX_Rect_Pass rect_pass = pass->rect;
-
-      for (GFX_Rect_Batch *batch = rect_pass.first_batch; batch != 0; batch = batch->next) {
-        // TODO(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
-        // Alternatively we could allocate a buffer that could contain the entire batch. This would allow for "infinite" rectangle counts.
-        if (rect_instances_count + batch->instance_count > MAX_RECTANGLE_COUNT) {
-          printf("Max number of rectangle instances reached for frame. Skipping batch.\n");
-          continue;
-        }
-
-        //- kti: Clip
-        VkRect2D scissor = {
-          .offset = {
-            .x = 0,
-            .y = 0,
-          },
-          .extent = {
-            .width  = vkw->swapchain_extent.width,
-            .height = vkw->swapchain_extent.height,
-          },
-        };
-        if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
-            batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
-          F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
-          F4 intersection = rect_overlap(screen_rect, batch->clip_rect);
-          if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
-            scissor.offset.x = intersection[0];
-            scissor.offset.y = intersection[1];
-            scissor.extent.width = intersection[2];
-            scissor.extent.height = intersection[3];
-          } else {
-            // NOTE(kti): Clip and screen rect don't overlap, we can skip the batch.
+        for (GFX_Rect_Batch *batch = rect_pass.first_batch; batch != 0; batch = batch->next) {
+          // TODO(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.
+          // Alternatively we could allocate a buffer that could contain the entire batch. This would allow for "infinite" rectangle counts.
+          if (rect_instances_count + batch->instance_count > MAX_RECTANGLE_COUNT) {
+            printf("Max number of rectangle instances reached for frame. Skipping batch.\n");
             continue;
           }
+
+          //- kti: Clip
+          VkRect2D scissor = {
+            .offset = {
+              .x = 0,
+              .y = 0,
+            },
+            .extent = {
+              .width  = vkw->swapchain_extent.width,
+              .height = vkw->swapchain_extent.height,
+            },
+          };
+          if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
+              batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
+            F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+            F4 intersection = rect_overlap(screen_rect, batch->clip_rect);
+            if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
+              scissor.offset.x = intersection[0];
+              scissor.offset.y = intersection[1];
+              scissor.extent.width = intersection[2];
+              scissor.extent.height = intersection[3];
+            } else {
+              // NOTE(kti): Clip and screen rect don't overlap, we can skip the batch.
+              continue;
+            }
+          }
+          vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+          //- kti: Texture
+          GFX_Texture *texture = batch->texture;
+          if (texture == 0) {
+            texture = gfx_state->white_texture;
+          }
+          VkDescriptorImageInfo image_info = {
+            .sampler = gfx_state->texture_sampler,
+            .imageView = texture->image_view,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          };
+          VkWriteDescriptorSet write = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstBinding = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &image_info,
+          };
+          vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline_layout, 0, 1, &write);
+
+          //- kti: Push Constants
+          F1 push_data[4] = {
+            vkw->swapchain_extent.width, vkw->swapchain_extent.height,
+            (F1)texture->width, (F1)texture->height
+          };
+          vkCmdPushConstants(cmd, gfx_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
+
+          //- kti: Draw
+          memmove(rect_instances + rect_instances_count, batch->instances, batch->instance_count*sizeof(GFX_Rect_Instance));
+          vkCmdDraw(cmd, 6, batch->instance_count, 0, rect_instances_count);
+
+          rect_instances_count += batch->instance_count;
         }
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-        //- kti: Texture
-        GFX_Texture *texture = batch->texture;
-        if (texture == 0) {
-          texture = gfx_state->white_texture;
-        }
-        VkDescriptorImageInfo image_info = {
-          .sampler = gfx_state->texture_sampler,
-          .imageView = texture->image_view,
-          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkWriteDescriptorSet write = {
-          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .dstBinding = 0,
-          .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .pImageInfo = &image_info,
-        };
-        vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline_layout, 0, 1, &write);
-
-        //- kti: Push Constants
-        F1 push_data[4] = {
-          vkw->swapchain_extent.width, vkw->swapchain_extent.height,
-          (F1)texture->width, (F1)texture->height
-        };
-        vkCmdPushConstants(cmd, gfx_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
-
-        //- kti: Draw
-        memmove(rect_instances + rect_instances_count, batch->instances, batch->instance_count*sizeof(GFX_Rect_Instance));
-        vkCmdDraw(cmd, 6, batch->instance_count, 0, rect_instances_count);
-
-        rect_instances_count += batch->instance_count;
       }
     }
+
+    vkw->per_frame[image_idx].rect_instances_count = rect_instances_count;
   }
-
-  vkw->per_frame[image_idx].rect_instances_count = rect_instances_count;
-
 }
 
 Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
   ProfFuncBegin();
-  if (!vkw->frame_active) { ProfEnd(); return; }
 
-  I1 image_idx = gfx_state->image_idx;
-  VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
+  I1 image_idx = vkw->image_idx;
+  if (image_idx < vkw->image_count) {
+    VkCommandBuffer cmd = vkw->per_frame[image_idx].command_buffer;
 
-  ////////////////////////////////
-  //~ kti: End Rendering
+    ////////////////////////////////
+    //~ kti: End Rendering
 
-  vkCmdEndRendering(cmd);
+    vkCmdEndRendering(cmd);
 
-  gfx_vk_transition_image_layout(
-    cmd,
-    vkw->swapchain_images[image_idx],
-    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-    0,
-    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-    VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
+    gfx_vk_transition_image_layout(
+      cmd,
+      vkw->swapchain_images[image_idx],
+      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+      0,
+      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
 
-  vkEndCommandBuffer(cmd);
+    vkEndCommandBuffer(cmd);
 
-  if (vkw->per_frame[image_idx].swapchain_release_semaphore == VK_NULL_HANDLE) {
-    VkSemaphoreCreateInfo semaphore_ci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    VkResult result = vkCreateSemaphore(gfx_state->device, &semaphore_ci, 0, &vkw->per_frame[image_idx].swapchain_release_semaphore);
+    if (vkw->per_frame[image_idx].swapchain_release_semaphore == VK_NULL_HANDLE) {
+      VkSemaphoreCreateInfo semaphore_ci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+      VkResult result = vkCreateSemaphore(gfx_state->device, &semaphore_ci, 0, &vkw->per_frame[image_idx].swapchain_release_semaphore);
+      Assert(result == VK_SUCCESS);
+    }
+
+    VkPipelineStageFlags wait_stage = { VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT };
+    VkSubmitInfo submit_info = {
+      .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .waitSemaphoreCount   = 1,
+      .pWaitSemaphores      = &vkw->per_frame[image_idx].swapchain_acquire_semaphore,
+      .pWaitDstStageMask    = &wait_stage,
+      .commandBufferCount   = 1,
+      .pCommandBuffers      = &cmd,
+      .signalSemaphoreCount = 1,
+      .pSignalSemaphores    = &vkw->per_frame[image_idx].swapchain_release_semaphore,
+    };
+    VkResult result = vkQueueSubmit(gfx_state->queue, 1, &submit_info, vkw->per_frame[image_idx].queue_submit_fence);
     Assert(result == VK_SUCCESS);
-  }
 
-  VkPipelineStageFlags wait_stage = { VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT };
-  VkSubmitInfo submit_info = {
-    .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-    .waitSemaphoreCount   = 1,
-    .pWaitSemaphores      = &vkw->per_frame[image_idx].swapchain_acquire_semaphore,
-    .pWaitDstStageMask    = &wait_stage,
-    .commandBufferCount   = 1,
-    .pCommandBuffers      = &cmd,
-    .signalSemaphoreCount = 1,
-    .pSignalSemaphores    = &vkw->per_frame[image_idx].swapchain_release_semaphore,
-  };
-  VkResult result = vkQueueSubmit(gfx_state->queue, 1, &submit_info, vkw->per_frame[image_idx].queue_submit_fence);
-  Assert(result == VK_SUCCESS);
+    ////////////////////////////////
+    //~ kti: Present
 
-  ////////////////////////////////
-  //~ kti: Present
+    VkPresentInfoKHR present_info = {
+      .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores    = &vkw->per_frame[image_idx].swapchain_release_semaphore,
+      .swapchainCount     = 1,
+      .pSwapchains        = &vkw->swapchain,
+      .pImageIndices      = &image_idx,
+    };
+    result = vkQueuePresentKHR(gfx_state->queue, &present_info);
 
-  VkPresentInfoKHR present_info = {
-    .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-    .waitSemaphoreCount = 1,
-    .pWaitSemaphores    = &vkw->per_frame[image_idx].swapchain_release_semaphore,
-    .swapchainCount     = 1,
-    .pSwapchains        = &vkw->swapchain,
-    .pImageIndices      = &image_idx,
-  };
-  result = vkQueuePresentKHR(gfx_state->queue, &present_info);
-
-  if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
-    gfx_vk_recreate_swapchain(os_window, vkw);
-  } else if (result != VK_SUCCESS) {
-    printf("Failed to present swapchain image.\n");
+    if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
+      gfx_vk_recreate_swapchain(os_window, vkw);
+    } else if (result != VK_SUCCESS) {
+      printf("Failed to present swapchain image.\n");
+    }
   }
 
   ProfEnd();

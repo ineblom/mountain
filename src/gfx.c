@@ -100,6 +100,13 @@ VK_EXTENSION_FUNCTIONS
 
 #if (HEADER)
 
+typedef struct GFX_VK_Buffer GFX_VK_Buffer;
+struct GFX_VK_Buffer {
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  void *ptr;
+};
+
 typedef struct GFX_Per_Frame GFX_Per_Frame;
 struct GFX_Per_Frame {
   VkFence queue_submit_fence;
@@ -108,14 +115,10 @@ struct GFX_Per_Frame {
   VkSemaphore swapchain_acquire_semaphore;
   VkSemaphore swapchain_release_semaphore;
 
-  VkBuffer instance_buffer;
-  VkDeviceMemory instance_buffer_memory;
-  void *rect_instances;
+  GFX_VK_Buffer instance_buffer;
   L1 rect_instances_count;
 
-  VkBuffer mesh_instance_buffer;
-  VkDeviceMemory mesh_instance_buffer_memory;
-  void *mesh_instances;
+  GFX_VK_Buffer mesh_instance_buffer;
   L1 mesh_instance_count;
 };
 
@@ -175,14 +178,12 @@ typedef struct GFX_Buffer GFX_Buffer;
 struct GFX_Buffer {
   GFX_Buffer *next;
 
+  GFX_Buffer_Kind kind;
   VkBuffer buffer;
   VkDeviceMemory memory;
   L1 size;
-  GFX_Buffer_Kind kind;
 
-  VkBuffer staging_buffer;
-  VkDeviceMemory staging_buffer_memory;
-  void *staging_ptr;
+  GFX_VK_Buffer staging;
 };
 
 typedef struct GFX_Rect_Instance GFX_Rect_Instance;
@@ -318,114 +319,132 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags
   return VK_FALSE;
 }
 
-Internal I1 gfx_find_memory_type(VkMemoryRequirements mem_reqs, VkMemoryPropertyFlags required_properties) {
+Internal VkDeviceMemory gfx_vk_allocate_memory(VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags required_properties) {
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+
   VkPhysicalDeviceMemoryProperties mem_properties;
   vkGetPhysicalDeviceMemoryProperties(gfx_state->physical_device, &mem_properties);
 
   for (I1 i = 0; i < mem_properties.memoryTypeCount; i++) {
-    if ((mem_reqs.memoryTypeBits & (1 << i)) && (mem_properties.memoryTypes[i].propertyFlags & required_properties) == required_properties) {
-      return i;
+    if ((memory_requirements.memoryTypeBits & (1u << i)) &&
+        (mem_properties.memoryTypes[i].propertyFlags & required_properties) == required_properties) {
+      VkMemoryAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memory_requirements.size,
+        .memoryTypeIndex = i,
+      };
+      VkDeviceMemory allocated_memory = VK_NULL_HANDLE;
+      if (vkAllocateMemory(gfx_state->device, &alloc_info, 0, &allocated_memory) == VK_SUCCESS) {
+        memory = allocated_memory;
+      }
+      break;
     }
   }
-  Assert(0); // Memory type not found
-  return 0;
+
+  return memory;
 }
 
-Internal void gfx_vk_create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *memory) {
+Internal void gfx_vk_destroy_buffer(GFX_VK_Buffer buffer);
+
+Internal GFX_VK_Buffer gfx_vk_create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memory_properties) {
+  GFX_VK_Buffer buffer = {0};
+
   VkBufferCreateInfo buffer_ci = {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
     .size = size,
     .usage = usage,
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
   };
-  VkResult result = vkCreateBuffer(gfx_state->device, &buffer_ci, 0, buffer);
-  Assert(result == VK_SUCCESS);
+  vkCreateBuffer(gfx_state->device, &buffer_ci, 0, &buffer.buffer);
 
-  VkMemoryRequirements memory_requirements = {0};
-  vkGetBufferMemoryRequirements(gfx_state->device, *buffer, &memory_requirements);
+  VkMemoryRequirements memory_requirements;
+  vkGetBufferMemoryRequirements(gfx_state->device, buffer.buffer, &memory_requirements);
+  buffer.memory = gfx_vk_allocate_memory(memory_requirements, memory_properties);
 
-  VkMemoryAllocateInfo alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .allocationSize = memory_requirements.size,
-    .memoryTypeIndex = gfx_find_memory_type(memory_requirements, memory_properties),
-  };
-  result = vkAllocateMemory(gfx_state->device, &alloc_info, 0, memory);
-  Assert(result == VK_SUCCESS);
+  if (buffer.buffer != VK_NULL_HANDLE && buffer.memory != VK_NULL_HANDLE) {
+    vkBindBufferMemory(gfx_state->device, buffer.buffer, buffer.memory, 0);
+  }
 
-  result = vkBindBufferMemory(gfx_state->device, *buffer, *memory, 0);
-  Assert(result == VK_SUCCESS);
+  return buffer;
 }
 
-Internal void gfx_vk_create_mapped_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buffer, VkDeviceMemory *memory, void **ptr) {
-  gfx_vk_create_buffer(size, usage, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer, memory);
-  VkResult result = vkMapMemory(gfx_state->device, *memory, 0, size, 0, ptr);
-  Assert(result == VK_SUCCESS);
+Internal GFX_VK_Buffer gfx_vk_create_mapped_buffer(VkDeviceSize size, VkBufferUsageFlags usage) {
+  GFX_VK_Buffer buffer = gfx_vk_create_buffer(
+    size,
+    usage,
+    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  if (buffer.memory != VK_NULL_HANDLE) {
+    vkMapMemory(gfx_state->device, buffer.memory, 0, size, 0, &buffer.ptr);
+  }
+
+  return buffer;
 }
 
-Internal void gfx_vk_destroy_mapped_buffer(VkBuffer *buffer, VkDeviceMemory *memory, void **ptr) {
-  if (memory && memory[0] != VK_NULL_HANDLE) {
-    vkUnmapMemory(gfx_state->device, *memory);
+Internal void gfx_vk_destroy_buffer(GFX_VK_Buffer buffer) {
+  if (buffer.ptr != 0 && buffer.memory != VK_NULL_HANDLE) {
+    vkUnmapMemory(gfx_state->device, buffer.memory);
   }
-  if (buffer && buffer[0] != VK_NULL_HANDLE) {
-    vkDestroyBuffer(gfx_state->device, *buffer, 0);
-    buffer[0] = VK_NULL_HANDLE;
+  if (buffer.buffer != VK_NULL_HANDLE) {
+    vkDestroyBuffer(gfx_state->device, buffer.buffer, 0);
   }
-  if (memory && memory[0] != VK_NULL_HANDLE) {
-    vkFreeMemory(gfx_state->device, *memory, 0);
-    memory[0] = VK_NULL_HANDLE;
-  }
-  if (ptr) {
-    ptr[0] = 0;
+  if (buffer.memory != VK_NULL_HANDLE) {
+    vkFreeMemory(gfx_state->device, buffer.memory, 0);
   }
 }
 
 Internal VkCommandBuffer gfx_vk_upload_begin(void) {
-  VkCommandBuffer cmd;
+  VkCommandBuffer cmd = VK_NULL_HANDLE;
   VkCommandBufferAllocateInfo cmd_alloc_info = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
     .commandPool = gfx_state->upload_command_pool,
     .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
     .commandBufferCount = 1,
   };
-  VkResult result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
-  Assert(result == VK_SUCCESS);
+  vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
 
-  VkCommandBufferBeginInfo begin_info = {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  result = vkBeginCommandBuffer(cmd, &begin_info);
-  Assert(result == VK_SUCCESS);
+  if (cmd != VK_NULL_HANDLE) {
+    VkCommandBufferBeginInfo begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    vkBeginCommandBuffer(cmd, &begin_info);
+  }
 
   return cmd;
 }
 
 Internal void gfx_vk_upload_end(VkCommandBuffer cmd) {
-  VkResult result = vkEndCommandBuffer(cmd);
-  Assert(result == VK_SUCCESS);
+  if (cmd != VK_NULL_HANDLE) {
+    VkResult result = vkEndCommandBuffer(cmd);
 
-  VkSubmitInfo submit = {
-    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-    .commandBufferCount = 1,
-    .pCommandBuffers = &cmd,
-  };
-  result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
-  Assert(result == VK_SUCCESS);
-  vkQueueWaitIdle(gfx_state->queue);
-  vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+    if (result == VK_SUCCESS) {
+      VkSubmitInfo submit = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+      };
+      vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
+      vkQueueWaitIdle(gfx_state->queue);
+    }
+
+    if (result != VK_ERROR_DEVICE_LOST) {
+      vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+    }
+  }
 }
 
 Internal VkShaderModule gfx_vk_create_shader_module(String8 code) {
-  Assert(code.len != 0);
+  VkShaderModule shader = VK_NULL_HANDLE;
 
-  VkShaderModuleCreateInfo shader_ci = {
-    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-    .codeSize = code.len,
-    .pCode = (const uint32_t *)code.str,
-  };
-  VkShaderModule shader;
-  VkResult result = vkCreateShaderModule(gfx_state->device, &shader_ci, 0, &shader);
-  Assert(result == VK_SUCCESS);
+  if (code.len > 0) {
+    VkShaderModuleCreateInfo shader_ci = {
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = code.len,
+      .pCode = (const uint32_t *)code.str,
+    };
+    vkCreateShaderModule(gfx_state->device, &shader_ci, 0, &shader);
+  }
+
   return shader;
 }
 
@@ -464,27 +483,22 @@ Internal void gfx_vk_upload_buffer(GFX_Buffer *buffer, VkBuffer staging_buffer, 
 }
 
 Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data) {
-  if (buffer != 0 &&
-    buffer->buffer != VK_NULL_HANDLE &&
-    data != 0 &&
-    size > 0 &&
-    offset <= buffer->size &&
-    offset+size > offset &&
-    offset+size <= buffer->size) {
-    VkBuffer staging_buffer = buffer->staging_buffer;
-    VkDeviceMemory staging_memory = buffer->staging_buffer_memory;
-    void *staging_ptr = buffer->staging_ptr;
-    I1 use_temp_staging = (staging_buffer == VK_NULL_HANDLE);
+  if (buffer != 0 && buffer->buffer != VK_NULL_HANDLE && buffer->memory != VK_NULL_HANDLE &&
+    data != 0 && size > 0 && offset <= buffer->size && offset+size > offset && offset+size <= buffer->size) {
+    GFX_VK_Buffer staging = buffer->staging;
+    I1 use_temp_staging = (staging.buffer == VK_NULL_HANDLE);
 
     if (use_temp_staging) {
-      gfx_vk_create_mapped_buffer(buffer->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_buffer, &staging_memory, &staging_ptr);
+      staging = gfx_vk_create_mapped_buffer(buffer->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     }
 
-    memmove((B1 *)staging_ptr + offset, data, size);
-    gfx_vk_upload_buffer(buffer, staging_buffer, offset, size);
+    if (staging.ptr != 0) {
+      memmove((B1 *)staging.ptr + offset, data, size);
+      gfx_vk_upload_buffer(buffer, staging.buffer, offset, size);
+    }
 
     if (use_temp_staging) {
-      gfx_vk_destroy_mapped_buffer(&staging_buffer, &staging_memory, &staging_ptr);
+      gfx_vk_destroy_buffer(staging);
     }
   }
 }
@@ -507,12 +521,14 @@ Internal GFX_Buffer *gfx_buffer_alloc(GFX_Buffer_Usage usage, GFX_Buffer_Kind ki
     } else {
       vk_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     }
-    gfx_vk_create_buffer(size, vk_usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &buffer->buffer, &buffer->memory);
+    GFX_VK_Buffer vk_buffer = gfx_vk_create_buffer(size, vk_usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    buffer->buffer = vk_buffer.buffer;
+    buffer->memory = vk_buffer.memory;
     buffer->size = size;
     buffer->kind = kind;
 
     if (usage == GFX_BUFFER_USAGE__DYNAMIC) {
-      gfx_vk_create_mapped_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &buffer->staging_buffer, &buffer->staging_buffer_memory, &buffer->staging_ptr);
+      buffer->staging = gfx_vk_create_mapped_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     }
     if (initial_data != 0) {
       gfx_buffer_fill(buffer, 0, size, initial_data);
@@ -526,7 +542,7 @@ Internal void gfx_buffer_free(GFX_Buffer *buffer) {
   if (buffer != 0 && buffer->buffer != VK_NULL_HANDLE) {
     vkDestroyBuffer(gfx_state->device, buffer->buffer, 0);
     vkFreeMemory(gfx_state->device, buffer->memory, 0);
-    gfx_vk_destroy_mapped_buffer(&buffer->staging_buffer, &buffer->staging_buffer_memory, &buffer->staging_ptr);
+    gfx_vk_destroy_buffer(buffer->staging);
     MemoryZeroStruct(buffer);
     SLLStackPush(gfx_state->first_free_buffer, buffer);
   }
@@ -590,10 +606,6 @@ Internal void gfx_vk_recycle_semaphore(VkSemaphore semaphore) {
 }
 
 Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 height, void *pixels) {
-  if (width == 0 || height == 0 ||
-      width > L1_MAX / ((L1)height * 4)) {
-    return 0;
-  }
   ProfFuncBegin();
 
   GFX_Texture *texture = gfx_state->first_free_texture;
@@ -601,10 +613,9 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
     texture = push_array(gfx_state->arena, GFX_Texture, 1);
   } else {
     SLLStackPop(gfx_state->first_free_texture);
-    MemoryZeroStruct(texture);
   }
+  MemoryZeroStruct(texture);
 
-  VkResult result;
   L1 image_size = (L1)width * height * 4; // RGBA8
 
   //- kti: Create Image
@@ -622,26 +633,19 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
-  result = vkCreateImage(gfx_state->device, &image_ci, 0, &texture->image);
-  Assert(result == VK_SUCCESS);
+  VkResult result = vkCreateImage(gfx_state->device, &image_ci, 0, &texture->image);
 
-  VkMemoryRequirements image_mem_reqs;
-  vkGetImageMemoryRequirements(gfx_state->device, texture->image, &image_mem_reqs);
+  VkMemoryRequirements image_mem_reqs = {0};
+  if (result == VK_SUCCESS) {
+    vkGetImageMemoryRequirements(gfx_state->device, texture->image, &image_mem_reqs);
+    texture->memory = gfx_vk_allocate_memory(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  }
 
-  I1 memory_type = gfx_find_memory_type(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  VkMemoryAllocateInfo image_alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .allocationSize = image_mem_reqs.size,
-    .memoryTypeIndex = memory_type,
-  };
-  result = vkAllocateMemory(gfx_state->device, &image_alloc_info, 0, &texture->memory);
-  Assert(result == VK_SUCCESS);
-
-  result = vkBindImageMemory(gfx_state->device, texture->image, texture->memory, 0);
-  Assert(result == VK_SUCCESS);
+  if (result == VK_SUCCESS && texture->memory != VK_NULL_HANDLE) {
+    result = vkBindImageMemory(gfx_state->device, texture->image, texture->memory, 0);
+  }
 
   //- kti: Create View
-
   VkImageViewCreateInfo view_ci = {
     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
     .image = texture->image,
@@ -655,32 +659,36 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
       .layerCount = 1,
     },
   };
-  result = vkCreateImageView(gfx_state->device, &view_ci, 0, &texture->image_view);
-  Assert(result == VK_SUCCESS);
+  if (result == VK_SUCCESS && texture->memory != VK_NULL_HANDLE) {
+    result = vkCreateImageView(gfx_state->device, &view_ci, 0, &texture->image_view);
+  }
 
   //- kti: Store dimensions
-  texture->width = width;
-  texture->height = height;
+  if (result == VK_SUCCESS && texture->image_view != VK_NULL_HANDLE) {
+    texture->width = width;
+    texture->height = height;
+  }
 
   ////////////////////////////////
   //~ kti: Upload
 
-  if (usage == GFX_TEXTURE_USAGE__DYNAMIC || pixels != 0) {
+  if (texture->image_view != VK_NULL_HANDLE &&
+      (usage == GFX_TEXTURE_USAGE__DYNAMIC || pixels != 0)) {
     //- kti: Create staging buffer.
-    VkBuffer staging_buffer;
-    VkDeviceMemory staging_memory;
-    void *staging_ptr;
-    gfx_vk_create_mapped_buffer(image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                &staging_buffer, &staging_memory, &staging_ptr);
+    GFX_VK_Buffer staging = gfx_vk_create_mapped_buffer(image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-    VkCommandBuffer cmd = gfx_vk_upload_begin();
+    VkCommandBuffer cmd = 0;
+    if (staging.ptr != 0) {
+      cmd = gfx_vk_upload_begin();
+    } else {
+      result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
-    if (pixels != 0) {
+    if (result == VK_SUCCESS && pixels != 0) {
       //- kti: Upload to staging buffer.
-      memmove(staging_ptr, pixels, image_size);
+      memmove(staging.ptr, pixels, image_size);
 
       //- kti: Upload via command buffer
-
       gfx_vk_transition_image_layout(cmd, texture->image,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -701,7 +709,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
         .imageOffset = {0, 0, 0},
         .imageExtent = {width, height, 1},
       };
-      vkCmdCopyBufferToImage(cmd, staging_buffer, texture->image,
+      vkCmdCopyBufferToImage(cmd, staging.buffer, texture->image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
       gfx_vk_transition_image_layout(cmd, texture->image,
@@ -710,7 +718,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
         VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
         VK_PIPELINE_STAGE_2_TRANSFER_BIT,
         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
-    } else {
+    } else if (result == VK_SUCCESS) {
       //- kti: Transition image.
       gfx_vk_transition_image_layout(cmd, texture->image,
         VK_IMAGE_LAYOUT_UNDEFINED,
@@ -722,15 +730,26 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
 
     gfx_vk_upload_end(cmd);
 
-    if (usage == GFX_TEXTURE_USAGE__DYNAMIC) {
+    if (cmd != VK_NULL_HANDLE && usage == GFX_TEXTURE_USAGE__DYNAMIC) {
       //- kti: Keep staging buffer mapped for dynamic updates.
-      texture->staging_buffer = staging_buffer;
-      texture->staging_buffer_memory = staging_memory;
-      texture->staging_ptr = staging_ptr;
+      texture->staging_buffer = staging.buffer;
+      texture->staging_buffer_memory = staging.memory;
+      texture->staging_ptr = staging.ptr;
     } else {
       //- kti: Cleanup staging resources for static textures.
-      gfx_vk_destroy_mapped_buffer(&staging_buffer, &staging_memory, &staging_ptr);
+      gfx_vk_destroy_buffer(staging);
     }
+  }
+
+  if (result != VK_SUCCESS ||
+      texture->memory == VK_NULL_HANDLE ||
+      texture->image_view == VK_NULL_HANDLE) {
+    vkDestroyImageView(gfx_state->device, texture->image_view, 0);
+    vkDestroyImage(gfx_state->device, texture->image, 0);
+    vkFreeMemory(gfx_state->device, texture->memory, 0);
+    MemoryZeroStruct(texture);
+    SLLStackPush(gfx_state->first_free_texture, texture);
+    texture = 0;
   }
 
   ProfEnd();
@@ -757,17 +776,19 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 
   //- kti: Use persistent staging buffer if available, otherwise create temporary.
   I1 use_temp_staging = (tex->staging_buffer == VK_NULL_HANDLE);
-  VkBuffer staging_buffer = tex->staging_buffer;
-  VkDeviceMemory staging_memory = tex->staging_buffer_memory;
-  void *staging_ptr = tex->staging_ptr;
+  GFX_VK_Buffer staging = {
+    .buffer = tex->staging_buffer,
+    .memory = tex->staging_buffer_memory,
+    .ptr = tex->staging_ptr,
+  };
 
   if (use_temp_staging) {
     //- kti: Create temporary staging buffer for static textures.
-    gfx_vk_create_mapped_buffer(region_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_buffer, &staging_memory, &staging_ptr);
+    staging = gfx_vk_create_mapped_buffer(region_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
   }
 
   //- kti: Copy pixels to staging buffer.
-  memmove(staging_ptr, pixels, region_size);
+  memmove(staging.ptr, pixels, region_size);
 
   VkCommandBuffer cmd = gfx_vk_upload_begin();
 
@@ -791,7 +812,7 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
     .imageOffset = {region[0], region[1], 0},
     .imageExtent = {region[2], region[3], 1},
   };
-  vkCmdCopyBufferToImage(cmd, staging_buffer, tex->image,
+  vkCmdCopyBufferToImage(cmd, staging.buffer, tex->image,
     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
   gfx_vk_transition_image_layout(cmd, tex->image,
@@ -805,7 +826,7 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 
   //- kti: Cleanup temporary staging buffer.
   if (use_temp_staging) {
-    gfx_vk_destroy_mapped_buffer(&staging_buffer, &staging_memory, &staging_ptr);
+    gfx_vk_destroy_buffer(staging);
   }
 
   ProfEnd();
@@ -821,7 +842,7 @@ Internal void gfx_tex2d_free(GFX_Texture *tex) {
   vkFreeMemory(gfx_state->device, tex->memory, 0);
 
   //- kti: Cleanup staging buffer for dynamic textures.
-  gfx_vk_destroy_mapped_buffer(&tex->staging_buffer, &tex->staging_buffer_memory, &tex->staging_ptr);
+  gfx_vk_destroy_buffer((GFX_VK_Buffer){tex->staging_buffer, tex->staging_buffer_memory, tex->staging_ptr});
 
   MemoryZeroStruct(tex);
   SLLStackPush(gfx_state->first_free_texture, tex);
@@ -1523,20 +1544,14 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
     Assert(result == VK_SUCCESS);
 
     //- kti: Instance Buffer
-    gfx_vk_create_mapped_buffer(
+    frame->instance_buffer = gfx_vk_create_mapped_buffer(
       sizeof(GFX_Rect_Instance) * MAX_RECTANGLE_COUNT,
-      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-      &frame->instance_buffer,
-      &frame->instance_buffer_memory,
-      &frame->rect_instances);
+      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
     //- kti: Mesh Instance Stream Buffer
-    gfx_vk_create_mapped_buffer(
+    frame->mesh_instance_buffer = gfx_vk_create_mapped_buffer(
       sizeof(GFX_Mesh_Instance) * MAX_MESH_INSTANCE_COUNT,
-      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-      &frame->mesh_instance_buffer,
-      &frame->mesh_instance_buffer_memory,
-      &frame->mesh_instances);
+      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
   }
 
   return vkw;
@@ -1564,8 +1579,8 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
     vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
 
     //- kti: Free instance buffers.
-    gfx_vk_destroy_mapped_buffer(&frame->instance_buffer, &frame->instance_buffer_memory, &frame->rect_instances);
-    gfx_vk_destroy_mapped_buffer(&frame->mesh_instance_buffer, &frame->mesh_instance_buffer_memory, &frame->mesh_instances);
+    gfx_vk_destroy_buffer(frame->instance_buffer);
+    gfx_vk_destroy_buffer(frame->mesh_instance_buffer);
 
     //- kti: Recycle semaphores.
     gfx_vk_recycle_semaphore(frame->swapchain_acquire_semaphore);
@@ -1712,16 +1727,16 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
   if (image_idx < vkw->image_count) {
     GFX_Per_Frame *frame = &vkw->per_frame[image_idx];
     VkCommandBuffer cmd = frame->command_buffer;
-    GFX_Rect_Instance *rect_instances = (GFX_Rect_Instance *)frame->rect_instances;
+    GFX_Rect_Instance *rect_instances = (GFX_Rect_Instance *)frame->instance_buffer.ptr;
     L1 rect_instances_count = frame->rect_instances_count;
-    GFX_Mesh_Instance *mesh_instances = (GFX_Mesh_Instance *)frame->mesh_instances;
+    GFX_Mesh_Instance *mesh_instances = (GFX_Mesh_Instance *)frame->mesh_instance_buffer.ptr;
     L1 mesh_instance_count = frame->mesh_instance_count;
 
     for (GFX_Pass *pass = passes.first; pass != 0; pass = pass->next) {
       if (pass->kind == GFX_PASS_KIND__RECT) {
         VkDeviceSize offset = {0};
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline);
-        vkCmdBindVertexBuffers(cmd, 0, 1, &frame->instance_buffer, &offset);
+        vkCmdBindVertexBuffers(cmd, 0, 1, &frame->instance_buffer.buffer, &offset);
 
         GFX_Rect_Pass rect_pass = pass->rect;
         for (GFX_Rect_Batch *batch = rect_pass.first_batch; batch != 0; batch = batch->next) {
@@ -1841,7 +1856,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
           VkBuffer vertex_buffers[] = {
             batch->vertex_buffer->buffer,
-            frame->mesh_instance_buffer,
+            frame->mesh_instance_buffer.buffer,
           };
           VkDeviceSize vertex_offsets[] = {
             batch->vertex_offset,

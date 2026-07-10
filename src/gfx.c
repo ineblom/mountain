@@ -793,19 +793,22 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 }
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {
-  if (tex == 0 || tex->image == VK_NULL_HANDLE) {
-    return;
+  if (tex != 0) {
+    if (tex->image_view != VK_NULL_HANDLE) {
+      vkDestroyImageView(gfx_state->device, tex->image_view, 0);
+    }
+    if (tex->image != VK_NULL_HANDLE) {
+      vkDestroyImage(gfx_state->device, tex->image, 0);
+    }
+    if (tex->memory != VK_NULL_HANDLE) {
+      vkFreeMemory(gfx_state->device, tex->memory, 0);
+    }
+
+    gfx_vk_destroy_buffer(tex->staging);
+
+    MemoryZeroStruct(tex);
+    SLLStackPush(gfx_state->first_free_texture, tex);
   }
-
-  vkDestroyImageView(gfx_state->device, tex->image_view, 0);
-  vkDestroyImage(gfx_state->device, tex->image, 0);
-  vkFreeMemory(gfx_state->device, tex->memory, 0);
-
-  //- kti: Cleanup staging buffer for dynamic textures.
-  gfx_vk_destroy_buffer(tex->staging);
-
-  MemoryZeroStruct(tex);
-  SLLStackPush(gfx_state->first_free_texture, tex);
 }
 
 Internal void gfx_init() {

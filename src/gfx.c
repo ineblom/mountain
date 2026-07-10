@@ -1798,7 +1798,22 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
         vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(M4F), &mesh_pass.view_projection);
 
         for (GFX_Mesh_Batch *batch = mesh_pass.first_batch; batch != 0; batch = batch->next) {
-          if (batch->vertex_count == 0 || batch->index_count == 0 || batch->instance_count == 0) {
+          if (batch->vertex_buffer == 0 ||
+              batch->vertex_buffer->buffer == VK_NULL_HANDLE ||
+              batch->vertex_buffer->kind != GFX_BUFFER_KIND__VERTEX ||
+              batch->index_buffer == 0 ||
+              batch->index_buffer->buffer == VK_NULL_HANDLE ||
+              batch->index_buffer->kind != GFX_BUFFER_KIND__INDEX ||
+              batch->vertex_count == 0 ||
+              batch->index_count == 0 ||
+              batch->instance_count == 0 ||
+              batch->vertex_offset % sizeof(GFX_Mesh_Vertex) != 0 ||
+              batch->index_offset % sizeof(I1) != 0 ||
+              batch->index_count > I1_MAX ||
+              batch->vertex_offset > batch->vertex_buffer->size ||
+              batch->vertex_count > (batch->vertex_buffer->size - batch->vertex_offset) / sizeof(GFX_Mesh_Vertex) ||
+              batch->index_offset > batch->index_buffer->size ||
+              batch->index_count > (batch->index_buffer->size - batch->index_offset) / sizeof(I1)) {
             continue;
           }
 

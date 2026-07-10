@@ -448,55 +448,56 @@ Internal VkShaderModule gfx_vk_create_shader_module(String8 code) {
   return shader;
 }
 
-Internal void gfx_vk_upload_buffer(GFX_Buffer *buffer, VkBuffer staging_buffer, L1 offset, L1 size) {
-  VkCommandBuffer cmd = gfx_vk_upload_begin();
-
-  VkBufferCopy copy_region = {
-    .srcOffset = offset,
-    .dstOffset = offset,
-    .size = size,
-  };
-  vkCmdCopyBuffer(cmd, staging_buffer, buffer->buffer, 1, &copy_region);
-
-  VkAccessFlags2 dst_access = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
-  if (buffer->kind == GFX_BUFFER_KIND__INDEX) {
-    dst_access = VK_ACCESS_2_INDEX_READ_BIT;
-  }
-  VkBufferMemoryBarrier2 buffer_barrier = {
-    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-    .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
-    .dstAccessMask = dst_access,
-    .buffer = buffer->buffer,
-    .offset = offset,
-    .size = size,
-  };
-  VkDependencyInfo dependency_info = {
-    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-    .bufferMemoryBarrierCount = 1,
-    .pBufferMemoryBarriers = &buffer_barrier,
-  };
-  vkCmdPipelineBarrier2(cmd, &dependency_info);
-
-  gfx_vk_upload_end(cmd);
-}
-
 Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data) {
   if (buffer != 0 && buffer->buffer != VK_NULL_HANDLE && buffer->memory != VK_NULL_HANDLE &&
     data != 0 && size > 0 && offset <= buffer->size && offset+size > offset && offset+size <= buffer->size) {
+
+    //- kti: Get staging buffer.
     GFX_VK_Buffer staging = buffer->staging;
     I1 use_temp_staging = (staging.buffer == VK_NULL_HANDLE);
-
     if (use_temp_staging) {
       staging = gfx_vk_create_mapped_buffer(buffer->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     }
 
     if (staging.ptr != 0) {
+      //- kti: Move data into staging buffer.
       memmove((B1 *)staging.ptr + offset, data, size);
-      gfx_vk_upload_buffer(buffer, staging.buffer, offset, size);
+
+      //- kti: Move data from staging buffer to final buffer. 
+      VkCommandBuffer cmd = gfx_vk_upload_begin();
+
+      VkBufferCopy copy_region = {
+        .srcOffset = offset,
+        .dstOffset = offset,
+        .size = size,
+      };
+      vkCmdCopyBuffer(cmd, staging.buffer, buffer->buffer, 1, &copy_region);
+
+      VkAccessFlags2 dst_access = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+      if (buffer->kind == GFX_BUFFER_KIND__INDEX) {
+        dst_access = VK_ACCESS_2_INDEX_READ_BIT;
+      }
+      VkBufferMemoryBarrier2 buffer_barrier = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
+        .dstAccessMask = dst_access,
+        .buffer = buffer->buffer,
+        .offset = offset,
+        .size = size,
+      };
+      VkDependencyInfo dependency_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .bufferMemoryBarrierCount = 1,
+        .pBufferMemoryBarriers = &buffer_barrier,
+      };
+      vkCmdPipelineBarrier2(cmd, &dependency_info);
+
+      gfx_vk_upload_end(cmd);
     }
 
+    //- kti: Cleanup temporary staging buffer.
     if (use_temp_staging) {
       gfx_vk_destroy_buffer(staging);
     }

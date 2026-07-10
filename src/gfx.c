@@ -332,60 +332,55 @@ Internal I1 gfx_find_memory_type(VkMemoryRequirements mem_reqs, VkMemoryProperty
   return 0;
 }
 
+Internal void gfx_vk_create_buffer(
+  VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memory_properties,
+  VkBuffer *buffer, VkDeviceMemory *memory) {
+  VkBufferCreateInfo buffer_ci = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .size = size,
+    .usage = usage,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  VkResult result = vkCreateBuffer(gfx_state->device, &buffer_ci, 0, buffer);
+  Assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements memory_requirements = {0};
+  vkGetBufferMemoryRequirements(gfx_state->device, *buffer, &memory_requirements);
+
+  VkMemoryAllocateInfo alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = memory_requirements.size,
+    .memoryTypeIndex = gfx_find_memory_type(memory_requirements, memory_properties),
+  };
+  result = vkAllocateMemory(gfx_state->device, &alloc_info, 0, memory);
+  Assert(result == VK_SUCCESS);
+
+  result = vkBindBufferMemory(gfx_state->device, *buffer, *memory, 0);
+  Assert(result == VK_SUCCESS);
+}
+
 Internal void gfx_vk_create_mapped_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buffer, VkDeviceMemory *memory, void **ptr) {
-  VkBufferCreateInfo buffer_ci = {
-    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-    .size = size,
-    .usage = usage,
-    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-  };
-  VkResult result = vkCreateBuffer(gfx_state->device, &buffer_ci, 0, buffer);
-  Assert(result == VK_SUCCESS);
-
-  VkMemoryRequirements memory_requirements = {0};
-  vkGetBufferMemoryRequirements(gfx_state->device, *buffer, &memory_requirements);
-
-  VkMemoryAllocateInfo alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .allocationSize = memory_requirements.size,
-    .memoryTypeIndex = gfx_find_memory_type(memory_requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-  };
-  result = vkAllocateMemory(gfx_state->device, &alloc_info, 0, memory);
-  Assert(result == VK_SUCCESS);
-
-  result = vkBindBufferMemory(gfx_state->device, *buffer, *memory, 0);
-  Assert(result == VK_SUCCESS);
-
-  result = vkMapMemory(gfx_state->device, *memory, 0, size, 0, ptr);
+  gfx_vk_create_buffer(size, usage, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer, memory);
+  VkResult result = vkMapMemory(gfx_state->device, *memory, 0, size, 0, ptr);
   Assert(result == VK_SUCCESS);
 }
 
-Internal void gfx_vk_create_device_local_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buffer, VkDeviceMemory *memory) {
-  VkBufferCreateInfo buffer_ci = {
-    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-    .size = size,
-    .usage = usage,
-    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-  };
-  VkResult result = vkCreateBuffer(gfx_state->device, &buffer_ci, 0, buffer);
-  Assert(result == VK_SUCCESS);
-
-  VkMemoryRequirements memory_requirements = {0};
-  vkGetBufferMemoryRequirements(gfx_state->device, *buffer, &memory_requirements);
-
-  VkMemoryAllocateInfo alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .allocationSize = memory_requirements.size,
-    .memoryTypeIndex = gfx_find_memory_type(memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-  };
-  result = vkAllocateMemory(gfx_state->device, &alloc_info, 0, memory);
-  Assert(result == VK_SUCCESS);
-
-  result = vkBindBufferMemory(gfx_state->device, *buffer, *memory, 0);
-  Assert(result == VK_SUCCESS);
+Internal void gfx_vk_destroy_mapped_buffer(VkBuffer *buffer, VkDeviceMemory *memory, void **ptr) {
+  if (*memory != VK_NULL_HANDLE) {
+    vkUnmapMemory(gfx_state->device, *memory);
+  }
+  if (*buffer != VK_NULL_HANDLE) {
+    vkDestroyBuffer(gfx_state->device, *buffer, 0);
+  }
+  if (*memory != VK_NULL_HANDLE) {
+    vkFreeMemory(gfx_state->device, *memory, 0);
+  }
+  *buffer = VK_NULL_HANDLE;
+  *memory = VK_NULL_HANDLE;
+  *ptr = 0;
 }
 
-Internal void gfx_vk_upload_buffer(GFX_Buffer *buffer, VkBuffer staging_buffer, L1 offset, L1 size) {
+Internal VkCommandBuffer gfx_vk_upload_begin(void) {
   VkCommandBuffer cmd;
   VkCommandBufferAllocateInfo cmd_alloc_info = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -402,6 +397,41 @@ Internal void gfx_vk_upload_buffer(GFX_Buffer *buffer, VkBuffer staging_buffer, 
   };
   result = vkBeginCommandBuffer(cmd, &begin_info);
   Assert(result == VK_SUCCESS);
+
+  return cmd;
+}
+
+Internal void gfx_vk_upload_end(VkCommandBuffer cmd) {
+  VkResult result = vkEndCommandBuffer(cmd);
+  Assert(result == VK_SUCCESS);
+
+  VkSubmitInfo submit = {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 1,
+    .pCommandBuffers = &cmd,
+  };
+  result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
+  Assert(result == VK_SUCCESS);
+  vkQueueWaitIdle(gfx_state->queue);
+  vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+}
+
+Internal VkShaderModule gfx_vk_create_shader_module(String8 code) {
+  Assert(code.len != 0);
+
+  VkShaderModuleCreateInfo shader_ci = {
+    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+    .codeSize = code.len,
+    .pCode = (const uint32_t *)code.str,
+  };
+  VkShaderModule shader;
+  VkResult result = vkCreateShaderModule(gfx_state->device, &shader_ci, 0, &shader);
+  Assert(result == VK_SUCCESS);
+  return shader;
+}
+
+Internal void gfx_vk_upload_buffer(GFX_Buffer *buffer, VkBuffer staging_buffer, L1 offset, L1 size) {
+  VkCommandBuffer cmd = gfx_vk_upload_begin();
 
   VkBufferCopy copy_region = {
     .srcOffset = offset,
@@ -431,18 +461,7 @@ Internal void gfx_vk_upload_buffer(GFX_Buffer *buffer, VkBuffer staging_buffer, 
   };
   vkCmdPipelineBarrier2(cmd, &dependency_info);
 
-  result = vkEndCommandBuffer(cmd);
-  Assert(result == VK_SUCCESS);
-
-  VkSubmitInfo submit = {
-    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-    .commandBufferCount = 1,
-    .pCommandBuffers = &cmd,
-  };
-  result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
-  Assert(result == VK_SUCCESS);
-  vkQueueWaitIdle(gfx_state->queue);
-  vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+  gfx_vk_upload_end(cmd);
 }
 
 Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data) {
@@ -457,17 +476,14 @@ Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data
   I1 use_temp_staging = (staging_buffer == VK_NULL_HANDLE);
 
   if (use_temp_staging) {
-    gfx_vk_create_mapped_buffer(buffer->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                &staging_buffer, &staging_memory, &staging_ptr);
+    gfx_vk_create_mapped_buffer(buffer->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_buffer, &staging_memory, &staging_ptr);
   }
 
   memmove((B1 *)staging_ptr + offset, data, size);
   gfx_vk_upload_buffer(buffer, staging_buffer, offset, size);
 
   if (use_temp_staging) {
-    vkUnmapMemory(gfx_state->device, staging_memory);
-    vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
-    vkFreeMemory(gfx_state->device, staging_memory, 0);
+    gfx_vk_destroy_mapped_buffer(&staging_buffer, &staging_memory, &staging_ptr);
   }
 }
 
@@ -489,15 +505,12 @@ Internal GFX_Buffer *gfx_buffer_alloc(GFX_Buffer_Usage usage, GFX_Buffer_Kind ki
   } else {
     vk_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
   }
-  gfx_vk_create_device_local_buffer(size, vk_usage, &buffer->buffer, &buffer->memory);
+  gfx_vk_create_buffer(size, vk_usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &buffer->buffer, &buffer->memory);
   buffer->size = size;
   buffer->kind = kind;
 
   if (usage == GFX_BUFFER_USAGE__DYNAMIC) {
-    gfx_vk_create_mapped_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                &buffer->staging_buffer,
-                                &buffer->staging_buffer_memory,
-                                &buffer->staging_ptr);
+    gfx_vk_create_mapped_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &buffer->staging_buffer, &buffer->staging_buffer_memory, &buffer->staging_ptr);
   }
   if (initial_data != 0) {
     gfx_buffer_fill(buffer, 0, size, initial_data);
@@ -512,9 +525,7 @@ Internal void gfx_buffer_free(GFX_Buffer *buffer) {
     vkFreeMemory(gfx_state->device, buffer->memory, 0);
 
     if (buffer->staging_buffer != VK_NULL_HANDLE) {
-      vkUnmapMemory(gfx_state->device, buffer->staging_buffer_memory);
-      vkDestroyBuffer(gfx_state->device, buffer->staging_buffer, 0);
-      vkFreeMemory(gfx_state->device, buffer->staging_buffer_memory, 0);
+      gfx_vk_destroy_mapped_buffer(&buffer->staging_buffer, &buffer->staging_buffer_memory, &buffer->staging_ptr);
     }
 
     buffer->size = 0;
@@ -655,51 +666,11 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
     //- kti: Create staging buffer.
     VkBuffer staging_buffer;
     VkDeviceMemory staging_memory;
-
-    VkBufferCreateInfo staging_ci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = image_size,
-      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    };
-    result = vkCreateBuffer(gfx_state->device, &staging_ci, 0, &staging_buffer);
-    Assert(result == VK_SUCCESS);
-
-    VkMemoryRequirements staging_mem_reqs;
-    vkGetBufferMemoryRequirements(gfx_state->device, staging_buffer, &staging_mem_reqs);
-
-    VkMemoryAllocateInfo staging_alloc_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = staging_mem_reqs.size,
-      .memoryTypeIndex = gfx_find_memory_type(staging_mem_reqs,
-                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-    };
-    result = vkAllocateMemory(gfx_state->device, &staging_alloc_info, 0, &staging_memory);
-    Assert(result == VK_SUCCESS);
-
-    result = vkBindBufferMemory(gfx_state->device, staging_buffer, staging_memory, 0);
-    Assert(result == VK_SUCCESS);
-
     void *staging_ptr;
-    result = vkMapMemory(gfx_state->device, staging_memory, 0, image_size, 0, &staging_ptr);
-    Assert(result == VK_SUCCESS);
+    gfx_vk_create_mapped_buffer(image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                &staging_buffer, &staging_memory, &staging_ptr);
 
-    VkCommandBuffer cmd;
-    VkCommandBufferAllocateInfo cmd_alloc_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool = gfx_state->upload_command_pool,
-      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-      .commandBufferCount = 1,
-    };
-    result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
-    Assert(result == VK_SUCCESS);
-
-    VkCommandBufferBeginInfo begin_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-    result = vkBeginCommandBuffer(cmd, &begin_info);
-    Assert(result == VK_SUCCESS);
+    VkCommandBuffer cmd = gfx_vk_upload_begin();
 
     if (pixels != 0) {
       //- kti: Upload to staging buffer.
@@ -746,23 +717,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
     }
 
-    //- kti: Submit command buffer and wait.
-
-    result = vkEndCommandBuffer(cmd);
-    Assert(result == VK_SUCCESS);
-
-    VkSubmitInfo submit = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .commandBufferCount = 1,
-      .pCommandBuffers = &cmd,
-    };
-    result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
-    Assert(result == VK_SUCCESS);
-
-    vkQueueWaitIdle(gfx_state->queue);
-
-    //- kti: Reset command pool to free command buffer.
-    vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+    gfx_vk_upload_end(cmd);
 
     if (usage == GFX_TEXTURE_USAGE__DYNAMIC) {
       //- kti: Keep staging buffer mapped for dynamic updates.
@@ -771,9 +726,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
       texture->staging_ptr = staging_ptr;
     } else {
       //- kti: Cleanup staging resources for static textures.
-      vkUnmapMemory(gfx_state->device, staging_memory);
-      vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
-      vkFreeMemory(gfx_state->device, staging_memory, 0);
+      gfx_vk_destroy_mapped_buffer(&staging_buffer, &staging_memory, &staging_ptr);
     }
   }
 
@@ -788,71 +741,23 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
   Assert(region[1] + region[3] <= tex->height);
   ProfFuncBegin();
 
-  VkResult result;
   L1 region_size = region[2] * region[3] * 4; // RGBA8
-
-  VkBuffer staging_buffer;
-  VkDeviceMemory staging_memory;
-  void *staging_ptr;
 
   //- kti: Use persistent staging buffer if available, otherwise create temporary.
   I1 use_temp_staging = (tex->staging_buffer == VK_NULL_HANDLE);
+  VkBuffer staging_buffer = tex->staging_buffer;
+  VkDeviceMemory staging_memory = tex->staging_buffer_memory;
+  void *staging_ptr = tex->staging_ptr;
 
   if (use_temp_staging) {
     //- kti: Create temporary staging buffer for static textures.
-    VkBufferCreateInfo staging_ci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = region_size,
-      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    };
-    result = vkCreateBuffer(gfx_state->device, &staging_ci, 0, &staging_buffer);
-    Assert(result == VK_SUCCESS);
-
-    VkMemoryRequirements staging_mem_reqs;
-    vkGetBufferMemoryRequirements(gfx_state->device, staging_buffer, &staging_mem_reqs);
-
-    VkMemoryAllocateInfo staging_alloc_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = staging_mem_reqs.size,
-      .memoryTypeIndex = gfx_find_memory_type(staging_mem_reqs,
-                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-    };
-    result = vkAllocateMemory(gfx_state->device, &staging_alloc_info, 0, &staging_memory);
-    Assert(result == VK_SUCCESS);
-
-    result = vkBindBufferMemory(gfx_state->device, staging_buffer, staging_memory, 0);
-    Assert(result == VK_SUCCESS);
-
-    result = vkMapMemory(gfx_state->device, staging_memory, 0, region_size, 0, &staging_ptr);
-    Assert(result == VK_SUCCESS);
-  } else {
-    //- kti: Use persistent staging buffer for dynamic textures.
-    staging_buffer = tex->staging_buffer;
-    staging_memory = tex->staging_buffer_memory;
-    staging_ptr = tex->staging_ptr;
+    gfx_vk_create_mapped_buffer(region_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_buffer, &staging_memory, &staging_ptr);
   }
 
   //- kti: Copy pixels to staging buffer.
   memmove(staging_ptr, pixels, region_size);
 
-  //- kti: Record and submit copy commands.
-  VkCommandBuffer cmd;
-  VkCommandBufferAllocateInfo cmd_alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-    .commandPool = gfx_state->upload_command_pool,
-    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-    .commandBufferCount = 1,
-  };
-  result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
-  Assert(result == VK_SUCCESS);
-
-  VkCommandBufferBeginInfo begin_info = {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  result = vkBeginCommandBuffer(cmd, &begin_info);
-  Assert(result == VK_SUCCESS);
+  VkCommandBuffer cmd = gfx_vk_upload_begin();
 
   gfx_vk_transition_image_layout(cmd, tex->image,
     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -884,27 +789,11 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
     VK_PIPELINE_STAGE_2_TRANSFER_BIT,
     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
 
-  result = vkEndCommandBuffer(cmd);
-  Assert(result == VK_SUCCESS);
-
-  VkSubmitInfo submit = {
-    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-    .commandBufferCount = 1,
-    .pCommandBuffers = &cmd,
-  };
-  result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
-  Assert(result == VK_SUCCESS);
-
-  vkQueueWaitIdle(gfx_state->queue);
-
-  //- kti: Reset command pool to free command buffer.
-  vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+  gfx_vk_upload_end(cmd);
 
   //- kti: Cleanup temporary staging buffer.
   if (use_temp_staging) {
-    vkUnmapMemory(gfx_state->device, staging_memory);
-    vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
-    vkFreeMemory(gfx_state->device, staging_memory, 0);
+    gfx_vk_destroy_mapped_buffer(&staging_buffer, &staging_memory, &staging_ptr);
   }
 
   ProfEnd();
@@ -917,11 +806,7 @@ Internal void gfx_tex2d_free(GFX_Texture *tex) {
 
   //- kti: Cleanup staging buffer for dynamic textures.
   if (tex->staging_buffer != VK_NULL_HANDLE) {
-    if (tex->staging_ptr != 0) {
-      vkUnmapMemory(gfx_state->device, tex->staging_buffer_memory);
-    }
-    vkDestroyBuffer(gfx_state->device, tex->staging_buffer, 0);
-    vkFreeMemory(gfx_state->device, tex->staging_buffer_memory, 0);
+    gfx_vk_destroy_mapped_buffer(&tex->staging_buffer, &tex->staging_buffer_memory, &tex->staging_ptr);
   }
 
   tex->width = 0;
@@ -1259,29 +1144,10 @@ Internal void gfx_init() {
     .pDynamicStates = dynamic_states,
   };
 
-  String8 vert_shader_code = os_read_entire_file(arena, str8("./shaders/shader.vert.spv"));
-  String8 frag_shader_code = os_read_entire_file(arena, str8("./shaders/shader.frag.spv"));
-
-  Assert(vert_shader_code.len != 0);
-  Assert(frag_shader_code.len != 0);
-
-  VkShaderModuleCreateInfo vert_shader_ci = {
-    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-    .codeSize = vert_shader_code.len,
-    .pCode = (const uint32_t *)vert_shader_code.str,
-  };
-  VkShaderModuleCreateInfo frag_shader_ci = {
-    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-    .codeSize = frag_shader_code.len,
-    .pCode = (const uint32_t *)frag_shader_code.str,
-  };
-
-  VkShaderModule vert_shader, frag_shader;
-
-  result = vkCreateShaderModule(gfx_state->device, &vert_shader_ci, 0, &vert_shader);
-  Assert(result == VK_SUCCESS);
-  result = vkCreateShaderModule(gfx_state->device, &frag_shader_ci, 0, &frag_shader);
-  Assert(result == VK_SUCCESS);
+  VkShaderModule vert_shader = gfx_vk_create_shader_module(
+    os_read_entire_file(arena, str8("./shaders/shader.vert.spv")));
+  VkShaderModule frag_shader = gfx_vk_create_shader_module(
+    os_read_entire_file(arena, str8("./shaders/shader.frag.spv")));
 
   VkPipelineShaderStageCreateInfo shader_stages[] = {
     {
@@ -1378,29 +1244,10 @@ Internal void gfx_init() {
     .pVertexAttributeDescriptions = mesh_attribute_descriptions,
   };
 
-  String8 mesh_vert_shader_code = os_read_entire_file(arena, str8("./shaders/mesh.vert.spv"));
-  String8 mesh_frag_shader_code = os_read_entire_file(arena, str8("./shaders/mesh.frag.spv"));
-
-  Assert(mesh_vert_shader_code.len != 0);
-  Assert(mesh_frag_shader_code.len != 0);
-
-  VkShaderModuleCreateInfo mesh_vert_shader_ci = {
-    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-    .codeSize = mesh_vert_shader_code.len,
-    .pCode = (const uint32_t *)mesh_vert_shader_code.str,
-  };
-  VkShaderModuleCreateInfo mesh_frag_shader_ci = {
-    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-    .codeSize = mesh_frag_shader_code.len,
-    .pCode = (const uint32_t *)mesh_frag_shader_code.str,
-  };
-
-  VkShaderModule mesh_vert_shader, mesh_frag_shader;
-
-  result = vkCreateShaderModule(gfx_state->device, &mesh_vert_shader_ci, 0, &mesh_vert_shader);
-  Assert(result == VK_SUCCESS);
-  result = vkCreateShaderModule(gfx_state->device, &mesh_frag_shader_ci, 0, &mesh_frag_shader);
-  Assert(result == VK_SUCCESS);
+  VkShaderModule mesh_vert_shader = gfx_vk_create_shader_module(
+    os_read_entire_file(arena, str8("./shaders/mesh.vert.spv")));
+  VkShaderModule mesh_frag_shader = gfx_vk_create_shader_module(
+    os_read_entire_file(arena, str8("./shaders/mesh.frag.spv")));
 
   VkPipelineShaderStageCreateInfo mesh_shader_stages[] = {
     {
@@ -1664,33 +1511,12 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
     Assert(result == VK_SUCCESS);
 
     //- kti: Instance Buffer
-
-    VkBufferCreateInfo instance_buffer_ci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = sizeof(GFX_Rect_Instance) * MAX_RECTANGLE_COUNT,
-      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    };
-    result = vkCreateBuffer(gfx_state->device, &instance_buffer_ci, 0, &frame->instance_buffer);
-    Assert(result == VK_SUCCESS);
-
-    VkMemoryRequirements memory_requirements = {0};
-    vkGetBufferMemoryRequirements(gfx_state->device, frame->instance_buffer, &memory_requirements);
-
-    VkMemoryAllocateInfo alloc_info = {
-      .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize  = memory_requirements.size,
-      .memoryTypeIndex = gfx_find_memory_type(memory_requirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-    };
-
-    result = vkAllocateMemory(gfx_state->device, &alloc_info, 0, &frame->instance_buffer_memory);
-    Assert(result == VK_SUCCESS);
-
-    result = vkBindBufferMemory(gfx_state->device, frame->instance_buffer, frame->instance_buffer_memory, 0);
-    Assert(result == VK_SUCCESS);
-
-    result = vkMapMemory(gfx_state->device, frame->instance_buffer_memory, 0, instance_buffer_ci.size, 0, &frame->rect_instances);
-    Assert(result == VK_SUCCESS);
+    gfx_vk_create_mapped_buffer(
+      sizeof(GFX_Rect_Instance) * MAX_RECTANGLE_COUNT,
+      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+      &frame->instance_buffer,
+      &frame->instance_buffer_memory,
+      &frame->rect_instances);
 
     //- kti: Mesh Instance Stream Buffer
     gfx_vk_create_mapped_buffer(
@@ -1726,25 +1552,8 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
     vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
 
     //- kti: Free instance buffers.
-    if (frame->instance_buffer_memory != VK_NULL_HANDLE) {
-      vkUnmapMemory(gfx_state->device, frame->instance_buffer_memory);
-    }
-    if (frame->instance_buffer != VK_NULL_HANDLE) {
-      vkDestroyBuffer(gfx_state->device, frame->instance_buffer, 0);
-    }
-    if (frame->instance_buffer_memory != VK_NULL_HANDLE) {
-      vkFreeMemory(gfx_state->device, frame->instance_buffer_memory, 0);
-    }
-
-    if (frame->mesh_instance_buffer_memory != VK_NULL_HANDLE) {
-      vkUnmapMemory(gfx_state->device, frame->mesh_instance_buffer_memory);
-    }
-    if (frame->mesh_instance_buffer != VK_NULL_HANDLE) {
-      vkDestroyBuffer(gfx_state->device, frame->mesh_instance_buffer, 0);
-    }
-    if (frame->mesh_instance_buffer_memory != VK_NULL_HANDLE) {
-      vkFreeMemory(gfx_state->device, frame->mesh_instance_buffer_memory, 0);
-    }
+    gfx_vk_destroy_mapped_buffer(&frame->instance_buffer, &frame->instance_buffer_memory, &frame->rect_instances);
+    gfx_vk_destroy_mapped_buffer(&frame->mesh_instance_buffer, &frame->mesh_instance_buffer_memory, &frame->mesh_instances);
 
     //- kti: Recycle semaphores.
     gfx_vk_recycle_semaphore(frame->swapchain_acquire_semaphore);

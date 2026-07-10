@@ -365,9 +365,7 @@ Internal GFX_VK_Buffer gfx_vk_create_buffer(VkDeviceSize size, VkBufferUsageFlag
 }
 
 Internal GFX_VK_Buffer gfx_vk_create_mapped_buffer(VkDeviceSize size, VkBufferUsageFlags usage) {
-  GFX_VK_Buffer buffer = gfx_vk_create_buffer(
-    size,
-    usage,
+  GFX_VK_Buffer buffer = gfx_vk_create_buffer( size, usage,
     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   if (buffer.memory != VK_NULL_HANDLE) {
     vkMapMemory(gfx_state->device, buffer.memory, 0, size, 0, &buffer.ptr);
@@ -388,7 +386,7 @@ Internal void gfx_vk_destroy_buffer(GFX_VK_Buffer buffer) {
   }
 }
 
-Internal VkCommandBuffer gfx_vk_upload_begin(void) {
+Internal VkCommandBuffer gfx_vk_immediate_begin(void) {
   VkCommandBuffer cmd = VK_NULL_HANDLE;
   VkCommandBufferAllocateInfo cmd_alloc_info = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -409,7 +407,7 @@ Internal VkCommandBuffer gfx_vk_upload_begin(void) {
   return cmd;
 }
 
-Internal void gfx_vk_upload_end(VkCommandBuffer cmd) {
+Internal void gfx_vk_immediate_end(VkCommandBuffer cmd) {
   if (cmd != VK_NULL_HANDLE) {
     VkResult result = vkEndCommandBuffer(cmd);
 
@@ -460,7 +458,7 @@ Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data
       memmove((B1 *)staging.ptr + offset, data, size);
 
       //- kti: Move data from staging buffer to final buffer. 
-      VkCommandBuffer cmd = gfx_vk_upload_begin();
+      VkCommandBuffer cmd = gfx_vk_immediate_begin();
 
       VkBufferCopy copy_region = {
         .srcOffset = offset,
@@ -490,7 +488,7 @@ Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data
       };
       vkCmdPipelineBarrier2(cmd, &dependency_info);
 
-      gfx_vk_upload_end(cmd);
+      gfx_vk_immediate_end(cmd);
     }
 
     //- kti: Cleanup temporary staging buffer.
@@ -628,16 +626,14 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
-  VkResult result = vkCreateImage(gfx_state->device, &image_ci, 0, &texture->image);
+  vkCreateImage(gfx_state->device, &image_ci, 0, &texture->image);
 
   VkMemoryRequirements image_mem_reqs = {0};
-  if (result == VK_SUCCESS) {
-    vkGetImageMemoryRequirements(gfx_state->device, texture->image, &image_mem_reqs);
-    texture->memory = gfx_vk_allocate_memory(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  }
+  vkGetImageMemoryRequirements(gfx_state->device, texture->image, &image_mem_reqs);
+  texture->memory = gfx_vk_allocate_memory(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-  if (result == VK_SUCCESS && texture->memory != VK_NULL_HANDLE) {
-    result = vkBindImageMemory(gfx_state->device, texture->image, texture->memory, 0);
+  if (texture->image != VK_NULL_HANDLE && texture->memory != VK_NULL_HANDLE) {
+    vkBindImageMemory(gfx_state->device, texture->image, texture->memory, 0);
   }
 
   //- kti: Create View
@@ -654,12 +650,12 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
       .layerCount = 1,
     },
   };
-  if (result == VK_SUCCESS && texture->memory != VK_NULL_HANDLE) {
-    result = vkCreateImageView(gfx_state->device, &view_ci, 0, &texture->image_view);
+  if (texture->image != VK_NULL_HANDLE && texture->memory != VK_NULL_HANDLE) {
+    vkCreateImageView(gfx_state->device, &view_ci, 0, &texture->image_view);
   }
 
   //- kti: Store dimensions
-  if (result == VK_SUCCESS && texture->image_view != VK_NULL_HANDLE) {
+  if (texture->image_view != VK_NULL_HANDLE) {
     texture->width = width;
     texture->height = height;
   }
@@ -667,23 +663,18 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
   ////////////////////////////////
   //~ kti: Upload
 
-  if (texture->image_view != VK_NULL_HANDLE &&
-      (usage == GFX_TEXTURE_USAGE__DYNAMIC || pixels != 0)) {
+
+  if (texture->image_view != VK_NULL_HANDLE && (usage == GFX_TEXTURE_USAGE__DYNAMIC || pixels != 0)) {
     //- kti: Create staging buffer.
     GFX_VK_Buffer staging = gfx_vk_create_mapped_buffer(image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-    VkCommandBuffer cmd = 0;
-    if (staging.ptr != 0) {
-      cmd = gfx_vk_upload_begin();
-    } else {
-      result = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
+    VkCommandBuffer cmd = gfx_vk_immediate_begin();
 
-    if (result == VK_SUCCESS && pixels != 0) {
+    if (pixels != 0) {
       //- kti: Upload to staging buffer.
       memmove(staging.ptr, pixels, image_size);
 
-      //- kti: Upload via command buffer
+      //- kti: Upload via command buffer.
       gfx_vk_transition_image_layout(cmd, texture->image,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -713,7 +704,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
         VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
         VK_PIPELINE_STAGE_2_TRANSFER_BIT,
         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
-    } else if (result == VK_SUCCESS) {
+    } else {
       //- kti: Transition image.
       gfx_vk_transition_image_layout(cmd, texture->image,
         VK_IMAGE_LAYOUT_UNDEFINED,
@@ -723,26 +714,14 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
     }
 
-    gfx_vk_upload_end(cmd);
+    gfx_vk_immediate_end(cmd);
 
+    //- kti: For dynamic textures we keep the staging buffer.
     if (cmd != VK_NULL_HANDLE && usage == GFX_TEXTURE_USAGE__DYNAMIC) {
-      //- kti: Keep staging buffer mapped for dynamic updates.
       texture->staging = staging;
     } else {
-      //- kti: Cleanup staging resources for static textures.
       gfx_vk_destroy_buffer(staging);
     }
-  }
-
-  if (result != VK_SUCCESS ||
-      texture->memory == VK_NULL_HANDLE ||
-      texture->image_view == VK_NULL_HANDLE) {
-    vkDestroyImageView(gfx_state->device, texture->image_view, 0);
-    vkDestroyImage(gfx_state->device, texture->image, 0);
-    vkFreeMemory(gfx_state->device, texture->memory, 0);
-    MemoryZeroStruct(texture);
-    SLLStackPush(gfx_state->first_free_texture, texture);
-    texture = 0;
   }
 
   ProfEnd();
@@ -750,75 +729,67 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
 }
 
 Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) {
-  if (tex == 0 ||
-      tex->image == VK_NULL_HANDLE ||
-      pixels == 0 ||
-      region[0] < 0 ||
-      region[1] < 0 ||
-      region[2] <= 0 ||
-      region[3] <= 0 ||
-      (I1)region[0] > tex->width ||
-      (I1)region[2] > tex->width - (I1)region[0] ||
-      (I1)region[1] > tex->height ||
-      (I1)region[3] > tex->height - (I1)region[1]) {
-    return;
+  if (tex != 0 &&
+    region[0] < tex->width && region[1] < tex->height &&
+    region[2] <= tex->width - region[0] && region[3] <= tex->height - region[1] &&
+    region[2] > 0 && region[3] > 0) {
+    ProfFuncBegin();
+
+    L1 region_size = (L1)region[2] * region[3] * 4; // RGBA8
+
+    //- kti: Use persistent staging buffer if available, otherwise create temporary.
+    GFX_VK_Buffer staging = tex->staging;
+    I1 use_temp_staging = (tex->staging.buffer == VK_NULL_HANDLE);
+    if (use_temp_staging) {
+      staging = gfx_vk_create_mapped_buffer(region_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    }
+
+    if (staging.ptr != 0) {
+      //- kti: Copy pixels to staging buffer.
+      memmove(staging.ptr, pixels, region_size);
+
+      //- kti: Upload to image.
+      VkCommandBuffer cmd = gfx_vk_immediate_begin();
+
+      gfx_vk_transition_image_layout(cmd, tex->image,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_ACCESS_2_SHADER_READ_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+
+      VkBufferImageCopy copy_region = {
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .mipLevel = 0,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+        },
+        .imageOffset = {region[0], region[1], 0},
+        .imageExtent = {region[2], region[3], 1},
+      };
+      vkCmdCopyBufferToImage(cmd, staging.buffer, tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+
+      gfx_vk_transition_image_layout(cmd, tex->image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+
+      gfx_vk_immediate_end(cmd);
+    }
+
+    //- kti: Cleanup temporary staging buffer.
+    if (use_temp_staging) {
+      gfx_vk_destroy_buffer(staging);
+    }
+
+    ProfEnd();
   }
-  ProfFuncBegin();
-
-  L1 region_size = (L1)region[2] * region[3] * 4; // RGBA8
-
-  //- kti: Use persistent staging buffer if available, otherwise create temporary.
-  I1 use_temp_staging = (tex->staging.buffer == VK_NULL_HANDLE);
-  GFX_VK_Buffer staging = tex->staging;
-
-  if (use_temp_staging) {
-    //- kti: Create temporary staging buffer for static textures.
-    staging = gfx_vk_create_mapped_buffer(region_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-  }
-
-  //- kti: Copy pixels to staging buffer.
-  memmove(staging.ptr, pixels, region_size);
-
-  VkCommandBuffer cmd = gfx_vk_upload_begin();
-
-  gfx_vk_transition_image_layout(cmd, tex->image,
-    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    VK_ACCESS_2_SHADER_READ_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-    VK_PIPELINE_STAGE_2_TRANSFER_BIT);
-
-  VkBufferImageCopy copy_region = {
-    .bufferOffset = 0,
-    .bufferRowLength = 0,
-    .bufferImageHeight = 0,
-    .imageSubresource = {
-      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-      .mipLevel = 0,
-      .baseArrayLayer = 0,
-      .layerCount = 1,
-    },
-    .imageOffset = {region[0], region[1], 0},
-    .imageExtent = {region[2], region[3], 1},
-  };
-  vkCmdCopyBufferToImage(cmd, staging.buffer, tex->image,
-    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
-
-  gfx_vk_transition_image_layout(cmd, tex->image,
-    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
-
-  gfx_vk_upload_end(cmd);
-
-  //- kti: Cleanup temporary staging buffer.
-  if (use_temp_staging) {
-    gfx_vk_destroy_buffer(staging);
-  }
-
-  ProfEnd();
 }
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {

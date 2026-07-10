@@ -60,6 +60,7 @@
   X(vkBindBufferMemory) \
   X(vkCmdBindVertexBuffers) \
   X(vkCmdBindIndexBuffer) \
+  X(vkCmdCopyBuffer) \
   X(vkCmdDraw) \
   X(vkCmdDrawIndexed) \
   X(vkCreateWaylandSurfaceKHR) \
@@ -95,8 +96,6 @@ VK_EXTENSION_FUNCTIONS
 // TODO(kti): Find a way to avoid this.
 // Dynamically allocate new buffers if needed.
 #define MAX_RECTANGLE_COUNT 8192
-#define MAX_MESH_VERTEX_COUNT 65536
-#define MAX_MESH_INDEX_COUNT 196608
 #define MAX_MESH_INSTANCE_COUNT 8192
 
 #if (HEADER)
@@ -113,16 +112,6 @@ struct GFX_Per_Frame {
   VkDeviceMemory instance_buffer_memory;
   void *rect_instances;
   L1 rect_instances_count;
-
-  VkBuffer mesh_vertex_buffer;
-  VkDeviceMemory mesh_vertex_buffer_memory;
-  void *mesh_vertices;
-  L1 mesh_vertex_count;
-
-  VkBuffer mesh_index_buffer;
-  VkDeviceMemory mesh_index_buffer_memory;
-  void *mesh_indices;
-  L1 mesh_index_count;
 
   VkBuffer mesh_instance_buffer;
   VkDeviceMemory mesh_instance_buffer_memory;
@@ -157,6 +146,16 @@ typedef enum GFX_Texture_Usage {
   GFX_TEXTURE_USAGE__STATIC,
 } GFX_Texture_Usage;
 
+typedef enum GFX_Buffer_Usage {
+  GFX_BUFFER_USAGE__DYNAMIC,
+  GFX_BUFFER_USAGE__STATIC,
+} GFX_Buffer_Usage;
+
+typedef enum GFX_Buffer_Kind {
+  GFX_BUFFER_KIND__VERTEX,
+  GFX_BUFFER_KIND__INDEX,
+} GFX_Buffer_Kind;
+
 typedef struct GFX_Texture GFX_Texture;
 struct GFX_Texture {
   GFX_Texture *next;
@@ -172,6 +171,19 @@ struct GFX_Texture {
   void *staging_ptr;
 };
 
+typedef struct GFX_Buffer GFX_Buffer;
+struct GFX_Buffer {
+  GFX_Buffer *next;
+
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  L1 size;
+  GFX_Buffer_Kind kind;
+
+  VkBuffer staging_buffer;
+  VkDeviceMemory staging_buffer_memory;
+  void *staging_ptr;
+};
 
 typedef struct GFX_Rect_Instance GFX_Rect_Instance;
 struct GFX_Rect_Instance {
@@ -215,10 +227,12 @@ typedef struct GFX_Mesh_Batch GFX_Mesh_Batch;
 struct GFX_Mesh_Batch {
   GFX_Mesh_Batch *next;
 
-  GFX_Mesh_Vertex *vertices;
+  GFX_Buffer *vertex_buffer;
+  L1 vertex_offset;
   L1 vertex_count;
 
-  I1 *indices;
+  GFX_Buffer *index_buffer;
+  L1 index_offset;
   L1 index_count;
 
   GFX_Mesh_Instance *instances;
@@ -282,6 +296,7 @@ struct GFX_State {
 
   GFX_Window *first_free_window;
   GFX_Texture *first_free_texture;
+  GFX_Buffer *first_free_buffer;
 
   VkSampler texture_sampler;
   VkDescriptorSetLayout descriptor_set_layout;
@@ -343,6 +358,168 @@ Internal void gfx_vk_create_mapped_buffer(VkDeviceSize size, VkBufferUsageFlags 
 
   result = vkMapMemory(gfx_state->device, *memory, 0, size, 0, ptr);
   Assert(result == VK_SUCCESS);
+}
+
+Internal void gfx_vk_create_device_local_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buffer, VkDeviceMemory *memory) {
+  VkBufferCreateInfo buffer_ci = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .size = size,
+    .usage = usage,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  VkResult result = vkCreateBuffer(gfx_state->device, &buffer_ci, 0, buffer);
+  Assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements memory_requirements = {0};
+  vkGetBufferMemoryRequirements(gfx_state->device, *buffer, &memory_requirements);
+
+  VkMemoryAllocateInfo alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = memory_requirements.size,
+    .memoryTypeIndex = gfx_find_memory_type(memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+  };
+  result = vkAllocateMemory(gfx_state->device, &alloc_info, 0, memory);
+  Assert(result == VK_SUCCESS);
+
+  result = vkBindBufferMemory(gfx_state->device, *buffer, *memory, 0);
+  Assert(result == VK_SUCCESS);
+}
+
+Internal void gfx_vk_upload_buffer(GFX_Buffer *buffer, VkBuffer staging_buffer, L1 offset, L1 size) {
+  VkCommandBuffer cmd;
+  VkCommandBufferAllocateInfo cmd_alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .commandPool = gfx_state->upload_command_pool,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandBufferCount = 1,
+  };
+  VkResult result = vkAllocateCommandBuffers(gfx_state->device, &cmd_alloc_info, &cmd);
+  Assert(result == VK_SUCCESS);
+
+  VkCommandBufferBeginInfo begin_info = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  result = vkBeginCommandBuffer(cmd, &begin_info);
+  Assert(result == VK_SUCCESS);
+
+  VkBufferCopy copy_region = {
+    .srcOffset = offset,
+    .dstOffset = offset,
+    .size = size,
+  };
+  vkCmdCopyBuffer(cmd, staging_buffer, buffer->buffer, 1, &copy_region);
+
+  VkAccessFlags2 dst_access = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+  if (buffer->kind == GFX_BUFFER_KIND__INDEX) {
+    dst_access = VK_ACCESS_2_INDEX_READ_BIT;
+  }
+  VkBufferMemoryBarrier2 buffer_barrier = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+    .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
+    .dstAccessMask = dst_access,
+    .buffer = buffer->buffer,
+    .offset = offset,
+    .size = size,
+  };
+  VkDependencyInfo dependency_info = {
+    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+    .bufferMemoryBarrierCount = 1,
+    .pBufferMemoryBarriers = &buffer_barrier,
+  };
+  vkCmdPipelineBarrier2(cmd, &dependency_info);
+
+  result = vkEndCommandBuffer(cmd);
+  Assert(result == VK_SUCCESS);
+
+  VkSubmitInfo submit = {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 1,
+    .pCommandBuffers = &cmd,
+  };
+  result = vkQueueSubmit(gfx_state->queue, 1, &submit, VK_NULL_HANDLE);
+  Assert(result == VK_SUCCESS);
+  vkQueueWaitIdle(gfx_state->queue);
+  vkResetCommandPool(gfx_state->device, gfx_state->upload_command_pool, 0);
+}
+
+Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data) {
+  Assert(buffer != 0);
+  Assert(data != 0);
+  Assert(size > 0);
+  Assert(offset <= buffer->size && size <= buffer->size - offset);
+
+  VkBuffer staging_buffer = buffer->staging_buffer;
+  VkDeviceMemory staging_memory = buffer->staging_buffer_memory;
+  void *staging_ptr = buffer->staging_ptr;
+  I1 use_temp_staging = (staging_buffer == VK_NULL_HANDLE);
+
+  if (use_temp_staging) {
+    gfx_vk_create_mapped_buffer(buffer->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                &staging_buffer, &staging_memory, &staging_ptr);
+  }
+
+  memmove((B1 *)staging_ptr + offset, data, size);
+  gfx_vk_upload_buffer(buffer, staging_buffer, offset, size);
+
+  if (use_temp_staging) {
+    vkUnmapMemory(gfx_state->device, staging_memory);
+    vkDestroyBuffer(gfx_state->device, staging_buffer, 0);
+    vkFreeMemory(gfx_state->device, staging_memory, 0);
+  }
+}
+
+Internal GFX_Buffer *gfx_buffer_alloc(GFX_Buffer_Usage usage, GFX_Buffer_Kind kind, L1 size, void *initial_data) {
+  Assert(size > 0);
+  Assert(kind == GFX_BUFFER_KIND__VERTEX || kind == GFX_BUFFER_KIND__INDEX);
+
+  GFX_Buffer *buffer = gfx_state->first_free_buffer;
+  if (buffer == 0) {
+    buffer = push_array(gfx_state->arena, GFX_Buffer, 1);
+  } else {
+    SLLStackPop(gfx_state->first_free_buffer);
+    MemoryZeroStruct(buffer);
+  }
+
+  VkBufferUsageFlags vk_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  if (kind == GFX_BUFFER_KIND__VERTEX) {
+    vk_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  } else {
+    vk_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+  }
+  gfx_vk_create_device_local_buffer(size, vk_usage, &buffer->buffer, &buffer->memory);
+  buffer->size = size;
+  buffer->kind = kind;
+
+  if (usage == GFX_BUFFER_USAGE__DYNAMIC) {
+    gfx_vk_create_mapped_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                &buffer->staging_buffer,
+                                &buffer->staging_buffer_memory,
+                                &buffer->staging_ptr);
+  }
+  if (initial_data != 0) {
+    gfx_buffer_fill(buffer, 0, size, initial_data);
+  }
+
+  return buffer;
+}
+
+Internal void gfx_buffer_free(GFX_Buffer *buffer) {
+  if (buffer != 0) {
+    vkDestroyBuffer(gfx_state->device, buffer->buffer, 0);
+    vkFreeMemory(gfx_state->device, buffer->memory, 0);
+
+    if (buffer->staging_buffer != VK_NULL_HANDLE) {
+      vkUnmapMemory(gfx_state->device, buffer->staging_buffer_memory);
+      vkDestroyBuffer(gfx_state->device, buffer->staging_buffer, 0);
+      vkFreeMemory(gfx_state->device, buffer->staging_buffer_memory, 0);
+    }
+
+    buffer->size = 0;
+    SLLStackPush(gfx_state->first_free_buffer, buffer);
+  }
 }
 
 ////////////////////////////////
@@ -1515,22 +1692,7 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
     result = vkMapMemory(gfx_state->device, frame->instance_buffer_memory, 0, instance_buffer_ci.size, 0, &frame->rect_instances);
     Assert(result == VK_SUCCESS);
 
-    //- kti: Mesh Stream Buffers
-
-    gfx_vk_create_mapped_buffer(
-      sizeof(GFX_Mesh_Vertex) * MAX_MESH_VERTEX_COUNT,
-      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-      &frame->mesh_vertex_buffer,
-      &frame->mesh_vertex_buffer_memory,
-      &frame->mesh_vertices);
-
-    gfx_vk_create_mapped_buffer(
-      sizeof(I1) * MAX_MESH_INDEX_COUNT,
-      VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-      &frame->mesh_index_buffer,
-      &frame->mesh_index_buffer_memory,
-      &frame->mesh_indices);
-
+    //- kti: Mesh Instance Stream Buffer
     gfx_vk_create_mapped_buffer(
       sizeof(GFX_Mesh_Instance) * MAX_MESH_INSTANCE_COUNT,
       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -1572,27 +1734,6 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
     }
     if (frame->instance_buffer_memory != VK_NULL_HANDLE) {
       vkFreeMemory(gfx_state->device, frame->instance_buffer_memory, 0);
-    }
-
-    //- kti: Free mesh stream buffers.
-    if (frame->mesh_vertex_buffer_memory != VK_NULL_HANDLE) {
-      vkUnmapMemory(gfx_state->device, frame->mesh_vertex_buffer_memory);
-    }
-    if (frame->mesh_vertex_buffer != VK_NULL_HANDLE) {
-      vkDestroyBuffer(gfx_state->device, frame->mesh_vertex_buffer, 0);
-    }
-    if (frame->mesh_vertex_buffer_memory != VK_NULL_HANDLE) {
-      vkFreeMemory(gfx_state->device, frame->mesh_vertex_buffer_memory, 0);
-    }
-
-    if (frame->mesh_index_buffer_memory != VK_NULL_HANDLE) {
-      vkUnmapMemory(gfx_state->device, frame->mesh_index_buffer_memory);
-    }
-    if (frame->mesh_index_buffer != VK_NULL_HANDLE) {
-      vkDestroyBuffer(gfx_state->device, frame->mesh_index_buffer, 0);
-    }
-    if (frame->mesh_index_buffer_memory != VK_NULL_HANDLE) {
-      vkFreeMemory(gfx_state->device, frame->mesh_index_buffer_memory, 0);
     }
 
     if (frame->mesh_instance_buffer_memory != VK_NULL_HANDLE) {
@@ -1737,8 +1878,6 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
     vkw->per_frame[image_idx].rect_instances_count = 0;
-    vkw->per_frame[image_idx].mesh_vertex_count = 0;
-    vkw->per_frame[image_idx].mesh_index_count = 0;
     vkw->per_frame[image_idx].mesh_instance_count = 0;
   }
 
@@ -1754,11 +1893,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
     VkCommandBuffer cmd = frame->command_buffer;
     GFX_Rect_Instance *rect_instances = (GFX_Rect_Instance *)frame->rect_instances;
     L1 rect_instances_count = frame->rect_instances_count;
-    GFX_Mesh_Vertex *mesh_vertices = (GFX_Mesh_Vertex *)frame->mesh_vertices;
-    I1 *mesh_indices = (I1 *)frame->mesh_indices;
     GFX_Mesh_Instance *mesh_instances = (GFX_Mesh_Instance *)frame->mesh_instances;
-    L1 mesh_vertex_count = frame->mesh_vertex_count;
-    L1 mesh_index_count = frame->mesh_index_count;
     L1 mesh_instance_count = frame->mesh_instance_count;
 
     for (GFX_Pass *pass = passes.first; pass != 0; pass = pass->next) {
@@ -1858,40 +1993,32 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
             continue;
           }
 
-          if (mesh_vertex_count + batch->vertex_count > MAX_MESH_VERTEX_COUNT ||
-              mesh_index_count + batch->index_count > MAX_MESH_INDEX_COUNT ||
-              mesh_instance_count + batch->instance_count > MAX_MESH_INSTANCE_COUNT) {
-            printf("Max mesh stream buffer count reached for frame. Skipping batch.\n");
+          if (mesh_instance_count + batch->instance_count > MAX_MESH_INSTANCE_COUNT) {
+            printf("Max mesh instance count reached for frame. Skipping batch.\n");
             continue;
           }
 
-          memmove(mesh_vertices + mesh_vertex_count, batch->vertices, batch->vertex_count*sizeof(GFX_Mesh_Vertex));
-          memmove(mesh_indices + mesh_index_count, batch->indices, batch->index_count*sizeof(I1));
           memmove(mesh_instances + mesh_instance_count, batch->instances, batch->instance_count*sizeof(GFX_Mesh_Instance));
 
           VkBuffer vertex_buffers[] = {
-            frame->mesh_vertex_buffer,
+            batch->vertex_buffer->buffer,
             frame->mesh_instance_buffer,
           };
           VkDeviceSize vertex_offsets[] = {
-            mesh_vertex_count * sizeof(GFX_Mesh_Vertex),
+            batch->vertex_offset,
             mesh_instance_count * sizeof(GFX_Mesh_Instance),
           };
           vkCmdBindVertexBuffers(cmd, 0, ArrayCount(vertex_buffers), vertex_buffers, vertex_offsets);
-          vkCmdBindIndexBuffer(cmd, frame->mesh_index_buffer, mesh_index_count * sizeof(I1), VK_INDEX_TYPE_UINT32);
+          vkCmdBindIndexBuffer(cmd, batch->index_buffer->buffer, batch->index_offset, VK_INDEX_TYPE_UINT32);
 
           vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
 
-          mesh_vertex_count += batch->vertex_count;
-          mesh_index_count += batch->index_count;
           mesh_instance_count += batch->instance_count;
         }
       }
     }
 
     frame->rect_instances_count = rect_instances_count;
-    frame->mesh_vertex_count = mesh_vertex_count;
-    frame->mesh_index_count = mesh_index_count;
     frame->mesh_instance_count = mesh_instance_count;
   }
 }

@@ -162,18 +162,6 @@ Internal GFX_Rect_Batch *dr_rect_batch_push(DR_Bucket *bucket, GFX_Rect_Pass *pa
   return batch;
 }
 
-Internal GFX_Mesh_Batch *dr_mesh_batch_push(DR_Bucket *bucket, GFX_Mesh_Pass *pass, GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count) {
-  GFX_Mesh_Batch *batch = push_array(dr_state->arena, GFX_Mesh_Batch, 1);
-  batch->vertices = vertices;
-  batch->vertex_count = vertex_count;
-  batch->indices = indices;
-  batch->index_count = index_count;
-  batch->instance_cap = 256;
-  batch->instances = push_array(dr_state->arena, GFX_Mesh_Instance, batch->instance_cap);
-  SLLQueuePush(pass->first_batch, pass->last_batch, batch);
-  return batch;
-}
-
 Internal void dr_mesh_view_projection(M4F view_projection) {
   DR_Bucket *bucket = dr_state->top_bucket;
   if (bucket != 0) {
@@ -210,7 +198,7 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
     batch->instance_count += 1;
     bucket->last_cmd_stack_gen = bucket->stack_gen;
 
-    *result = (GFX_Rect_Instance){
+    result[0] = (GFX_Rect_Instance){
       .dst_rect = dst,
       .colors = { color, color, color, color },
       .border_color = color,
@@ -254,7 +242,7 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
     batch->instance_count += 1;
     bucket->last_cmd_stack_gen = bucket->stack_gen;
 
-    *result = (GFX_Rect_Instance){
+    result[0] = (GFX_Rect_Instance){
       .dst_rect = dst,
       .src_rect = src,
       .colors = { color, color, color, color },
@@ -267,13 +255,24 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
   return result;
 }
 
-Internal GFX_Mesh_Instance *dr_mesh(GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count, M4F transform, F4 color) {
+Internal GFX_Mesh_Instance *dr_mesh(
+  GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count,
+  GFX_Buffer *index_buffer, L1 index_offset, L1 index_count,
+  M4F transform, F4 color) {
   ProfFuncBegin();
 
   GFX_Mesh_Instance *result = 0;
 
   DR_Bucket *bucket = dr_state->top_bucket;
-  if (bucket != 0 && vertices != 0 && indices != 0 && vertex_count > 0 && index_count > 0) {
+  if (bucket != 0 && vertex_buffer != 0 && index_buffer != 0 && vertex_count > 0 && index_count > 0) {
+    Assert(vertex_buffer->kind == GFX_BUFFER_KIND__VERTEX);
+    Assert(index_buffer->kind == GFX_BUFFER_KIND__INDEX);
+    Assert(vertex_offset % sizeof(GFX_Mesh_Vertex) == 0);
+    Assert(index_offset % sizeof(I1) == 0);
+    Assert(vertex_offset <= vertex_buffer->size && vertex_count <= (vertex_buffer->size - vertex_offset)/sizeof(GFX_Mesh_Vertex));
+    Assert(index_offset <= index_buffer->size && index_count <= (index_buffer->size - index_offset)/sizeof(I1));
+    Assert(index_count <= I1_MAX);
+
     GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__MESH);
     GFX_Mesh_Pass *pass = &pass_n->mesh;
     GFX_Mesh_Batch *batch = pass->last_batch;
@@ -282,14 +281,25 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Mesh_Vertex *vertices, L1 vertex_count, 
     I1 mesh_requires_new_batch = 0;
     if (batch) {
       out_of_space = batch->instance_count >= batch->instance_cap;
-      mesh_requires_new_batch = batch->vertices != vertices ||
+      mesh_requires_new_batch = batch->vertex_buffer != vertex_buffer ||
+                                batch->vertex_offset != vertex_offset ||
                                 batch->vertex_count != vertex_count ||
-                                batch->indices != indices ||
+                                batch->index_buffer != index_buffer ||
+                                batch->index_offset != index_offset ||
                                 batch->index_count != index_count;
     }
 
     if (batch == 0 || out_of_space || mesh_requires_new_batch) {
-      batch = dr_mesh_batch_push(bucket, pass, vertices, vertex_count, indices, index_count);
+      batch = push_array(dr_state->arena, GFX_Mesh_Batch, 1);
+      batch->vertex_buffer = vertex_buffer;
+      batch->vertex_offset = vertex_offset;
+      batch->vertex_count = vertex_count;
+      batch->index_buffer = index_buffer;
+      batch->index_offset = index_offset;
+      batch->index_count = index_count;
+      batch->instance_cap = 256;
+      batch->instances = push_array(dr_state->arena, GFX_Mesh_Instance, batch->instance_cap);
+      SLLQueuePush(pass->first_batch, pass->last_batch, batch);
     }
 
     result = &batch->instances[batch->instance_count];

@@ -323,8 +323,7 @@ Internal I1 gfx_find_memory_type(VkMemoryRequirements mem_reqs, VkMemoryProperty
   vkGetPhysicalDeviceMemoryProperties(gfx_state->physical_device, &mem_properties);
 
   for (I1 i = 0; i < mem_properties.memoryTypeCount; i++) {
-    if ((mem_reqs.memoryTypeBits & (1 << i)) &&
-        (mem_properties.memoryTypes[i].propertyFlags & required_properties) == required_properties) {
+    if ((mem_reqs.memoryTypeBits & (1 << i)) && (mem_properties.memoryTypes[i].propertyFlags & required_properties) == required_properties) {
       return i;
     }
   }
@@ -332,9 +331,7 @@ Internal I1 gfx_find_memory_type(VkMemoryRequirements mem_reqs, VkMemoryProperty
   return 0;
 }
 
-Internal void gfx_vk_create_buffer(
-  VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memory_properties,
-  VkBuffer *buffer, VkDeviceMemory *memory) {
+Internal void gfx_vk_create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memory_properties, VkBuffer *buffer, VkDeviceMemory *memory) {
   VkBufferCreateInfo buffer_ci = {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
     .size = size,
@@ -366,18 +363,20 @@ Internal void gfx_vk_create_mapped_buffer(VkDeviceSize size, VkBufferUsageFlags 
 }
 
 Internal void gfx_vk_destroy_mapped_buffer(VkBuffer *buffer, VkDeviceMemory *memory, void **ptr) {
-  if (*memory != VK_NULL_HANDLE) {
+  if (memory && memory[0] != VK_NULL_HANDLE) {
     vkUnmapMemory(gfx_state->device, *memory);
   }
-  if (*buffer != VK_NULL_HANDLE) {
+  if (buffer && buffer[0] != VK_NULL_HANDLE) {
     vkDestroyBuffer(gfx_state->device, *buffer, 0);
+    buffer[0] = VK_NULL_HANDLE;
   }
-  if (*memory != VK_NULL_HANDLE) {
+  if (memory && memory[0] != VK_NULL_HANDLE) {
     vkFreeMemory(gfx_state->device, *memory, 0);
+    memory[0] = VK_NULL_HANDLE;
   }
-  *buffer = VK_NULL_HANDLE;
-  *memory = VK_NULL_HANDLE;
-  *ptr = 0;
+  if (ptr) {
+    ptr[0] = 0;
+  }
 }
 
 Internal VkCommandBuffer gfx_vk_upload_begin(void) {
@@ -465,70 +464,70 @@ Internal void gfx_vk_upload_buffer(GFX_Buffer *buffer, VkBuffer staging_buffer, 
 }
 
 Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data) {
-  Assert(buffer != 0);
-  Assert(data != 0);
-  Assert(size > 0);
-  Assert(offset <= buffer->size && size <= buffer->size - offset);
+  if (buffer != 0 &&
+    buffer->buffer != VK_NULL_HANDLE &&
+    data != 0 &&
+    size > 0 &&
+    offset <= buffer->size &&
+    offset+size > offset &&
+    offset+size <= buffer->size) {
+    VkBuffer staging_buffer = buffer->staging_buffer;
+    VkDeviceMemory staging_memory = buffer->staging_buffer_memory;
+    void *staging_ptr = buffer->staging_ptr;
+    I1 use_temp_staging = (staging_buffer == VK_NULL_HANDLE);
 
-  VkBuffer staging_buffer = buffer->staging_buffer;
-  VkDeviceMemory staging_memory = buffer->staging_buffer_memory;
-  void *staging_ptr = buffer->staging_ptr;
-  I1 use_temp_staging = (staging_buffer == VK_NULL_HANDLE);
+    if (use_temp_staging) {
+      gfx_vk_create_mapped_buffer(buffer->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_buffer, &staging_memory, &staging_ptr);
+    }
 
-  if (use_temp_staging) {
-    gfx_vk_create_mapped_buffer(buffer->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_buffer, &staging_memory, &staging_ptr);
-  }
+    memmove((B1 *)staging_ptr + offset, data, size);
+    gfx_vk_upload_buffer(buffer, staging_buffer, offset, size);
 
-  memmove((B1 *)staging_ptr + offset, data, size);
-  gfx_vk_upload_buffer(buffer, staging_buffer, offset, size);
-
-  if (use_temp_staging) {
-    gfx_vk_destroy_mapped_buffer(&staging_buffer, &staging_memory, &staging_ptr);
+    if (use_temp_staging) {
+      gfx_vk_destroy_mapped_buffer(&staging_buffer, &staging_memory, &staging_ptr);
+    }
   }
 }
 
 Internal GFX_Buffer *gfx_buffer_alloc(GFX_Buffer_Usage usage, GFX_Buffer_Kind kind, L1 size, void *initial_data) {
-  Assert(size > 0);
-  Assert(kind == GFX_BUFFER_KIND__VERTEX || kind == GFX_BUFFER_KIND__INDEX);
+  GFX_Buffer *buffer = 0;
 
-  GFX_Buffer *buffer = gfx_state->first_free_buffer;
-  if (buffer == 0) {
-    buffer = push_array(gfx_state->arena, GFX_Buffer, 1);
-  } else {
-    SLLStackPop(gfx_state->first_free_buffer);
-    MemoryZeroStruct(buffer);
-  }
+  if (size > 0) {
+    buffer = gfx_state->first_free_buffer;
+    if (buffer == 0) {
+      buffer = push_array(gfx_state->arena, GFX_Buffer, 1);
+    } else {
+      SLLStackPop(gfx_state->first_free_buffer);
+      MemoryZeroStruct(buffer);
+    }
 
-  VkBufferUsageFlags vk_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  if (kind == GFX_BUFFER_KIND__VERTEX) {
-    vk_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-  } else {
-    vk_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-  }
-  gfx_vk_create_buffer(size, vk_usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &buffer->buffer, &buffer->memory);
-  buffer->size = size;
-  buffer->kind = kind;
+    VkBufferUsageFlags vk_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (kind == GFX_BUFFER_KIND__VERTEX) {
+      vk_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    } else {
+      vk_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    }
+    gfx_vk_create_buffer(size, vk_usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &buffer->buffer, &buffer->memory);
+    buffer->size = size;
+    buffer->kind = kind;
 
-  if (usage == GFX_BUFFER_USAGE__DYNAMIC) {
-    gfx_vk_create_mapped_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &buffer->staging_buffer, &buffer->staging_buffer_memory, &buffer->staging_ptr);
-  }
-  if (initial_data != 0) {
-    gfx_buffer_fill(buffer, 0, size, initial_data);
+    if (usage == GFX_BUFFER_USAGE__DYNAMIC) {
+      gfx_vk_create_mapped_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &buffer->staging_buffer, &buffer->staging_buffer_memory, &buffer->staging_ptr);
+    }
+    if (initial_data != 0) {
+      gfx_buffer_fill(buffer, 0, size, initial_data);
+    }
   }
 
   return buffer;
 }
 
 Internal void gfx_buffer_free(GFX_Buffer *buffer) {
-  if (buffer != 0) {
+  if (buffer != 0 && buffer->buffer != VK_NULL_HANDLE) {
     vkDestroyBuffer(gfx_state->device, buffer->buffer, 0);
     vkFreeMemory(gfx_state->device, buffer->memory, 0);
-
-    if (buffer->staging_buffer != VK_NULL_HANDLE) {
-      gfx_vk_destroy_mapped_buffer(&buffer->staging_buffer, &buffer->staging_buffer_memory, &buffer->staging_ptr);
-    }
-
-    buffer->size = 0;
+    gfx_vk_destroy_mapped_buffer(&buffer->staging_buffer, &buffer->staging_buffer_memory, &buffer->staging_ptr);
+    MemoryZeroStruct(buffer);
     SLLStackPush(gfx_state->first_free_buffer, buffer);
   }
 }
@@ -591,7 +590,10 @@ Internal void gfx_vk_recycle_semaphore(VkSemaphore semaphore) {
 }
 
 Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 height, void *pixels) {
-  Assert(width > 0 && height > 0);
+  if (width == 0 || height == 0 ||
+      width > L1_MAX / ((L1)height * 4)) {
+    return 0;
+  }
   ProfFuncBegin();
 
   GFX_Texture *texture = gfx_state->first_free_texture;
@@ -603,7 +605,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
   }
 
   VkResult result;
-  L1 image_size = width * height * 4; // RGBA8
+  L1 image_size = (L1)width * height * 4; // RGBA8
 
   //- kti: Create Image
 
@@ -626,10 +628,11 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
   VkMemoryRequirements image_mem_reqs;
   vkGetImageMemoryRequirements(gfx_state->device, texture->image, &image_mem_reqs);
 
+  I1 memory_type = gfx_find_memory_type(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   VkMemoryAllocateInfo image_alloc_info = {
     .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
     .allocationSize = image_mem_reqs.size,
-    .memoryTypeIndex = gfx_find_memory_type(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+    .memoryTypeIndex = memory_type,
   };
   result = vkAllocateMemory(gfx_state->device, &image_alloc_info, 0, &texture->memory);
   Assert(result == VK_SUCCESS);
@@ -735,13 +738,22 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
 }
 
 Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) {
-  Assert(pixels != 0);
-  Assert(region[0] >= 0 && region[1] >= 0);
-  Assert(region[0] + region[2] <= tex->width);
-  Assert(region[1] + region[3] <= tex->height);
+  if (tex == 0 ||
+      tex->image == VK_NULL_HANDLE ||
+      pixels == 0 ||
+      region[0] < 0 ||
+      region[1] < 0 ||
+      region[2] <= 0 ||
+      region[3] <= 0 ||
+      (I1)region[0] > tex->width ||
+      (I1)region[2] > tex->width - (I1)region[0] ||
+      (I1)region[1] > tex->height ||
+      (I1)region[3] > tex->height - (I1)region[1]) {
+    return;
+  }
   ProfFuncBegin();
 
-  L1 region_size = region[2] * region[3] * 4; // RGBA8
+  L1 region_size = (L1)region[2] * region[3] * 4; // RGBA8
 
   //- kti: Use persistent staging buffer if available, otherwise create temporary.
   I1 use_temp_staging = (tex->staging_buffer == VK_NULL_HANDLE);
@@ -800,18 +812,18 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 }
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {
+  if (tex == 0 || tex->image == VK_NULL_HANDLE) {
+    return;
+  }
+
   vkDestroyImageView(gfx_state->device, tex->image_view, 0);
   vkDestroyImage(gfx_state->device, tex->image, 0);
   vkFreeMemory(gfx_state->device, tex->memory, 0);
 
   //- kti: Cleanup staging buffer for dynamic textures.
-  if (tex->staging_buffer != VK_NULL_HANDLE) {
-    gfx_vk_destroy_mapped_buffer(&tex->staging_buffer, &tex->staging_buffer_memory, &tex->staging_ptr);
-  }
+  gfx_vk_destroy_mapped_buffer(&tex->staging_buffer, &tex->staging_buffer_memory, &tex->staging_ptr);
 
-  tex->width = 0;
-  tex->height = 0;
-
+  MemoryZeroStruct(tex);
   SLLStackPush(gfx_state->first_free_texture, tex);
 }
 
@@ -1751,6 +1763,9 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           GFX_Texture *texture = batch->texture;
           if (texture == 0) {
             texture = gfx_state->white_texture;
+          }
+          if (texture == 0 || texture->image_view == VK_NULL_HANDLE) {
+            continue;
           }
           VkDescriptorImageInfo image_info = {
             .sampler = gfx_state->texture_sampler,

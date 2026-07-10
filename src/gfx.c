@@ -540,10 +540,16 @@ Internal GFX_Buffer *gfx_buffer_alloc(GFX_Buffer_Usage usage, GFX_Buffer_Kind ki
 }
 
 Internal void gfx_buffer_free(GFX_Buffer *buffer) {
-  if (buffer != 0 && buffer->buffer != VK_NULL_HANDLE) {
-    vkDestroyBuffer(gfx_state->device, buffer->buffer, 0);
-    vkFreeMemory(gfx_state->device, buffer->memory, 0);
+  if (buffer != 0) {
+    if (buffer->buffer != VK_NULL_HANDLE) {
+      vkDestroyBuffer(gfx_state->device, buffer->buffer, 0);
+    }
+    if (buffer->memory != VK_NULL_HANDLE) {
+      vkFreeMemory(gfx_state->device, buffer->memory, 0);
+    }
     gfx_vk_destroy_buffer(buffer->staging);
+
+    //- kti: Add to freelist.
     MemoryZeroStruct(buffer);
     SLLStackPush(gfx_state->first_free_buffer, buffer);
   }

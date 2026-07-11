@@ -40,6 +40,10 @@ enum {
 #if (SOURCE)
 
 ////////////////////////////////
+//~ General
+#define Square(x) ((x)*(x))
+
+////////////////////////////////
 //~ F1
 
 #define abs_F1(x) fabsf(x)

@@ -28,6 +28,7 @@ struct View {
   UI_Box *viewport_box;
 
   F4 camera_pos;
+  F4 camera_target_pos;
   F1 camera_yaw;
   F1 camera_pitch;
   F1 camera_fov;
@@ -423,6 +424,7 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
 
   if (kind == VIEW_KIND__VIEWPORT) {
     view->camera_pos = (F4){0.0f, 0.0f, -5.0f};
+    view->camera_target_pos = view->camera_pos;
     view->camera_fov = 60.0f * PI/180.0f;
     view->camera_nearz = 0.1f;
     view->camera_farz = 100.0f;
@@ -1120,6 +1122,14 @@ Internal void lane(Arena *arena) {
 
                   //- kti: 3D viewport.
                   case VIEW_KIND__VIEWPORT: {
+                    //- kti: Animate camera.
+                    view->camera_pos = lerp_F4(view->camera_pos, 0.15f, view->camera_target_pos);
+                    if (length_sq_F4(view->camera_pos-view->camera_target_pos) < Square(0.001f)) {
+                      view->camera_pos = view->camera_target_pos;
+                    }
+
+                    //- kti: Build box.
+                    
                     ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
                     ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
                     ui_set_next_background_color((F4){0.025f, 0.025f, 0.035f, 1.0f});
@@ -1128,16 +1138,15 @@ Internal void lane(Arena *arena) {
                     UI_Signal viewport_signal = ui_signal_from_box(view->viewport_box);
                     F2 drag_delta = ui_drag_delta();
 
-                    //- kti: Zooming.
+                    //- kti: Dolly.
                     if (viewport_signal.scroll[1] != 0.0f) {
                       M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera_pitch), rotate_y_M4F(view->camera_yaw));
                       F4 camera_forward = mul_M4F_F4(camera_rotation, (F4){0.0f, 0.0f, 1.0f, 0.0f});
                       F1 dolly_speed = 0.05f;
-                      view->camera_pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
+                      view->camera_target_pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
                     }
 
-                    F2 delta = ui_drag_delta();
-                    I1 is_click = dot_F2(delta) <= 4.0f*4.0f;
+                    I1 is_click = dot_F2(drag_delta) <= Square(4.0f);
 
                     //- kti: Panning
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
@@ -1151,9 +1160,9 @@ Internal void lane(Arena *arena) {
                       F4 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
                       F4 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
                       F1 pan_speed = 0.01f;
-                      view->camera_pos = view->camera_drag_start_pos
-                          - drag_delta[0]*pan_speed*camera_right
-                          + drag_delta[1]*pan_speed*camera_up;
+                      view->camera_target_pos = view->camera_drag_start_pos -
+                        drag_delta[0]*pan_speed*camera_right +
+                        drag_delta[1]*pan_speed*camera_up;
                     }
 
                     //- kti: Rotating

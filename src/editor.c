@@ -972,16 +972,22 @@ Internal void lane(Arena *arena) {
                           UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
                           UI_Font_Size(ui_top_font_size()*0.8f)
                           UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
-                          ui_label(str8("Size"));
+                          ui_label(entity->shape == SHAPE__SPHERE ? str8("Radius") : str8("Size"));
 
                           UI_Row()
                           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                           UI_Corner_Radius(ui_top_font_size()*0.2f) {
-                            ui_drag_F1(str8("X"), &entity->size[0], 50.0f);
-                            ui_spacer(ui_px(5.0f, 1.0f));
-                            ui_drag_F1(str8("Y"), &entity->size[1], 50.0f);
-                            ui_spacer(ui_px(5.0f, 1.0f));
-                            ui_drag_F1(str8("Z"), &entity->size[2], 50.0f);
+                            if (entity->shape == SHAPE__SPHERE) {
+                              F1 radius = entity->size[0];
+                              ui_drag_F1(str8("R"), &radius, 50.0f);
+                              entity->size = (F3){radius, radius, radius};
+                            } else {
+                              ui_drag_F1(str8("X"), &entity->size[0], 50.0f);
+                              ui_spacer(ui_px(5.0f, 1.0f));
+                              ui_drag_F1(str8("Y"), &entity->size[1], 50.0f);
+                              ui_spacer(ui_px(5.0f, 1.0f));
+                              ui_drag_F1(str8("Z"), &entity->size[2], 50.0f);
+                            }
                           }
 
                           ui_spacer(ui_px(10.0f, 1.0f));
@@ -1015,6 +1021,10 @@ Internal void lane(Arena *arena) {
                               UI_Signal signal = ui_signal_from_box(box);
                               if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
                                 entity->shape = shape;
+                                if (shape == SHAPE__SPHERE) {
+                                  entity->size[1] = entity->size[0];
+                                  entity->size[2] = entity->size[0];
+                                }
                               }
                             }
                           }

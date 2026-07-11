@@ -2339,24 +2339,17 @@ Internal void ui_draw(void) {
     I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS && (hot_by_key || hot_by_group));
 
     if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
-      F4 shadow = {
-        box->rect[0] - 4,
-        box->rect[1] - 4,
-        box->rect[2] + 16,
-        box->rect[3] + 16,
-      };
-      dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
+      F4 shadow = rect_pad(box->rect, 4.0f);
+      shadow[1] += 4.0f;
+      GFX_Rect_Instance *shadow_inst = dr_rect(shadow, oklch(0, 0, 0, 0.25f), 0.0f, 8.0f);
+      shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
     }
 
     if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
       if (draw_hot_effect && !draw_active_effect) {
-        F4 shadow = {
-          box->rect[0] - 4,
-          box->rect[1] - 4,
-          box->rect[2] + 16,
-          box->rect[3] + 16,
-        };
-        dr_rect(shadow, oklch(0, 0, 0, 1), 0.8f, 8.0f);
+        F4 shadow = rect_pad(box->rect, 4.0f);
+        GFX_Rect_Instance *shadow_inst = dr_rect(shadow, oklch(0, 0, 0, 0.2f), 0.0f, 8.0f);
+        shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
       }
 
       GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, softness);

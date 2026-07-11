@@ -129,6 +129,14 @@ struct Entity {
   RT_Material material;
 };
 
+typedef struct Mesh Mesh;
+struct Mesh {
+  GFX_Buffer *vertex_buffer;
+  GFX_Buffer *index_buffer;
+  L1 vertex_count;
+  L1 index_count;
+};
+
 ////////////////////////////////
 //~ kti: State
 
@@ -158,8 +166,7 @@ struct State {
 
   Entity_Handle selected_entity;
 
-  GFX_Buffer *triangle_vertex_buffer;
-  GFX_Buffer *triangle_index_buffer;
+  Mesh meshes[SHAPE_COUNT];
 };
 
 #endif
@@ -167,6 +174,94 @@ struct State {
 #if (SOURCE)
 
 Global State *state = 0;
+
+////////////////////////////////
+//~ kti: Meshes
+
+Internal Mesh mesh_alloc_from_vertices_indices(GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count) {
+  Mesh result = {0};
+  result.vertex_buffer = gfx_buffer_alloc(
+      GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__VERTEX,
+      vertex_count*sizeof(vertices[0]), vertices);
+  result.index_buffer = gfx_buffer_alloc(
+      GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__INDEX,
+      index_count*sizeof(indices[0]), indices);
+  result.vertex_count = vertex_count;
+  result.index_count = index_count;
+  return result;
+}
+
+Internal Mesh mesh_alloc_sphere(I1 latitude_segments, I1 longitude_segments) {
+  Temp_Arena scratch = scratch_begin(0, 0);
+
+  latitude_segments = Max(latitude_segments, 2);
+  longitude_segments = Max(longitude_segments, 3);
+
+  L1 vertex_count = (L1)(latitude_segments + 1)*(longitude_segments + 1);
+  L1 index_count = (L1)latitude_segments*longitude_segments*6;
+  GFX_Mesh_Vertex *vertices = push_array_no_zero(scratch.arena, GFX_Mesh_Vertex, vertex_count);
+  I1 *indices = push_array_no_zero(scratch.arena, I1, index_count);
+
+  L1 vertex_idx = 0;
+  for (I1 lat = 0; lat <= latitude_segments; lat += 1) {
+    F1 v = (F1)lat/(F1)latitude_segments;
+    F1 latitude = PI*(v - 0.5f);
+    F1 y = sinf(latitude);
+    F1 ring_radius = cosf(latitude);
+    for (I1 lon = 0; lon <= longitude_segments; lon += 1) {
+      F1 u = (F1)lon/(F1)longitude_segments;
+      F1 longitude = 2.0f*PI*u;
+      F1 x = ring_radius*cosf(longitude);
+      F1 z = ring_radius*sinf(longitude);
+      vertices[vertex_idx++] = (GFX_Mesh_Vertex){
+        .pos = {0.5f*x, 0.5f*y, 0.5f*z, 1.0f},
+        .normal = {x, y, z, 0.0f},
+        .uv = {u, 1.0f-v},
+        .color = {1.0f, 1.0f, 1.0f, 1.0f},
+      };
+    }
+  }
+
+  L1 index_idx = 0;
+  I1 row_size = longitude_segments + 1;
+  for (I1 lat = 0; lat < latitude_segments; lat += 1) {
+    for (I1 lon = 0; lon < longitude_segments; lon += 1) {
+      I1 a = lat*row_size + lon;
+      I1 b = a + row_size;
+      indices[index_idx++] = a;
+      indices[index_idx++] = b;
+      indices[index_idx++] = a + 1;
+      indices[index_idx++] = a + 1;
+      indices[index_idx++] = b;
+      indices[index_idx++] = b + 1;
+    }
+  }
+
+  Mesh mesh = mesh_alloc_from_vertices_indices(vertices, vertex_count, indices, index_count);
+  scratch_end(scratch);
+
+  return mesh;
+}
+
+Internal Mesh mesh_alloc_box(void) {
+#define BV(px, py, pz, nx, ny, nz, u, v) \
+  {{px, py, pz, 1.0f}, {nx, ny, nz, 0.0f}, {u, v}, {1.0f, 1.0f, 1.0f, 1.0f}}
+  GFX_Mesh_Vertex vertices[] = {
+    BV(-.5f,-.5f, .5f, 0, 0, 1, 0, 0), BV( .5f,-.5f, .5f, 0, 0, 1, 1, 0), BV( .5f, .5f, .5f, 0, 0, 1, 1, 1), BV(-.5f, .5f, .5f, 0, 0, 1, 0, 1),
+    BV( .5f,-.5f,-.5f, 0, 0,-1, 0, 0), BV(-.5f,-.5f,-.5f, 0, 0,-1, 1, 0), BV(-.5f, .5f,-.5f, 0, 0,-1, 1, 1), BV( .5f, .5f,-.5f, 0, 0,-1, 0, 1),
+    BV(-.5f,-.5f,-.5f,-1, 0, 0, 0, 0), BV(-.5f,-.5f, .5f,-1, 0, 0, 1, 0), BV(-.5f, .5f, .5f,-1, 0, 0, 1, 1), BV(-.5f, .5f,-.5f,-1, 0, 0, 0, 1),
+    BV( .5f,-.5f, .5f, 1, 0, 0, 0, 0), BV( .5f,-.5f,-.5f, 1, 0, 0, 1, 0), BV( .5f, .5f,-.5f, 1, 0, 0, 1, 1), BV( .5f, .5f, .5f, 1, 0, 0, 0, 1),
+    BV(-.5f, .5f, .5f, 0, 1, 0, 0, 0), BV( .5f, .5f, .5f, 0, 1, 0, 1, 0), BV( .5f, .5f,-.5f, 0, 1, 0, 1, 1), BV(-.5f, .5f,-.5f, 0, 1, 0, 0, 1),
+    BV(-.5f,-.5f,-.5f, 0,-1, 0, 0, 0), BV( .5f,-.5f,-.5f, 0,-1, 0, 1, 0), BV( .5f,-.5f, .5f, 0,-1, 0, 1, 1), BV(-.5f,-.5f, .5f, 0,-1, 0, 0, 1),
+  };
+#undef BV
+  I1 indices[] = {
+    0, 1, 2,  0, 2, 3,  4, 5, 6,  4, 6, 7,
+    8, 9,10,  8,10,11, 12,13,14, 12,14,15,
+    16,17,18, 16,18,19, 20,21,22, 20,22,23,
+  };
+  return mesh_alloc_from_vertices_indices(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
+}
 
 ////////////////////////////////
 //~ kti: Panel
@@ -447,29 +542,8 @@ Internal void lane(Arena *arena) {
     state = push_array(arena, State, 1);
     state->arena = arena;
 
-    GFX_Mesh_Vertex triangle_vertices[] = {
-      {
-        .pos = {-0.45f, -0.35f, 1.0f, 1.0f},
-        .normal = {0.0f, 0.0f, 1.0f, 0.0f},
-        .uv = {0.0f, 0.0f},
-        .color = {1.0f, 0.1f, 0.1f, 1.0f},
-      },
-      {
-        .pos = {0.45f, -0.35f, 1.0f, 1.0f},
-        .normal = {0.0f, 0.0f, 1.0f, 0.0f},
-        .uv = {1.0f, 0.0f},
-        .color = {0.1f, 1.0f, 0.1f, 1.0f},
-      },
-      {
-        .pos = {0.0f, 0.45f, 1.0f, 1.0f},
-        .normal = {0.0f, 0.0f, 1.0f, 0.0f},
-        .uv = {0.5f, 1.0f},
-        .color = {0.1f, 0.2f, 1.0f, 1.0f},
-      },
-    };
-    I1 triangle_indices[] = {0, 1, 2};
-    state->triangle_vertex_buffer = gfx_buffer_alloc(GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__VERTEX, sizeof(triangle_vertices), triangle_vertices);
-    state->triangle_index_buffer = gfx_buffer_alloc(GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__INDEX, sizeof(triangle_indices), triangle_indices);
+    state->meshes[SHAPE__BOX] = mesh_alloc_box();
+    state->meshes[SHAPE__SPHERE] = mesh_alloc_sphere(16, 32);
 
     Window *window = window_open();
 
@@ -1033,9 +1107,11 @@ Internal void lane(Arena *arena) {
                 //- kti: Draw scene.
                 for (L1 i = 0; i < state->entity_count; i += 1) {
                   Entity *e = &state->entities[i];
-                  M4F transform = translate_M4F(e->pos);
-                  dr_mesh(state->triangle_vertex_buffer, 0, 3, state->triangle_index_buffer, 0, 3,
-                          transform, (F4){1.0f, 1.0f, 1.0f, 1.0f});
+                  Mesh *mesh = &state->meshes[e->shape];
+                  M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
+                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
+                          mesh->index_buffer, 0, mesh->index_count,
+                          transform, F4_from_F3(e->material.base_color, 1.0f));
                 }
               }
             }

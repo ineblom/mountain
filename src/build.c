@@ -63,8 +63,6 @@ NoInline void WrmEnd(void) { Crash(1); }
 
 // #define RT_APP
 #include "rt.c"
+#include "editor.c"
 
-#include "editor_new.c"
-
-// #include "editor.c"
 #endif

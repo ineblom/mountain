@@ -530,6 +530,47 @@ Internal Entity *entity_create(L1 flags, String8 name) {
   return entity;
 }
 
+Internal void widget_rgb_edit(String8 label, F3 *rgb) {
+  UI_Row()
+  UI_Corner_Radius(ui_top_font_size()*0.4f) {
+    UI_Pref_Width(ui_pct(0.15f, 1.0f))
+    ui_label(label);
+    ui_spacer(ui_px(10.0f, 1.0f));
+    
+    ui_push_text_align(UI_TEXT_ALIGN__CENTER);
+
+    UI_Background_Color(oklch(0.3f, 0.15f, 35, 1.0f))
+    UI_Border_Color(oklch(0.5f, 0.2f, 35, 1.0f)) {
+      ui_drag_F1(str8("R"), &rgb[0][0], 200.0f, 1.0f);
+    }
+    ui_spacer(ui_px(5.0f, 1.0f));
+
+    UI_Background_Color(oklch(0.272f, 0.076f, 145, 1.0f))
+    UI_Border_Color(oklch(0.484f, 0.164f, 145, 1.0f)) {
+      ui_drag_F1(str8("G"), &rgb[0][1], 200.0f, 1.0f);
+    }
+    ui_spacer(ui_px(5.0f, 1.0f));
+
+    UI_Background_Color(oklch(0.277f, 0.077f, 252, 1.0f))
+    UI_Border_Color(oklch(0.493f, 0.172f, 252, 1.0f)) {
+      ui_drag_F1(str8("B"), &rgb[0][2], 200.0f, 1.0f);
+    }
+    ui_spacer(ui_px(5.0f, 1.0f));
+
+    F4 color = oklch_from_linear_rgb(F4_from_F3(rgb[0], 1.0f));
+    UI_Background_Color(color)
+    UI_Pref_Width(ui_px(50.0f, 1.0f))
+    UI_Corner_Radius(0) {
+      ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, str8("color"));
+    }
+
+    ui_pop_text_align();
+
+    rgb[0] = clamp01_F3(rgb[0]);
+  }
+}
+
+
 ////////////////////////////////
 //~ kti: Main
 
@@ -856,7 +897,7 @@ Internal void lane(Arena *arena) {
                       //- kti: Build entities box.
                       ui_set_next_pref_height(ui_children_sum(1.0f));
                       ui_set_next_child_layout_axis(AXIS__Y);
-                      ui_set_next_corner_radius(ui_top_font_size()*0.2f);
+                      ui_set_next_corner_radius(ui_top_font_size()*0.4f);
                       UI_Box *entities_box = ui_build_box_from_string(
                         UI_BOX_FLAG__DRAW_BORDER|
                         UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT,
@@ -930,7 +971,7 @@ Internal void lane(Arena *arena) {
                           String8 name = {.str = entity->name, .len = entity->name_len};
                           UI_Pref_Width(ui_px(500.0f, 1.0f))
                           UI_Pref_Height(ui_em(2.8f, 1.0f))
-                          UI_Corner_Radius(ui_top_font_size()*0.2f)
+                          UI_Corner_Radius(ui_top_font_size()*0.4f)
                           UI_Text_Padding(floor_F1(ui_top_font_size()*0.5f)) {
                             UI_Signal signal = ui_textedit(&state->name_cursor,
                                                            &state->name_mark,
@@ -958,7 +999,7 @@ Internal void lane(Arena *arena) {
 
                           UI_Row()
                           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                          UI_Corner_Radius(ui_top_font_size()*0.2f) {
+                          UI_Corner_Radius(ui_top_font_size()*0.4f) {
                             ui_drag_F1(str8("X"), &entity->pos[0], 40.0f, 0.0f);
                             ui_spacer(ui_px(5.0f, 1.0f));
                             ui_drag_F1(str8("Y"), &entity->pos[1], 40.0f, 0.0f);
@@ -976,7 +1017,7 @@ Internal void lane(Arena *arena) {
 
                           UI_Row()
                           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                          UI_Corner_Radius(ui_top_font_size()*0.2f) {
+                          UI_Corner_Radius(ui_top_font_size()*0.4f) {
                             if (entity->shape == SHAPE__SPHERE) {
                               F1 radius = entity->size[0];
                               ui_drag_F1(str8("R"), &radius, 50.0f, 0.5f);

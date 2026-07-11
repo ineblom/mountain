@@ -18,7 +18,15 @@ layout(location = 11) flat in float in_omit_texture;
 layout(location = 0) out vec4 out_color;
 
 float rounded_box_sdf(vec2 sample_pos, vec2 rect_half_size, float r) {
-    return length(max(abs(sample_pos) - rect_half_size + r, 0.0)) - r;
+    vec2 q = abs(sample_pos) - rect_half_size + r;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+
+float sdf_coverage(float distance, float softness) {
+    // fwidth keeps the transition approximately one pixel wide. Softness is
+    // retained as an optional minimum width for deliberately softer edges.
+    float width = max(fwidth(distance), softness);
+    return 1.0 - smoothstep(-0.5 * width, 0.5 * width, distance);
 }
 
 float bayer4x4(vec2 pos) {
@@ -108,33 +116,30 @@ void main() {
     }
     corner_radius = min(corner_radius, min(rect_half_size.x, rect_half_size.y));
 
-    float border_mix = 0.0;
+    float outer_sdf = rounded_box_sdf(
+        sdf_sample_pos,
+        rect_half_size,
+        corner_radius
+    );
+    float outer_coverage = sdf_coverage(outer_sdf, in_softness);
+
+    float inner_coverage = 1.0;
     if (in_border_width > 0.0) {
-        float border_sdf_s = rounded_box_sdf(
+        float inner_sdf = rounded_box_sdf(
             sdf_sample_pos,
-            rect_half_size - vec2(in_softness * 2.0) - in_border_width,
+            max(rect_half_size - vec2(in_border_width), vec2(0.0)),
             max(corner_radius - in_border_width, 0.0)
         );
-        border_mix = smoothstep(0.0, 2.0 * in_softness, border_sdf_s);
-    }
-
-    float corner_sdf_t = 1.0;
-    if (corner_radius > 0.0 || in_softness > 0.75) {
-        float corner_sdf_s = rounded_box_sdf(
-            sdf_sample_pos,
-            rect_half_size - vec2(in_softness * 2.0),
-            corner_radius
-        );
-        corner_sdf_t = 1.0 - smoothstep(0.0, 2.0 * in_softness, corner_sdf_s);
+        inner_coverage = sdf_coverage(inner_sdf, in_softness);
     }
 
     vec2 pixel_pos = in_rect_pos * in_rect_size;
     float dither_value = bayer4x4(pixel_pos);
 
     vec4 border_linear = oklch_to_linear_rgb(in_border_color);
-    vec4 base_color = mix(fill_color, border_linear, border_mix);
+    vec4 base_color = mix(border_linear, fill_color, inner_coverage);
     base_color.rgb += vec3(dither_value);
-    base_color.a *= corner_sdf_t;
+    base_color.a *= outer_coverage;
 
     out_color = base_color;
 }

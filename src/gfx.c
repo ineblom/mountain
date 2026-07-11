@@ -145,6 +145,10 @@ struct GFX_Window {
   VkImageView depth_image_view;
   VkDeviceMemory depth_image_memory;
 
+  VkImage msaa_color_image;
+  VkImageView msaa_color_image_view;
+  VkDeviceMemory msaa_color_image_memory;
+
   GFX_Per_Frame *per_frame;
   I1 image_idx;
 };
@@ -285,6 +289,7 @@ struct GFX_State {
   VkDebugReportCallbackEXT vk_debug_callback;
   VkPhysicalDevice physical_device;
   VkPhysicalDeviceProperties physical_device_properties;
+  VkSampleCountFlagBits sample_count;
   VkDevice device;
   VkQueue queue;
   L1 present_queue_index;
@@ -945,6 +950,16 @@ Internal void gfx_init() {
 
   Assert(gfx_state->physical_device);
 
+  VkSampleCountFlags supported_sample_counts =
+    gfx_state->physical_device_properties.limits.framebufferColorSampleCounts &
+    gfx_state->physical_device_properties.limits.framebufferDepthSampleCounts;
+  gfx_state->sample_count = VK_SAMPLE_COUNT_1_BIT;
+  if (supported_sample_counts & VK_SAMPLE_COUNT_4_BIT) {
+    gfx_state->sample_count = VK_SAMPLE_COUNT_4_BIT;
+  } else if (supported_sample_counts & VK_SAMPLE_COUNT_2_BIT) {
+    gfx_state->sample_count = VK_SAMPLE_COUNT_2_BIT;
+  }
+
   VkPhysicalDeviceFeatures2 query_device_features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
   VkPhysicalDeviceVulkan13Features query_vulkan13_features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
   VkPhysicalDeviceExtendedDynamicStateFeaturesEXT query_extended_dynamic_state_features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
@@ -1143,7 +1158,7 @@ Internal void gfx_init() {
 
   VkPipelineMultisampleStateCreateInfo multisample = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-    .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    .rasterizationSamples = gfx_state->sample_count,
   };
 
   VkPipelineDynamicStateCreateInfo dynamic_state_ci = {
@@ -1354,6 +1369,14 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
     vkw->depth_image = VK_NULL_HANDLE;
     vkw->depth_image_memory = VK_NULL_HANDLE;
   }
+  if (vkw->msaa_color_image_view != VK_NULL_HANDLE) {
+    vkDestroyImageView(gfx_state->device, vkw->msaa_color_image_view, 0);
+    vkDestroyImage(gfx_state->device, vkw->msaa_color_image, 0);
+    vkFreeMemory(gfx_state->device, vkw->msaa_color_image_memory, 0);
+    vkw->msaa_color_image_view = VK_NULL_HANDLE;
+    vkw->msaa_color_image = VK_NULL_HANDLE;
+    vkw->msaa_color_image_memory = VK_NULL_HANDLE;
+  }
 
   //- kti: Our pipeline uses BGRA_SRGB so we force it. Not optimal.
   VkFormat color_format = VK_FORMAT_UNDEFINED;
@@ -1452,6 +1475,50 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
   }
 
   ////////////////////////////////
+  //~ kti: Multisampled Color Buffer
+
+  if (gfx_state->sample_count != VK_SAMPLE_COUNT_1_BIT) {
+    VkImageCreateInfo color_image_ci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = color_format,
+      .extent = {surface_resolution.width, surface_resolution.height, 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = gfx_state->sample_count,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    result = vkCreateImage(gfx_state->device, &color_image_ci, 0, &vkw->msaa_color_image);
+    Assert(result == VK_SUCCESS);
+
+    VkMemoryRequirements color_mem_reqs = {0};
+    vkGetImageMemoryRequirements(gfx_state->device, vkw->msaa_color_image, &color_mem_reqs);
+    vkw->msaa_color_image_memory = gfx_vk_allocate_memory(color_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    Assert(vkw->msaa_color_image_memory != VK_NULL_HANDLE);
+    result = vkBindImageMemory(gfx_state->device, vkw->msaa_color_image, vkw->msaa_color_image_memory, 0);
+    Assert(result == VK_SUCCESS);
+
+    VkImageViewCreateInfo color_view_ci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = vkw->msaa_color_image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = color_format,
+      .subresourceRange = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+      },
+    };
+    result = vkCreateImageView(gfx_state->device, &color_view_ci, 0, &vkw->msaa_color_image_view);
+    Assert(result == VK_SUCCESS);
+  }
+
+  ////////////////////////////////
   //~ kti: Depth Buffer
 
   VkImageCreateInfo depth_image_ci = {
@@ -1461,7 +1528,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
     .extent = {surface_resolution.width, surface_resolution.height, 1},
     .mipLevels = 1,
     .arrayLayers = 1,
-    .samples = VK_SAMPLE_COUNT_1_BIT,
+    .samples = gfx_state->sample_count,
     .tiling = VK_IMAGE_TILING_OPTIMAL,
     .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -1619,6 +1686,11 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   vkDestroyImageView(gfx_state->device, vkw->depth_image_view, 0);
   vkDestroyImage(gfx_state->device, vkw->depth_image, 0);
   vkFreeMemory(gfx_state->device, vkw->depth_image_memory, 0);
+  if (vkw->msaa_color_image_view != VK_NULL_HANDLE) {
+    vkDestroyImageView(gfx_state->device, vkw->msaa_color_image_view, 0);
+    vkDestroyImage(gfx_state->device, vkw->msaa_color_image, 0);
+    vkFreeMemory(gfx_state->device, vkw->msaa_color_image_memory, 0);
+  }
   vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
   vkDestroySurfaceKHR(gfx_state->instance, vkw->surface, 0);
 
@@ -1700,6 +1772,18 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
       VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
       VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
+    if (gfx_state->sample_count != VK_SAMPLE_COUNT_1_BIT) {
+      gfx_vk_transition_image_layout(
+        cmd,
+        vkw->msaa_color_image,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        0,
+        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    }
+
     VkImageMemoryBarrier2 depth_barrier = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
       .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
@@ -1731,12 +1815,19 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 
     VkRenderingAttachmentInfo color_attachment = {
       .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView   = vkw->swapchain_image_views[image_idx],
+      .imageView   = gfx_state->sample_count == VK_SAMPLE_COUNT_1_BIT ?
+                     vkw->swapchain_image_views[image_idx] : vkw->msaa_color_image_view,
       .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+      .storeOp     = gfx_state->sample_count == VK_SAMPLE_COUNT_1_BIT ?
+                     VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE,
       .clearValue  = clear_value,
     };
+    if (gfx_state->sample_count != VK_SAMPLE_COUNT_1_BIT) {
+      color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+      color_attachment.resolveImageView = vkw->swapchain_image_views[image_idx];
+      color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
 
     VkClearValue depth_clear_value = {.depthStencil = {1.0f, 0}};
     VkRenderingAttachmentInfo depth_attachment = {

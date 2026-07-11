@@ -1562,7 +1562,7 @@ Internal void ui_end_build(void) {
           }
           if (floor_F1(b->rect[0]+b->rect[2]) >= floor_F1(box->rect[0]+box->rect[2]) &&
               floor_F1(b->rect[1]+b->rect[3]) >= floor_F1(box->rect[1]+box->rect[3])) {
-            b->corner_radii[2] = box->corner_radii[2];
+            b->corner_radii[3] = box->corner_radii[3];
           }
         }
         box->first->corner_radii[0] = box->corner_radii[0];
@@ -1852,7 +1852,7 @@ Internal UI_Signal ui_slider_F1(F1 *value, F1 min, F1 max) {
     UI_Pref_Width(ui_pct(1.0f, 0.0f))
     UI_Column() UI_Padding(ui_pct(1, 0)) {
       UI_Pref_Height(ui_px(height, 1.0f))
-      UI_Corner_Radius(height*0.5f-1.0f)
+      UI_Corner_Radius(height*0.5f)
       UI_Border_Color(oklch(0.5f, 0.0f, 0.0f, 1.0f)) {
         UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%p", value);
         UI_Key bg_key = ui_key_from_string(box->key, str8("bg"));
@@ -1888,7 +1888,7 @@ Internal UI_Signal ui_slider_F1(F1 *value, F1 min, F1 max) {
               UI_Background_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f))
               UI_Pref_Width(ui_px(knob_size, 1.0f))
               UI_Pref_Height(ui_px(knob_size, 1.0f))
-              UI_Corner_Radius(knob_size*0.5f-2.0f) {
+              UI_Corner_Radius(knob_size*0.5f) {
                 ui_build_box_from_key(
                   UI_BOX_FLAG__DRAW_BACKGROUND|
                   UI_BOX_FLAG__DRAW_HOT_EFFECTS|
@@ -2329,7 +2329,7 @@ Internal void ui_draw(void) {
     UI_Box *hot_box = ui_box_from_key(ui_hot_key());
     UI_Box *active_box = ui_box_from_key(ui_active_key(OS_MOUSE_BUTTON__LEFT));
 
-    F1 softness = (box->corner_radii[0] > 0 || box->corner_radii[1] > 0 || box->corner_radii[2] > 0 || box->corner_radii[3] > 0) ? 1.0f : 0.0f;
+    F1 softness = 0.0f;
 
     I1 hot_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_hot_key());
     I1 active_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT));
@@ -2455,7 +2455,7 @@ Internal void ui_draw(void) {
       I1 is_focus_active = !!(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE) && !(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED);
       I1 draw_focus_border = b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_BORDER) && is_focus_active;
 
-      F1 b_softness = (b->corner_radii[0] > 0 || b->corner_radii[1] > 0 || b->corner_radii[2] > 0 || b->corner_radii[3] > 0) ? 1.0f : 0.0f;
+      F1 b_softness = 0.0f;
 
       //- kti: Focus Overlay
       if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot) {
@@ -2468,6 +2468,11 @@ Internal void ui_draw(void) {
         F4 border_rect = rect_pad(b->rect, 1.0f);
         GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, b_softness);
         inst->corner_radii = b->corner_radii;
+        for (L1 corner_idx = 0; corner_idx < 4; corner_idx += 1) {
+          if (inst->corner_radii[corner_idx] > 0.0f) {
+            inst->corner_radii[corner_idx] += 1.0f;
+          }
+        }
         inst->border_width = 1.0f;
         inst->border_color = draw_focus_border ? focus_border_color : b->border_color;
       }

@@ -25,8 +25,7 @@ struct View {
   L1 name_len;
   B1 name[512];
 
-  F1 value;
-  I1 checked;
+  UI_Box *viewport_box;
 };
 
 typedef struct Panel Panel;
@@ -737,10 +736,10 @@ Internal void lane(Arena *arena) {
                 }
               }
 
-              UI_Row()
-              UI_Padding(ui_px(10.0f, 1.0f)) {
-                UI_Column() {
-                  if (panel->view_count == 0) {
+              if (panel->view_count == 0) {
+                UI_Row()
+                UI_Padding(ui_px(10.0f, 1.0f)) {
+                  UI_Column() {
                     UI_Text_Color(oklch(0.682f, 0.176f, 252, 1.0f))
                     ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Choose view kind."));
 
@@ -754,217 +753,234 @@ Internal void lane(Arena *arena) {
                         panel_push_view(panel, i);
                       }
                     }
-                  } else {
-                    ui_spacer(ui_px(10.0f, 1.0f));
+                  }
+                }
+              } else {
 
-                    ////////////////////////////////
-                    //~ Views.
+                ////////////////////////////////
+                //~ Views.
 
-                    View *view = &panel->views[panel->selected_view_idx];
-                    switch (view->kind) {
-                      //- kti: Entities view.
-                      case VIEW_KIND__ENTITIES: {
+                View *view = &panel->views[panel->selected_view_idx];
+                switch (view->kind) {
+                  //- kti: Entities view.
+                  case VIEW_KIND__ENTITIES: {
+                    UI_Row()
+                    UI_Padding(ui_px(10.0f, 1.0f))
+                    UI_Column() {
+                      ui_spacer(ui_px(10.0f, 1.0f));
+                      //- kti: Build entities box.
+                      ui_set_next_pref_height(ui_children_sum(1.0f));
+                      ui_set_next_child_layout_axis(AXIS__Y);
+                      ui_set_next_corner_radius(ui_top_font_size()*0.2f);
+                      UI_Box *entities_box = ui_build_box_from_string(
+                        UI_BOX_FLAG__DRAW_BORDER|
+                        UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT,
+                        str8("entities"));
 
-                        //- kti: Build entities box.
-                        ui_set_next_pref_height(ui_children_sum(1.0f));
-                        ui_set_next_child_layout_axis(AXIS__Y);
-                        ui_set_next_corner_radius(ui_top_font_size()*0.2f);
-                        UI_Box *entities_box = ui_build_box_from_string(
-                          UI_BOX_FLAG__DRAW_BORDER|
-                          UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT,
-                          str8("entities"));
+                      //- kti: Fill entries
+                      UI_Text_Padding(10.0f)
+                      UI_Parent(entities_box) {
+                        for (L1 i = 0; i < state->entity_count; i += 1) {
+                          Entity *e = &state->entities[i];
+                          String8 name = {e->name, e->name_len};
+                          I1 selected = entity_handle_match(e->handle, state->selected_entity);
 
-                        //- kti: Fill entries
-                        UI_Text_Padding(10.0f)
-                        UI_Parent(entities_box) {
-                          for (L1 i = 0; i < state->entity_count; i += 1) {
-                            Entity *e = &state->entities[i];
-                            String8 name = {e->name, e->name_len};
-                            I1 selected = entity_handle_match(e->handle, state->selected_entity);
-
-                            if (selected) {
-                              ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
-                              ui_set_next_text_color(oklch(0.682f, 0.176f, 252, 1.0f));
-                            }
-                            UI_Box *row = ui_build_box_from_stringf(
-                              UI_BOX_FLAG__DRAW_BACKGROUND|
-                              UI_BOX_FLAG__DRAW_TEXT|
-                              UI_BOX_FLAG__CLICKABLE|
-                              UI_BOX_FLAG__CLICK_TO_FOCUS|
-                              (selected*UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY),
-                              "entity_%llu", i);
-                            ui_box_equip_display_string(row, name);
-
-                            UI_Signal sig = ui_signal_from_box(row);
-                            if (sig.flags & UI_SIGNAL_FLAG__PRESSED) {
-                              state->selected_entity = e->handle;
-                              cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                            }
+                          if (selected) {
+                            ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
+                            ui_set_next_text_color(oklch(0.682f, 0.176f, 252, 1.0f));
                           }
-                          if (state->entity_count == 0) {
-                            ui_set_next_text_color((F4){0.4f, 0.0f, 0.0f, 1.0f});
-                            ui_label(str8("No entities..."));
+                          UI_Box *row = ui_build_box_from_stringf(
+                            UI_BOX_FLAG__DRAW_BACKGROUND|
+                            UI_BOX_FLAG__DRAW_TEXT|
+                            UI_BOX_FLAG__CLICKABLE|
+                            UI_BOX_FLAG__CLICK_TO_FOCUS|
+                            (selected*UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY),
+                            "entity_%llu", i);
+                          ui_box_equip_display_string(row, name);
+
+                          UI_Signal sig = ui_signal_from_box(row);
+                          if (sig.flags & UI_SIGNAL_FLAG__PRESSED) {
+                            state->selected_entity = e->handle;
+                            cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                           }
                         }
+                        if (state->entity_count == 0) {
+                          ui_set_next_text_color((F4){0.4f, 0.0f, 0.0f, 1.0f});
+                          ui_label(str8("No entities..."));
+                        }
+                      }
 
-                        ui_spacer(ui_px(5.0f, 1.0f));
+                      ui_spacer(ui_px(5.0f, 1.0f));
 
-                        UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
-                        UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-                        UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                        UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                      UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
+                      UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+                      UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+                      UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
                         if (ui_button(str8("Create")).flags & UI_SIGNAL_FLAG__PRESSED) {
                           cmd_push((Cmd){.kind = CMD_KIND__CREATE_ENTITY});
                           cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                         }
-                      } break;
-
-                      //- kti: Entity view.
-                      case VIEW_KIND__ENTITY: {
-                        Entity *entity = entity_from_handle(state->selected_entity);
-                        if (entity_is_nil(entity)) {
-                          ui_label(str8("Select an entity..."));
-                        } else {
-                          ui_set_next_child_layout_axis(AXIS__Y);
-                          UI_Parent(ui_build_box_from_stringf(0, "entity_%p", entity)) {
-                            //- kti: Name edit
-                            ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
-                            ui_set_next_font_size(ui_top_font_size()*0.8f);
-                            ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
-                            ui_label(str8("Name"));
-
-                            String8 name = {.str = entity->name, .len = entity->name_len};
-                            UI_Pref_Width(ui_px(500.0f, 1.0f))
-                            UI_Pref_Height(ui_em(2.8f, 1.0f))
-                            UI_Corner_Radius(ui_top_font_size()*0.2f)
-                            UI_Text_Padding(floor_F1(ui_top_font_size()*0.5f)) {
-                              UI_Signal signal = ui_textedit(&state->name_cursor,
-                                                             &state->name_mark,
-                                                             state->name_edit_buffer,
-                                                             sizeof(entity->name),
-                                                             &state->name_edit_buffer_len,
-                                                             name,
-                                                             str8("name_textedit"));
-                              if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
-                                entity->name_len = Min(sizeof(entity->name), state->name_edit_buffer_len);
-                                memmove(entity->name, state->name_edit_buffer, Min(entity->name_len, sizeof(entity->name)));
-                              }
-                              if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-                                cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                              }
-                            }
-
-                            ui_spacer(ui_px(10.0f, 1.0f));
-
-                            //- kti: Position
-                            ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
-                            ui_set_next_font_size(ui_top_font_size()*0.8f);
-                            ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
-                            ui_label(str8("Postiion"));
-
-                            UI_Row()
-                            UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                            UI_Corner_Radius(ui_top_font_size()*0.2f) {
-                              ui_drag_F1(str8("X"), &entity->pos[0], 20.0f);
-                              ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(str8("Y"), &entity->pos[1], 20.0f);
-                              ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(str8("Z"), &entity->pos[2], 20.0f);
-                            }
-                            
-                            ui_spacer(ui_px(10.0f, 1.0f));
-
-                            //- kti: Size
-                            UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                            UI_Font_Size(ui_top_font_size()*0.8f)
-                            UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
-                            ui_label(str8("Size"));
-
-                            UI_Row()
-                            UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                            UI_Corner_Radius(ui_top_font_size()*0.2f) {
-                              ui_drag_F1(str8("X"), &entity->size[0], 50.0f);
-                              ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(str8("Y"), &entity->size[1], 50.0f);
-                              ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(str8("Z"), &entity->size[2], 50.0f);
-                            }
-
-                            ui_spacer(ui_px(10.0f, 1.0f));
-
-                            //- kti: Shape
-                            UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                            UI_Font_Size(ui_top_font_size()*0.8f)
-                            UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
-                            ui_label(str8("Shape"));
-
-                            ui_set_next_child_layout_axis(AXIS__X);
-                            ui_set_next_pref_height(ui_children_sum(1.0f));
-                            UI_Box *shape_selection = ui_build_box_from_string(0, str8("shape_selection"));
-                            UI_Parent(shape_selection) 
-                            UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
-                              for (L1 shape = 0; shape < SHAPE_COUNT; shape += 1) {
-                                I1 selected = (shape == entity->shape);
-                                String8 name = shape_names[shape];
-                                
-                                if (selected) {
-                                  ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
-                                  ui_set_next_text_color(oklch(0.682f, 0.176f, 252, 1.0f));
-                                }
-                                UI_Box *box = ui_build_box_from_string(
-                                  UI_BOX_FLAG__DRAW_BORDER|
-                                  UI_BOX_FLAG__DRAW_TEXT|
-                                  UI_BOX_FLAG__CLICKABLE|
-                                  UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-                                  UI_BOX_FLAG__DRAW_BACKGROUND,
-                                  name);
-                                UI_Signal signal = ui_signal_from_box(box);
-                                if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
-                                  entity->shape = shape;
-                                }
-                              }
-                            }
-
-                            ui_spacer(ui_px(15.0f, 1.0f));
-
-                            //- kti: Material
-                            F1 spacing = 20.0f;
-
-                            UI_Text_Color(oklch(1.0f, 0.0f, 0.0f, 1.0f))
-                            UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                            ui_label(str8("Material"));
-                            ui_spacer(ui_px(spacing*0.5f, 1.0f));
-
-                            //- kti: Base Color
-                            widget_rgb_edit(str8("Base Color"), &entity->material.base_color);
-                            ui_spacer(ui_px(spacing, 1.0f));
-
-                            //- kti: Metallic
-                            UI_Row() {
-                              UI_Pref_Width(ui_pct(0.15f, 1.0f))
-                              ui_label(str8("Metallic"));
-                              ui_spacer(ui_px(10.0f, 1.0f));
-                              ui_slider_F1(&entity->material.metallic, 0.0f, 1.0f); 
-                            }
-                            ui_spacer(ui_px(spacing, 1.0f));
-
-                            //- kti: Roughness
-                            UI_Row() {
-                              UI_Pref_Width(ui_pct(0.15f, 1.0f))
-                              ui_label(str8("Roughness"));
-                              ui_spacer(ui_px(10.0f, 1.0f));
-                              ui_slider_F1(&entity->material.roughness, 0.0f, 1.0f); 
-                            }
-                            ui_spacer(ui_px(spacing, 1.0f));
-
-                            //- kti: Emissive
-                            widget_rgb_edit(str8("Emissive"), &entity->material.emissive);
-                            ui_spacer(ui_px(spacing, 1.0f));
-                          }
-                        }
-                      } break;
+                      }
                     }
-                  }
+                  } break;
+
+                  //- kti: Entity view.
+                  case VIEW_KIND__ENTITY: {
+                    UI_Row()
+                    UI_Padding(ui_px(10.0f, 1.0f))
+                    UI_Column() {
+                      ui_spacer(ui_px(10.0f, 1.0f));
+                      Entity *entity = entity_from_handle(state->selected_entity);
+                      if (entity_is_nil(entity)) {
+                        ui_label(str8("Select an entity..."));
+                      } else {
+                        ui_set_next_child_layout_axis(AXIS__Y);
+                        UI_Parent(ui_build_box_from_stringf(0, "entity_%p", entity)) {
+                          //- kti: Name edit
+                          ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
+                          ui_set_next_font_size(ui_top_font_size()*0.8f);
+                          ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
+                          ui_label(str8("Name"));
+
+                          String8 name = {.str = entity->name, .len = entity->name_len};
+                          UI_Pref_Width(ui_px(500.0f, 1.0f))
+                          UI_Pref_Height(ui_em(2.8f, 1.0f))
+                          UI_Corner_Radius(ui_top_font_size()*0.2f)
+                          UI_Text_Padding(floor_F1(ui_top_font_size()*0.5f)) {
+                            UI_Signal signal = ui_textedit(&state->name_cursor,
+                                                           &state->name_mark,
+                                                           state->name_edit_buffer,
+                                                           sizeof(entity->name),
+                                                           &state->name_edit_buffer_len,
+                                                           name,
+                                                           str8("name_textedit"));
+                            if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
+                              entity->name_len = Min(sizeof(entity->name), state->name_edit_buffer_len);
+                              memmove(entity->name, state->name_edit_buffer, Min(entity->name_len, sizeof(entity->name)));
+                            }
+                            if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+                              cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                            }
+                          }
+
+                          ui_spacer(ui_px(10.0f, 1.0f));
+
+                          //- kti: Position
+                          ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
+                          ui_set_next_font_size(ui_top_font_size()*0.8f);
+                          ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
+                          ui_label(str8("Postiion"));
+
+                          UI_Row()
+                          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                          UI_Corner_Radius(ui_top_font_size()*0.2f) {
+                            ui_drag_F1(str8("X"), &entity->pos[0], 20.0f);
+                            ui_spacer(ui_px(5.0f, 1.0f));
+                            ui_drag_F1(str8("Y"), &entity->pos[1], 20.0f);
+                            ui_spacer(ui_px(5.0f, 1.0f));
+                            ui_drag_F1(str8("Z"), &entity->pos[2], 20.0f);
+                          }
+
+                          ui_spacer(ui_px(10.0f, 1.0f));
+
+                          //- kti: Size
+                          UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+                          UI_Font_Size(ui_top_font_size()*0.8f)
+                          UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
+                          ui_label(str8("Size"));
+
+                          UI_Row()
+                          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                          UI_Corner_Radius(ui_top_font_size()*0.2f) {
+                            ui_drag_F1(str8("X"), &entity->size[0], 50.0f);
+                            ui_spacer(ui_px(5.0f, 1.0f));
+                            ui_drag_F1(str8("Y"), &entity->size[1], 50.0f);
+                            ui_spacer(ui_px(5.0f, 1.0f));
+                            ui_drag_F1(str8("Z"), &entity->size[2], 50.0f);
+                          }
+
+                          ui_spacer(ui_px(10.0f, 1.0f));
+
+                          //- kti: Shape
+                          UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+                          UI_Font_Size(ui_top_font_size()*0.8f)
+                          UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
+                          ui_label(str8("Shape"));
+
+                          ui_set_next_child_layout_axis(AXIS__X);
+                          ui_set_next_pref_height(ui_children_sum(1.0f));
+                          UI_Box *shape_selection = ui_build_box_from_string(0, str8("shape_selection"));
+                          UI_Parent(shape_selection) 
+                          UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
+                            for (L1 shape = 0; shape < SHAPE_COUNT; shape += 1) {
+                              I1 selected = (shape == entity->shape);
+                              String8 name = shape_names[shape];
+
+                              if (selected) {
+                                ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
+                                ui_set_next_text_color(oklch(0.682f, 0.176f, 252, 1.0f));
+                              }
+                              UI_Box *box = ui_build_box_from_string(
+                                UI_BOX_FLAG__DRAW_BORDER|
+                                UI_BOX_FLAG__DRAW_TEXT|
+                                UI_BOX_FLAG__CLICKABLE|
+                                UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+                                UI_BOX_FLAG__DRAW_BACKGROUND,
+                                name);
+                              UI_Signal signal = ui_signal_from_box(box);
+                              if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
+                                entity->shape = shape;
+                              }
+                            }
+                          }
+
+                          ui_spacer(ui_px(15.0f, 1.0f));
+
+                          //- kti: Material
+                          F1 spacing = 20.0f;
+
+                          UI_Text_Color(oklch(1.0f, 0.0f, 0.0f, 1.0f))
+                          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                          ui_label(str8("Material"));
+                          ui_spacer(ui_px(spacing*0.5f, 1.0f));
+
+                          //- kti: Base Color
+                          widget_rgb_edit(str8("Base Color"), &entity->material.base_color);
+                          ui_spacer(ui_px(spacing, 1.0f));
+
+                          //- kti: Metallic
+                          UI_Row() {
+                            UI_Pref_Width(ui_pct(0.15f, 1.0f))
+                            ui_label(str8("Metallic"));
+                            ui_spacer(ui_px(10.0f, 1.0f));
+                            ui_slider_F1(&entity->material.metallic, 0.0f, 1.0f); 
+                          }
+                          ui_spacer(ui_px(spacing, 1.0f));
+
+                          //- kti: Roughness
+                          UI_Row() {
+                            UI_Pref_Width(ui_pct(0.15f, 1.0f))
+                            ui_label(str8("Roughness"));
+                            ui_spacer(ui_px(10.0f, 1.0f));
+                            ui_slider_F1(&entity->material.roughness, 0.0f, 1.0f); 
+                          }
+                          ui_spacer(ui_px(spacing, 1.0f));
+
+                          //- kti: Emissive
+                          widget_rgb_edit(str8("Emissive"), &entity->material.emissive);
+                          ui_spacer(ui_px(spacing, 1.0f));
+                        }
+                      }
+                    }
+                  } break;
+
+                  //- kti: 3D viewport.
+                  case VIEW_KIND__VIEWPORT: {
+                    ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+                    ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
+                    ui_set_next_background_color((F4){0.025f, 0.025f, 0.035f, 1.0f});
+                    view->viewport_box = ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__CLIP, "##viewport_%p", panel);
+                  } break;
                 }
               }
 
@@ -993,27 +1009,32 @@ Internal void lane(Arena *arena) {
         DR_Bucket *bucket = dr_bucket_make();
         dr_push_bucket(bucket);
 
-        // dr_rect((F4){0, 0, w->os->width, w->os->height},
-        // (F4){0.15f, 0.0f, 0.0f, 1.0f}, 0.0f, 0.0f);
-
         ui_draw();
 
         ////////////////////////////////
         //~ 3D Draw
-        
-        //- kti: Calculate projection matrix.
-        F1 aspect = (F1)w->os->width / (F1)w->os->height;
-        F1 near_z = 0.1f;
-        F1 far_z = 100.0f;
-        F1 fov = 60.0f * PI/180.0f;
-        F1 top = near_z * tanf(fov * 0.5f);
-        F1 right = top * aspect;
-        M4F projection = frustum_M4F(-right, right, -top, top, near_z, far_z);
-        dr_mesh_view_projection(projection);
 
-        //- kti: Draw scene.
-        dr_mesh(state->triangle_vertex_buffer, 0, 3, state->triangle_index_buffer, 0, 3,
-                identity_M4F(), (F4){1.0f, 1.0f, 1.0f, 1.0f});
+        for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
+          if (panel->first == 0 && panel->view_count != 0) {
+            View *view = &panel->views[panel->selected_view_idx];
+            if (view->kind == VIEW_KIND__VIEWPORT && view->viewport_box != 0) {
+              F4 viewport_rect = view->viewport_box->rect;
+              if (viewport_rect[2] > 0.0f && viewport_rect[3] > 0.0f) {
+                F1 aspect = viewport_rect[2] / viewport_rect[3];
+                F1 near_z = 0.1f;
+                F1 far_z = 100.0f;
+                F1 fov = 60.0f * PI/180.0f;
+                F1 top = near_z * tanf(fov * 0.5f);
+                F1 right = top * aspect;
+                M4F projection = frustum_M4F(-right, right, -top, top, near_z, far_z);
+
+                dr_mesh_viewport(viewport_rect);
+                dr_mesh_view_projection(projection);
+                dr_mesh(state->triangle_vertex_buffer, 0, 3, state->triangle_index_buffer, 0, 3, identity_M4F(), (F4){1.0f, 1.0f, 1.0f, 1.0f});
+              }
+            }
+          }
+        }
 
         //- kti: Submit to render.
         dr_submit_bucket(w->os, w->gfx, bucket);

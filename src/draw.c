@@ -255,6 +255,20 @@ Internal void dr_mesh_view_projection(M4F view_projection) {
   }
 }
 
+Internal void dr_mesh_viewport(F4 rect) {
+  DR_Bucket *bucket = dr_state->top_bucket;
+  if (bucket != 0) {
+    GFX_Pass *pass_n = bucket->passes.last;
+    if (pass_n == 0 || pass_n->kind != GFX_PASS_KIND__MESH || pass_n->mesh.first_batch != 0) {
+      pass_n = push_array(dr_state->arena, GFX_Pass, 1);
+      pass_n->kind = GFX_PASS_KIND__MESH;
+      pass_n->mesh.view_projection = identity_M4F();
+      SLLQueuePush(bucket->passes.first, bucket->passes.last, pass_n);
+    }
+    pass_n->mesh.viewport_rect = rect;
+  }
+}
+
 Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count, GFX_Buffer *index_buffer, L1 index_offset, L1 index_count, M4F transform, F4 color) {
   ProfFuncBegin();
 

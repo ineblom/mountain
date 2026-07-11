@@ -141,6 +141,10 @@ struct GFX_Window {
   VkImage *swapchain_images;
   VkImageView *swapchain_image_views;
 
+  VkImage depth_image;
+  VkImageView depth_image_view;
+  VkDeviceMemory depth_image_memory;
+
   GFX_Per_Frame *per_frame;
   I1 image_idx;
 };
@@ -246,6 +250,7 @@ struct GFX_Rect_Pass {
 typedef struct GFX_Mesh_Pass GFX_Mesh_Pass;
 struct GFX_Mesh_Pass {
   M4F view_projection;
+  F4 viewport_rect;
   GFX_Mesh_Batch *first_batch;
   GFX_Mesh_Batch *last_batch;
 };
@@ -1129,6 +1134,13 @@ Internal void gfx_init() {
     .depthCompareOp = VK_COMPARE_OP_ALWAYS,
   };
 
+  VkPipelineDepthStencilStateCreateInfo mesh_depth_stencil = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+    .depthTestEnable = VK_TRUE,
+    .depthWriteEnable = VK_TRUE,
+    .depthCompareOp = VK_COMPARE_OP_LESS,
+  };
+
   VkPipelineMultisampleStateCreateInfo multisample = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
     .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
@@ -1165,6 +1177,7 @@ Internal void gfx_init() {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
     .colorAttachmentCount = 1,
     .pColorAttachmentFormats = &color_format,
+    .depthAttachmentFormat = VK_FORMAT_D32_SFLOAT,
   };
 
   VkGraphicsPipelineCreateInfo pipeline_ci = {
@@ -1270,7 +1283,7 @@ Internal void gfx_init() {
     .pViewportState      = &viewport,
     .pRasterizationState = &raster,
     .pMultisampleState   = &multisample,
-    .pDepthStencilState  = &depth_stencil,
+    .pDepthStencilState  = &mesh_depth_stencil,
     .pColorBlendState    = &blend,
     .pDynamicState       = &dynamic_state_ci,
     .layout              = gfx_state->mesh_pipeline_layout,
@@ -1332,6 +1345,14 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
   }
   for (L1 i = 0; i < vkw->image_count; i += 1) {
     vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
+  }
+  if (vkw->depth_image_view != VK_NULL_HANDLE) {
+    vkDestroyImageView(gfx_state->device, vkw->depth_image_view, 0);
+    vkDestroyImage(gfx_state->device, vkw->depth_image, 0);
+    vkFreeMemory(gfx_state->device, vkw->depth_image_memory, 0);
+    vkw->depth_image_view = VK_NULL_HANDLE;
+    vkw->depth_image = VK_NULL_HANDLE;
+    vkw->depth_image_memory = VK_NULL_HANDLE;
   }
 
   //- kti: Our pipeline uses BGRA_SRGB so we force it. Not optimal.
@@ -1429,6 +1450,48 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
     };
     vkCreateImageView(gfx_state->device, &image_view_ci, 0, &vkw->swapchain_image_views[i]);
   }
+
+  ////////////////////////////////
+  //~ kti: Depth Buffer
+
+  VkImageCreateInfo depth_image_ci = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+    .imageType = VK_IMAGE_TYPE_2D,
+    .format = VK_FORMAT_D32_SFLOAT,
+    .extent = {surface_resolution.width, surface_resolution.height, 1},
+    .mipLevels = 1,
+    .arrayLayers = 1,
+    .samples = VK_SAMPLE_COUNT_1_BIT,
+    .tiling = VK_IMAGE_TILING_OPTIMAL,
+    .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+  result = vkCreateImage(gfx_state->device, &depth_image_ci, 0, &vkw->depth_image);
+  Assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements depth_mem_reqs = {0};
+  vkGetImageMemoryRequirements(gfx_state->device, vkw->depth_image, &depth_mem_reqs);
+  vkw->depth_image_memory = gfx_vk_allocate_memory(depth_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  Assert(vkw->depth_image_memory != VK_NULL_HANDLE);
+  result = vkBindImageMemory(gfx_state->device, vkw->depth_image, vkw->depth_image_memory, 0);
+  Assert(result == VK_SUCCESS);
+
+  VkImageViewCreateInfo depth_view_ci = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+    .image = vkw->depth_image,
+    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+    .format = VK_FORMAT_D32_SFLOAT,
+    .subresourceRange = {
+      .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+      .baseMipLevel = 0,
+      .levelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+    },
+  };
+  result = vkCreateImageView(gfx_state->device, &depth_view_ci, 0, &vkw->depth_image_view);
+  Assert(result == VK_SUCCESS);
 }
 
 Internal GFX_Window *gfx_window_equip(OS_Window *window) {
@@ -1553,6 +1616,9 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   ////////////////////////////////
   //~ kti: Destroy Per Window Resources
 
+  vkDestroyImageView(gfx_state->device, vkw->depth_image_view, 0);
+  vkDestroyImage(gfx_state->device, vkw->depth_image, 0);
+  vkFreeMemory(gfx_state->device, vkw->depth_image_memory, 0);
   vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
   vkDestroySurfaceKHR(gfx_state->instance, vkw->surface, 0);
 
@@ -1634,6 +1700,33 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
       VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
       VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
+    VkImageMemoryBarrier2 depth_barrier = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                      VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+      .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                       VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = vkw->depth_image,
+      .subresourceRange = {
+        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+      },
+    };
+    VkDependencyInfo depth_dependency = {
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .imageMemoryBarrierCount = 1,
+      .pImageMemoryBarriers = &depth_barrier,
+    };
+    vkCmdPipelineBarrier2(cmd, &depth_dependency);
+
     VkClearValue clear_value = {.color= {{0.0f, 0.0f, 0.0f, 1.0f}}};
 
     VkRenderingAttachmentInfo color_attachment = {
@@ -1643,6 +1736,16 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
       .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
       .clearValue  = clear_value,
+    };
+
+    VkClearValue depth_clear_value = {.depthStencil = {1.0f, 0}};
+    VkRenderingAttachmentInfo depth_attachment = {
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = vkw->depth_image_view,
+      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .clearValue = depth_clear_value,
     };
 
     VkRenderingInfo rendering_info = {
@@ -1656,7 +1759,8 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
       },
       .layerCount = 1,
       .colorAttachmentCount = 1,
-      .pColorAttachments = &color_attachment
+      .pColorAttachments = &color_attachment,
+      .pDepthAttachment = &depth_attachment,
     };
 
     vkCmdBeginRendering(cmd, &rendering_info);
@@ -1775,18 +1879,38 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
       } else if (pass->kind == GFX_PASS_KIND__MESH) {
         GFX_Mesh_Pass mesh_pass = pass->mesh;
 
+        F4 viewport_rect = mesh_pass.viewport_rect;
+        if (viewport_rect[2] <= 0.0f || viewport_rect[3] <= 0.0f) {
+          viewport_rect = (F4){0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+        }
+        F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+        viewport_rect = rect_overlap(screen_rect, viewport_rect);
+        if (viewport_rect[2] <= 0.0f || viewport_rect[3] <= 0.0f) {
+          continue;
+        }
+
+        VkViewport viewport = {
+          .x = viewport_rect[0],
+          .y = viewport_rect[1],
+          .width = viewport_rect[2],
+          .height = viewport_rect[3],
+          .minDepth = 0.0f,
+          .maxDepth = 1.0f,
+        };
+
         VkRect2D scissor = {
           .offset = {
-            .x = 0,
-            .y = 0,
+            .x = viewport_rect[0],
+            .y = viewport_rect[1],
           },
           .extent = {
-            .width  = vkw->swapchain_extent.width,
-            .height = vkw->swapchain_extent.height,
+            .width  = viewport_rect[2],
+            .height = viewport_rect[3],
           },
         };
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_pipeline);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
         vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(M4F), &mesh_pass.view_projection);
 

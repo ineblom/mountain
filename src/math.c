@@ -261,6 +261,27 @@ Inline F4 mul_M4F_F4(M4F m, F4 v) {
 ////////////////////////////////
 //~ Ray
 
+Internal F1 ray_sphere_intersect(F4 ray_origin, F4 ray_direction, F4 sphere_origin, F1 sphere_radius) {
+  F1 result = 0.0f;
+
+  F4 sphere_relative_ray_origin = ray_origin - sphere_origin;
+  F1 b = 2.0f * dot_F4(ray_direction, sphere_relative_ray_origin);
+  F1 c = dot_F4(sphere_relative_ray_origin, sphere_relative_ray_origin) - sphere_radius*sphere_radius;
+
+  F1 discriminant = b*b - 4.0f*c;
+  if (discriminant > 0.0f) {
+    F1 root_term = sqrtf(discriminant);
+    if (root_term > 0.0001f) {
+      F1 tp = (-b + root_term) / 2.0f;
+      F1 tn = (-b - root_term) / 2.0f;
+
+      result = tp;
+      if (tn > 0.001f && tn < tp) result = tn;
+    }
+  }
+  return result;
+}
+
 Internal F1 ray_aabb_intersect(F4 ray_origin, F4 ray_direction, F4 aabb_min, F4 aabb_max) {
   F1 t_min = (aabb_min[0] - ray_origin[0]) / ray_direction[0];
   F1 t_max = (aabb_max[0] - ray_origin[0]) / ray_direction[0];

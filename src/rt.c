@@ -210,27 +210,13 @@ Internal F4 ray_cast(RT_Scene scene, F4 ray_origin, F4 ray_direction) {
     for (L1 sphere_index = 0; sphere_index < scene.sphere_count; sphere_index += 1) {
       RT_Sphere sphere = scene.spheres[sphere_index];
 
-      F4 sphere_relative_ray_origin = ray_origin - sphere.p;
-      F1 b = 2.0f * dot_F4(ray_direction, sphere_relative_ray_origin);
-      F1 c = dot_F4(sphere_relative_ray_origin, sphere_relative_ray_origin) - sphere.r*sphere.r;
+      F1 t = ray_sphere_intersect(ray_origin, ray_direction, sphere.p, sphere.r);
+      if (t > min_hit_distance && t < hit_distance) {
+        hit_distance = t;
+        hit_material_idx = sphere.material_idx;
 
-      F1 root_term = sqrtf(b*b - 4.0f*c);
-      if (root_term > tolerance) {
-        F1 tp = (-b + root_term) / 2.0f;
-        F1 tn = (-b - root_term) / 2.0f;
-
-        F1 t = tp;
-        if (tn > min_hit_distance && tn < tp) {
-          t = tn;
-        }
-
-        if (t > min_hit_distance && t < hit_distance) {
-          hit_distance = t;
-          hit_material_idx = sphere.material_idx;
-
-          next_origin = ray_origin + t*ray_direction;
-          next_normal = normalize_F4(next_origin - sphere.p);
-        }
+        next_origin = ray_origin + t*ray_direction;
+        next_normal = normalize_F4(next_origin - sphere.p);
       }
     }
 
@@ -238,27 +224,7 @@ Internal F4 ray_cast(RT_Scene scene, F4 ray_origin, F4 ray_direction) {
     for (L1 box_index = 0; box_index < scene.box_count; box_index += 1) {
       RT_Box box = scene.boxes[box_index];
 
-      F1 t_min = (box.min[0] - ray_origin[0]) / ray_direction[0];
-      F1 t_max = (box.max[0] - ray_origin[0]) / ray_direction[0];
-      if (t_min > t_max) Swap(t_min, t_max);
-
-      F1 ty_min = (box.min[1] - ray_origin[1]) / ray_direction[1];
-      F1 ty_max = (box.max[1] - ray_origin[1]) / ray_direction[1];
-      if (ty_min > ty_max) Swap(ty_min, ty_max);
-
-      t_min = Max(t_min, ty_min);
-      t_max = Min(t_max, ty_max);
-
-      if (t_min > t_max) continue;
-
-      F1 tz_min = (box.min[2] - ray_origin[2]) / ray_direction[2];
-      F1 tz_max = (box.max[2] - ray_origin[2]) / ray_direction[2];
-      if (tz_min > tz_max) Swap(tz_min, tz_max);
-
-      t_min = Max(t_min, tz_min);
-      t_max = Min(t_max, tz_max);
-
-      if (t_min > t_max) continue;
+      F1 t_min = ray_aabb_intersect(ray_origin, ray_direction, box.min, box.max);
 
       if (t_min > min_hit_distance && t_min < hit_distance) {
         next_origin = ray_origin + t_min * ray_direction;

@@ -423,7 +423,7 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
 
   if (kind == VIEW_KIND__VIEWPORT) {
     view->camera_pos = (F4){0.0f, 0.0f, -5.0f};
-    view->camera_fov = 60.0f * 180.0f/PI;
+    view->camera_fov = 60.0f * PI/180.0f;
     view->camera_nearz = 0.1f;
     view->camera_farz = 100.0f;
   }
@@ -1136,12 +1136,15 @@ Internal void lane(Arena *arena) {
                       view->camera_pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
                     }
 
+                    F2 delta = ui_drag_delta();
+                    I1 is_click = dot_F2(delta) <= 4.0f*4.0f;
+
                     //- kti: Panning
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
                       view->camera_drag_start_pos = view->camera_pos;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
-                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !is_click) {
                       M4F camera_rotation = mul_M4F(
                           rotate_x_M4F(view->camera_pitch),
                           rotate_y_M4F(view->camera_yaw));
@@ -1167,9 +1170,8 @@ Internal void lane(Arena *arena) {
                           0.49f*PI);
                     }
 
-                    //- kti: Selecting
-                    F2 delta = ui_drag_delta();
-                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && dot_F2(delta) <= 4.0f*4.0f) {
+                    //- kti: Entity Selecting / Selection
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && is_click) {
                       F2 mouse = ui_mouse();
                       F4 rect = view->viewport_box->rect;
                       F1 aspect = rect[2] / rect[3];
@@ -1189,10 +1191,28 @@ Internal void lane(Arena *arena) {
 
                       F4 ray_direction = mul_M4F_F4(camera_rotation, ray_dir_camera);
 
+                      F1 min_hit_distance = 0.001f;
                       F1 closest_t = F1_MAX;
+                      Entity_Handle selected_entity = entity_handle_zero();
                       for (L1 i = 0; i < state->entity_count; i += 1) {
                         Entity *e = &state->entities[i];
+
+                        F1 t = 0.0f;
+                        if (e->shape == SHAPE__BOX) {
+                          F4 min = e->pos - e->size*0.5f;
+                          F4 max = e->pos + e->size*0.5f;
+                          t = ray_aabb_intersect(view->camera_pos, ray_direction, min, max);
+                        } else if (e->shape == SHAPE__SPHERE) {
+                          t = ray_sphere_intersect(view->camera_pos, ray_direction, e->pos, e->size[0]*0.5f);
+                        }
+
+                        if (t > min_hit_distance && t < closest_t) {
+                          closest_t = t;
+                          selected_entity = e->handle;
+                        }
                       }
+
+                      state->selected_entity = selected_entity;
                     }
                   } break;
                 }

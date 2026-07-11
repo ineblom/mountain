@@ -36,7 +36,7 @@ typedef float F4 VEC_TYPE(4, float);
 
 typedef union M4F M4F;
 union M4F {
-  F4 c[4];
+  F4 r[4];
   F1 m[4][4];
   F1 v[16];
 };

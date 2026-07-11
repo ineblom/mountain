@@ -170,13 +170,13 @@ Inline M4F identity_M4F(void) {
 
 Inline M4F mul_M4F(M4F a, M4F b) {
   M4F result = {0};
-  for (I1 col = 0; col < 4; col += 1) {
-    for (I1 row = 0; row < 4; row += 1) {
+  for (I1 row = 0; row < 4; row += 1) {
+    for (I1 col = 0; col < 4; col += 1) {
       F1 sum = 0.0f;
       for (I1 i = 0; i < 4; i += 1) {
-        sum += a.m[i][row] * b.m[col][i];
+        sum += a.m[row][i] * b.m[i][col];
       }
-      result.m[col][row] = sum;
+      result.m[row][col] = sum;
     }
   }
   return result;
@@ -231,26 +231,35 @@ Inline M4F rotate_z_M4F(F1 angle_rad) {
   return result;
 }
 
-Inline M4F frustum_M4F(F1 left, F1 right, F1 bottom, F1 top, F1 near_z, F1 far_z) {
+Inline M4F perspective_fov_M4F(F1 fov_angle_y, F1 aspect_ratio, F1 near_distance, F1 far_distance) {
+  Assert(fov_angle_y > 2.0E-8f);
+  Assert(aspect_ratio > 1.0E-8f);
+  Assert(near_distance > 0.0f && far_distance > 0.0f);
+  Assert((far_distance - near_distance) > 1.0E-8f);
+
+  F1 sin_fov = sinf(fov_angle_y * 0.5f);
+  F1 cos_fov = cosf(fov_angle_y * 0.5f);
+  F1 scaled_view_height = cos_fov / sin_fov;
+  F1 scaled_view_width = scaled_view_height / aspect_ratio;
+  F1 scaled_far_distance = far_distance / (far_distance - near_distance);
+
   M4F result = {0};
-  result.m[0][0] = (2.0f * near_z) / (right - left);
-  result.m[1][1] = (2.0f * near_z) / (top - bottom);
-  result.m[2][0] = (right + left) / (right - left);
-  result.m[2][1] = (top + bottom) / (top - bottom);
-  result.m[2][2] = far_z / (near_z - far_z);
-  result.m[2][3] = -1.0f;
-  result.m[3][2] = (far_z * near_z) / (near_z - far_z);
+  result.m[0][0] = scaled_view_width;
+  result.m[1][1] = scaled_view_height;
+  result.m[2][2] = scaled_far_distance;
+  result.m[2][3] = 1.0f;
+  result.m[3][2] = -scaled_far_distance * near_distance;
   return result;
 }
 
 Inline F4 mul_M4F_F4(M4F m, F4 v) {
   F4 result = {0};
-  for (I1 row = 0; row < 4; row += 1) {
-    result[row] =
-      m.m[0][row] * v[0] +
-      m.m[1][row] * v[1] +
-      m.m[2][row] * v[2] +
-      m.m[3][row] * v[3];
+  for (I1 col = 0; col < 4; col += 1) {
+    result[col] =
+      v[0] * m.m[0][col] +
+      v[1] * m.m[1][col] +
+      v[2] * m.m[2][col] +
+      v[3] * m.m[3][col];
   }
   return result;
 }

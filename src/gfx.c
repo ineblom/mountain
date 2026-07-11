@@ -1238,10 +1238,10 @@ Internal void gfx_init() {
     {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, normal)},
     {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT,       .offset = offsetof(GFX_Mesh_Vertex, uv)},
     {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, color)},
-    {.location = 4, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.c[0])},
-    {.location = 5, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.c[1])},
-    {.location = 6, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.c[2])},
-    {.location = 7, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.c[3])},
+    {.location = 4, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[0])},
+    {.location = 5, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[1])},
+    {.location = 6, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[2])},
+    {.location = 7, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[3])},
     {.location = 8, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, color)},
   };
 
@@ -1891,9 +1891,9 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
         VkViewport viewport = {
           .x = viewport_rect[0],
-          .y = viewport_rect[1],
+          .y = viewport_rect[1] + viewport_rect[3],
           .width = viewport_rect[2],
-          .height = viewport_rect[3],
+          .height = -viewport_rect[3],
           .minDepth = 0.0f,
           .maxDepth = 1.0f,
         };

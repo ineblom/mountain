@@ -449,19 +449,19 @@ Internal void lane(Arena *arena) {
 
     GFX_Mesh_Vertex triangle_vertices[] = {
       {
-        .pos = {-0.45f, -0.35f, -1.0f, 1.0f},
+        .pos = {-0.45f, -0.35f, 1.0f, 1.0f},
         .normal = {0.0f, 0.0f, 1.0f, 0.0f},
         .uv = {0.0f, 0.0f},
         .color = {1.0f, 0.1f, 0.1f, 1.0f},
       },
       {
-        .pos = {0.45f, -0.35f, -1.0f, 1.0f},
+        .pos = {0.45f, -0.35f, 1.0f, 1.0f},
         .normal = {0.0f, 0.0f, 1.0f, 0.0f},
         .uv = {1.0f, 0.0f},
         .color = {0.1f, 1.0f, 0.1f, 1.0f},
       },
       {
-        .pos = {0.0f, 0.45f, -1.0f, 1.0f},
+        .pos = {0.0f, 0.45f, 1.0f, 1.0f},
         .normal = {0.0f, 0.0f, 1.0f, 0.0f},
         .uv = {0.5f, 1.0f},
         .color = {0.1f, 0.2f, 1.0f, 1.0f},
@@ -874,11 +874,11 @@ Internal void lane(Arena *arena) {
                           UI_Row()
                           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                           UI_Corner_Radius(ui_top_font_size()*0.2f) {
-                            ui_drag_F1(str8("X"), &entity->pos[0], 20.0f);
+                            ui_drag_F1(str8("X"), &entity->pos[0], 40.0f);
                             ui_spacer(ui_px(5.0f, 1.0f));
-                            ui_drag_F1(str8("Y"), &entity->pos[1], 20.0f);
+                            ui_drag_F1(str8("Y"), &entity->pos[1], 40.0f);
                             ui_spacer(ui_px(5.0f, 1.0f));
-                            ui_drag_F1(str8("Z"), &entity->pos[2], 20.0f);
+                            ui_drag_F1(str8("Z"), &entity->pos[2], 40.0f);
                           }
 
                           ui_spacer(ui_px(10.0f, 1.0f));
@@ -1020,17 +1020,23 @@ Internal void lane(Arena *arena) {
             if (view->kind == VIEW_KIND__VIEWPORT && view->viewport_box != 0) {
               F4 viewport_rect = view->viewport_box->rect;
               if (viewport_rect[2] > 0.0f && viewport_rect[3] > 0.0f) {
+                dr_mesh_viewport(viewport_rect);
+
+                //- kti: Projection
                 F1 aspect = viewport_rect[2] / viewport_rect[3];
                 F1 near_z = 0.1f;
                 F1 far_z = 100.0f;
                 F1 fov = 60.0f * PI/180.0f;
-                F1 top = near_z * tanf(fov * 0.5f);
-                F1 right = top * aspect;
-                M4F projection = frustum_M4F(-right, right, -top, top, near_z, far_z);
-
-                dr_mesh_viewport(viewport_rect);
+                M4F projection = perspective_fov_M4F(fov, aspect, near_z, far_z);
                 dr_mesh_view_projection(projection);
-                dr_mesh(state->triangle_vertex_buffer, 0, 3, state->triangle_index_buffer, 0, 3, identity_M4F(), (F4){1.0f, 1.0f, 1.0f, 1.0f});
+
+                //- kti: Draw scene.
+                for (L1 i = 0; i < state->entity_count; i += 1) {
+                  Entity *e = &state->entities[i];
+                  M4F transform = translate_M4F(e->pos);
+                  dr_mesh(state->triangle_vertex_buffer, 0, 3, state->triangle_index_buffer, 0, 3,
+                          transform, (F4){1.0f, 1.0f, 1.0f, 1.0f});
+                }
               }
             }
           }

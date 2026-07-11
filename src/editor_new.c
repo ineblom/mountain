@@ -450,31 +450,27 @@ Internal void lane(Arena *arena) {
 
     GFX_Mesh_Vertex triangle_vertices[] = {
       {
-        .pos = {-0.45f, -0.35f, 0.0f, 1.0f},
+        .pos = {-0.45f, -0.35f, -1.0f, 1.0f},
         .normal = {0.0f, 0.0f, 1.0f, 0.0f},
         .uv = {0.0f, 0.0f},
         .color = {1.0f, 0.1f, 0.1f, 1.0f},
       },
       {
-        .pos = {0.45f, -0.35f, 0.0f, 1.0f},
+        .pos = {0.45f, -0.35f, -1.0f, 1.0f},
         .normal = {0.0f, 0.0f, 1.0f, 0.0f},
         .uv = {1.0f, 0.0f},
         .color = {0.1f, 1.0f, 0.1f, 1.0f},
       },
       {
-        .pos = {0.0f, 0.45f, 0.0f, 1.0f},
+        .pos = {0.0f, 0.45f, -1.0f, 1.0f},
         .normal = {0.0f, 0.0f, 1.0f, 0.0f},
         .uv = {0.5f, 1.0f},
         .color = {0.1f, 0.2f, 1.0f, 1.0f},
       },
     };
     I1 triangle_indices[] = {0, 1, 2};
-    state->triangle_vertex_buffer = gfx_buffer_alloc(
-      GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__VERTEX,
-      sizeof(triangle_vertices), triangle_vertices);
-    state->triangle_index_buffer = gfx_buffer_alloc(
-      GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__INDEX,
-      sizeof(triangle_indices), triangle_indices);
+    state->triangle_vertex_buffer = gfx_buffer_alloc(GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__VERTEX, sizeof(triangle_vertices), triangle_vertices);
+    state->triangle_index_buffer = gfx_buffer_alloc(GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__INDEX, sizeof(triangle_indices), triangle_indices);
 
     Window *window = window_open();
 
@@ -1002,11 +998,24 @@ Internal void lane(Arena *arena) {
 
         ui_draw();
 
-        dr_mesh_view_projection(identity_M4F());
-        dr_mesh(state->triangle_vertex_buffer, 0, 3,
-                state->triangle_index_buffer, 0, 3,
+        ////////////////////////////////
+        //~ 3D Draw
+        
+        //- kti: Calculate projection matrix.
+        F1 aspect = (F1)w->os->width / (F1)w->os->height;
+        F1 near_z = 0.1f;
+        F1 far_z = 100.0f;
+        F1 fov = 60.0f * PI/180.0f;
+        F1 top = near_z * tanf(fov * 0.5f);
+        F1 right = top * aspect;
+        M4F projection = frustum_M4F(-right, right, -top, top, near_z, far_z);
+        dr_mesh_view_projection(projection);
+
+        //- kti: Draw scene.
+        dr_mesh(state->triangle_vertex_buffer, 0, 3, state->triangle_index_buffer, 0, 3,
                 identity_M4F(), (F4){1.0f, 1.0f, 1.0f, 1.0f});
 
+        //- kti: Submit to render.
         dr_submit_bucket(w->os, w->gfx, bucket);
         dr_pop_bucket();
         gfx_window_end_frame(w->os, w->gfx);

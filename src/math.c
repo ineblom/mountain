@@ -237,9 +237,9 @@ Inline M4F frustum_M4F(F1 left, F1 right, F1 bottom, F1 top, F1 near_z, F1 far_z
   result.m[1][1] = (2.0f * near_z) / (top - bottom);
   result.m[2][0] = (right + left) / (right - left);
   result.m[2][1] = (top + bottom) / (top - bottom);
-  result.m[2][2] = -(far_z + near_z) / (far_z - near_z);
+  result.m[2][2] = far_z / (near_z - far_z);
   result.m[2][3] = -1.0f;
-  result.m[3][2] = -(2.0f * far_z * near_z) / (far_z - near_z);
+  result.m[3][2] = (far_z * near_z) / (near_z - far_z);
   return result;
 }
 

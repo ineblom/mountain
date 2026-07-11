@@ -162,14 +162,6 @@ Internal GFX_Rect_Batch *dr_rect_batch_push(DR_Bucket *bucket, GFX_Rect_Pass *pa
   return batch;
 }
 
-Internal void dr_mesh_view_projection(M4F view_projection) {
-  DR_Bucket *bucket = dr_state->top_bucket;
-  if (bucket != 0) {
-    GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__MESH);
-    pass_n->mesh.view_projection = view_projection;
-  }
-}
-
 Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_softness) {
   ProfFuncBegin();
 
@@ -255,6 +247,14 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
   return result;
 }
 
+Internal void dr_mesh_view_projection(M4F view_projection) {
+  DR_Bucket *bucket = dr_state->top_bucket;
+  if (bucket != 0) {
+    GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__MESH);
+    pass_n->mesh.view_projection = view_projection;
+  }
+}
+
 Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count, GFX_Buffer *index_buffer, L1 index_offset, L1 index_count, M4F transform, F4 color) {
   ProfFuncBegin();
 
@@ -294,7 +294,7 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
     result = &batch->instances[batch->instance_count];
     batch->instance_count += 1;
 
-    *result = (GFX_Mesh_Instance){
+    result[0] = (GFX_Mesh_Instance){
       .transform = transform,
       .color = color,
     };

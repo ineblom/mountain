@@ -31,7 +31,6 @@ typedef unsigned long long L1;
 #endif
 
 typedef float F2 VEC_TYPE(2, float);
-typedef float F3 VEC_TYPE(4, float);
 typedef float F4 VEC_TYPE(4, float);
 
 typedef union M4F M4F;

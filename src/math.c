@@ -78,30 +78,30 @@ Inline F1 length_F2(F2 v) {
 }
 
 ////////////////////////////////
-//~ F3
+//~ F4
 
-Inline F1 dot_F3(F3 a, F3 b) {
-  F1 result = a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+Inline F1 dot_F4(F4 a, F4 b) {
+  F1 result = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
   return result;
 }
 
-Inline F1 length_sq_F3(F3 v) {
-  F1 result = dot_F3(v, v);
+Inline F1 length_sq_F4(F4 v) {
+  F1 result = dot_F4(v, v);
   return result;
 }
 
-Inline F1 length_F3(F3 v) {
-  F1 result = sqrtf(length_sq_F3(v));
+Inline F1 length_F4(F4 v) {
+  F1 result = sqrtf(length_sq_F4(v));
   return result;
 }
 
-Inline F3 normalize_F3(F3 v) {
-  F3 result = v * (1.0f / length_F3(v));
+Inline F4 normalize_F4(F4 v) {
+  F4 result = v * (1.0f / length_F4(v));
   return result;
 }
 
-Inline F3 cross_F3(F3 a, F3 b) {
-  F3 result = {0};
+Inline F4 cross_F4(F4 a, F4 b) {
+  F4 result = {0};
 
   result[0] = a[1]*b[2] - a[2]*b[1];
   result[1] = a[2]*b[0] - a[0]*b[2];
@@ -110,49 +110,43 @@ Inline F3 cross_F3(F3 a, F3 b) {
   return result;
 }
 
-Inline F3 lerp_F3(F3 a, F1 t, F3 b) {
-  F3 result = a * (1-t) + b*t;
+Inline F4 lerp_F4(F4 a, F1 t, F4 b) {
+  F4 result = a * (1-t) + b*t;
   return result;
 }
 
-Inline F3 abs_F3(F3 v) {
-  F3 result = { fabsf(v[0]), fabsf(v[1]), fabsf(v[2]) };
+Inline F4 abs_F4(F4 v) {
+  F4 result = { fabsf(v[0]), fabsf(v[1]), fabsf(v[2]), fabsf(v[3]) };
   return result;
 }
 
-Inline F3 clamp01_F3(F3 v) {
-  F3 result= {
+Inline F4 clamp01_F4(F4 v) {
+  F4 result= {
     clamp01_F1(v[0]),
     clamp01_F1(v[1]),
-    clamp01_F1(v[2])
+    clamp01_F1(v[2]),
+    clamp01_F1(v[3])
   };
   return result;
 }
 
-Inline F1 luminance_F3(F3 v) {
+Inline F1 luminance_F4(F4 v) {
   F1 result = 0.2126f*v[0] + 0.7152f*v[1] + 0.0722f*v[2];
   return result;
 }
 
-Inline F3 pow_F3(F3 v, F1 exp) {
-  F3 result = {
+Inline F4 pow_F4(F4 v, F1 exp) {
+  F4 result = {
     powf(v[0], exp),
     powf(v[1], exp),
-    powf(v[2], exp)
+    powf(v[2], exp),
+    powf(v[3], exp)
   };
   return result;
 }
 
-Inline F3 reflect_F3(F3 v, F3 normal) {
-  F3 result = v - 2*dot_F3(v, normal) * normal;
-  return result;
-}
-
-////////////////////////////////
-//~ F4
-
-Inline F4 F4_from_F3(F3 v, F1 w) {
-  F4 result = {v[0], v[1], v[2], w};
+Inline F4 reflect_F4(F4 v, F4 normal) {
+  F4 result = v - 2*dot_F4(v, normal) * normal;
   return result;
 }
 
@@ -182,7 +176,7 @@ Inline M4F mul_M4F(M4F a, M4F b) {
   return result;
 }
 
-Inline M4F translate_M4F(F3 p) {
+Inline M4F translate_M4F(F4 p) {
   M4F result = identity_M4F();
   result.m[3][0] = p[0];
   result.m[3][1] = p[1];
@@ -190,7 +184,7 @@ Inline M4F translate_M4F(F3 p) {
   return result;
 }
 
-Inline M4F scale_M4F(F3 s) {
+Inline M4F scale_M4F(F4 s) {
   M4F result = identity_M4F();
   result.m[0][0] = s[0];
   result.m[1][1] = s[1];
@@ -264,17 +258,10 @@ Inline F4 mul_M4F_F4(M4F m, F4 v) {
   return result;
 }
 
-Inline F3 transform_point_M4F(M4F m, F3 p) {
-  F4 transformed = mul_M4F_F4(m, F4_from_F3(p, 1.0f));
-  F1 inv_w = 1.0f / transformed[3];
-  F3 result = {transformed[0] * inv_w, transformed[1] * inv_w, transformed[2] * inv_w};
-  return result;
-}
-
 ////////////////////////////////
 //~ Ray
 
-Internal F1 ray_aabb_intersect(F3 ray_origin, F3 ray_direction, F3 aabb_min, F3 aabb_max) {
+Internal F1 ray_aabb_intersect(F4 ray_origin, F4 ray_direction, F4 aabb_min, F4 aabb_max) {
   F1 t_min = (aabb_min[0] - ray_origin[0]) / ray_direction[0];
   F1 t_max = (aabb_max[0] - ray_origin[0]) / ray_direction[0];
   if (t_min > t_max) Swap(t_min, t_max);

@@ -27,14 +27,14 @@ struct View {
 
   UI_Box *viewport_box;
 
-  F3 camera_pos;
+  F4 camera_pos;
   F1 camera_yaw;
   F1 camera_pitch;
   F1 camera_fov;
   F1 camera_nearz;
   F1 camera_farz;
 
-  F3 camera_drag_start_pos;
+  F4 camera_drag_start_pos;
   F1 camera_drag_start_yaw;
   F1 camera_drag_start_pitch;
 };
@@ -134,8 +134,8 @@ struct Entity {
   L1 flags;
   B1 name[128];
   L1 name_len;
-  F3 pos;
-  F3 size;
+  F4 pos;
+  F4 size;
   Shape shape;
   RT_Material material;
 };
@@ -422,7 +422,7 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
   memmove(view->name, default_name.str, view->name_len);
 
   if (kind == VIEW_KIND__VIEWPORT) {
-    view->camera_pos = (F3){0.0f, 0.0f, -5.0f};
+    view->camera_pos = (F4){0.0f, 0.0f, -5.0f};
     view->camera_fov = 60.0f * 180.0f/PI;
     view->camera_nearz = 0.1f;
     view->camera_farz = 100.0f;
@@ -529,15 +529,16 @@ Internal Entity *entity_create(L1 flags, String8 name) {
     entity->handle.idx = idx;
     entity->handle.id = id;
     entity->flags = flags;
-    entity->size = (F3){1.0f, 1.0f, 1.0f};
+    entity->size = (F4){1.0f, 1.0f, 1.0f};
     entity->name_len = Min(name.len, sizeof(entity->name));
-    entity->material.base_color = (F3){0.9f, 0.9f, 0.9f};
+    entity->material.base_color = (F4){0.9f, 0.9f, 0.9f, 1.0f};
+    entity->material.emissive = (F4){0.0f, 0.0f, 0.0f, 1.0f};
     memmove(entity->name, name.str, entity->name_len);
   }
   return entity;
 }
 
-Internal void widget_rgb_edit(String8 label, F3 *rgb) {
+Internal void widget_rgb_edit(String8 label, F4 *rgb) {
   UI_Row()
   UI_Corner_Radius(ui_top_font_size()*0.4f) {
     UI_Pref_Width(ui_pct(0.15f, 1.0f))
@@ -564,7 +565,7 @@ Internal void widget_rgb_edit(String8 label, F3 *rgb) {
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
-    F4 color = oklch_from_linear_rgb(F4_from_F3(rgb[0], 1.0f));
+    F4 color = oklch_from_linear_rgb(rgb[0]);
     UI_Background_Color(color)
     UI_Pref_Width(ui_px(50.0f, 1.0f))
     UI_Corner_Radius(0) {
@@ -573,7 +574,7 @@ Internal void widget_rgb_edit(String8 label, F3 *rgb) {
 
     ui_pop_text_align();
 
-    rgb[0] = clamp01_F3(rgb[0]);
+    rgb[0] = clamp01_F4(rgb[0]);
   }
 }
 
@@ -1028,7 +1029,7 @@ Internal void lane(Arena *arena) {
                             if (entity->shape == SHAPE__SPHERE) {
                               F1 radius = entity->size[0];
                               ui_drag_F1(str8("R"), &radius, 50.0f, 1.0f);
-                              entity->size = (F3){radius, radius, radius};
+                              entity->size = (F4){radius, radius, radius};
                             } else {
                               ui_drag_F1(str8("X"), &entity->size[0], 50.0f, 1.0f);
                               ui_spacer(ui_px(5.0f, 1.0f));
@@ -1144,8 +1145,8 @@ Internal void lane(Arena *arena) {
                       M4F camera_rotation = mul_M4F(
                           rotate_x_M4F(view->camera_pitch),
                           rotate_y_M4F(view->camera_yaw));
-                      F3 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
-                      F3 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
+                      F4 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
+                      F4 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
                       F1 pan_speed = 0.01f;
                       view->camera_pos = view->camera_drag_start_pos
                           - drag_delta[0]*pan_speed*camera_right
@@ -1176,7 +1177,7 @@ Internal void lane(Arena *arena) {
                       F1 v = (mouse[1] - rect[1]) / rect[3];
 
                       F1 tan_half_fov = tanf(0.5f * view->camera_fov);
-                      F4 ray_dir_camera = normalize_F3((F4){
+                      F4 ray_dir_camera = normalize_F4((F4){
                         (2.0f*u-1) * aspect * tan_half_fov,
                         (1.0f - 2.0f*v) * tan_half_fov,
                         1.0f,
@@ -1186,7 +1187,7 @@ Internal void lane(Arena *arena) {
                       M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera_pitch),
                                                     rotate_y_M4F(view->camera_yaw));
 
-                      F3 ray_direction = mul_M4F_F4(camera_rotation, ray_dir_camera);
+                      F4 ray_direction = mul_M4F_F4(camera_rotation, ray_dir_camera);
 
                       F1 closest_t = F1_MAX;
                       for (L1 i = 0; i < state->entity_count; i += 1) {
@@ -1250,7 +1251,7 @@ Internal void lane(Arena *arena) {
                   M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
                   dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
                           mesh->index_buffer, 0, mesh->index_count,
-                          transform, F4_from_F3(e->material.base_color, 1.0f));
+                          transform, e->material.base_color);
                 }
               }
             }

@@ -57,16 +57,16 @@ Inline L1 image_xy_to_index(Image image, L1 x, L1 y) {
   return result;
 }
 
-Inline F3 I1_to_F3(I1 pixel) {
+Inline F4 I1_to_F4(I1 pixel) {
   F1 r = (F1)((pixel >> 16) & 0xFF);
   F1 g = (F1)((pixel >> 8) & 0xFF);
   F1 b = (F1)(pixel & 0xFF);
-  F3 result = {r/255.0f,g/255.0f,b/255.0f};
+  F4 result = {r/255.0f,g/255.0f,b/255.0f};
   return result;
 }
 
-Inline F3 image_sample_bilinear_F3(Image image, F1 u, F1 v) {
-  Assert(image.bytes_per_pixel == sizeof(F3));
+Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
+  Assert(image.bytes_per_pixel == sizeof(F4));
 
   u = clamp01_F1(u);
   v = clamp01_F1(v);
@@ -82,20 +82,20 @@ Inline F3 image_sample_bilinear_F3(Image image, F1 u, F1 v) {
   F1 fx = tex_x - (F1)x0;
   F1 fy = tex_y - (F1)y0;
 
-  F3 *p = (F3 *)image.pixels;
-  F3 c00 = p[x0+y0*image.width];
-  F3 c10 = p[x1+y0*image.width];
-  F3 c01 = p[x0+y1*image.width];
-  F3 c11 = p[x1+y1*image.width];
+  F4 *p = (F4 *)image.pixels;
+  F4 c00 = p[x0+y0*image.width];
+  F4 c10 = p[x1+y0*image.width];
+  F4 c01 = p[x0+y1*image.width];
+  F4 c11 = p[x1+y1*image.width];
 
-  F3 top_row = lerp_F3(c00, fx, c10);
-  F3 bot_row = lerp_F3(c01, fx, c11);
-  F3 result  = lerp_F3(top_row, fy, bot_row);
+  F4 top_row = lerp_F4(c00, fx, c10);
+  F4 bot_row = lerp_F4(c01, fx, c11);
+  F4 result  = lerp_F4(top_row, fy, bot_row);
 
   return result;
 }
 
-Inline F3 image_sample_bilinear_I1_to_F3(Image image, F1 u, F1 v) {
+Inline F4 image_sample_bilinear_I1_to_F4(Image image, F1 u, F1 v) {
   Assert(image.bytes_per_pixel == sizeof(I1));
 
   u = clamp01_F1(u);
@@ -118,14 +118,14 @@ Inline F3 image_sample_bilinear_I1_to_F3(Image image, F1 u, F1 v) {
   I1 c01 = p[x0+y1*image.width];
   I1 c11 = p[x1+y1*image.width];
 
-  F3 c00rgb = I1_to_F3(c00);
-  F3 c10rgb = I1_to_F3(c10);
-  F3 c01rgb = I1_to_F3(c01);
-  F3 c11rgb = I1_to_F3(c11);
+  F4 c00rgb = I1_to_F4(c00);
+  F4 c10rgb = I1_to_F4(c10);
+  F4 c01rgb = I1_to_F4(c01);
+  F4 c11rgb = I1_to_F4(c11);
 
-  F3 top_row = lerp_F3(c00rgb,  fx, c10rgb);
-  F3 bot_row = lerp_F3(c01rgb,  fx, c11rgb);
-  F3 result  = lerp_F3(top_row, fy, bot_row);
+  F4 top_row = lerp_F4(c00rgb,  fx, c10rgb);
+  F4 bot_row = lerp_F4(c01rgb,  fx, c11rgb);
+  F4 result  = lerp_F4(top_row, fy, bot_row);
 
   return result;
 }

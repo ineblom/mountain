@@ -63,6 +63,19 @@ Inline F1 sign_F1(F1 a) {
   return result;
 }
 
+Inline F1 lerp_F1(F1 a, F1 t, F1 b) {
+  F1 result = a * (1-t) + b*t;
+  return result;
+}
+
+Inline F1 lerp_snap_F1(F1 a, F1 t, F1 b, F1 min_dist) {
+  F1 result = lerp_F1(a, t, b);
+  if (abs_F1(a-b) < min_dist) {
+    result = b;
+  }
+  return result;
+}
+
 ////////////////////////////////
 //~ F2
 
@@ -116,6 +129,14 @@ Inline F4 cross_F4(F4 a, F4 b) {
 
 Inline F4 lerp_F4(F4 a, F1 t, F4 b) {
   F4 result = a * (1-t) + b*t;
+  return result;
+}
+
+Inline F4 lerp_snap_F4(F4 a, F1 t, F4 b, F1 min_dist) {
+  F4 result = lerp_F4(a, t, b);
+  if (length_sq_F4(a-b) < Square(min_dist)) {
+    result = b;
+  }
   return result;
 }
 

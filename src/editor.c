@@ -18,6 +18,16 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__VIEWPORT] = str8("Viewport"),
 };
 
+typedef struct Camera Camera;
+struct Camera {
+  F4 pos;
+  F1 yaw;
+  F1 pitch;
+  F1 fov;
+  F1 near_z;
+  F1 far_z;
+};
+
 typedef struct View View;
 struct View {
   View_Kind kind;
@@ -27,13 +37,8 @@ struct View {
 
   UI_Box *viewport_box;
 
-  F4 camera_pos;
-  F4 camera_target_pos;
-  F1 camera_yaw;
-  F1 camera_pitch;
-  F1 camera_fov;
-  F1 camera_nearz;
-  F1 camera_farz;
+  Camera camera;
+  Camera target_camera;
 
   F4 camera_drag_start_pos;
   F1 camera_drag_start_yaw;
@@ -423,11 +428,13 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
   memmove(view->name, default_name.str, view->name_len);
 
   if (kind == VIEW_KIND__VIEWPORT) {
-    view->camera_pos = (F4){0.0f, 0.0f, -5.0f};
-    view->camera_target_pos = view->camera_pos;
-    view->camera_fov = 60.0f * PI/180.0f;
-    view->camera_nearz = 0.1f;
-    view->camera_farz = 100.0f;
+    view->camera = (Camera){
+      .pos = (F4){0.0f, 0.0f, -7.0f},
+      .fov = 70.0f * PI/180.0f,
+      .near_z = 0.1f,
+      .far_z = 100.0f,
+    };
+    view->target_camera = view->camera;
   }
 }
 
@@ -1123,10 +1130,12 @@ Internal void lane(Arena *arena) {
                   //- kti: 3D viewport.
                   case VIEW_KIND__VIEWPORT: {
                     //- kti: Animate camera.
-                    view->camera_pos = lerp_F4(view->camera_pos, 0.15f, view->camera_target_pos);
-                    if (length_sq_F4(view->camera_pos-view->camera_target_pos) < Square(0.001f)) {
-                      view->camera_pos = view->camera_target_pos;
-                    }
+                    view->camera.pos = lerp_snap_F4(view->camera.pos, 0.15f, view->target_camera.pos, 0.001f);
+                    view->camera.pitch = lerp_snap_F1(view->camera.pitch, 0.2f, view->target_camera.pitch, 0.001f);
+                    view->camera.yaw = lerp_snap_F1(view->camera.yaw, 0.2f, view->target_camera.yaw, 0.001f);
+                    view->camera.fov = lerp_snap_F1(view->camera.fov, 0.15f, view->target_camera.fov, 0.001f);
+                    view->camera.near_z = lerp_snap_F1(view->camera.near_z, 0.15f, view->target_camera.near_z, 0.001f);
+                    view->camera.far_z = lerp_snap_F1(view->camera.far_z, 0.15f, view->target_camera.far_z, 0.001f);
 
                     //- kti: Build box.
                     
@@ -1140,41 +1149,41 @@ Internal void lane(Arena *arena) {
 
                     //- kti: Dolly.
                     if (viewport_signal.scroll[1] != 0.0f) {
-                      M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera_pitch), rotate_y_M4F(view->camera_yaw));
+                      M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera.pitch), rotate_y_M4F(view->camera.yaw));
                       F4 camera_forward = mul_M4F_F4(camera_rotation, (F4){0.0f, 0.0f, 1.0f, 0.0f});
                       F1 dolly_speed = 0.05f;
-                      view->camera_target_pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
+                      view->target_camera.pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
                     }
 
                     I1 is_click = dot_F2(drag_delta) <= Square(4.0f);
 
                     //- kti: Panning
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-                      view->camera_drag_start_pos = view->camera_pos;
+                      view->camera_drag_start_pos = view->camera.pos;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !is_click) {
                       M4F camera_rotation = mul_M4F(
-                          rotate_x_M4F(view->camera_pitch),
-                          rotate_y_M4F(view->camera_yaw));
+                          rotate_x_M4F(view->camera.pitch),
+                          rotate_y_M4F(view->camera.yaw));
                       F4 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
                       F4 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
                       F1 pan_speed = 0.01f;
-                      view->camera_target_pos = view->camera_drag_start_pos -
+                      view->target_camera.pos = view->camera_drag_start_pos -
                         drag_delta[0]*pan_speed*camera_right +
                         drag_delta[1]*pan_speed*camera_up;
                     }
 
                     //- kti: Rotating
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_PRESSED) {
-                      view->camera_drag_start_yaw = view->camera_yaw;
-                      view->camera_drag_start_pitch = view->camera_pitch;
+                      view->camera_drag_start_yaw = view->camera.yaw;
+                      view->camera_drag_start_pitch = view->camera.pitch;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_DRAGGING) {
                       F1 rotate_speed = 0.005f;
-                      view->camera_yaw = view->camera_drag_start_yaw + drag_delta[0]*rotate_speed;
-                      view->camera_pitch = Clamp(-0.49f*PI,
+                      view->target_camera.yaw = view->camera_drag_start_yaw + drag_delta[0]*rotate_speed;
+                      view->target_camera.pitch = Clamp(-0.49f*PI,
                           view->camera_drag_start_pitch + drag_delta[1]*rotate_speed,
                           0.49f*PI);
                     }
@@ -1187,7 +1196,7 @@ Internal void lane(Arena *arena) {
                       F1 u = (mouse[0] - rect[0]) / rect[2];
                       F1 v = (mouse[1] - rect[1]) / rect[3];
 
-                      F1 tan_half_fov = tanf(0.5f * view->camera_fov);
+                      F1 tan_half_fov = tanf(0.5f * view->camera.fov);
                       F4 ray_dir_camera = normalize_F4((F4){
                         (2.0f*u-1) * aspect * tan_half_fov,
                         (1.0f - 2.0f*v) * tan_half_fov,
@@ -1195,8 +1204,7 @@ Internal void lane(Arena *arena) {
                         0.0f,
                       });
 
-                      M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera_pitch),
-                                                    rotate_y_M4F(view->camera_yaw));
+                      M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera.pitch), rotate_y_M4F(view->camera.yaw));
 
                       F4 ray_direction = mul_M4F_F4(camera_rotation, ray_dir_camera);
 
@@ -1210,9 +1218,9 @@ Internal void lane(Arena *arena) {
                         if (e->shape == SHAPE__BOX) {
                           F4 min = e->pos - e->size*0.5f;
                           F4 max = e->pos + e->size*0.5f;
-                          t = ray_aabb_intersect(view->camera_pos, ray_direction, min, max);
+                          t = ray_aabb_intersect(view->camera.pos, ray_direction, min, max);
                         } else if (e->shape == SHAPE__SPHERE) {
-                          t = ray_sphere_intersect(view->camera_pos, ray_direction, e->pos, e->size[0]*0.5f);
+                          t = ray_sphere_intersect(view->camera.pos, ray_direction, e->pos, e->size[0]*0.5f);
                         }
 
                         if (t > min_hit_distance && t < closest_t) {
@@ -1267,10 +1275,10 @@ Internal void lane(Arena *arena) {
 
                 //- kti: Projection
                 F1 aspect = viewport_rect[2] / viewport_rect[3];
-                M4F projection = perspective_fov_M4F(view->camera_fov, aspect, view->camera_nearz, view->camera_farz);
-                M4F view_matrix = translate_M4F(-view->camera_pos);
-                view_matrix = mul_M4F(view_matrix, rotate_y_M4F(-view->camera_yaw));
-                view_matrix = mul_M4F(view_matrix, rotate_x_M4F(-view->camera_pitch));
+                M4F projection = perspective_fov_M4F(view->camera.fov, aspect, view->camera.near_z, view->camera.far_z);
+                M4F view_matrix = translate_M4F(-view->camera.pos);
+                view_matrix = mul_M4F(view_matrix, rotate_y_M4F(-view->camera.yaw));
+                view_matrix = mul_M4F(view_matrix, rotate_x_M4F(-view->camera.pitch));
                 dr_mesh_view_projection(mul_M4F(view_matrix, projection));
 
                 //- kti: Draw scene.

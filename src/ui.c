@@ -1920,7 +1920,7 @@ Internal UI_Signal ui_slider_F1(F1 *value, F1 min, F1 max) {
   return signal;
 }
 
-Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 pixels_per_unit) {
+Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 pixels_per_unit, F1 default_value) {
   UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_%p", value));
   UI_Box *box = ui_build_box_from_key(
     UI_BOX_FLAG__CLICKABLE|
@@ -1942,6 +1942,10 @@ Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 pixels_per_unit) {
     F1 initial_value = ui_get_drag_struct(F1)[0];
     F1 change = ui_drag_delta()[0] / pixels_per_unit;
     value[0] = initial_value + change;
+  }
+
+  if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
+    value[0] = default_value;
   }
 
   return signal;

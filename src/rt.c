@@ -701,19 +701,19 @@ Internal void widget_rgb_edit(String8 label, F3 *rgb) {
 
     UI_Background_Color(oklch(0.3f, 0.15f, 35, 1.0f))
     UI_Border_Color(oklch(0.5f, 0.2f, 35, 1.0f)) {
-      ui_drag_F1(str8("R"), &rgb[0][0], 200.0f);
+      ui_drag_F1(str8("R"), &rgb[0][0], 200.0f, 1.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
     UI_Background_Color(oklch(0.272f, 0.076f, 145, 1.0f))
     UI_Border_Color(oklch(0.484f, 0.164f, 145, 1.0f)) {
-      ui_drag_F1(str8("G"), &rgb[0][1], 200.0f);
+      ui_drag_F1(str8("G"), &rgb[0][1], 200.0f, 1.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
     UI_Background_Color(oklch(0.277f, 0.077f, 252, 1.0f))
     UI_Border_Color(oklch(0.493f, 0.172f, 252, 1.0f)) {
-      ui_drag_F1(str8("B"), &rgb[0][2], 200.0f);
+      ui_drag_F1(str8("B"), &rgb[0][2], 200.0f, 1.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 

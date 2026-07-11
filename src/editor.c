@@ -959,11 +959,11 @@ Internal void lane(Arena *arena) {
                           UI_Row()
                           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                           UI_Corner_Radius(ui_top_font_size()*0.2f) {
-                            ui_drag_F1(str8("X"), &entity->pos[0], 40.0f);
+                            ui_drag_F1(str8("X"), &entity->pos[0], 40.0f, 0.0f);
                             ui_spacer(ui_px(5.0f, 1.0f));
-                            ui_drag_F1(str8("Y"), &entity->pos[1], 40.0f);
+                            ui_drag_F1(str8("Y"), &entity->pos[1], 40.0f, 0.0f);
                             ui_spacer(ui_px(5.0f, 1.0f));
-                            ui_drag_F1(str8("Z"), &entity->pos[2], 40.0f);
+                            ui_drag_F1(str8("Z"), &entity->pos[2], 40.0f, 0.0f);
                           }
 
                           ui_spacer(ui_px(10.0f, 1.0f));
@@ -979,14 +979,14 @@ Internal void lane(Arena *arena) {
                           UI_Corner_Radius(ui_top_font_size()*0.2f) {
                             if (entity->shape == SHAPE__SPHERE) {
                               F1 radius = entity->size[0];
-                              ui_drag_F1(str8("R"), &radius, 50.0f);
+                              ui_drag_F1(str8("R"), &radius, 50.0f, 0.5f);
                               entity->size = (F3){radius, radius, radius};
                             } else {
-                              ui_drag_F1(str8("X"), &entity->size[0], 50.0f);
+                              ui_drag_F1(str8("X"), &entity->size[0], 50.0f, 1.0f);
                               ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(str8("Y"), &entity->size[1], 50.0f);
+                              ui_drag_F1(str8("Y"), &entity->size[1], 50.0f, 1.0f);
                               ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(str8("Z"), &entity->size[2], 50.0f);
+                              ui_drag_F1(str8("Z"), &entity->size[2], 50.0f, 1.0f);
                             }
                           }
 

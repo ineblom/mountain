@@ -26,6 +26,17 @@ struct View {
   B1 name[512];
 
   UI_Box *viewport_box;
+
+  F3 camera_pos;
+  F1 camera_yaw;
+  F1 camera_pitch;
+};
+
+typedef struct Camera_Drag_Data Camera_Drag_Data;
+struct Camera_Drag_Data {
+  F3 pos;
+  F1 yaw;
+  F1 pitch;
 };
 
 typedef struct Panel Panel;
@@ -409,6 +420,10 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
   String8 default_name = str8("Theodor");
   view->name_len = Min(sizeof(view->name), default_name.len);
   memmove(view->name, default_name.str, view->name_len);
+
+  if (kind == VIEW_KIND__VIEWPORT) {
+    view->camera_pos = (F3){0.0f, 0.0f, -5.0f};
+  }
 }
 
 ////////////////////////////////
@@ -1053,7 +1068,57 @@ Internal void lane(Arena *arena) {
                     ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
                     ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
                     ui_set_next_background_color((F4){0.025f, 0.025f, 0.035f, 1.0f});
-                    view->viewport_box = ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__CLIP, "##viewport_%p", panel);
+                    view->viewport_box = ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__SCROLL, "##viewport_%p", panel);
+
+                    UI_Signal viewport_signal = ui_signal_from_box(view->viewport_box);
+                    F2 drag_delta = ui_drag_delta();
+
+                    if (viewport_signal.scroll[1] != 0.0f) {
+                      M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera_pitch), rotate_y_M4F(view->camera_yaw));
+                      F3 camera_forward = transform_vector_M4F(camera_rotation, (F3){0.0f, 0.0f, 1.0f});
+                      F1 dolly_speed = 0.05f;
+                      view->camera_pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
+                    }
+
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+                      Camera_Drag_Data drag_data = {
+                        .pos = view->camera_pos,
+                        .yaw = view->camera_yaw,
+                        .pitch = view->camera_pitch,
+                      };
+                      ui_store_drag_struct(&drag_data);
+                      cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                    }
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+                      Camera_Drag_Data drag_data = ui_get_drag_struct(Camera_Drag_Data)[0];
+                      M4F camera_rotation = mul_M4F(
+                          rotate_x_M4F(drag_data.pitch),
+                          rotate_y_M4F(drag_data.yaw));
+                      F3 camera_right = transform_vector_M4F(camera_rotation, (F3){1.0f, 0.0f, 0.0f});
+                      F3 camera_up = transform_vector_M4F(camera_rotation, (F3){0.0f, 1.0f, 0.0f});
+                      F1 pan_speed = 0.01f;
+                      view->camera_pos = drag_data.pos
+                          - drag_delta[0]*pan_speed*camera_right
+                          + drag_delta[1]*pan_speed*camera_up;
+                    }
+
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_PRESSED) {
+                      Camera_Drag_Data drag_data = {
+                        .pos = view->camera_pos,
+                        .yaw = view->camera_yaw,
+                        .pitch = view->camera_pitch,
+                      };
+                      ui_store_drag_struct(&drag_data);
+                      cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                    }
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_DRAGGING) {
+                      Camera_Drag_Data drag_data = ui_get_drag_struct(Camera_Drag_Data)[0];
+                      F1 rotate_speed = 0.005f;
+                      view->camera_yaw = drag_data.yaw + drag_delta[0]*rotate_speed;
+                      view->camera_pitch = Clamp(-0.49f*PI,
+                          drag_data.pitch + drag_delta[1]*rotate_speed,
+                          0.49f*PI);
+                    }
                   } break;
                 }
               }
@@ -1102,7 +1167,10 @@ Internal void lane(Arena *arena) {
                 F1 far_z = 100.0f;
                 F1 fov = 60.0f * PI/180.0f;
                 M4F projection = perspective_fov_M4F(fov, aspect, near_z, far_z);
-                dr_mesh_view_projection(projection);
+                M4F view_matrix = translate_M4F(-view->camera_pos);
+                view_matrix = mul_M4F(view_matrix, rotate_y_M4F(-view->camera_yaw));
+                view_matrix = mul_M4F(view_matrix, rotate_x_M4F(-view->camera_pitch));
+                dr_mesh_view_projection(mul_M4F(view_matrix, projection));
 
                 //- kti: Draw scene.
                 for (L1 i = 0; i < state->entity_count; i += 1) {

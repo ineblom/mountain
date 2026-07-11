@@ -28,15 +28,11 @@ struct View {
   UI_Box *viewport_box;
 
   F3 camera_pos;
+  F3 camera_drag_start_pos;
   F1 camera_yaw;
   F1 camera_pitch;
-};
-
-typedef struct Camera_Drag_Data Camera_Drag_Data;
-struct Camera_Drag_Data {
-  F3 pos;
-  F1 yaw;
-  F1 pitch;
+  F1 camera_drag_start_yaw;
+  F1 camera_drag_start_pitch;
 };
 
 typedef struct Panel Panel;
@@ -1081,42 +1077,31 @@ Internal void lane(Arena *arena) {
                     }
 
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-                      Camera_Drag_Data drag_data = {
-                        .pos = view->camera_pos,
-                        .yaw = view->camera_yaw,
-                        .pitch = view->camera_pitch,
-                      };
-                      ui_store_drag_struct(&drag_data);
+                      view->camera_drag_start_pos = view->camera_pos;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-                      Camera_Drag_Data drag_data = ui_get_drag_struct(Camera_Drag_Data)[0];
                       M4F camera_rotation = mul_M4F(
-                          rotate_x_M4F(drag_data.pitch),
-                          rotate_y_M4F(drag_data.yaw));
+                          rotate_x_M4F(view->camera_pitch),
+                          rotate_y_M4F(view->camera_yaw));
                       F3 camera_right = transform_vector_M4F(camera_rotation, (F3){1.0f, 0.0f, 0.0f});
                       F3 camera_up = transform_vector_M4F(camera_rotation, (F3){0.0f, 1.0f, 0.0f});
                       F1 pan_speed = 0.01f;
-                      view->camera_pos = drag_data.pos
+                      view->camera_pos = view->camera_drag_start_pos
                           - drag_delta[0]*pan_speed*camera_right
                           + drag_delta[1]*pan_speed*camera_up;
                     }
 
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_PRESSED) {
-                      Camera_Drag_Data drag_data = {
-                        .pos = view->camera_pos,
-                        .yaw = view->camera_yaw,
-                        .pitch = view->camera_pitch,
-                      };
-                      ui_store_drag_struct(&drag_data);
+                      view->camera_drag_start_yaw = view->camera_yaw;
+                      view->camera_drag_start_pitch = view->camera_pitch;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_DRAGGING) {
-                      Camera_Drag_Data drag_data = ui_get_drag_struct(Camera_Drag_Data)[0];
                       F1 rotate_speed = 0.005f;
-                      view->camera_yaw = drag_data.yaw + drag_delta[0]*rotate_speed;
+                      view->camera_yaw = view->camera_drag_start_yaw + drag_delta[0]*rotate_speed;
                       view->camera_pitch = Clamp(-0.49f*PI,
-                          drag_data.pitch + drag_delta[1]*rotate_speed,
+                          view->camera_drag_start_pitch + drag_delta[1]*rotate_speed,
                           0.49f*PI);
                     }
                   } break;

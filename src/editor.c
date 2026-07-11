@@ -28,9 +28,13 @@ struct View {
   UI_Box *viewport_box;
 
   F3 camera_pos;
-  F3 camera_drag_start_pos;
   F1 camera_yaw;
   F1 camera_pitch;
+  F1 camera_fov;
+  F1 camera_nearz;
+  F1 camera_farz;
+
+  F3 camera_drag_start_pos;
   F1 camera_drag_start_yaw;
   F1 camera_drag_start_pitch;
 };
@@ -419,6 +423,9 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
 
   if (kind == VIEW_KIND__VIEWPORT) {
     view->camera_pos = (F3){0.0f, 0.0f, -5.0f};
+    view->camera_fov = 60.0f * 180.0f/PI;
+    view->camera_nearz = 0.1f;
+    view->camera_farz = 100.0f;
   }
 }
 
@@ -1020,7 +1027,7 @@ Internal void lane(Arena *arena) {
                           UI_Corner_Radius(ui_top_font_size()*0.4f) {
                             if (entity->shape == SHAPE__SPHERE) {
                               F1 radius = entity->size[0];
-                              ui_drag_F1(str8("R"), &radius, 50.0f, 0.5f);
+                              ui_drag_F1(str8("R"), &radius, 50.0f, 1.0f);
                               entity->size = (F3){radius, radius, radius};
                             } else {
                               ui_drag_F1(str8("X"), &entity->size[0], 50.0f, 1.0f);
@@ -1120,13 +1127,15 @@ Internal void lane(Arena *arena) {
                     UI_Signal viewport_signal = ui_signal_from_box(view->viewport_box);
                     F2 drag_delta = ui_drag_delta();
 
+                    //- kti: Zooming.
                     if (viewport_signal.scroll[1] != 0.0f) {
                       M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera_pitch), rotate_y_M4F(view->camera_yaw));
-                      F3 camera_forward = transform_vector_M4F(camera_rotation, (F3){0.0f, 0.0f, 1.0f});
+                      F4 camera_forward = mul_M4F_F4(camera_rotation, (F4){0.0f, 0.0f, 1.0f, 0.0f});
                       F1 dolly_speed = 0.05f;
                       view->camera_pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
                     }
 
+                    //- kti: Panning
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
                       view->camera_drag_start_pos = view->camera_pos;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
@@ -1135,14 +1144,15 @@ Internal void lane(Arena *arena) {
                       M4F camera_rotation = mul_M4F(
                           rotate_x_M4F(view->camera_pitch),
                           rotate_y_M4F(view->camera_yaw));
-                      F3 camera_right = transform_vector_M4F(camera_rotation, (F3){1.0f, 0.0f, 0.0f});
-                      F3 camera_up = transform_vector_M4F(camera_rotation, (F3){0.0f, 1.0f, 0.0f});
+                      F3 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
+                      F3 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
                       F1 pan_speed = 0.01f;
                       view->camera_pos = view->camera_drag_start_pos
                           - drag_delta[0]*pan_speed*camera_right
                           + drag_delta[1]*pan_speed*camera_up;
                     }
 
+                    //- kti: Rotating
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_PRESSED) {
                       view->camera_drag_start_yaw = view->camera_yaw;
                       view->camera_drag_start_pitch = view->camera_pitch;
@@ -1154,6 +1164,34 @@ Internal void lane(Arena *arena) {
                       view->camera_pitch = Clamp(-0.49f*PI,
                           view->camera_drag_start_pitch + drag_delta[1]*rotate_speed,
                           0.49f*PI);
+                    }
+
+                    //- kti: Selecting
+                    F2 delta = ui_drag_delta();
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && dot_F2(delta) <= 4.0f*4.0f) {
+                      F2 mouse = ui_mouse();
+                      F4 rect = view->viewport_box->rect;
+                      F1 aspect = rect[2] / rect[3];
+                      F1 u = (mouse[0] - rect[0]) / rect[2];
+                      F1 v = (mouse[1] - rect[1]) / rect[3];
+
+                      F1 tan_half_fov = tanf(0.5f * view->camera_fov);
+                      F4 ray_dir_camera = normalize_F3((F4){
+                        (2.0f*u-1) * aspect * tan_half_fov,
+                        (1.0f - 2.0f*v) * tan_half_fov,
+                        1.0f,
+                        0.0f,
+                      });
+
+                      M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera_pitch),
+                                                    rotate_y_M4F(view->camera_yaw));
+
+                      F3 ray_direction = mul_M4F_F4(camera_rotation, ray_dir_camera);
+
+                      F1 closest_t = F1_MAX;
+                      for (L1 i = 0; i < state->entity_count; i += 1) {
+                        Entity *e = &state->entities[i];
+                      }
                     }
                   } break;
                 }
@@ -1199,10 +1237,7 @@ Internal void lane(Arena *arena) {
 
                 //- kti: Projection
                 F1 aspect = viewport_rect[2] / viewport_rect[3];
-                F1 near_z = 0.1f;
-                F1 far_z = 100.0f;
-                F1 fov = 60.0f * PI/180.0f;
-                M4F projection = perspective_fov_M4F(fov, aspect, near_z, far_z);
+                M4F projection = perspective_fov_M4F(view->camera_fov, aspect, view->camera_nearz, view->camera_farz);
                 M4F view_matrix = translate_M4F(-view->camera_pos);
                 view_matrix = mul_M4F(view_matrix, rotate_y_M4F(-view->camera_yaw));
                 view_matrix = mul_M4F(view_matrix, rotate_x_M4F(-view->camera_pitch));

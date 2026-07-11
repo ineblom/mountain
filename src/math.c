@@ -271,12 +271,6 @@ Inline F3 transform_point_M4F(M4F m, F3 p) {
   return result;
 }
 
-Inline F3 transform_vector_M4F(M4F m, F3 v) {
-  F4 transformed = mul_M4F_F4(m, F4_from_F3(v, 0.0f));
-  F3 result = {transformed[0], transformed[1], transformed[2]};
-  return result;
-}
-
 ////////////////////////////////
 //~ Ray
 

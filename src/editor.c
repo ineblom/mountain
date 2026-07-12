@@ -536,6 +536,11 @@ Internal I1 entity_handle_match(Entity_Handle a, Entity_Handle b) {
   return result;
 }
 
+Internal I1 entity_is_nil(Entity *entity) {
+  I1 result = (entity == 0 || entity == &state->nil_entity);
+  return result;
+}
+
 Internal Entity *entity_from_handle(Entity_Handle handle) {
   Entity *result = &state->nil_entity;
 
@@ -543,11 +548,6 @@ Internal Entity *entity_from_handle(Entity_Handle handle) {
     result = handle.ptr;
   }
 
-  return result;
-}
-
-Internal I1 entity_is_nil(Entity *entity) {
-  I1 result = (entity == 0 || entity == &state->nil_entity);
   return result;
 }
 
@@ -701,7 +701,7 @@ Internal void lane(Arena *arena) {
     lister_panel->pct_of_parent = 0.3f;
     viewport_panel->pct_of_parent = 0.7f;
 
-    Entity *starting_entity = entity_create(0, str8("Starting Entity"));
+    Entity *starting_entity = entity_create(ENTITY_FLAG__SHAPE, str8("Starting Entity"));
     state->selected_entity = entity_handle(starting_entity);
   }
 
@@ -837,10 +837,14 @@ Internal void lane(Arena *arena) {
           } break;
 
           case CMD_KIND__CREATE_ENTITY: {
-            entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
+            Entity *new = entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
+            state->selected_entity = entity_handle(new);
           } break;
           case CMD_KIND__DELETE_ENTITY: {
             entity_delete(cmd.entity);
+            if (entity_handle_match(cmd.entity, state->selected_entity)) {
+              state->selected_entity = entity_handle_zero();
+            }
           } break;
         }
       }
@@ -1247,10 +1251,12 @@ Internal void lane(Arena *arena) {
 
                 //- kti: Draw scene.
                 for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
-                  Mesh *mesh = &state->meshes[e->shape];
-                  M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
-                  F4 color = e->material.base_color;
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color);
+                  if (e->flags & ENTITY_FLAG__SHAPE) {
+                    Mesh *mesh = &state->meshes[e->shape];
+                    M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
+                    F4 color = e->material.base_color;
+                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color);
+                  }
                 }
               }
             }

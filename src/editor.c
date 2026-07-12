@@ -27,8 +27,8 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
 };
 
 typedef enum Lister_Entry_Kind {
-  LISTER_ENTRY_KIND__DRAG_F1,
-  LISTER_ENTRY_KIND__POS,
+  LISTER_ENTRY_KIND__DRAG_F1 = 0,
+  LISTER_ENTRY_KIND__DRAG_XYZ,
   LISTER_ENTRY_KIND__COLOR,
 } Lister_Entry_Kind;
 
@@ -41,6 +41,7 @@ struct Lister_Entry {
   F1 default_f1;
   F1 min, max;
   F1 *f1;
+  F4 *f4;
 };
 
 typedef struct View View;
@@ -198,7 +199,6 @@ struct State {
   Entity_Handle selected_entity;
 
   //- kti: Lister.
-  F1 drag_f1;
   L1 lister_entry_count;
   Lister_Entry lister_entries[512];
 
@@ -521,11 +521,6 @@ Internal Entity_Handle entity_handle_zero() {
   return result;
 }
 
-Internal I1 entity_is_nil(Entity *entity) {
-  I1 result = (entity == 0 || entity == &state->nil_entity);
-  return result;
-}
-
 Internal I1 entity_handle_match(Entity_Handle a, Entity_Handle b) {
   I1 result = (a.idx == b.idx && a.id == b.id);
   return result;
@@ -541,6 +536,11 @@ Internal Entity *entity_from_handle(Entity_Handle handle) {
     }
   }
 
+  return result;
+}
+
+Internal I1 entity_is_nil(Entity *entity) {
+  I1 result = (entity == 0 || entity == &state->nil_entity);
   return result;
 }
 
@@ -627,6 +627,22 @@ Internal Lister_Entry *lister_drag_F1(String8 str, F1 *value, F1 default_value, 
   return entry;
 }
 
+Internal Lister_Entry *lister_drag_XYZ(String8 str, F4 *value, F1 pixels_per_unit) {
+  Lister_Entry *entry = 0;
+
+  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
+    entry = &state->lister_entries[state->lister_entry_count];
+    state->lister_entry_count += 1;
+
+    entry->kind = LISTER_ENTRY_KIND__DRAG_XYZ;
+    entry->str = str;
+    entry->f4 = value;
+    entry->pixels_per_unit = pixels_per_unit;
+  }
+
+  return entry;
+}
+
 ////////////////////////////////
 //~ kti: Main
 
@@ -689,7 +705,6 @@ Internal void lane(Arena *arena) {
     UI_Cmd_List ui_cmds = {0};
     OS_Event_List events = {0};
     if (lane_idx() == 0) {
-
       ////////////////////////////////
       //~ kti: Events
       events = os_poll_events(scratch.arena);
@@ -762,12 +777,24 @@ Internal void lane(Arena *arena) {
     lane_sync();
 
     if (lane_idx() == 0) {
+      //- kti: Build lister
+
       state->lister_entry_count = 0;
 
-      lister_drag_F1(str8("Drag Test"), &state->drag_f1, 0.0f, 20.0f, 0.0f, 1.0f);
+      {
+        Entity *e = entity_from_handle(state->selected_entity);
+        if (!entity_is_nil(e)) {
+          lister_drag_XYZ(str8("Pos"), &e->pos, 50.0f);
+          lister_drag_XYZ(str8("Size"), &e->size, 50.0f);
+
+          lister_drag_F1(str8("Metallic"), &e->material.metallic, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_drag_F1(str8("Roughness"), &e->material.roughness, 0.3f, 300.0f, 0.0f, 1.0f);
+        }
+      }
 
       ////////////////////////////////
       //~ kti: Execute Cmds
+
       for (L1 i = 0; i < state->cmd_count; i += 1) {
         Cmd cmd = state->cmds[i];
         switch (cmd.kind) {
@@ -958,7 +985,18 @@ Internal void lane(Arena *arena) {
                             ui_set_next_text_padding(10.0f);
                             ui_drag_F1(entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                           } break;
-                          case LISTER_ENTRY_KIND__POS: { } break;
+                          case LISTER_ENTRY_KIND__DRAG_XYZ: {
+                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry->f4);
+                            UI_Parent(drag_box) {
+                              ui_set_next_text_padding(10.0f);
+                              UI_Box *label_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DRAW_BORDER, entry->str);
+                              UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
+                                ui_drag_F1(str8("X"), &entry->f4[0][0], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
+                                ui_drag_F1(str8("Y"), &entry->f4[0][1], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
+                                ui_drag_F1(str8("Z"), &entry->f4[0][2], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
+                              }
+                            }
+                          } break;
                           case LISTER_ENTRY_KIND__COLOR: { } break;
                         }
                       }

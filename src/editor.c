@@ -27,8 +27,8 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
 };
 
 typedef enum Lister_Entry_Kind {
-  LISTER_ENTRY_KIND__DRAG_F1 = 0,
-  LISTER_ENTRY_KIND__DRAG_XYZ,
+  LISTER_ENTRY_KIND__F1 = 0,
+  LISTER_ENTRY_KIND__XYZ,
   LISTER_ENTRY_KIND__COLOR,
 } Lister_Entry_Kind;
 
@@ -567,55 +567,17 @@ Internal Entity *entity_create(L1 flags, String8 name) {
   return entity;
 }
 
-Internal void widget_rgb_edit(String8 label, F4 *rgb) {
-  UI_Row()
-  UI_Corner_Radius(ui_top_font_size()*0.4f) {
-    UI_Pref_Width(ui_pct(0.15f, 1.0f))
-    ui_label(label);
-    ui_spacer(ui_px(10.0f, 1.0f));
-    
-    ui_push_text_align(UI_TEXT_ALIGN__CENTER);
-
-    UI_Background_Color(oklch(0.3f, 0.15f, 35, 1.0f))
-    UI_Border_Color(oklch(0.5f, 0.2f, 35, 1.0f)) {
-      ui_drag_F1(str8("R"), &rgb[0][0], 1.0f, 200.0f, 0.0f, 1.0f);
-    }
-    ui_spacer(ui_px(5.0f, 1.0f));
-
-    UI_Background_Color(oklch(0.272f, 0.076f, 145, 1.0f))
-    UI_Border_Color(oklch(0.484f, 0.164f, 145, 1.0f)) {
-      ui_drag_F1(str8("G"), &rgb[0][1], 1.0f, 200.0f, 0.0f, 1.0f);
-    }
-    ui_spacer(ui_px(5.0f, 1.0f));
-
-    UI_Background_Color(oklch(0.277f, 0.077f, 252, 1.0f))
-    UI_Border_Color(oklch(0.493f, 0.172f, 252, 1.0f)) {
-      ui_drag_F1(str8("B"), &rgb[0][2], 1.0f, 200.f, 0.0f, 1.0f);
-    }
-    ui_spacer(ui_px(5.0f, 1.0f));
-
-    F4 color = oklch_from_linear_rgb(rgb[0]);
-    UI_Background_Color(color)
-    UI_Pref_Width(ui_px(50.0f, 1.0f))
-    UI_Corner_Radius(0) {
-      ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND, str8("color"));
-    }
-
-    ui_pop_text_align();
-  }
-}
-
 ////////////////////////////////
 //~ kti: Lister
 
-Internal Lister_Entry *lister_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+Internal Lister_Entry *lister_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   Lister_Entry *entry = 0;
 
   if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
     entry = &state->lister_entries[state->lister_entry_count];
     state->lister_entry_count += 1;
 
-    entry->kind = LISTER_ENTRY_KIND__DRAG_F1;
+    entry->kind = LISTER_ENTRY_KIND__F1;
     entry->str = str;
     entry->f1 = value;
     entry->pixels_per_unit = pixels_per_unit;
@@ -627,17 +589,32 @@ Internal Lister_Entry *lister_drag_F1(String8 str, F1 *value, F1 default_value, 
   return entry;
 }
 
-Internal Lister_Entry *lister_drag_XYZ(String8 str, F4 *value, F1 pixels_per_unit) {
+Internal Lister_Entry *lister_xyz(String8 str, F4 *value, F1 pixels_per_unit) {
   Lister_Entry *entry = 0;
 
   if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
     entry = &state->lister_entries[state->lister_entry_count];
     state->lister_entry_count += 1;
 
-    entry->kind = LISTER_ENTRY_KIND__DRAG_XYZ;
+    entry->kind = LISTER_ENTRY_KIND__XYZ;
     entry->str = str;
     entry->f4 = value;
     entry->pixels_per_unit = pixels_per_unit;
+  }
+
+  return entry;
+}
+
+Internal Lister_Entry *lister_color(String8 str, F4 *value) {
+  Lister_Entry *entry = 0;
+
+  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
+    entry = &state->lister_entries[state->lister_entry_count];
+    state->lister_entry_count += 1;
+
+    entry->kind = LISTER_ENTRY_KIND__COLOR;
+    entry->str = str;
+    entry->f4 = value;
   }
 
   return entry;
@@ -777,18 +754,20 @@ Internal void lane(Arena *arena) {
     lane_sync();
 
     if (lane_idx() == 0) {
-      //- kti: Build lister
+      //- kti: Build lister.
 
       state->lister_entry_count = 0;
 
       {
         Entity *e = entity_from_handle(state->selected_entity);
         if (!entity_is_nil(e)) {
-          lister_drag_XYZ(str8("Pos"), &e->pos, 50.0f);
-          lister_drag_XYZ(str8("Size"), &e->size, 50.0f);
+          lister_xyz(str8("Pos"), &e->pos, 50.0f);
+          lister_xyz(str8("Size"), &e->size, 50.0f);
 
-          lister_drag_F1(str8("Metallic"), &e->material.metallic, 0.3f, 300.0f, 0.0f, 1.0f);
-          lister_drag_F1(str8("Roughness"), &e->material.roughness, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_color(str8("Base"), &e->material.base_color);
+          lister_F1(str8("Metallic"), &e->material.metallic, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_F1(str8("Roughness"), &e->material.roughness, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_color(str8("Emissive"), &e->material.emissive);
         }
       }
 
@@ -979,20 +958,20 @@ Internal void lane(Arena *arena) {
                     UI_Parent(lister) {
                       for (L1 i = 0; i < state->lister_entry_count; i += 1) {
                         Lister_Entry *entry = &state->lister_entries[i];
+                        UI_Box_Flags top_side = (i == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
 
                         switch (entry->kind) {
-                          case LISTER_ENTRY_KIND__DRAG_F1: {
+                          case LISTER_ENTRY_KIND__F1: {
                             ui_set_next_text_padding(10.0f);
                             ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
                                               UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                               UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                              ((i == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP));
+                                              top_side);
                             ui_drag_F1(entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                           } break;
-                          case LISTER_ENTRY_KIND__DRAG_XYZ: {
+                          case LISTER_ENTRY_KIND__XYZ: {
                             UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry->f4);
                             UI_Parent(drag_box) {
-                              UI_Box_Flags top_side = (i == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
                                                        UI_BOX_FLAG__DRAW_SIDE_LEFT|
@@ -1010,7 +989,39 @@ Internal void lane(Arena *arena) {
                               }
                             }
                           } break;
-                          case LISTER_ENTRY_KIND__COLOR: { } break;
+                          case LISTER_ENTRY_KIND__COLOR: {
+                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry->f4);
+                            UI_Parent(drag_box) {
+                              ui_set_next_text_padding(10.0f);
+                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                                       top_side,
+                                                       entry->str);
+
+                              ui_set_next_background_color(oklch_from_linear_rgb(entry->f4[0]));
+                              ui_set_next_pref_width(ui_px(30.0f, 1.0f));
+                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND|
+                                                       UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                                       top_side, str8("color_preview"));
+
+                              UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                              UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f)) {
+                                F1 pixels_per_unit = 300.0f;
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
+                                ui_set_next_background_color(oklch(0.27f, 0.1f, 27.0f, 1.0f));
+                                ui_drag_F1(str8("R"), &entry->f4[0][0], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
+                                ui_set_next_background_color(oklch(0.27f, 0.09f, 143.0f, 1.0f));
+                                ui_drag_F1(str8("G"), &entry->f4[0][1], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
+                                ui_set_next_background_color(oklch(0.27f, 0.09f, 256.0f, 1.0f));
+                                ui_drag_F1(str8("B"), &entry->f4[0][2], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                              }
+                            }
+                          } break;
                         }
                       }
                     }

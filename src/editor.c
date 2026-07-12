@@ -1,23 +1,5 @@
 #if (HEADER)
 
-////////////////////////////////
-//~ kti: UI
-
-typedef I1 View_Kind;
-enum {
-  VIEW_KIND__ENTITIES = 0,
-  VIEW_KIND__ENTITY,
-  VIEW_KIND__VIEWPORT,
-
-  VIEW_KIND_COUNT,
-};
-
-Global String8 view_kind_names[VIEW_KIND_COUNT] = {
-  [VIEW_KIND__ENTITIES] = str8("Entities"),
-  [VIEW_KIND__ENTITY] = str8("Entity"),
-  [VIEW_KIND__VIEWPORT] = str8("Viewport"),
-};
-
 typedef struct Camera Camera;
 struct Camera {
   F4 pos;
@@ -28,6 +10,39 @@ struct Camera {
   F1 far_z;
 };
 
+////////////////////////////////
+//~ kti: UI
+
+typedef I1 View_Kind;
+enum {
+  VIEW_KIND__LISTER = 0,
+  VIEW_KIND__VIEWPORT,
+
+  VIEW_KIND_COUNT,
+};
+
+Global String8 view_kind_names[VIEW_KIND_COUNT] = {
+  [VIEW_KIND__LISTER] = str8("Lister"),
+  [VIEW_KIND__VIEWPORT] = str8("Viewport"),
+};
+
+typedef enum Lister_Entry_Kind {
+  LISTER_ENTRY_KIND__DRAG_F1,
+  LISTER_ENTRY_KIND__SLIDER_F1,
+  LISTER_ENTRY_KIND__POS,
+  LISTER_ENTRY_KIND__COLOR,
+} Lister_Entry_Kind;
+
+typedef struct Lister_Entry Lister_Entry;
+struct Lister_Entry {
+  Lister_Entry_Kind kind;
+
+  String8 str;
+  F1 pixels_per_unit;
+  F1 default_f1;
+  F1 *f1;
+};
+
 typedef struct View View;
 struct View {
   View_Kind kind;
@@ -35,11 +50,10 @@ struct View {
   L1 name_len;
   B1 name[512];
 
+  //- kti: Viewport
   UI_Box *viewport_box;
-
   Camera camera;
   Camera target_camera;
-
   F4 camera_drag_start_pos;
   F1 camera_drag_start_yaw;
   F1 camera_drag_start_pitch;
@@ -183,6 +197,13 @@ struct State {
 
   Entity_Handle selected_entity;
 
+  //- kti: Lister.
+  F1 drag_f1;
+  F1 slider_f1;
+  L1 lister_entry_count;
+  Lister_Entry lister_entries[512];
+
+  //- kti: Graphics.
   Mesh meshes[SHAPE_COUNT];
 };
 
@@ -587,6 +608,25 @@ Internal void widget_rgb_edit(String8 label, F4 *rgb) {
   }
 }
 
+////////////////////////////////
+//~ kti: Lister
+
+Internal Lister_Entry *lister_drag_F1(String8 str, F1 *value, F1 pixels_per_unit, F1 default_value) {
+  Lister_Entry *entry = 0;
+
+  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
+    entry = &state->lister_entries[state->lister_entry_count];
+    state->lister_entry_count += 1;
+
+    entry->kind = LISTER_ENTRY_KIND__DRAG_F1;
+    entry->str = str;
+    entry->f1 = value;
+    entry->pixels_per_unit = pixels_per_unit;
+    entry->default_f1 = default_value;
+  }
+
+  return entry;
+}
 
 ////////////////////////////////
 //~ kti: Main
@@ -617,21 +657,16 @@ Internal void lane(Arena *arena) {
     Window *window = window_open();
 
     //- kti: Create initial state.
-    Panel *entities_panel = panel_alloc();
-    panel_push_view(entities_panel, VIEW_KIND__ENTITIES);
-    panel_insert(entities_panel, &window->root_panel, 0);
+    Panel *lister_panel = panel_alloc();
+    panel_push_view(lister_panel, VIEW_KIND__LISTER);
+    panel_insert(lister_panel, &window->root_panel, 0);
 
     Panel *viewport_panel = panel_alloc();
     panel_push_view(viewport_panel, VIEW_KIND__VIEWPORT);
-    panel_insert(viewport_panel, entities_panel, DIR__RIGHT);
+    panel_insert(viewport_panel, lister_panel, DIR__RIGHT);
 
-    Panel *entity_panel = panel_alloc();
-    panel_push_view(entity_panel, VIEW_KIND__ENTITY);
-    panel_insert(entity_panel, viewport_panel, DIR__RIGHT);
-
-    entities_panel->pct_of_parent = 0.2f;
-    viewport_panel->pct_of_parent = 0.5f;
-    entity_panel->pct_of_parent = 0.3f;
+    lister_panel->pct_of_parent = 0.3f;
+    viewport_panel->pct_of_parent = 0.7f;
 
     Entity *starting_entity = entity_create(0, str8("Starting Entity"));
     state->selected_entity = starting_entity->handle;
@@ -728,6 +763,11 @@ Internal void lane(Arena *arena) {
     lane_sync();
 
     if (lane_idx() == 0) {
+      state->lister_entry_count = 0;
+
+      lister_drag_F1(str8("Drag Test"), &state->drag_f1, 20.0f, 0.0f);
+      lister_drag_F1(str8("Slider Test"), &state->slider_f1, 20.0f, 0.0f);
+
       ////////////////////////////////
       //~ kti: Execute Cmds
       for (L1 i = 0; i < state->cmd_count; i += 1) {
@@ -907,223 +947,22 @@ Internal void lane(Arena *arena) {
 
                 View *view = &panel->views[panel->selected_view_idx];
                 switch (view->kind) {
-                  //- kti: Entities view.
-                  case VIEW_KIND__ENTITIES: {
-                    UI_Row()
-                    UI_Padding(ui_px(10.0f, 1.0f))
-                    UI_Column() {
-                      ui_spacer(ui_px(10.0f, 1.0f));
-                      //- kti: Build entities box.
-                      ui_set_next_pref_height(ui_children_sum(1.0f));
-                      ui_set_next_child_layout_axis(AXIS__Y);
-                      ui_set_next_corner_radius(ui_top_font_size()*0.4f);
-                      UI_Box *entities_box = ui_build_box_from_string(
-                        UI_BOX_FLAG__DRAW_BORDER|
-                        UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT,
-                        str8("entities"));
+                  //- kti: Lister view.
+                  case VIEW_KIND__LISTER: {
+                    ui_set_next_child_layout_axis(AXIS__Y);
+                    UI_Box *lister = ui_build_box_from_stringf(0, "lister%p", view);
+                    UI_Parent(lister) {
+                      for (L1 i = 0; i < state->lister_entry_count; i += 1) {
+                        Lister_Entry *entry = &state->lister_entries[i];
 
-                      //- kti: Fill entries
-                      UI_Text_Padding(10.0f)
-                      UI_Parent(entities_box) {
-                        for (L1 i = 0; i < state->entity_count; i += 1) {
-                          Entity *e = &state->entities[i];
-                          String8 name = {e->name, e->name_len};
-                          I1 selected = entity_handle_match(e->handle, state->selected_entity);
-
-                          if (selected) {
-                            ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
-                            ui_set_next_text_color(oklch(0.682f, 0.176f, 252, 1.0f));
-                          }
-                          UI_Box *row = ui_build_box_from_stringf(
-                            UI_BOX_FLAG__DRAW_BACKGROUND|
-                            UI_BOX_FLAG__DRAW_TEXT|
-                            UI_BOX_FLAG__CLICKABLE|
-                            UI_BOX_FLAG__CLICK_TO_FOCUS|
-                            (selected*UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY),
-                            "entity_%llu", i);
-                          ui_box_equip_display_string(row, name);
-
-                          UI_Signal sig = ui_signal_from_box(row);
-                          if (sig.flags & UI_SIGNAL_FLAG__PRESSED) {
-                            state->selected_entity = e->handle;
-                            cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                          }
-                        }
-                        if (state->entity_count == 0) {
-                          ui_set_next_text_color((F4){0.4f, 0.0f, 0.0f, 1.0f});
-                          ui_label(str8("No entities..."));
-                        }
-                      }
-
-                      ui_spacer(ui_px(5.0f, 1.0f));
-
-                      UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
-                      UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-                      UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                      UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
-                        if (ui_button(str8("Create")).flags & UI_SIGNAL_FLAG__PRESSED) {
-                          cmd_push((Cmd){.kind = CMD_KIND__CREATE_ENTITY});
-                          cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                        }
-                      }
-                    }
-                  } break;
-
-                  //- kti: Entity view.
-                  case VIEW_KIND__ENTITY: {
-                    UI_Row()
-                    UI_Padding(ui_px(10.0f, 1.0f))
-                    UI_Column() {
-                      ui_spacer(ui_px(10.0f, 1.0f));
-                      Entity *entity = entity_from_handle(state->selected_entity);
-                      if (entity_is_nil(entity)) {
-                        ui_label(str8("Select an entity..."));
-                      } else {
-                        ui_set_next_child_layout_axis(AXIS__Y);
-                        UI_Parent(ui_build_box_from_stringf(0, "entity_%p", entity)) {
-                          //- kti: Name edit
-                          ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
-                          ui_set_next_font_size(ui_top_font_size()*0.8f);
-                          ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
-                          ui_label(str8("Name"));
-
-                          String8 name = {.str = entity->name, .len = entity->name_len};
-                          UI_Pref_Width(ui_px(500.0f, 1.0f))
-                          UI_Pref_Height(ui_em(2.8f, 1.0f))
-                          UI_Corner_Radius(ui_top_font_size()*0.4f)
-                          UI_Text_Padding(floor_F1(ui_top_font_size()*0.5f)) {
-                            UI_Signal signal = ui_textedit(&state->name_cursor,
-                                                           &state->name_mark,
-                                                           state->name_edit_buffer,
-                                                           sizeof(entity->name),
-                                                           &state->name_edit_buffer_len,
-                                                           name,
-                                                           str8("name_textedit"));
-                            if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
-                              entity->name_len = Min(sizeof(entity->name), state->name_edit_buffer_len);
-                              memmove(entity->name, state->name_edit_buffer, Min(entity->name_len, sizeof(entity->name)));
-                            }
-                            if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-                              cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                            }
-                          }
-
-                          ui_spacer(ui_px(10.0f, 1.0f));
-
-                          //- kti: Position
-                          ui_set_next_pref_height(ui_text_dim(5.0f, 1.0f));
-                          ui_set_next_font_size(ui_top_font_size()*0.8f);
-                          ui_set_next_text_color((F4){0.7f, 0.0f, 0.0f, 1.0f});
-                          ui_label(str8("Postiion"));
-
-                          UI_Row()
-                          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                          UI_Corner_Radius(ui_top_font_size()*0.4f) {
-                            ui_drag_F1(str8("X"), &entity->pos[0], 40.0f, 0.0f);
-                            ui_spacer(ui_px(5.0f, 1.0f));
-                            ui_drag_F1(str8("Y"), &entity->pos[1], 40.0f, 0.0f);
-                            ui_spacer(ui_px(5.0f, 1.0f));
-                            ui_drag_F1(str8("Z"), &entity->pos[2], 40.0f, 0.0f);
-                          }
-
-                          ui_spacer(ui_px(10.0f, 1.0f));
-
-                          //- kti: Size
-                          UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                          UI_Font_Size(ui_top_font_size()*0.8f)
-                          UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
-                          ui_label(entity->shape == SHAPE__SPHERE ? str8("Radius") : str8("Size"));
-
-                          UI_Row()
-                          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                          UI_Corner_Radius(ui_top_font_size()*0.4f) {
-                            if (entity->shape == SHAPE__SPHERE) {
-                              F1 radius = entity->size[0];
-                              ui_drag_F1(str8("R"), &radius, 50.0f, 1.0f);
-                              entity->size = (F4){radius, radius, radius};
-                            } else {
-                              ui_drag_F1(str8("X"), &entity->size[0], 50.0f, 1.0f);
-                              ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(str8("Y"), &entity->size[1], 50.0f, 1.0f);
-                              ui_spacer(ui_px(5.0f, 1.0f));
-                              ui_drag_F1(str8("Z"), &entity->size[2], 50.0f, 1.0f);
-                            }
-                          }
-
-                          ui_spacer(ui_px(10.0f, 1.0f));
-
-                          //- kti: Shape
-                          UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                          UI_Font_Size(ui_top_font_size()*0.8f)
-                          UI_Text_Color(((F4){0.7f, 0.0f, 0.0f, 1.0f}))
-                          ui_label(str8("Shape"));
-
-                          ui_set_next_child_layout_axis(AXIS__X);
-                          ui_set_next_pref_height(ui_children_sum(1.0f));
-                          UI_Box *shape_selection = ui_build_box_from_string(0, str8("shape_selection"));
-                          UI_Parent(shape_selection) 
-                          UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
-                            for (L1 shape = 0; shape < SHAPE_COUNT; shape += 1) {
-                              I1 selected = (shape == entity->shape);
-                              String8 name = shape_names[shape];
-
-                              if (selected) {
-                                ui_set_next_background_color((F4){0.2f, 0.0f, 0.0f, 1.0f});
-                                ui_set_next_text_color(oklch(0.682f, 0.176f, 252, 1.0f));
-                              }
-                              UI_Box *box = ui_build_box_from_string(
-                                UI_BOX_FLAG__DRAW_BORDER|
-                                UI_BOX_FLAG__DRAW_TEXT|
-                                UI_BOX_FLAG__CLICKABLE|
-                                UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-                                UI_BOX_FLAG__DRAW_BACKGROUND,
-                                name);
-                              UI_Signal signal = ui_signal_from_box(box);
-                              if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
-                                entity->shape = shape;
-                                if (shape == SHAPE__SPHERE) {
-                                  entity->size[1] = entity->size[0];
-                                  entity->size[2] = entity->size[0];
-                                }
-                              }
-                            }
-                          }
-
-                          ui_spacer(ui_px(15.0f, 1.0f));
-
-                          //- kti: Material
-                          F1 spacing = 20.0f;
-
-                          UI_Text_Color(oklch(1.0f, 0.0f, 0.0f, 1.0f))
-                          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                          ui_label(str8("Material"));
-                          ui_spacer(ui_px(spacing*0.5f, 1.0f));
-
-                          //- kti: Base Color
-                          widget_rgb_edit(str8("Base Color"), &entity->material.base_color);
-                          ui_spacer(ui_px(spacing, 1.0f));
-
-                          //- kti: Metallic
-                          UI_Row() {
-                            UI_Pref_Width(ui_pct(0.15f, 1.0f))
-                            ui_label(str8("Metallic"));
-                            ui_spacer(ui_px(10.0f, 1.0f));
-                            ui_slider_F1(&entity->material.metallic, 0.0f, 1.0f); 
-                          }
-                          ui_spacer(ui_px(spacing, 1.0f));
-
-                          //- kti: Roughness
-                          UI_Row() {
-                            UI_Pref_Width(ui_pct(0.15f, 1.0f))
-                            ui_label(str8("Roughness"));
-                            ui_spacer(ui_px(10.0f, 1.0f));
-                            ui_slider_F1(&entity->material.roughness, 0.0f, 1.0f); 
-                          }
-                          ui_spacer(ui_px(spacing, 1.0f));
-
-                          //- kti: Emissive
-                          widget_rgb_edit(str8("Emissive"), &entity->material.emissive);
-                          ui_spacer(ui_px(spacing, 1.0f));
+                        switch (entry->kind) {
+                          case LISTER_ENTRY_KIND__DRAG_F1: {
+                            UI_Text_Padding(10.0f)
+                            ui_drag_F1(entry->str, entry->f1, entry->pixels_per_unit, entry->default_f1);
+                          } break;
+                          case LISTER_ENTRY_KIND__SLIDER_F1: { } break;
+                          case LISTER_ENTRY_KIND__POS: { } break;
+                          case LISTER_ENTRY_KIND__COLOR: { } break;
                         }
                       }
                     }

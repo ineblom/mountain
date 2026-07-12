@@ -26,24 +26,6 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__VIEWPORT] = str8("Viewport"),
 };
 
-typedef enum Lister_Entry_Kind {
-  LISTER_ENTRY_KIND__F1 = 0,
-  LISTER_ENTRY_KIND__XYZ,
-  LISTER_ENTRY_KIND__COLOR,
-} Lister_Entry_Kind;
-
-typedef struct Lister_Entry Lister_Entry;
-struct Lister_Entry {
-  Lister_Entry_Kind kind;
-
-  String8 str;
-  F1 pixels_per_unit;
-  F1 default_f1;
-  F1 min, max;
-  F1 *f1;
-  F4 *f4;
-};
-
 typedef struct View View;
 struct View {
   View_Kind kind;
@@ -168,6 +150,30 @@ struct Mesh {
   L1 vertex_count;
   L1 index_count;
 };
+
+////////////////////////////////
+//~ kti: Lister.
+
+typedef enum Lister_Entry_Kind {
+  LISTER_ENTRY_KIND__F1 = 0,
+  LISTER_ENTRY_KIND__XYZ,
+  LISTER_ENTRY_KIND__COLOR,
+  LISTER_ENTRY_KIND__CMD,
+} Lister_Entry_Kind;
+
+typedef struct Lister_Entry Lister_Entry;
+struct Lister_Entry {
+  Lister_Entry_Kind kind;
+
+  String8 str;
+  F1 pixels_per_unit;
+  F1 default_f1;
+  F1 min, max;
+  F1 *f1;
+  F4 *f4;
+  Cmd cmd;
+};
+
 
 ////////////////////////////////
 //~ kti: State
@@ -620,6 +626,21 @@ Internal Lister_Entry *lister_color(String8 str, F4 *value) {
   return entry;
 }
 
+Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
+  Lister_Entry *entry = 0;
+
+  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
+    entry = &state->lister_entries[state->lister_entry_count];
+    state->lister_entry_count += 1;
+
+    entry->kind = LISTER_ENTRY_KIND__CMD;
+    entry->str = str;
+    entry->cmd = cmd;
+  }
+
+  return entry;
+}
+
 ////////////////////////////////
 //~ kti: Main
 
@@ -755,7 +776,6 @@ Internal void lane(Arena *arena) {
 
     if (lane_idx() == 0) {
       //- kti: Build lister.
-
       state->lister_entry_count = 0;
 
       {
@@ -769,6 +789,10 @@ Internal void lane(Arena *arena) {
           lister_F1(str8("Roughness"), &e->material.roughness, 0.3f, 300.0f, 0.0f, 1.0f);
           lister_color(str8("Emissive"), &e->material.emissive);
         }
+
+        lister_cmd(str8("Create Entity"), (Cmd){
+          .kind = CMD_KIND__CREATE_ENTITY,
+        });
       }
 
       ////////////////////////////////
@@ -1022,6 +1046,14 @@ Internal void lane(Arena *arena) {
                               }
                             }
                           } break;
+                          case LISTER_ENTRY_KIND__CMD: {
+                            ui_set_next_background_color(oklch(0.2f, 0.1, 27.0f, 1.0f));
+                            ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
+                            UI_Signal signal = ui_button(entry->str);
+                            if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
+                              cmd_push(entry->cmd);
+                            }
+                          } break;
                         }
                       }
                     }
@@ -1191,9 +1223,8 @@ Internal void lane(Arena *arena) {
                   Entity *e = &state->entities[i];
                   Mesh *mesh = &state->meshes[e->shape];
                   M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
-                          mesh->index_buffer, 0, mesh->index_count,
-                          transform, e->material.base_color);
+                  F4 color = e->material.base_color;
+                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color);
                 }
               }
             }

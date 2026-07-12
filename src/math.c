@@ -53,6 +53,9 @@ enum {
 #define floor_F1(x) floorf(x)
 #define round_F1(x) roundf(x)
 #define ceil_F1(x) ceilf(x)
+#define sin_F1(x) sinf(x)
+#define cos_F1(x) cosf(x)
+#define tan_F1(x) tanf(x)
 
 Inline F1 clamp01_F1(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
 Inline F1 saturate_F1(F1 x) { return clamp01_F1(x); }
@@ -218,8 +221,8 @@ Inline M4F scale_M4F(F4 s) {
 }
 
 Inline M4F rotate_x_M4F(F1 angle_rad) {
-  F1 c = cosf(angle_rad);
-  F1 s = sinf(angle_rad);
+  F1 c = cos_F1(angle_rad);
+  F1 s = sin_F1(angle_rad);
   M4F result = identity_M4F();
   result.m[1][1] = c;
   result.m[1][2] = s;
@@ -229,8 +232,8 @@ Inline M4F rotate_x_M4F(F1 angle_rad) {
 }
 
 Inline M4F rotate_y_M4F(F1 angle_rad) {
-  F1 c = cosf(angle_rad);
-  F1 s = sinf(angle_rad);
+  F1 c = cos_F1(angle_rad);
+  F1 s = sin_F1(angle_rad);
   M4F result = identity_M4F();
   result.m[0][0] = c;
   result.m[0][2] = -s;
@@ -240,8 +243,8 @@ Inline M4F rotate_y_M4F(F1 angle_rad) {
 }
 
 Inline M4F rotate_z_M4F(F1 angle_rad) {
-  F1 c = cosf(angle_rad);
-  F1 s = sinf(angle_rad);
+  F1 c = cos_F1(angle_rad);
+  F1 s = sin_F1(angle_rad);
   M4F result = identity_M4F();
   result.m[0][0] = c;
   result.m[0][1] = s;
@@ -256,8 +259,8 @@ Inline M4F perspective_fov_M4F(F1 fov_angle_y, F1 aspect_ratio, F1 near_distance
   Assert(near_distance > 0.0f && far_distance > 0.0f);
   Assert((far_distance - near_distance) > 1.0E-8f);
 
-  F1 sin_fov = sinf(fov_angle_y * 0.5f);
-  F1 cos_fov = cosf(fov_angle_y * 0.5f);
+  F1 sin_fov = sin_F1(fov_angle_y * 0.5f);
+  F1 cos_fov = cos_F1(fov_angle_y * 0.5f);
   F1 scaled_view_height = cos_fov / sin_fov;
   F1 scaled_view_width = scaled_view_height / aspect_ratio;
   F1 scaled_far_distance = far_distance / (far_distance - near_distance);

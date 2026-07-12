@@ -273,6 +273,7 @@ struct OS_GFX_State {
   struct wl_cursor *default_cursor;
   struct wl_surface *cursor_surface;
 
+  struct wl_registry_listener registry_listener;
   struct xdg_wm_base_listener xdg_wm_base_listener;
   struct wl_seat_listener seat_listener;
   struct wl_pointer_listener pointer_listener;
@@ -665,13 +666,23 @@ Internal void xdg_toplevel_close_handler(void *data, struct xdg_toplevel *xdg_to
 //~ kti: Seat event handlers
 
 Internal void seat_capabilities_handler(void *data, struct wl_seat *seat, I1 capabilities) {
-  if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
+  if ((capabilities & WL_SEAT_CAPABILITY_POINTER) && os_gfx_state->pointer == 0) {
     os_gfx_state->pointer = wl_seat_get_pointer(seat);
     wl_pointer_add_listener(os_gfx_state->pointer, &os_gfx_state->pointer_listener, 0);
+  } else if (!(capabilities & WL_SEAT_CAPABILITY_POINTER) && os_gfx_state->pointer != 0) {
+    wl_pointer_release(os_gfx_state->pointer);
+    os_gfx_state->pointer = 0;
+    os_gfx_state->hovered_window = 0;
   }
-  if (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) {
+  if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && os_gfx_state->keyboard == 0) {
     os_gfx_state->keyboard = wl_seat_get_keyboard(seat);
     wl_keyboard_add_listener(os_gfx_state->keyboard, &os_gfx_state->keyboard_listener, 0);
+  } else if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && os_gfx_state->keyboard != 0) {
+    wl_keyboard_release(os_gfx_state->keyboard);
+    os_gfx_state->keyboard = 0;
+    os_gfx_state->focused_window = 0;
+    MemoryZeroArray(os_gfx_state->key_states);
+    os_key_repeat_clear();
   }
 }
 
@@ -826,6 +837,7 @@ Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I
 
 Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface) {
   os_gfx_state->focused_window = 0;
+  MemoryZeroArray(os_gfx_state->key_states);
   os_key_repeat_clear();
 }
 
@@ -889,11 +901,9 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
     struct wl_registry *registry = wl_display_get_registry(os_gfx_state->display);
     Assert(registry != 0);
 
-    struct wl_registry_listener registry_listener = {
-        .global = registry_global_handler,
-        .global_remove = registry_global_remove_handler,
-    };
-    wl_registry_add_listener(registry, &registry_listener, 0);
+    os_gfx_state->registry_listener.global = registry_global_handler;
+    os_gfx_state->registry_listener.global_remove = registry_global_remove_handler;
+    wl_registry_add_listener(registry, &os_gfx_state->registry_listener, 0);
     wl_display_roundtrip(os_gfx_state->display);
     Assert(os_gfx_state->compositor != 0);
     Assert(os_gfx_state->xdg_wm_base != 0);
@@ -985,23 +995,39 @@ Internal OS_Event_List os_poll_events(Arena *arena) {
   os_gfx_state->events.last = 0;
   os_gfx_state->events.count = 0;
 
-  while (wl_display_prepare_read(os_gfx_state->display) != 0) {
-    wl_display_dispatch_pending(os_gfx_state->display);
+  I1 display_ok = 1;
+  while (display_ok && wl_display_prepare_read(os_gfx_state->display) != 0) {
+    display_ok = (wl_display_dispatch_pending(os_gfx_state->display) >= 0);
   }
-  wl_display_flush(os_gfx_state->display);
-  
-  struct pollfd pfd = {
-    .fd = wl_display_get_fd(os_gfx_state->display),
-    .events = POLLIN,
-  };
+  if (display_ok) {
+    wl_display_flush(os_gfx_state->display);
 
-  if (poll(&pfd, 1, 0) > 0) {
-    wl_display_read_events(os_gfx_state->display);
-  } else {
-    wl_display_cancel_read(os_gfx_state->display);
+    struct pollfd pfd = {
+      .fd = wl_display_get_fd(os_gfx_state->display),
+      .events = POLLIN,
+    };
+
+    I1 poll_result = poll(&pfd, 1, 0);
+    if (poll_result > 0 && (pfd.revents & POLLIN)) {
+      display_ok = (wl_display_read_events(os_gfx_state->display) >= 0);
+    } else {
+      wl_display_cancel_read(os_gfx_state->display);
+      display_ok = (poll_result >= 0 && !(pfd.revents & (POLLERR | POLLHUP | POLLNVAL)));
+    }
   }
-  
-  wl_display_dispatch_pending(os_gfx_state->display);
+
+  if (display_ok) {
+    display_ok = (wl_display_dispatch_pending(os_gfx_state->display) >= 0);
+  }
+
+  if (!display_ok) {
+    for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next) {
+      os_push_event((OS_Event){
+        .kind = OS_EVENT_KIND__WINDOW_CLOSE,
+        .window = window,
+      });
+    }
+  }
 
   if (os_gfx_state->repeat_key != OS_KEY__NULL &&
       os_gfx_state->key_repeat_rate > 0 &&

@@ -79,39 +79,7 @@ struct Window {
 };
 
 ////////////////////////////////
-//~ kti: Cmds
-
-typedef I1 Cmd_Kind;
-enum {
-  CMD_KIND__NONE = 0,
-
-  CMD_KIND__OPEN_PANEL,
-  CMD_KIND__CLOSE_PANEL,
-  CMD_KIND__FOCUS_PANEL,
-
-  CMD_KIND__CREATE_ENTITY,
-
-  CMD_KIND_COUNT,
-};
-
-typedef struct Cmd Cmd;
-struct Cmd {
-  Cmd_Kind kind;
-
-  Window *window;
-  Panel *panel;
-
-  Dir dir;
-};
-
-////////////////////////////////
 //~ kti: Entity
-
-typedef struct Entity_Handle Entity_Handle;
-struct Entity_Handle {
-  L1 idx;
-  L1 id;
-};
 
 enum {
   ENTITY_FLAG__SHAPE  = 1 << 0,
@@ -132,7 +100,9 @@ Global String8 shape_names[SHAPE_COUNT] = {
 
 typedef struct Entity Entity;
 struct Entity {
-  Entity_Handle handle;
+  Entity *next;
+  Entity *prev;
+  L1 gen;
 
   L1 flags;
   B1 name[128];
@@ -143,12 +113,46 @@ struct Entity {
   RT_Material material;
 };
 
+typedef struct Entity_Handle Entity_Handle;
+struct Entity_Handle {
+  Entity *ptr;
+  L1 gen;
+};
+
 typedef struct Mesh Mesh;
 struct Mesh {
   GFX_Buffer *vertex_buffer;
   GFX_Buffer *index_buffer;
   L1 vertex_count;
   L1 index_count;
+};
+
+////////////////////////////////
+//~ kti: Cmds
+
+typedef I1 Cmd_Kind;
+enum {
+  CMD_KIND__NONE = 0,
+
+  CMD_KIND__OPEN_PANEL,
+  CMD_KIND__CLOSE_PANEL,
+  CMD_KIND__FOCUS_PANEL,
+
+  CMD_KIND__CREATE_ENTITY,
+  CMD_KIND__DELETE_ENTITY,
+
+  CMD_KIND_COUNT,
+};
+
+typedef struct Cmd Cmd;
+struct Cmd {
+  Cmd_Kind kind;
+
+  Window *window;
+  Panel *panel;
+  Entity_Handle entity;
+
+  Dir dir;
 };
 
 ////////////////////////////////
@@ -197,9 +201,9 @@ struct State {
   Txt_Pt name_mark;
 
   //- kti: Entities.
-  L1 entity_count;
-  L1 last_entity_id;
-  Entity entities[128];
+  Entity *first_entity;
+  Entity *last_entity;
+  Entity *first_free_entity;
   Entity nil_entity;
 
   Entity_Handle selected_entity;
@@ -528,18 +532,15 @@ Internal Entity_Handle entity_handle_zero() {
 }
 
 Internal I1 entity_handle_match(Entity_Handle a, Entity_Handle b) {
-  I1 result = (a.idx == b.idx && a.id == b.id);
+  I1 result = (a.gen == b.gen && a.ptr == b.ptr);
   return result;
 }
 
 Internal Entity *entity_from_handle(Entity_Handle handle) {
   Entity *result = &state->nil_entity;
 
-  if (handle.idx < state->entity_count && handle.id != 0) {
-    Entity *candidate = &state->entities[handle.idx];
-    if (candidate->handle.id == handle.id) {
-      result = candidate;
-    }
+  if (!entity_is_nil(handle.ptr) && handle.gen == handle.ptr->gen) {
+    result = handle.ptr;
   }
 
   return result;
@@ -550,27 +551,46 @@ Internal I1 entity_is_nil(Entity *entity) {
   return result;
 }
 
-Internal Entity *entity_create(L1 flags, String8 name) {
-  Entity *entity = 0;
-
-  L1 idx = state->entity_count;
-  if (idx < ArrayCount(state->entities)) {
-    state->entity_count += 1;
-    state->last_entity_id += 1;
-    L1 id = state->last_entity_id;
-
-    entity = &state->entities[idx];
-    MemoryZeroStruct(entity);
-    entity->handle.idx = idx;
-    entity->handle.id = id;
-    entity->flags = flags;
-    entity->size = (F4){1.0f, 1.0f, 1.0f};
-    entity->name_len = Min(name.len, sizeof(entity->name));
-    entity->material.base_color = (F4){0.9f, 0.9f, 0.9f, 1.0f};
-    entity->material.emissive = (F4){0.0f, 0.0f, 0.0f, 1.0f};
-    memmove(entity->name, name.str, entity->name_len);
+Internal Entity_Handle entity_handle(Entity *entity) {
+  Entity_Handle result = {0};
+  if (!entity_is_nil(entity)) {
+    result.ptr = entity;
+    result.gen = entity->gen;
   }
+  return result;
+}
+
+Internal Entity *entity_create(L1 flags, String8 name) {
+  Entity *entity = state->first_free_entity;
+  if (entity == 0) {
+    entity = push_array(state->arena, Entity, 1);
+    entity->gen = 1;
+  } else {
+    SLLStackPop(state->first_free_entity);
+    L1 gen = entity->gen;
+    MemoryZeroStruct(entity);
+    entity->gen = gen;
+  }
+
+  DLLPushBack(state->first_entity, state->last_entity, entity);
+
+  entity->flags = flags;
+  entity->size = (F4){1.0f, 1.0f, 1.0f};
+  entity->name_len = Min(name.len, sizeof(entity->name));
+  entity->material.base_color = (F4){0.9f, 0.9f, 0.9f, 1.0f};
+  entity->material.emissive = (F4){0.0f, 0.0f, 0.0f, 1.0f};
+  memmove(entity->name, name.str, entity->name_len);
+
   return entity;
+}
+
+Internal void entity_delete(Entity_Handle handle) {
+  Entity *entity = entity_from_handle(handle);
+  if (!entity_is_nil(entity)) {
+    entity->gen += 1;
+    DLLRemove(state->first_entity, state->last_entity, entity);
+    SLLStackPush(state->first_free_entity, entity);
+  }
 }
 
 ////////////////////////////////
@@ -682,7 +702,7 @@ Internal void lane(Arena *arena) {
     viewport_panel->pct_of_parent = 0.7f;
 
     Entity *starting_entity = entity_create(0, str8("Starting Entity"));
-    state->selected_entity = starting_entity->handle;
+    state->selected_entity = entity_handle(starting_entity);
   }
 
   lane_sync();
@@ -788,6 +808,11 @@ Internal void lane(Arena *arena) {
           lister_F1(str8("Metallic"), &e->material.metallic, 0.3f, 300.0f, 0.0f, 1.0f);
           lister_F1(str8("Roughness"), &e->material.roughness, 0.3f, 300.0f, 0.0f, 1.0f);
           lister_color(str8("Emissive"), &e->material.emissive);
+
+          lister_cmd(str8("Delete"), (Cmd){
+            .kind = CMD_KIND__DELETE_ENTITY,
+            .entity = state->selected_entity,
+          });
         }
 
         lister_cmd(str8("Create Entity"), (Cmd){
@@ -813,6 +838,9 @@ Internal void lane(Arena *arena) {
 
           case CMD_KIND__CREATE_ENTITY: {
             entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
+          } break;
+          case CMD_KIND__DELETE_ENTITY: {
+            entity_delete(cmd.entity);
           } break;
         }
       }
@@ -1143,8 +1171,7 @@ Internal void lane(Arena *arena) {
                       F1 min_hit_distance = 0.001f;
                       F1 closest_t = F1_MAX;
                       Entity_Handle selected_entity = entity_handle_zero();
-                      for (L1 i = 0; i < state->entity_count; i += 1) {
-                        Entity *e = &state->entities[i];
+                      for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
 
                         F1 t = 0.0f;
                         if (e->shape == SHAPE__BOX) {
@@ -1157,7 +1184,7 @@ Internal void lane(Arena *arena) {
 
                         if (t > min_hit_distance && t < closest_t) {
                           closest_t = t;
-                          selected_entity = e->handle;
+                          selected_entity = entity_handle(e);
                         }
                       }
 
@@ -1219,8 +1246,7 @@ Internal void lane(Arena *arena) {
                 dr_mesh_view_projection(mul_M4F(view_matrix, projection));
 
                 //- kti: Draw scene.
-                for (L1 i = 0; i < state->entity_count; i += 1) {
-                  Entity *e = &state->entities[i];
+                for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
                   Mesh *mesh = &state->meshes[e->shape];
                   M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
                   F4 color = e->material.base_color;

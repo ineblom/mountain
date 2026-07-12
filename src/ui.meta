@@ -1,4 +1,6 @@
 Parent,            parent,            UI_Box *,      &ui_nil_box
+Flags,             flags,             UI_Box_Flags,  0
+Omit_Flags,        omit_flags,        UI_Box_Flags,  0
 Fixed_X,           fixed_x,           F1,            0.0f
 Fixed_Y,           fixed_y,           F1,            0.0f
 Fixed_Width,       fixed_width,       F1,            0.0f

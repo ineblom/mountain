@@ -983,16 +983,29 @@ Internal void lane(Arena *arena) {
                         switch (entry->kind) {
                           case LISTER_ENTRY_KIND__DRAG_F1: {
                             ui_set_next_text_padding(10.0f);
+                            ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                              UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                              UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                              ((i == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP));
                             ui_drag_F1(entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                           } break;
                           case LISTER_ENTRY_KIND__DRAG_XYZ: {
                             UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry->f4);
                             UI_Parent(drag_box) {
+                              UI_Box_Flags top_side = (i == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
                               ui_set_next_text_padding(10.0f);
-                              UI_Box *label_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DRAW_BORDER, entry->str);
+                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                                       top_side,
+                                                       entry->str);
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_drag_F1(str8("X"), &entry->f4[0][0], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_drag_F1(str8("Y"), &entry->f4[0][1], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_drag_F1(str8("Z"), &entry->f4[0][2], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
                               }
                             }

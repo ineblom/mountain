@@ -178,12 +178,17 @@ enum {
   UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY    = (1LLU<<35),
   UI_BOX_FLAG__DISABLE_FOCUS_BORDER     = (1LLU<<36),
   UI_BOX_FLAG__DISABLE_TEXT_TRUNC       = (1LLU<<37),
+  UI_BOX_FLAG__DRAW_SIDE_TOP            = (1LLU<<38),
+  UI_BOX_FLAG__DRAW_SIDE_BOTTOM         = (1LLU<<39),
+  UI_BOX_FLAG__DRAW_SIDE_LEFT           = (1LLU<<40),
+  UI_BOX_FLAG__DRAW_SIDE_RIGHT          = (1LLU<<41),
 
   UI_BOX_FLAG__CLICKABLE         = (UI_BOX_FLAG__MOUSE_CLICKABLE|UI_BOX_FLAG__KEYBOARD_CLICKABLE),
   UI_BOX_FLAG__FLOATING          = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
   UI_BOX_FLAG__VIEW_SCROLL       = (UI_BOX_FLAG__VIEW_SCROLL_X|UI_BOX_FLAG__VIEW_SCROLL_Y),
   UI_BOX_FLAG__VIEW_CLAMP        = (UI_BOX_FLAG__VIEW_CLAMP_X|UI_BOX_FLAG__VIEW_CLAMP_Y),
   UI_BOX_FLAG__DEFAULT_FOCUS_NAV = (UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X|UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y),
+  UI_BOX_FLAG__DRAW_SIDES        = (UI_BOX_FLAG__DRAW_SIDE_TOP|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|UI_BOX_FLAG__DRAW_SIDE_LEFT|UI_BOX_FLAG__DRAW_SIDE_RIGHT),
 };
 
 typedef struct UI_Box UI_Box;
@@ -672,7 +677,7 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
 
   //- kti: Fill box
   box->key = key;
-  box->flags = flags; // TODO: Flags & Omit flags stack.
+  box->flags = (flags|ui_top_flags()) & ~ui_top_omit_flags();
   box->group_key = ui_top_group_key();
 
   if (ui_is_focus_active() && (box->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) && ui_key_match(ui_state->default_nav_root_key, ui_key_zero())) {
@@ -1817,7 +1822,6 @@ Internal UI_Signal ui_drag_F1(String8 str, F1 *value,  F1 default_value, F1 pixe
   UI_Box *box = ui_build_box_from_key(
     UI_BOX_FLAG__CLICKABLE|
     UI_BOX_FLAG__DRAW_BACKGROUND|
-    UI_BOX_FLAG__DRAW_BORDER|
     UI_BOX_FLAG__DRAW_HOT_EFFECTS|
     UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
     UI_BOX_FLAG__DRAW_TEXT,
@@ -2366,6 +2370,29 @@ Internal void ui_draw(void) {
         }
         inst->border_width = 1.0f;
         inst->border_color = draw_focus_border ? focus_border_color : b->border_color;
+      }
+
+      //- kti: Individual sides for tiled boxes and dividers. DRAW_BORDER
+      // remains the complete four-sided SDF border.
+      if (b->flags & UI_BOX_FLAG__DRAW_SIDES) {
+        F4 r = b->rect;
+        F4 color = b->border_color;
+        F1 thickness = 1.0f;
+
+        if (r[2] > 0.0f && r[3] > 0.0f) {
+          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_TOP) {
+            dr_rect((F4){r[0], r[1], r[2], thickness}, color, 0.0f, 0.0f);
+          }
+          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_BOTTOM) {
+            dr_rect((F4){r[0], r[1]+r[3]-thickness, r[2], thickness}, color, 0.0f, 0.0f);
+          }
+          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_LEFT) {
+            dr_rect((F4){r[0], r[1], thickness, r[3]}, color, 0.0f, 0.0f);
+          }
+          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_RIGHT) {
+            dr_rect((F4){r[0]+r[2]-thickness, r[1], thickness, r[3]}, color, 0.0f, 0.0f);
+          }
+        }
       }
     }
 

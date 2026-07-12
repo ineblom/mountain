@@ -28,7 +28,6 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
 
 typedef enum Lister_Entry_Kind {
   LISTER_ENTRY_KIND__DRAG_F1,
-  LISTER_ENTRY_KIND__SLIDER_F1,
   LISTER_ENTRY_KIND__POS,
   LISTER_ENTRY_KIND__COLOR,
 } Lister_Entry_Kind;
@@ -40,6 +39,7 @@ struct Lister_Entry {
   String8 str;
   F1 pixels_per_unit;
   F1 default_f1;
+  F1 min, max;
   F1 *f1;
 };
 
@@ -199,7 +199,6 @@ struct State {
 
   //- kti: Lister.
   F1 drag_f1;
-  F1 slider_f1;
   L1 lister_entry_count;
   Lister_Entry lister_entries[512];
 
@@ -579,19 +578,19 @@ Internal void widget_rgb_edit(String8 label, F4 *rgb) {
 
     UI_Background_Color(oklch(0.3f, 0.15f, 35, 1.0f))
     UI_Border_Color(oklch(0.5f, 0.2f, 35, 1.0f)) {
-      ui_drag_F1(str8("R"), &rgb[0][0], 200.0f, 1.0f);
+      ui_drag_F1(str8("R"), &rgb[0][0], 1.0f, 200.0f, 0.0f, 1.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
     UI_Background_Color(oklch(0.272f, 0.076f, 145, 1.0f))
     UI_Border_Color(oklch(0.484f, 0.164f, 145, 1.0f)) {
-      ui_drag_F1(str8("G"), &rgb[0][1], 200.0f, 1.0f);
+      ui_drag_F1(str8("G"), &rgb[0][1], 1.0f, 200.0f, 0.0f, 1.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
     UI_Background_Color(oklch(0.277f, 0.077f, 252, 1.0f))
     UI_Border_Color(oklch(0.493f, 0.172f, 252, 1.0f)) {
-      ui_drag_F1(str8("B"), &rgb[0][2], 200.0f, 1.0f);
+      ui_drag_F1(str8("B"), &rgb[0][2], 1.0f, 200.f, 0.0f, 1.0f);
     }
     ui_spacer(ui_px(5.0f, 1.0f));
 
@@ -603,15 +602,13 @@ Internal void widget_rgb_edit(String8 label, F4 *rgb) {
     }
 
     ui_pop_text_align();
-
-    rgb[0] = clamp01_F4(rgb[0]);
   }
 }
 
 ////////////////////////////////
 //~ kti: Lister
 
-Internal Lister_Entry *lister_drag_F1(String8 str, F1 *value, F1 pixels_per_unit, F1 default_value) {
+Internal Lister_Entry *lister_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   Lister_Entry *entry = 0;
 
   if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
@@ -623,6 +620,8 @@ Internal Lister_Entry *lister_drag_F1(String8 str, F1 *value, F1 pixels_per_unit
     entry->f1 = value;
     entry->pixels_per_unit = pixels_per_unit;
     entry->default_f1 = default_value;
+    entry->min = min;
+    entry->max = max;
   }
 
   return entry;
@@ -765,8 +764,7 @@ Internal void lane(Arena *arena) {
     if (lane_idx() == 0) {
       state->lister_entry_count = 0;
 
-      lister_drag_F1(str8("Drag Test"), &state->drag_f1, 20.0f, 0.0f);
-      lister_drag_F1(str8("Slider Test"), &state->slider_f1, 20.0f, 0.0f);
+      lister_drag_F1(str8("Drag Test"), &state->drag_f1, 0.0f, 20.0f, 0.0f, 1.0f);
 
       ////////////////////////////////
       //~ kti: Execute Cmds
@@ -957,10 +955,9 @@ Internal void lane(Arena *arena) {
 
                         switch (entry->kind) {
                           case LISTER_ENTRY_KIND__DRAG_F1: {
-                            UI_Text_Padding(10.0f)
-                            ui_drag_F1(entry->str, entry->f1, entry->pixels_per_unit, entry->default_f1);
+                            ui_set_next_text_padding(10.0f);
+                            ui_drag_F1(entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                           } break;
-                          case LISTER_ENTRY_KIND__SLIDER_F1: { } break;
                           case LISTER_ENTRY_KIND__POS: { } break;
                           case LISTER_ENTRY_KIND__COLOR: { } break;
                         }

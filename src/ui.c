@@ -1811,116 +1811,7 @@ Internal UI_Signal ui_buttonf(CString fmt, ...) {
   return result;
 }
 
-// TODO(kti): Look at alignment.
-Internal UI_Signal ui_slider_F1(F1 *value, F1 min, F1 max) {
-  UI_Signal signal = {0};
-
-  F1 range = max - min;
-  F1 pct = (value[0]-min) / range;
-  F1 height = 20.0f;
-
-  ui_set_next_pref_height(ui_px(height, 1.0f));
-  UI_Row() {
-    //- kti: Value
-    Temp_Arena scratch = scratch_begin(0, 0);
-    F1 value_font_size = 10.0f;
-    FC_Tag value_font = ui_top_font();
-    F1 value_tab_px = ui_top_tab_size();
-    String8 min_str = str8f(scratch.arena, "%.2f", min);
-    String8 max_str = str8f(scratch.arena, "%.2f", max);
-    F1 value_box_width = Max(
-      fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, min_str).dim[0],
-      fc_run_from_string(value_font, value_font_size, 0.0f, value_tab_px, max_str).dim[0]);
-
-    ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
-    UI_Pref_Width(ui_px(value_box_width, 1.0f))
-    UI_Column() UI_Padding(ui_pct(1.0f, 0.0f)) {
-      UI_Font_Size(value_font_size)
-      UI_Text_Align(UI_TEXT_ALIGN__RIGHT)
-      UI_Pref_Width(ui_px(value_box_width, 1.0f))
-      UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
-        ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8f(scratch.arena, "%.2f", value[0]));
-      }
-    }
-
-    scratch_end(scratch);
-    ui_spacer(ui_px(10.f, 1.0f));
-
-    //- kti: Slider
-    F1 knob_size = 14.0f;
-    ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
-    UI_Pref_Width(ui_pct(1.0f, 0.0f))
-    UI_Column() UI_Padding(ui_pct(1, 0)) {
-      UI_Pref_Height(ui_px(height, 1.0f))
-      UI_Corner_Radius(height*0.5f)
-      UI_Border_Color(oklch(0.5f, 0.0f, 0.0f, 1.0f)) {
-        UI_Box *box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE|UI_BOX_FLAG__DRAW_BORDER, "slider_%p", value);
-        UI_Key bg_key = ui_key_from_string(box->key, str8("bg"));
-        UI_Key knob_key = ui_key_from_string(box->key, str8("knob"));
-
-        box->group_key = box->key;
-
-        UI_Group_Key(box->group_key)
-        UI_Parent(box) {
-          F1 knob_inset = floor_F1((height-knob_size)*0.5f);
-          F1 min = knob_size+knob_inset*2.0f;
-          F1 w = floor_F1(min+(box->rect[2]-min)*pct);
-          ui_set_next_background_color(oklch(0.195f, 0.100f, 17.0f, 1.0f));
-          ui_set_next_pref_width(ui_px(w, 1.0f));
-          ui_build_box_from_key(
-            UI_BOX_FLAG__DRAW_BACKGROUND|
-            UI_BOX_FLAG__DRAW_BORDER|
-            UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-            UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
-            bg_key);
-          UI_Box *bg_box = ui_box_from_key(bg_key);
-          UI_Parent(bg_box) {
-            ui_spacer(ui_px(knob_inset, 1.0f));
-            ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
-            ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
-            UI_Row() {
-              ui_spacer(ui_pct(1.0f, 0.0f));
-
-              UI_Pref_Width(ui_px(knob_size, 1.0f))
-              UI_Pref_Height(ui_pct(1.0f, 0.0f))
-              UI_Column()
-              UI_Padding(ui_pct(1.0f, 0.0f))
-              UI_Background_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f))
-              UI_Pref_Width(ui_px(knob_size, 1.0f))
-              UI_Pref_Height(ui_px(knob_size, 1.0f))
-              UI_Corner_Radius(knob_size*0.5f) {
-                ui_build_box_from_key(
-                  UI_BOX_FLAG__DRAW_BACKGROUND|
-                  UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-                  UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
-                  knob_key);
-              }
-
-              ui_spacer(ui_px(knob_inset, 1.0f));
-            }
-          }
-        }
-
-        //- kti: Signal handling
-        signal = ui_signal_from_box(box);
-
-        if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-          if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-            ui_store_drag_struct(&pct);
-          }
-
-          F1 initial_pct = ui_get_drag_struct(F1)[0];
-          F1 pct_change = ui_drag_delta()[0] / (box->rect[2]-knob_size);
-          value[0] = min + Clamp(0, initial_pct+pct_change, 1.0f)*range;
-        }
-      }
-    }
-  }
-
-  return signal;
-}
-
-Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 pixels_per_unit, F1 default_value) {
+Internal UI_Signal ui_drag_F1(String8 str, F1 *value,  F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_%p", value));
   UI_Box *box = ui_build_box_from_key(
     UI_BOX_FLAG__CLICKABLE|
@@ -1946,6 +1837,10 @@ Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 pixels_per_unit, F1 def
 
   if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
     value[0] = default_value;
+  }
+
+  if (min != 0 || max != 0) {
+    value[0] = Clamp(min, value[0], max);
   }
 
   return signal;

@@ -1,6 +1,6 @@
-#if  (DEF_)
+#if  (HEADER)
 
-# include "spall.h"
+#include "spall.h"
 
 Internal void prof_begin(const char *str, L1 length);
 

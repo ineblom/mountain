@@ -1,4 +1,4 @@
-#if (DEF_)
+#if (HEADER)
 
 #include <wayland-client.h>
 #include <wayland-cursor.h>
@@ -17,10 +17,6 @@
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
 #include <poll.h>
-
-#endif
-
-#if (HEADER)
 
 typedef void *ThreadFunc(void *);
 

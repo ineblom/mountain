@@ -1,9 +1,6 @@
-#if (DEF_)
+#if (HEADER)
 #include <ft2build.h>
 #include FT_FREETYPE_H
-#endif
-
-#if (HEADER)
 
 typedef struct FP_Handle FP_Handle;
 struct FP_Handle {

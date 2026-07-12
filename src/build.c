@@ -5,7 +5,6 @@
 # define DEV_ 0
 #endif
 
-#define DEF_ 0
 #define HEADER 0
 #define SOURCE 0
 
@@ -14,11 +13,6 @@
 
 #ifndef BOT_
 # define BOT_
-# undef DEF_
-# define DEF_ 1
-# include __FILE__
-# undef DEF_
-# define DEF_ 0
 
 # undef HEADER
 # define HEADER 1

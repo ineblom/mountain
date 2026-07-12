@@ -1,4 +1,4 @@
-#if (DEF_)
+#if (HEADER)
 #define VK_NO_PROTOTYPES
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include "vulkan.h"
@@ -91,14 +91,11 @@
 VK_CORE_FUNCTIONS
 VK_EXTENSION_FUNCTIONS
 #undef X
-#endif
 
 // TODO(kti): Find a way to avoid this.
 // Dynamically allocate new buffers if needed.
 #define MAX_RECTANGLE_COUNT 8192
 #define MAX_MESH_INSTANCE_COUNT 8192
-
-#if (HEADER)
 
 typedef struct GFX_VK_Buffer GFX_VK_Buffer;
 struct GFX_VK_Buffer {

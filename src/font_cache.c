@@ -1,10 +1,6 @@
-#if (DEF_)
+#if (HEADER)
 
 #include "meow_hash_x64_aesni.h"
-
-#endif
-
-#if (HEADER)
 
 typedef struct FC_Tag FC_Tag;
 struct FC_Tag {

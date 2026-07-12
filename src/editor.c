@@ -753,6 +753,8 @@ Internal void lane(Arena *arena) {
       ////////////////////////////////
       //~ UI
 
+      ProfBegin("UI");
+
       fc_frame();
 
       FC_Tag prop_fnt = fc_tag_from_path(str8("/usr/share/fonts/bloomberg/" "Bloomberg-PropU_N.ttf"));
@@ -1255,6 +1257,10 @@ Internal void lane(Arena *arena) {
 
         ui_end_build();
 
+        ProfEnd();
+
+        ProfBegin("Draw");
+
         dr_begin_frame();
         gfx_window_begin_frame(w->os, w->gfx);
         DR_Bucket *bucket = dr_bucket_make();
@@ -1265,6 +1271,7 @@ Internal void lane(Arena *arena) {
         ////////////////////////////////
         //~ 3D Draw
 
+        ProfBegin("3D draw");
         for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
           if (panel->first == 0 && panel->view_count != 0) {
             View *view = &panel->views[panel->selected_view_idx];
@@ -1294,11 +1301,14 @@ Internal void lane(Arena *arena) {
             }
           }
         }
+        ProfEnd();
 
         //- kti: Submit to render.
         dr_submit_bucket(w->os, w->gfx, bucket);
         dr_pop_bucket();
         gfx_window_end_frame(w->os, w->gfx);
+
+        ProfEnd();
       }
     }
 

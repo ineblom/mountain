@@ -2319,6 +2319,8 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 }
 
 Internal void ui_draw(void) {
+  ProfFuncBegin();
+
   F4 focus_border_color = oklch(0.849f, 0.107f, 252, 1.0f);
   F4 cursor_color = focus_border_color;
   cursor_color[0] += 0.2f;
@@ -2473,6 +2475,8 @@ Internal void ui_draw(void) {
 
     box = rec.next;
   }
+
+  ProfEnd();
 }
 
 #endif

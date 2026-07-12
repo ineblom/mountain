@@ -1504,14 +1504,13 @@ Internal void ui_layout_position__in_place(UI_Box *root, Axis axis) {
         }
       }
 
-      // TODO: Should rects be xy,wh or xy,xy?
-      child->rect[axis] = box->rect[axis] + child->fixed_pos[axis] - !(child->flags&(UI_BOX_FLAG__SKIP_VIEW_OFF_X<<axis))*floor_F1(box->view_off[axis]);
-      child->rect[2+axis] = child->fixed_size[axis];
-
-      child->rect[0] = floor_F1(child->rect[0]);
-      child->rect[1] = floor_F1(child->rect[1]);
-      child->rect[2] = floor_F1(child->rect[2]);
-      child->rect[3] = floor_F1(child->rect[3]);
+      F1 view_off = !(child->flags & (UI_BOX_FLAG__SKIP_VIEW_OFF_X << axis)) ? floor_F1(box->view_off[axis]) : 0.0f;
+      F1 rect_min = box->rect[axis] + child->fixed_pos[axis] - view_off;
+      F1 rect_max = rect_min + child->fixed_size[axis];
+      F1 rect_min_px = floor_F1(rect_min);
+      F1 rect_max_px = floor_F1(rect_max);
+      child->rect[axis] = rect_min_px;
+      child->rect[2+axis] = rect_max_px - rect_min_px;
     }
 
     box->view_bounds[axis] = bounds;
@@ -1812,6 +1811,8 @@ Internal UI_Signal ui_buttonf(CString fmt, ...) {
 }
 
 Internal UI_Signal ui_drag_F1(String8 str, F1 *value,  F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+  // TODO: Automatic pixels_per_unit calculation (if 0)
+
   UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_%p", value));
   UI_Box *box = ui_build_box_from_key(
     UI_BOX_FLAG__CLICKABLE|

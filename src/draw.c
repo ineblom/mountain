@@ -62,6 +62,8 @@ struct DR_Bucket {
   DR_Bucket *next;
   GFX_Pass_List passes;
   DR_Clip_Node *top_clip;
+  M4F mesh_view_projection;
+  F4 mesh_viewport_rect;
   L1 stack_gen;
   L1 last_cmd_stack_gen;
 };
@@ -111,6 +113,7 @@ Internal DR_Bucket *dr_bucket_make(void) {
   DR_Bucket *bucket = push_array(dr_state->arena, DR_Bucket, 1);
   bucket->passes = (GFX_Pass_List){0};
   bucket->top_clip = &dr_nil_clip_node;
+  bucket->mesh_view_projection = identity_M4F();
   return bucket;
 }
 
@@ -143,7 +146,7 @@ Internal GFX_Pass *dr_pass_from_kind(DR_Bucket *bucket, GFX_Pass_Kind kind) {
     pass->kind = kind;
     pass->next = 0;
     MemoryZeroStruct(&pass->rect);
-    if (kind == GFX_PASS_KIND__MESH) {
+    if (kind == GFX_PASS_KIND__MESH || kind == GFX_PASS_KIND__MESH_OUTLINE) {
       pass->mesh.view_projection = identity_M4F();
     }
     SLLQueuePush(bucket->passes.first, bucket->passes.last, pass);
@@ -169,8 +172,7 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
 
   DR_Bucket *bucket = dr_state->top_bucket;
   if (bucket != 0) {
-    GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__RECT);
-    GFX_Rect_Pass *pass = &pass_n->rect;
+    GFX_Rect_Pass *pass = &dr_pass_from_kind(bucket, GFX_PASS_KIND__RECT)->rect;
     GFX_Rect_Batch *batch = pass->last_batch;
 
     I1 out_of_space = 0;
@@ -211,8 +213,7 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
 
   DR_Bucket *bucket = dr_state->top_bucket;
   if (bucket != 0) {
-    GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__RECT);
-    GFX_Rect_Pass *pass = &pass_n->rect;
+    GFX_Rect_Pass *pass = &dr_pass_from_kind(bucket, GFX_PASS_KIND__RECT)->rect;
     GFX_Rect_Batch *batch = pass->last_batch;
 
     I1 out_of_space = 0;
@@ -250,6 +251,7 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
 Internal void dr_mesh_view_projection(M4F view_projection) {
   DR_Bucket *bucket = dr_state->top_bucket;
   if (bucket != 0) {
+    bucket->mesh_view_projection = view_projection;
     GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__MESH);
     pass_n->mesh.view_projection = view_projection;
   }
@@ -258,6 +260,7 @@ Internal void dr_mesh_view_projection(M4F view_projection) {
 Internal void dr_mesh_viewport(F4 rect) {
   DR_Bucket *bucket = dr_state->top_bucket;
   if (bucket != 0) {
+    bucket->mesh_viewport_rect = rect;
     GFX_Pass *pass_n = bucket->passes.last;
     if (pass_n == 0 || pass_n->kind != GFX_PASS_KIND__MESH || pass_n->mesh.first_batch != 0) {
       pass_n = push_array(dr_state->arena, GFX_Pass, 1);
@@ -269,15 +272,16 @@ Internal void dr_mesh_viewport(F4 rect) {
   }
 }
 
-Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count, GFX_Buffer *index_buffer, L1 index_offset, L1 index_count, M4F transform, F4 color, GFX_Mesh_Flags flags) {
+Internal GFX_Mesh_Instance *dr_mesh_(GFX_Pass_Kind pass_kind, GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count, GFX_Buffer *index_buffer, L1 index_offset, L1 index_count, M4F transform, F4 color, GFX_Mesh_Feature_Flags feature_flags, F1 outline_width) {
   ProfFuncBegin();
 
   GFX_Mesh_Instance *result = 0;
 
   DR_Bucket *bucket = dr_state->top_bucket;
   if (bucket != 0) {
-    GFX_Pass *pass_n = dr_pass_from_kind(bucket, GFX_PASS_KIND__MESH);
-    GFX_Mesh_Pass *pass = &pass_n->mesh;
+    GFX_Mesh_Pass *pass = &dr_pass_from_kind(bucket, pass_kind)->mesh;
+    pass->view_projection = bucket->mesh_view_projection;
+    pass->viewport_rect = bucket->mesh_viewport_rect;
     GFX_Mesh_Batch *batch = pass->last_batch;
 
     I1 out_of_space = 0;
@@ -290,7 +294,7 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
                                 batch->index_buffer != index_buffer ||
                                 batch->index_offset != index_offset ||
                                 batch->index_count != index_count ||
-                                batch->flags != flags;
+                                batch->outline_width != outline_width;
     }
 
     if (batch == 0 || out_of_space || mesh_requires_new_batch) {
@@ -301,7 +305,7 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
       batch->index_buffer = index_buffer;
       batch->index_offset = index_offset;
       batch->index_count = index_count;
-      batch->flags = flags;
+      batch->outline_width = outline_width;
       batch->instance_cap = 256;
       batch->instances = push_array(dr_state->arena, GFX_Mesh_Instance, batch->instance_cap);
       SLLQueuePush(pass->first_batch, pass->last_batch, batch);
@@ -313,12 +317,24 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
     result[0] = (GFX_Mesh_Instance){
       .transform = transform,
       .color = color,
-      .flags = flags,
+      .feature_flags = feature_flags,
     };
   }
 
   ProfEnd();
   return result;
+}
+
+Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count, GFX_Buffer *index_buffer, L1 index_offset, L1 index_count, M4F transform, F4 color, GFX_Mesh_Feature_Flags feature_flags) {
+  return dr_mesh_(GFX_PASS_KIND__MESH, vertex_buffer, vertex_offset, vertex_count,
+                  index_buffer, index_offset, index_count, transform, color,
+                  feature_flags, 0.0f);
+}
+
+Internal GFX_Mesh_Instance *dr_mesh_outline(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count, GFX_Buffer *index_buffer, L1 index_offset, L1 index_count, M4F transform, F4 color, F1 width) {
+  return dr_mesh_(GFX_PASS_KIND__MESH_OUTLINE, vertex_buffer, vertex_offset, vertex_count,
+                  index_buffer, index_offset, index_count, transform, color,
+                  GFX_MESH_FEATURE__NONE, width);
 }
 
 Internal void dr_text_run(FC_Run run, F2 pos, F4 color) {

@@ -3,13 +3,14 @@
 layout(push_constant) uniform PushConstants {
   mat4 view_projection;
   vec2 viewport_size;
+  float outline_width;
 } push;
 
 layout(location = 0) in vec4 in_pos;
-layout(location = 1) in vec4 in_normal;
 layout(location = 4) in mat4 in_transform;
 layout(location = 8) in vec4 in_instance_color;
-layout(location = 9) in uint in_flags;
+
+layout(location = 0) flat out vec4 out_color;
 
 void main() {
   vec4 world_pos = in_transform * vec4(in_pos.xyz, 1.0);
@@ -25,7 +26,7 @@ void main() {
     outline_dir /= outline_dir_len;
   }
 
-  const float outline_width_pixels = 3.0;
-  clip_pos.xy += outline_dir * outline_width_pixels * 2.0 / push.viewport_size * clip_pos.w;
+  clip_pos.xy += outline_dir * push.outline_width * 2.0 / push.viewport_size * clip_pos.w;
   gl_Position = clip_pos;
+  out_color = in_instance_color;
 }

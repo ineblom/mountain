@@ -201,23 +201,23 @@ struct GFX_Mesh_Vertex {
   F4 normal;
 };
 
-typedef I1 GFX_Mesh_Flags;
+typedef I1 GFX_Mesh_Feature_Flags;
 enum {
-  GFX_MESH_FLAG__NONE    = 0,
-  GFX_MESH_FLAG__OUTLINE = (1 << 0),
+  GFX_MESH_FEATURE__NONE = 0,
 };
 
 typedef struct GFX_Mesh_Instance GFX_Mesh_Instance;
 struct GFX_Mesh_Instance {
   M4F transform;
   F4 color;
-  GFX_Mesh_Flags flags;
+  GFX_Mesh_Feature_Flags feature_flags;
 };
 
 typedef struct GFX_Mesh_Push_Constants GFX_Mesh_Push_Constants;
 struct GFX_Mesh_Push_Constants {
   M4F view_projection;
   F2 viewport_size;
+  F1 outline_width;
 };
 
 typedef struct GFX_Rect_Batch GFX_Rect_Batch;
@@ -244,7 +244,7 @@ struct GFX_Mesh_Batch {
   L1 index_offset;
   L1 index_count;
 
-  GFX_Mesh_Flags flags;
+  F1 outline_width;
 
   GFX_Mesh_Instance *instances;
   L1 instance_cap;
@@ -268,6 +268,7 @@ struct GFX_Mesh_Pass {
 typedef enum GFX_Pass_Kind  {
   GFX_PASS_KIND__RECT,
   GFX_PASS_KIND__MESH,
+  GFX_PASS_KIND__MESH_OUTLINE,
 } GFX_Pass_Kind;
 
 typedef struct GFX_Pass GFX_Pass;
@@ -1252,7 +1253,7 @@ Internal void gfx_init() {
     {.location = 6, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[2])},
     {.location = 7, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[3])},
     {.location = 8, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, color)},
-    {.location = 9, .binding = 1, .format = VK_FORMAT_R32_UINT,             .offset = offsetof(GFX_Mesh_Instance, flags)},
+    {.location = 9, .binding = 1, .format = VK_FORMAT_R32_UINT,             .offset = offsetof(GFX_Mesh_Instance, feature_flags)},
   };
 
   VkPipelineVertexInputStateCreateInfo mesh_vertex_input = {
@@ -1932,8 +1933,9 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
           rect_instances_count += batch->instance_count;
         }
-      } else if (pass->kind == GFX_PASS_KIND__MESH) {
+      } else if (pass->kind == GFX_PASS_KIND__MESH || pass->kind == GFX_PASS_KIND__MESH_OUTLINE) {
         GFX_Mesh_Pass mesh_pass = pass->mesh;
+        I1 is_outline_pass = pass->kind == GFX_PASS_KIND__MESH_OUTLINE;
 
         F4 viewport_rect = mesh_pass.viewport_rect;
         if (viewport_rect[2] <= 0.0f || viewport_rect[3] <= 0.0f) {
@@ -1970,11 +1972,12 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           .viewport_size = {viewport_rect[2], viewport_rect[3]},
         };
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_pipeline);
-        vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
+        VkPipeline mesh_pipeline = is_outline_pass ? gfx_state->mesh_outline_pipeline : gfx_state->mesh_pipeline;
+        VkCullModeFlags cull_mode = is_outline_pass ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_NONE;
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline);
+        vkCmdSetCullMode(cmd, cull_mode);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
-        vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
 
         for (GFX_Mesh_Batch *batch = mesh_pass.first_batch; batch != 0; batch = batch->next) {
           if (batch->vertex_buffer == 0 ||
@@ -2001,6 +2004,9 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
             continue;
           }
 
+          mesh_push.outline_width = batch->outline_width;
+          vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
+
           memmove(mesh_instances + mesh_instance_count, batch->instances, batch->instance_count*sizeof(GFX_Mesh_Instance));
 
           VkBuffer vertex_buffers[] = {
@@ -2018,55 +2024,6 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
           mesh_instance_count += batch->instance_count;
         }
-
-        // Draw requested silhouette effects after regular geometry has populated depth.
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_outline_pipeline);
-        vkCmdSetCullMode(cmd, VK_CULL_MODE_FRONT_BIT);
-
-        for (GFX_Mesh_Batch *batch = mesh_pass.first_batch; batch != 0; batch = batch->next) {
-          if (!(batch->flags & GFX_MESH_FLAG__OUTLINE) ||
-              batch->vertex_buffer == 0 ||
-              batch->vertex_buffer->main.buffer == VK_NULL_HANDLE ||
-              batch->vertex_buffer->kind != GFX_BUFFER_KIND__VERTEX ||
-              batch->index_buffer == 0 ||
-              batch->index_buffer->main.buffer == VK_NULL_HANDLE ||
-              batch->index_buffer->kind != GFX_BUFFER_KIND__INDEX ||
-              batch->vertex_count == 0 ||
-              batch->index_count == 0 ||
-              batch->instance_count == 0 ||
-              batch->vertex_offset % sizeof(GFX_Mesh_Vertex) != 0 ||
-              batch->index_offset % sizeof(I1) != 0 ||
-              batch->index_count > I1_MAX ||
-              batch->vertex_offset > batch->vertex_buffer->main.size ||
-              batch->vertex_count > (batch->vertex_buffer->main.size - batch->vertex_offset) / sizeof(GFX_Mesh_Vertex) ||
-              batch->index_offset > batch->index_buffer->main.size ||
-              batch->index_count > (batch->index_buffer->main.size - batch->index_offset) / sizeof(I1)) {
-            continue;
-          }
-
-          if (mesh_instance_count + batch->instance_count > MAX_MESH_INSTANCE_COUNT) {
-            printf("Max mesh instance count reached for frame. Skipping outline batch.\n");
-            continue;
-          }
-
-          memmove(mesh_instances + mesh_instance_count, batch->instances, batch->instance_count*sizeof(GFX_Mesh_Instance));
-
-          VkBuffer vertex_buffers[] = {
-            batch->vertex_buffer->main.buffer,
-            frame->mesh_instance_buffer.buffer,
-          };
-          VkDeviceSize vertex_offsets[] = {
-            batch->vertex_offset,
-            mesh_instance_count * sizeof(GFX_Mesh_Instance),
-          };
-          vkCmdBindVertexBuffers(cmd, 0, ArrayCount(vertex_buffers), vertex_buffers, vertex_offsets);
-          vkCmdBindIndexBuffer(cmd, batch->index_buffer->main.buffer, batch->index_offset, VK_INDEX_TYPE_UINT32);
-          vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
-
-          mesh_instance_count += batch->instance_count;
-        }
-
-        vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
       }
     }
 

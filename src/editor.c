@@ -1326,12 +1326,19 @@ Internal void lane(Arena *arena) {
                     Mesh *mesh = &state->meshes[e->shape];
                     M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
                     F4 color = e->material.base_color;
-                    GFX_Mesh_Flags flags = GFX_MESH_FLAG__NONE;
-                    if (entity_handle_match(entity_handle(e), state->selected_entity)) {
-                      flags |= GFX_MESH_FLAG__OUTLINE;
-                    }
-                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, flags);
+                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__NONE);
                   }
+                }
+
+                //- kti: Draw the selected entity's silhouette in a separate pass.
+                Entity *selected = entity_from_handle(state->selected_entity);
+                if (!entity_is_nil(selected) && selected->flags & ENTITY_FLAG__SHAPE) {
+                  Mesh *mesh = &state->meshes[selected->shape];
+                  M4F transform = mul_M4F(scale_M4F(selected->size), translate_M4F(selected->pos));
+                  F4 color = {1.0f, 0.35f, 0.03f, 1.0f};
+                  dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
+                                  mesh->index_buffer, 0, mesh->index_count,
+                                  transform, color, 3.0f);
                 }
               }
             }

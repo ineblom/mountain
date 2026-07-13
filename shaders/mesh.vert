@@ -3,13 +3,14 @@
 layout(push_constant) uniform PushConstants {
   mat4 view_projection;
   vec2 viewport_size;
+  float outline_width;
 } push;
 
 layout(location = 0) in vec4 in_pos;
 layout(location = 1) in vec4 in_normal;
 layout(location = 4) in mat4 in_transform;
 layout(location = 8) in vec4 in_instance_color;
-layout(location = 9) in uint in_flags;
+layout(location = 9) in uint in_feature_flags;
 
 layout(location = 0) out vec4 out_color;
 layout(location = 1) out vec3 out_normal;

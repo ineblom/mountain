@@ -105,6 +105,13 @@ struct GFX_VK_Buffer {
   VkDeviceSize size;
 };
 
+typedef struct GFX_VK_Image GFX_VK_Image;
+struct GFX_VK_Image {
+  VkImage image;
+  VkImageView view;
+  VkDeviceMemory memory;
+};
+
 typedef struct GFX_Per_Frame GFX_Per_Frame;
 struct GFX_Per_Frame {
   VkFence queue_submit_fence;
@@ -138,9 +145,7 @@ struct GFX_Window {
   VkImage *swapchain_images;
   VkImageView *swapchain_image_views;
 
-  VkImage depth_image;
-  VkImageView depth_image_view;
-  VkDeviceMemory depth_image_memory;
+  GFX_VK_Image depth;
 
   GFX_Per_Frame *per_frame;
   I1 image_idx;
@@ -165,9 +170,7 @@ typedef struct GFX_Texture GFX_Texture;
 struct GFX_Texture {
   GFX_Texture *next;
 
-  VkImage image;
-  VkImageView image_view;
-  VkDeviceMemory memory;
+  GFX_VK_Image image;
   I1 width;
   I1 height;
 
@@ -445,26 +448,94 @@ Internal void gfx_vk_immediate_end(VkCommandBuffer cmd) {
   }
 }
 
-Internal VkShaderModule gfx_vk_create_shader_module(String8 code) {
-  VkShaderModule shader = VK_NULL_HANDLE;
+Internal void gfx_vk_create_shader_stages(Arena *arena, String8 paths[2],
+    VkShaderModule modules[2], VkPipelineShaderStageCreateInfo stages[2]) {
+  VkShaderStageFlagBits stage_flags[] = {
+    VK_SHADER_STAGE_VERTEX_BIT,
+    VK_SHADER_STAGE_FRAGMENT_BIT,
+  };
 
-  if (code.len > 0) {
-    VkShaderModuleCreateInfo shader_ci = {
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = code.len,
-      .pCode = (const uint32_t *)code.str,
+  for (L1 i = 0; i < ArrayCount(stage_flags); i += 1) {
+    String8 code = os_read_entire_file(arena, paths[i]);
+    modules[i] = VK_NULL_HANDLE;
+    if (code.len > 0) {
+      VkShaderModuleCreateInfo shader_ci = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = code.len,
+        .pCode = (const uint32_t *)code.str,
+      };
+      vkCreateShaderModule(gfx_state->device, &shader_ci, 0, &modules[i]);
+    }
+    stages[i] = (VkPipelineShaderStageCreateInfo) {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = stage_flags[i],
+      .module = modules[i],
+      .pName = "main",
     };
-    vkCreateShaderModule(gfx_state->device, &shader_ci, 0, &shader);
+  }
+}
+
+Internal void gfx_vk_destroy_shader_modules(VkShaderModule modules[2]) {
+  for (L1 i = 0; i < 2; i += 1) {
+    vkDestroyShaderModule(gfx_state->device, modules[i], 0);
+  }
+}
+
+Internal VkImageView gfx_vk_create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect_mask) {
+  VkImageView image_view = VK_NULL_HANDLE;
+  VkImageViewCreateInfo view_ci = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+    .image = image,
+    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+    .format = format,
+    .subresourceRange = {
+      .aspectMask = aspect_mask,
+      .baseMipLevel = 0,
+      .levelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+    },
+  };
+  vkCreateImageView(gfx_state->device, &view_ci, 0, &image_view);
+  return image_view;
+}
+
+Internal GFX_VK_Image gfx_vk_create_image(VkImageCreateInfo *image_ci,
+    VkImageAspectFlags aspect_mask, VkMemoryPropertyFlags memory_properties) {
+  GFX_VK_Image image = {0};
+  vkCreateImage(gfx_state->device, image_ci, 0, &image.image);
+
+  if (image.image != VK_NULL_HANDLE) {
+    VkMemoryRequirements memory_requirements;
+    vkGetImageMemoryRequirements(gfx_state->device, image.image, &memory_requirements);
+    image.memory = gfx_vk_allocate_memory(memory_requirements, memory_properties);
+  }
+  if (image.memory != VK_NULL_HANDLE) {
+    VkResult result = vkBindImageMemory(gfx_state->device, image.image, image.memory, 0);
+    if (result == VK_SUCCESS) {
+      image.view = gfx_vk_create_image_view(image.image, image_ci->format, aspect_mask);
+    }
   }
 
-  return shader;
+  return image;
+}
+
+Internal void gfx_vk_destroy_image(GFX_VK_Image image) {
+  if (image.view != VK_NULL_HANDLE) {
+    vkDestroyImageView(gfx_state->device, image.view, 0);
+  }
+  if (image.image != VK_NULL_HANDLE) {
+    vkDestroyImage(gfx_state->device, image.image, 0);
+  }
+  if (image.memory != VK_NULL_HANDLE) {
+    vkFreeMemory(gfx_state->device, image.memory, 0);
+  }
 }
 
 Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data) {
   if (buffer != 0 && buffer->main.buffer != VK_NULL_HANDLE && buffer->main.memory != VK_NULL_HANDLE &&
     data != 0 && size > 0 && offset <= buffer->main.size && offset+size > offset && offset+size <= buffer->main.size) {
 
-    //- kti: Get staging buffer.
     GFX_VK_Buffer staging = buffer->staging;
     I1 use_temp_staging = (staging.buffer == VK_NULL_HANDLE);
     if (use_temp_staging) {
@@ -472,12 +543,9 @@ Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data
     }
 
     if (staging.ptr != 0) {
-      //- kti: Move data into staging buffer.
       memmove((B1 *)staging.ptr + offset, data, size);
 
-      //- kti: Move data from staging buffer to final buffer. 
       VkCommandBuffer cmd = gfx_vk_immediate_begin();
-
       VkBufferCopy copy_region = {
         .srcOffset = offset,
         .dstOffset = offset,
@@ -485,16 +553,13 @@ Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data
       };
       vkCmdCopyBuffer(cmd, staging.buffer, buffer->main.buffer, 1, &copy_region);
 
-      VkAccessFlags2 dst_access = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
-      if (buffer->kind == GFX_BUFFER_KIND__INDEX) {
-        dst_access = VK_ACCESS_2_INDEX_READ_BIT;
-      }
       VkBufferMemoryBarrier2 buffer_barrier = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
         .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
         .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
         .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
-        .dstAccessMask = dst_access,
+        .dstAccessMask = buffer->kind == GFX_BUFFER_KIND__INDEX ?
+          VK_ACCESS_2_INDEX_READ_BIT : VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
         .buffer = buffer->main.buffer,
         .offset = offset,
         .size = size,
@@ -505,11 +570,9 @@ Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data
         .pBufferMemoryBarriers = &buffer_barrier,
       };
       vkCmdPipelineBarrier2(cmd, &dependency_info);
-
       gfx_vk_immediate_end(cmd);
     }
 
-    //- kti: Cleanup temporary staging buffer.
     if (use_temp_staging) {
       gfx_vk_destroy_buffer(staging);
     }
@@ -616,6 +679,21 @@ Internal void gfx_vk_recycle_semaphore(VkSemaphore semaphore) {
   }
 }
 
+Internal VkSemaphore gfx_vk_take_semaphore(void) {
+  VkSemaphore semaphore = VK_NULL_HANDLE;
+  if (gfx_state->recycle_semaphores_count > 0) {
+    gfx_state->recycle_semaphores_count -= 1;
+    semaphore = gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count];
+  } else {
+    VkSemaphoreCreateInfo semaphore_ci = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    VkResult result = vkCreateSemaphore(gfx_state->device, &semaphore_ci, 0, &semaphore);
+    Assert(result == VK_SUCCESS);
+  }
+  return semaphore;
+}
+
 Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 height, void *pixels) {
   ProfFuncBegin();
 
@@ -644,36 +722,11 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
-  vkCreateImage(gfx_state->device, &image_ci, 0, &texture->image);
-
-  VkMemoryRequirements image_mem_reqs = {0};
-  vkGetImageMemoryRequirements(gfx_state->device, texture->image, &image_mem_reqs);
-  texture->memory = gfx_vk_allocate_memory(image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-  if (texture->image != VK_NULL_HANDLE && texture->memory != VK_NULL_HANDLE) {
-    vkBindImageMemory(gfx_state->device, texture->image, texture->memory, 0);
-  }
-
-  //- kti: Create View
-  VkImageViewCreateInfo view_ci = {
-    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-    .image = texture->image,
-    .viewType = VK_IMAGE_VIEW_TYPE_2D,
-    .format = VK_FORMAT_R8G8B8A8_SRGB,
-    .subresourceRange = {
-      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-      .baseMipLevel = 0,
-      .levelCount = 1,
-      .baseArrayLayer = 0,
-      .layerCount = 1,
-    },
-  };
-  if (texture->image != VK_NULL_HANDLE && texture->memory != VK_NULL_HANDLE) {
-    vkCreateImageView(gfx_state->device, &view_ci, 0, &texture->image_view);
-  }
+  texture->image = gfx_vk_create_image(&image_ci, VK_IMAGE_ASPECT_COLOR_BIT,
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
   //- kti: Store dimensions
-  if (texture->image_view != VK_NULL_HANDLE) {
+  if (texture->image.view != VK_NULL_HANDLE) {
     texture->width = width;
     texture->height = height;
   }
@@ -682,7 +735,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
   //~ kti: Upload
 
 
-  if (texture->image_view != VK_NULL_HANDLE && (usage == GFX_TEXTURE_USAGE__DYNAMIC || pixels != 0)) {
+  if (texture->image.view != VK_NULL_HANDLE && (usage == GFX_TEXTURE_USAGE__DYNAMIC || pixels != 0)) {
     //- kti: Create staging buffer.
     GFX_VK_Buffer staging = gfx_vk_create_mapped_buffer(image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
@@ -693,7 +746,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
       memmove(staging.ptr, pixels, image_size);
 
       //- kti: Upload via command buffer.
-      gfx_vk_transition_image_layout(cmd, texture->image,
+      gfx_vk_transition_image_layout(cmd, texture->image.image,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         0, VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -713,10 +766,10 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
         .imageOffset = {0, 0, 0},
         .imageExtent = {width, height, 1},
       };
-      vkCmdCopyBufferToImage(cmd, staging.buffer, texture->image,
+      vkCmdCopyBufferToImage(cmd, staging.buffer, texture->image.image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-      gfx_vk_transition_image_layout(cmd, texture->image,
+      gfx_vk_transition_image_layout(cmd, texture->image.image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
@@ -724,7 +777,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
     } else {
       //- kti: Transition image.
-      gfx_vk_transition_image_layout(cmd, texture->image,
+      gfx_vk_transition_image_layout(cmd, texture->image.image,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         0, VK_ACCESS_2_SHADER_READ_BIT,
@@ -769,7 +822,7 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
       //- kti: Upload to image.
       VkCommandBuffer cmd = gfx_vk_immediate_begin();
 
-      gfx_vk_transition_image_layout(cmd, tex->image,
+      gfx_vk_transition_image_layout(cmd, tex->image.image,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_ACCESS_2_SHADER_READ_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -789,9 +842,9 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
         .imageOffset = {region[0], region[1], 0},
         .imageExtent = {region[2], region[3], 1},
       };
-      vkCmdCopyBufferToImage(cmd, staging.buffer, tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+      vkCmdCopyBufferToImage(cmd, staging.buffer, tex->image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
-      gfx_vk_transition_image_layout(cmd, tex->image,
+      gfx_vk_transition_image_layout(cmd, tex->image.image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT,
@@ -812,16 +865,7 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {
   if (tex != 0) {
-    if (tex->image_view != VK_NULL_HANDLE) {
-      vkDestroyImageView(gfx_state->device, tex->image_view, 0);
-    }
-    if (tex->image != VK_NULL_HANDLE) {
-      vkDestroyImage(gfx_state->device, tex->image, 0);
-    }
-    if (tex->memory != VK_NULL_HANDLE) {
-      vkFreeMemory(gfx_state->device, tex->memory, 0);
-    }
-
+    gfx_vk_destroy_image(tex->image);
     gfx_vk_destroy_buffer(tex->staging);
 
     MemoryZeroStruct(tex);
@@ -1165,25 +1209,13 @@ Internal void gfx_init() {
     .pDynamicStates = dynamic_states,
   };
 
-  VkShaderModule vert_shader = gfx_vk_create_shader_module(
-    os_read_entire_file(arena, str8("./shaders/shader.vert.spv")));
-  VkShaderModule frag_shader = gfx_vk_create_shader_module(
-    os_read_entire_file(arena, str8("./shaders/shader.frag.spv")));
-
-  VkPipelineShaderStageCreateInfo shader_stages[] = {
-    {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_VERTEX_BIT,
-      .module = vert_shader,
-      .pName = "main",
-    },
-    {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-      .module = frag_shader,
-      .pName = "main",
-    },
+  String8 shader_paths[] = {
+    str8("./shaders/shader.vert.spv"),
+    str8("./shaders/shader.frag.spv"),
   };
+  VkShaderModule shader_modules[2];
+  VkPipelineShaderStageCreateInfo shader_stages[2];
+  gfx_vk_create_shader_stages(arena, shader_paths, shader_modules, shader_stages);
 
   VkFormat color_format = VK_FORMAT_B8G8R8A8_SRGB;
   VkPipelineRenderingCreateInfo pipeline_rendering = {
@@ -1213,8 +1245,7 @@ Internal void gfx_init() {
 
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &pipeline_ci, 0, &gfx_state->pipeline);
 
-  vkDestroyShaderModule(gfx_state->device, vert_shader, 0);
-  vkDestroyShaderModule(gfx_state->device, frag_shader, 0);
+  gfx_vk_destroy_shader_modules(shader_modules);
 
   ////////////////////////////////
   //~ kti: Mesh Pipeline
@@ -1265,25 +1296,13 @@ Internal void gfx_init() {
     .pVertexAttributeDescriptions = mesh_attribute_descriptions,
   };
 
-  VkShaderModule mesh_vert_shader = gfx_vk_create_shader_module(
-    os_read_entire_file(arena, str8("./shaders/mesh.vert.spv")));
-  VkShaderModule mesh_frag_shader = gfx_vk_create_shader_module(
-    os_read_entire_file(arena, str8("./shaders/mesh.frag.spv")));
-
-  VkPipelineShaderStageCreateInfo mesh_shader_stages[] = {
-    {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_VERTEX_BIT,
-      .module = mesh_vert_shader,
-      .pName = "main",
-    },
-    {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-      .module = mesh_frag_shader,
-      .pName = "main",
-    },
+  String8 mesh_shader_paths[] = {
+    str8("./shaders/mesh.vert.spv"),
+    str8("./shaders/mesh.frag.spv"),
   };
+  VkShaderModule mesh_shader_modules[2];
+  VkPipelineShaderStageCreateInfo mesh_shader_stages[2];
+  gfx_vk_create_shader_stages(arena, mesh_shader_paths, mesh_shader_modules, mesh_shader_stages);
 
   VkGraphicsPipelineCreateInfo mesh_pipeline_ci = {
     .sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -1306,8 +1325,7 @@ Internal void gfx_init() {
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_pipeline_ci, 0, &gfx_state->mesh_pipeline);
   Assert(result == VK_SUCCESS);
 
-  vkDestroyShaderModule(gfx_state->device, mesh_vert_shader, 0);
-  vkDestroyShaderModule(gfx_state->device, mesh_frag_shader, 0);
+  gfx_vk_destroy_shader_modules(mesh_shader_modules);
 
   ////////////////////////////////
   //~ kti: Mesh Outline Pipeline
@@ -1328,25 +1346,14 @@ Internal void gfx_init() {
   mesh_outline_vertex_input.vertexAttributeDescriptionCount = ArrayCount(mesh_outline_attribute_descriptions);
   mesh_outline_vertex_input.pVertexAttributeDescriptions = mesh_outline_attribute_descriptions;
 
-  VkShaderModule mesh_outline_vert_shader = gfx_vk_create_shader_module(
-    os_read_entire_file(arena, str8("./shaders/mesh_outline.vert.spv")));
-  VkShaderModule mesh_outline_frag_shader = gfx_vk_create_shader_module(
-    os_read_entire_file(arena, str8("./shaders/mesh_outline.frag.spv")));
-
-  VkPipelineShaderStageCreateInfo mesh_outline_shader_stages[] = {
-    {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_VERTEX_BIT,
-      .module = mesh_outline_vert_shader,
-      .pName = "main",
-    },
-    {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-      .module = mesh_outline_frag_shader,
-      .pName = "main",
-    },
+  String8 mesh_outline_shader_paths[] = {
+    str8("./shaders/mesh_outline.vert.spv"),
+    str8("./shaders/mesh_outline.frag.spv"),
   };
+  VkShaderModule mesh_outline_shader_modules[2];
+  VkPipelineShaderStageCreateInfo mesh_outline_shader_stages[2];
+  gfx_vk_create_shader_stages(arena, mesh_outline_shader_paths,
+    mesh_outline_shader_modules, mesh_outline_shader_stages);
 
   VkGraphicsPipelineCreateInfo mesh_outline_pipeline_ci = mesh_pipeline_ci;
   mesh_outline_pipeline_ci.stageCount = ArrayCount(mesh_outline_shader_stages);
@@ -1357,8 +1364,7 @@ Internal void gfx_init() {
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_outline_pipeline_ci, 0, &gfx_state->mesh_outline_pipeline);
   Assert(result == VK_SUCCESS);
 
-  vkDestroyShaderModule(gfx_state->device, mesh_outline_vert_shader, 0);
-  vkDestroyShaderModule(gfx_state->device, mesh_outline_frag_shader, 0);
+  gfx_vk_destroy_shader_modules(mesh_outline_shader_modules);
 
   ////////////////////////////////
   //~ kti: Sampler
@@ -1409,14 +1415,8 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
   for (L1 i = 0; i < vkw->image_count; i += 1) {
     vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
   }
-  if (vkw->depth_image_view != VK_NULL_HANDLE) {
-    vkDestroyImageView(gfx_state->device, vkw->depth_image_view, 0);
-    vkDestroyImage(gfx_state->device, vkw->depth_image, 0);
-    vkFreeMemory(gfx_state->device, vkw->depth_image_memory, 0);
-    vkw->depth_image_view = VK_NULL_HANDLE;
-    vkw->depth_image = VK_NULL_HANDLE;
-    vkw->depth_image_memory = VK_NULL_HANDLE;
-  }
+  gfx_vk_destroy_image(vkw->depth);
+  MemoryZeroStruct(&vkw->depth);
   //- kti: Our pipeline uses BGRA_SRGB so we force it. Not optimal.
   VkFormat color_format = VK_FORMAT_UNDEFINED;
 
@@ -1499,18 +1499,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
   vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
 
   for (L1 i = 0; i < vkw->image_count; i += 1) {
-    VkImageViewCreateInfo image_view_ci = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = vkw->swapchain_images[i],
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = color_format,
-      .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-      .subresourceRange.baseMipLevel = 0,
-      .subresourceRange.levelCount = 1,
-      .subresourceRange.baseArrayLayer = 0,
-      .subresourceRange.layerCount = 1,
-    };
-    vkCreateImageView(gfx_state->device, &image_view_ci, 0, &vkw->swapchain_image_views[i]);
+    vkw->swapchain_image_views[i] = gfx_vk_create_image_view(vkw->swapchain_images[i], color_format, VK_IMAGE_ASPECT_COLOR_BIT);
   }
 
   ////////////////////////////////
@@ -1529,31 +1518,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
-  result = vkCreateImage(gfx_state->device, &depth_image_ci, 0, &vkw->depth_image);
-  Assert(result == VK_SUCCESS);
-
-  VkMemoryRequirements depth_mem_reqs = {0};
-  vkGetImageMemoryRequirements(gfx_state->device, vkw->depth_image, &depth_mem_reqs);
-  vkw->depth_image_memory = gfx_vk_allocate_memory(depth_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  Assert(vkw->depth_image_memory != VK_NULL_HANDLE);
-  result = vkBindImageMemory(gfx_state->device, vkw->depth_image, vkw->depth_image_memory, 0);
-  Assert(result == VK_SUCCESS);
-
-  VkImageViewCreateInfo depth_view_ci = {
-    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-    .image = vkw->depth_image,
-    .viewType = VK_IMAGE_VIEW_TYPE_2D,
-    .format = VK_FORMAT_D32_SFLOAT,
-    .subresourceRange = {
-      .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-      .baseMipLevel = 0,
-      .levelCount = 1,
-      .baseArrayLayer = 0,
-      .layerCount = 1,
-    },
-  };
-  result = vkCreateImageView(gfx_state->device, &depth_view_ci, 0, &vkw->depth_image_view);
-  Assert(result == VK_SUCCESS);
+  vkw->depth = gfx_vk_create_image(&depth_image_ci, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
 Internal GFX_Window *gfx_window_equip(OS_Window *window) {
@@ -1678,9 +1643,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   ////////////////////////////////
   //~ kti: Destroy Per Window Resources
 
-  vkDestroyImageView(gfx_state->device, vkw->depth_image_view, 0);
-  vkDestroyImage(gfx_state->device, vkw->depth_image, 0);
-  vkFreeMemory(gfx_state->device, vkw->depth_image_memory, 0);
+  gfx_vk_destroy_image(vkw->depth);
   vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
   vkDestroySurfaceKHR(gfx_state->instance, vkw->surface, 0);
 
@@ -1701,15 +1664,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   }
 
   //- kti: Grab a sempahore.
-  VkSemaphore acquire_semaphore;
-  if (gfx_state->recycle_semaphores_count == 0) {
-    VkSemaphoreCreateInfo semaphore_ci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    VkResult result = vkCreateSemaphore(gfx_state->device, &semaphore_ci, 0, &acquire_semaphore);
-    Assert(result == VK_SUCCESS);
-  } else {
-    gfx_state->recycle_semaphores_count -= 1;
-    acquire_semaphore = gfx_state->recycle_semaphores[gfx_state->recycle_semaphores_count];
-  }
+  VkSemaphore acquire_semaphore = gfx_vk_take_semaphore();
 
   //- kti: Grab the next image.
   I1 image_idx = 0;
@@ -1781,7 +1736,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
       .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = vkw->depth_image,
+      .image = vkw->depth.image,
       .subresourceRange = {
         .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
         .baseMipLevel = 0,
@@ -1811,7 +1766,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     VkClearValue depth_clear_value = {.depthStencil = {1.0f, 0}};
     VkRenderingAttachmentInfo depth_attachment = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = vkw->depth_image_view,
+      .imageView = vkw->depth.view,
       .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -1918,12 +1873,12 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           if (texture == 0) {
             texture = gfx_state->white_texture;
           }
-          if (texture == 0 || texture->image_view == VK_NULL_HANDLE) {
+          if (texture == 0 || texture->image.view == VK_NULL_HANDLE) {
             continue;
           }
           VkDescriptorImageInfo image_info = {
             .sampler = gfx_state->texture_sampler,
-            .imageView = texture->image_view,
+            .imageView = texture->image.view,
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
           };
           VkWriteDescriptorSet write = {
@@ -2074,9 +2029,7 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     vkEndCommandBuffer(cmd);
 
     if (vkw->per_frame[image_idx].swapchain_release_semaphore == VK_NULL_HANDLE) {
-      VkSemaphoreCreateInfo semaphore_ci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-      VkResult result = vkCreateSemaphore(gfx_state->device, &semaphore_ci, 0, &vkw->per_frame[image_idx].swapchain_release_semaphore);
-      Assert(result == VK_SUCCESS);
+      vkw->per_frame[image_idx].swapchain_release_semaphore = gfx_vk_take_semaphore();
     }
 
     VkPipelineStageFlags wait_stage = { VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT };

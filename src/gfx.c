@@ -307,6 +307,7 @@ struct GFX_State {
   VkPipeline pipeline;
   VkPipelineLayout mesh_pipeline_layout;
   VkPipeline mesh_pipeline;
+  VkPipeline mesh_outline_mask_pipeline;
   VkPipeline mesh_outline_pipeline;
 
   L1 recycle_semaphores_count;
@@ -1222,7 +1223,8 @@ Internal void gfx_init() {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
     .colorAttachmentCount = 1,
     .pColorAttachmentFormats = &color_format,
-    .depthAttachmentFormat = VK_FORMAT_D32_SFLOAT,
+    .depthAttachmentFormat = VK_FORMAT_D32_SFLOAT_S8_UINT,
+    .stencilAttachmentFormat = VK_FORMAT_D32_SFLOAT_S8_UINT,
   };
 
   VkGraphicsPipelineCreateInfo pipeline_ci = {
@@ -1331,7 +1333,36 @@ Internal void gfx_init() {
   //~ kti: Mesh Outline Pipeline
 
   VkPipelineDepthStencilStateCreateInfo mesh_outline_depth_stencil = mesh_depth_stencil;
+  mesh_outline_depth_stencil.depthTestEnable = VK_FALSE;
   mesh_outline_depth_stencil.depthWriteEnable = VK_FALSE;
+  mesh_outline_depth_stencil.stencilTestEnable = VK_TRUE;
+  mesh_outline_depth_stencil.front = (VkStencilOpState){
+    .failOp = VK_STENCIL_OP_KEEP,
+    .passOp = VK_STENCIL_OP_KEEP,
+    .depthFailOp = VK_STENCIL_OP_KEEP,
+    .compareOp = VK_COMPARE_OP_NOT_EQUAL,
+    .compareMask = 0xff,
+    .writeMask = 0,
+    .reference = 1,
+  };
+  mesh_outline_depth_stencil.back = mesh_outline_depth_stencil.front;
+
+  VkPipelineDepthStencilStateCreateInfo mesh_outline_mask_depth_stencil = mesh_outline_depth_stencil;
+  mesh_outline_mask_depth_stencil.front = (VkStencilOpState){
+    .failOp = VK_STENCIL_OP_REPLACE,
+    .passOp = VK_STENCIL_OP_REPLACE,
+    .depthFailOp = VK_STENCIL_OP_REPLACE,
+    .compareOp = VK_COMPARE_OP_ALWAYS,
+    .compareMask = 0xff,
+    .writeMask = 0xff,
+    .reference = 1,
+  };
+  mesh_outline_mask_depth_stencil.back = mesh_outline_mask_depth_stencil.front;
+
+  VkPipelineColorBlendAttachmentState mesh_outline_mask_blend_attachment = blend_attachment;
+  mesh_outline_mask_blend_attachment.colorWriteMask = 0;
+  VkPipelineColorBlendStateCreateInfo mesh_outline_mask_blend = blend;
+  mesh_outline_mask_blend.pAttachments = &mesh_outline_mask_blend_attachment;
 
   VkVertexInputAttributeDescription mesh_outline_attribute_descriptions[] = {
     {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, pos)},
@@ -1362,6 +1393,13 @@ Internal void gfx_init() {
   mesh_outline_pipeline_ci.pDepthStencilState = &mesh_outline_depth_stencil;
 
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_outline_pipeline_ci, 0, &gfx_state->mesh_outline_pipeline);
+  Assert(result == VK_SUCCESS);
+
+  VkGraphicsPipelineCreateInfo mesh_outline_mask_pipeline_ci = mesh_outline_pipeline_ci;
+  mesh_outline_mask_pipeline_ci.pDepthStencilState = &mesh_outline_mask_depth_stencil;
+  mesh_outline_mask_pipeline_ci.pColorBlendState = &mesh_outline_mask_blend;
+
+  result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_outline_mask_pipeline_ci, 0, &gfx_state->mesh_outline_mask_pipeline);
   Assert(result == VK_SUCCESS);
 
   gfx_vk_destroy_shader_modules(mesh_outline_shader_modules);
@@ -1508,7 +1546,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
   VkImageCreateInfo depth_image_ci = {
     .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
     .imageType = VK_IMAGE_TYPE_2D,
-    .format = VK_FORMAT_D32_SFLOAT,
+    .format = VK_FORMAT_D32_SFLOAT_S8_UINT,
     .extent = {surface_resolution.width, surface_resolution.height, 1},
     .mipLevels = 1,
     .arrayLayers = 1,
@@ -1518,7 +1556,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
-  vkw->depth = gfx_vk_create_image(&depth_image_ci, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  vkw->depth = gfx_vk_create_image(&depth_image_ci, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
 Internal GFX_Window *gfx_window_equip(OS_Window *window) {
@@ -1733,12 +1771,12 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
       .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
       .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .image = vkw->depth.image,
       .subresourceRange = {
-        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
         .baseMipLevel = 0,
         .levelCount = 1,
         .baseArrayLayer = 0,
@@ -1767,7 +1805,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     VkRenderingAttachmentInfo depth_attachment = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
       .imageView = vkw->depth.view,
-      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
       .clearValue = depth_clear_value,
@@ -1786,6 +1824,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
       .colorAttachmentCount = 1,
       .pColorAttachments = &color_attachment,
       .pDepthAttachment = &depth_attachment,
+      .pStencilAttachment = &depth_attachment,
     };
 
     vkCmdBeginRendering(cmd, &rendering_info);
@@ -1974,9 +2013,6 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
             continue;
           }
 
-          mesh_push.outline_width = batch->outline_width;
-          vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
-
           memmove(mesh_instances + mesh_instance_count, batch->instances, batch->instance_count*sizeof(GFX_Mesh_Instance));
 
           VkBuffer vertex_buffers[] = {
@@ -1990,6 +2026,20 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           vkCmdBindVertexBuffers(cmd, 0, ArrayCount(vertex_buffers), vertex_buffers, vertex_offsets);
           vkCmdBindIndexBuffer(cmd, batch->index_buffer->main.buffer, batch->index_offset, VK_INDEX_TYPE_UINT32);
 
+          if (is_outline_pass) {
+            mesh_push.outline_width = 0;
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_outline_mask_pipeline);
+            vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
+            vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
+            vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
+
+            mesh_push.outline_width = batch->outline_width;
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_outline_pipeline);
+            vkCmdSetCullMode(cmd, VK_CULL_MODE_FRONT_BIT);
+          } else {
+            mesh_push.outline_width = batch->outline_width;
+          }
+          vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
           vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
 
           mesh_instance_count += batch->instance_count;

@@ -162,6 +162,7 @@ typedef enum Lister_Entry_Kind {
   LISTER_ENTRY_KIND__F1 = 0,
   LISTER_ENTRY_KIND__XYZ,
   LISTER_ENTRY_KIND__COLOR,
+  LISTER_ENTRY_KIND__ENUM,
   LISTER_ENTRY_KIND__CMD,
 } Lister_Entry_Kind;
 
@@ -175,6 +176,9 @@ struct Lister_Entry {
   F1 min, max;
   F1 *f1;
   F4 *f4;
+  I1 *enum_value;
+  String8 *enum_names;
+  L1 enum_count;
   Cmd cmd;
 };
 
@@ -646,6 +650,23 @@ Internal Lister_Entry *lister_color(String8 str, F4 *value) {
   return entry;
 }
 
+Internal Lister_Entry *lister_enum(String8 str, I1 *value, String8 *names, L1 count) {
+  Lister_Entry *entry = 0;
+
+  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
+    entry = &state->lister_entries[state->lister_entry_count];
+    state->lister_entry_count += 1;
+
+    entry->kind = LISTER_ENTRY_KIND__ENUM;
+    entry->str = str;
+    entry->enum_value = value;
+    entry->enum_names = names;
+    entry->enum_count = count;
+  }
+
+  return entry;
+}
+
 Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
   Lister_Entry *entry = 0;
 
@@ -801,6 +822,7 @@ Internal void lane(Arena *arena) {
       {
         Entity *e = entity_from_handle(state->selected_entity);
         if (!entity_is_nil(e)) {
+          lister_enum(str8("Shape"), &e->shape, shape_names, SHAPE_COUNT);
           lister_xyz(str8("Pos"), &e->pos, 50.0f);
           lister_xyz(str8("Size"), &e->size, 50.0f);
 
@@ -1078,10 +1100,60 @@ Internal void lane(Arena *arena) {
                               }
                             }
                           } break;
+                          case LISTER_ENTRY_KIND__ENUM: {
+                            ui_set_next_child_layout_axis(AXIS__X);
+                            UI_Box *enum_box = ui_build_box_from_stringf(0, "enum_%p", entry->enum_value);
+                            UI_Parent(enum_box) {
+                              ui_set_next_text_padding(10.0f);
+                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                                       top_side,
+                                                       entry->str);
+
+                              UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                              UI_Pref_Width(ui_pct(1.0f/(F1)entry->enum_count, 1.0f)) {
+                                for (L1 option = 0; option < entry->enum_count; option += 1) {
+                                  if (*entry->enum_value == option) {
+                                    ui_set_next_background_color(oklch(0.35f, 0.08f, 252.0f, 1.0f));
+                                  }
+
+                                  String8 name = entry->enum_names[option];
+                                  UI_Box *option_box = ui_build_box_from_stringf(
+                                      UI_BOX_FLAG__CLICKABLE|
+                                      UI_BOX_FLAG__DRAW_TEXT|
+                                      UI_BOX_FLAG__DRAW_BACKGROUND|
+                                      UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+                                      UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
+                                      UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                      UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                      top_side,
+                                      "%.*s##enum_%p_%llu",
+                                      (int)name.len, name.str,
+                                      entry->enum_value, option);
+                                  UI_Signal signal = ui_signal_from_box(option_box);
+                                  if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
+                                    *entry->enum_value = option;
+                                  }
+                                }
+                              }
+                            }
+                          } break;
                           case LISTER_ENTRY_KIND__CMD: {
                             ui_set_next_background_color(oklch(0.2f, 0.1, 27.0f, 1.0f));
                             ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-                            UI_Signal signal = ui_button(entry->str);
+                            UI_Box *cmd_box = ui_build_box_from_string(
+                                UI_BOX_FLAG__CLICKABLE|
+                                UI_BOX_FLAG__DRAW_TEXT|
+                                UI_BOX_FLAG__DRAW_BACKGROUND|
+                                UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+                                UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
+                                UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                top_side,
+                                entry->str);
+                            UI_Signal signal = ui_signal_from_box(cmd_box);
                             if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
                               cmd_push(entry->cmd);
                             }

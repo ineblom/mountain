@@ -214,7 +214,7 @@ struct UI_Box {
   F2 view_off_target;
   F2 view_bounds;
   F4 rect;
-  UI_Size pref_size[AXIS_COUNT];
+  UI_Size pref_size[AXIS2_COUNT];
   Axis child_layout_axis;
   L1 first_touch_build_index;
   L1 last_touch_build_index;
@@ -1181,7 +1181,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
           if (nav_next) {
             UI_Box *search_start = ui_box_is_nil(focus_box) ? nav_root : focus_box;
-            L1 moved_in_axis[AXIS_COUNT] = {0};
+            L1 moved_in_axis[AXIS2_COUNT] = {0};
             moved = 1;
             for (UI_Box *box = search_start;;) {
               if (box != search_start && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP) &&
@@ -1213,7 +1213,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
           if (nav_prev) {
             UI_Box *search_start = ui_box_is_nil(focus_box) ? nav_root : focus_box;
-            L1 moved_in_axis[AXIS_COUNT] = {0};
+            L1 moved_in_axis[AXIS2_COUNT] = {0};
             moved = 1;
             for (UI_Box *box = search_start;;) {
               if (box != search_start && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP) &&
@@ -1259,7 +1259,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
             UI_Box *box = n->box;
             F1 distance_from_start = 0;
             if (axis_lock != AXIS__INVALID) {
-              distance_from_start = abs_F1(rect_center(box->rect)[axis_flip(axis_lock)] - rect_center(focus_box->rect)[axis_flip(axis_lock)]);
+              distance_from_start = abs_F1(rect_center(box->rect)[axis2_flip(axis_lock)] - rect_center(focus_box->rect)[axis2_flip(axis_lock)]);
             }
             if (distance_from_start < best_distance_from_start && box != focus_box) {
               next_focus_box = box;
@@ -1543,7 +1543,7 @@ Internal void ui_end_build(void) {
     }
   }
 
-  for (L1 axis = 0; axis < AXIS_COUNT; axis += 1) {
+  for (L1 axis = 0; axis < AXIS2_COUNT; axis += 1) {
     ui_layout_root(ui_state->root, axis);
   }
 

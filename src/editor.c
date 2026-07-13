@@ -267,8 +267,6 @@ Internal Mesh mesh_alloc_sphere(I1 latitude_segments, I1 longitude_segments) {
       vertices[vertex_idx++] = (GFX_Mesh_Vertex){
         .pos = {0.5f*x, 0.5f*y, 0.5f*z, 1.0f},
         .normal = {x, y, z, 0.0f},
-        .uv = {u, 1.0f-v},
-        .color = {1.0f, 1.0f, 1.0f, 1.0f},
       };
     }
   }
@@ -295,15 +293,15 @@ Internal Mesh mesh_alloc_sphere(I1 latitude_segments, I1 longitude_segments) {
 }
 
 Internal Mesh mesh_alloc_box(void) {
-#define BV(px, py, pz, nx, ny, nz, u, v) \
-  {{px, py, pz, 1.0f}, {nx, ny, nz, 0.0f}, {u, v}, {1.0f, 1.0f, 1.0f, 1.0f}}
+#define BV(px, py, pz, nx, ny, nz) \
+  {{px, py, pz, 1.0f}, {nx, ny, nz, 0.0f}}
   GFX_Mesh_Vertex vertices[] = {
-    BV(-.5f,-.5f, .5f, 0, 0, 1, 0, 0), BV( .5f,-.5f, .5f, 0, 0, 1, 1, 0), BV( .5f, .5f, .5f, 0, 0, 1, 1, 1), BV(-.5f, .5f, .5f, 0, 0, 1, 0, 1),
-    BV( .5f,-.5f,-.5f, 0, 0,-1, 0, 0), BV(-.5f,-.5f,-.5f, 0, 0,-1, 1, 0), BV(-.5f, .5f,-.5f, 0, 0,-1, 1, 1), BV( .5f, .5f,-.5f, 0, 0,-1, 0, 1),
-    BV(-.5f,-.5f,-.5f,-1, 0, 0, 0, 0), BV(-.5f,-.5f, .5f,-1, 0, 0, 1, 0), BV(-.5f, .5f, .5f,-1, 0, 0, 1, 1), BV(-.5f, .5f,-.5f,-1, 0, 0, 0, 1),
-    BV( .5f,-.5f, .5f, 1, 0, 0, 0, 0), BV( .5f,-.5f,-.5f, 1, 0, 0, 1, 0), BV( .5f, .5f,-.5f, 1, 0, 0, 1, 1), BV( .5f, .5f, .5f, 1, 0, 0, 0, 1),
-    BV(-.5f, .5f, .5f, 0, 1, 0, 0, 0), BV( .5f, .5f, .5f, 0, 1, 0, 1, 0), BV( .5f, .5f,-.5f, 0, 1, 0, 1, 1), BV(-.5f, .5f,-.5f, 0, 1, 0, 0, 1),
-    BV(-.5f,-.5f,-.5f, 0,-1, 0, 0, 0), BV( .5f,-.5f,-.5f, 0,-1, 0, 1, 0), BV( .5f,-.5f, .5f, 0,-1, 0, 1, 1), BV(-.5f,-.5f, .5f, 0,-1, 0, 0, 1),
+    BV(-.5f,-.5f, .5f, 0, 0, 1), BV( .5f,-.5f, .5f, 0, 0, 1), BV( .5f, .5f, .5f, 0, 0, 1), BV(-.5f, .5f, .5f, 0, 0, 1),
+    BV( .5f,-.5f,-.5f, 0, 0,-1), BV(-.5f,-.5f,-.5f, 0, 0,-1), BV(-.5f, .5f,-.5f, 0, 0,-1), BV( .5f, .5f,-.5f, 0, 0,-1),
+    BV(-.5f,-.5f,-.5f,-1, 0, 0), BV(-.5f,-.5f, .5f,-1, 0, 0), BV(-.5f, .5f, .5f,-1, 0, 0), BV(-.5f, .5f,-.5f,-1, 0, 0),
+    BV( .5f,-.5f, .5f, 1, 0, 0), BV( .5f,-.5f,-.5f, 1, 0, 0), BV( .5f, .5f,-.5f, 1, 0, 0), BV( .5f, .5f, .5f, 1, 0, 0),
+    BV(-.5f, .5f, .5f, 0, 1, 0), BV( .5f, .5f, .5f, 0, 1, 0), BV( .5f, .5f,-.5f, 0, 1, 0), BV(-.5f, .5f,-.5f, 0, 1, 0),
+    BV(-.5f,-.5f,-.5f, 0,-1, 0), BV( .5f,-.5f,-.5f, 0,-1, 0), BV( .5f,-.5f, .5f, 0,-1, 0), BV(-.5f,-.5f, .5f, 0,-1, 0),
   };
 #undef BV
   I1 indices[] = {
@@ -384,7 +382,7 @@ Internal Panel *panel_alloc() {
 }
 
 Internal void panel_insert(Panel *panel, Panel *at, Dir dir) {
-  I1 split_axis = (dir == DIR__RIGHT || dir == DIR__LEFT) ? AXIS__X : AXIS__Y;
+  Axis split_axis = (dir == DIR__RIGHT || dir == DIR__LEFT) ? AXIS__X : AXIS__Y;
   Panel *parent = at->parent;
   if (parent == 0) {
     panel->parent = at;
@@ -823,6 +821,7 @@ Internal void lane(Arena *arena) {
         Entity *e = entity_from_handle(state->selected_entity);
         if (!entity_is_nil(e)) {
           lister_enum(str8("Shape"), &e->shape, shape_names, SHAPE_COUNT);
+
           lister_xyz(str8("Pos"), &e->pos, 50.0f);
           lister_xyz(str8("Size"), &e->size, 50.0f);
 
@@ -1327,7 +1326,11 @@ Internal void lane(Arena *arena) {
                     Mesh *mesh = &state->meshes[e->shape];
                     M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
                     F4 color = e->material.base_color;
-                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color);
+                    GFX_Mesh_Flags flags = GFX_MESH_FLAG__NONE;
+                    if (entity_handle_match(entity_handle(e), state->selected_entity)) {
+                      flags |= GFX_MESH_FLAG__OUTLINE;
+                    }
+                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, flags);
                   }
                 }
               }

@@ -199,14 +199,25 @@ typedef struct GFX_Mesh_Vertex GFX_Mesh_Vertex;
 struct GFX_Mesh_Vertex {
   F4 pos;
   F4 normal;
-  F2 uv;
-  F4 color;
+};
+
+typedef I1 GFX_Mesh_Flags;
+enum {
+  GFX_MESH_FLAG__NONE    = 0,
+  GFX_MESH_FLAG__OUTLINE = (1 << 0),
 };
 
 typedef struct GFX_Mesh_Instance GFX_Mesh_Instance;
 struct GFX_Mesh_Instance {
   M4F transform;
   F4 color;
+  GFX_Mesh_Flags flags;
+};
+
+typedef struct GFX_Mesh_Push_Constants GFX_Mesh_Push_Constants;
+struct GFX_Mesh_Push_Constants {
+  M4F view_projection;
+  F2 viewport_size;
 };
 
 typedef struct GFX_Rect_Batch GFX_Rect_Batch;
@@ -232,6 +243,8 @@ struct GFX_Mesh_Batch {
   GFX_Buffer *index_buffer;
   L1 index_offset;
   L1 index_count;
+
+  GFX_Mesh_Flags flags;
 
   GFX_Mesh_Instance *instances;
   L1 instance_cap;
@@ -289,6 +302,7 @@ struct GFX_State {
   VkPipeline pipeline;
   VkPipelineLayout mesh_pipeline_layout;
   VkPipeline mesh_pipeline;
+  VkPipeline mesh_outline_pipeline;
 
   L1 recycle_semaphores_count;
   VkSemaphore recycle_semaphores[16];
@@ -1206,7 +1220,7 @@ Internal void gfx_init() {
   VkPushConstantRange mesh_push_constants_range = {
     .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
     .offset = 0,
-    .size = sizeof(M4F),
+    .size = sizeof(GFX_Mesh_Push_Constants),
   };
 
   VkPipelineLayoutCreateInfo mesh_layout_ci = {
@@ -1233,13 +1247,12 @@ Internal void gfx_init() {
   VkVertexInputAttributeDescription mesh_attribute_descriptions[] = {
     {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, pos)},
     {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, normal)},
-    {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT,       .offset = offsetof(GFX_Mesh_Vertex, uv)},
-    {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, color)},
     {.location = 4, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[0])},
     {.location = 5, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[1])},
     {.location = 6, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[2])},
     {.location = 7, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[3])},
     {.location = 8, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, color)},
+    {.location = 9, .binding = 1, .format = VK_FORMAT_R32_UINT,             .offset = offsetof(GFX_Mesh_Instance, flags)},
   };
 
   VkPipelineVertexInputStateCreateInfo mesh_vertex_input = {
@@ -1293,6 +1306,43 @@ Internal void gfx_init() {
 
   vkDestroyShaderModule(gfx_state->device, mesh_vert_shader, 0);
   vkDestroyShaderModule(gfx_state->device, mesh_frag_shader, 0);
+
+  ////////////////////////////////
+  //~ kti: Mesh Outline Pipeline
+
+  VkPipelineDepthStencilStateCreateInfo mesh_outline_depth_stencil = mesh_depth_stencil;
+  mesh_outline_depth_stencil.depthWriteEnable = VK_FALSE;
+
+  VkShaderModule mesh_outline_vert_shader = gfx_vk_create_shader_module(
+    os_read_entire_file(arena, str8("./shaders/mesh_outline.vert.spv")));
+  VkShaderModule mesh_outline_frag_shader = gfx_vk_create_shader_module(
+    os_read_entire_file(arena, str8("./shaders/mesh_outline.frag.spv")));
+
+  VkPipelineShaderStageCreateInfo mesh_outline_shader_stages[] = {
+    {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_VERTEX_BIT,
+      .module = mesh_outline_vert_shader,
+      .pName = "main",
+    },
+    {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+      .module = mesh_outline_frag_shader,
+      .pName = "main",
+    },
+  };
+
+  VkGraphicsPipelineCreateInfo mesh_outline_pipeline_ci = mesh_pipeline_ci;
+  mesh_outline_pipeline_ci.stageCount = ArrayCount(mesh_outline_shader_stages);
+  mesh_outline_pipeline_ci.pStages = mesh_outline_shader_stages;
+  mesh_outline_pipeline_ci.pDepthStencilState = &mesh_outline_depth_stencil;
+
+  result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_outline_pipeline_ci, 0, &gfx_state->mesh_outline_pipeline);
+  Assert(result == VK_SUCCESS);
+
+  vkDestroyShaderModule(gfx_state->device, mesh_outline_vert_shader, 0);
+  vkDestroyShaderModule(gfx_state->device, mesh_outline_frag_shader, 0);
 
   ////////////////////////////////
   //~ kti: Sampler
@@ -1915,10 +1965,16 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           },
         };
 
+        GFX_Mesh_Push_Constants mesh_push = {
+          .view_projection = mesh_pass.view_projection,
+          .viewport_size = {viewport_rect[2], viewport_rect[3]},
+        };
+
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_pipeline);
+        vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
-        vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(M4F), &mesh_pass.view_projection);
+        vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
 
         for (GFX_Mesh_Batch *batch = mesh_pass.first_batch; batch != 0; batch = batch->next) {
           if (batch->vertex_buffer == 0 ||
@@ -1962,6 +2018,55 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
           mesh_instance_count += batch->instance_count;
         }
+
+        // Draw requested silhouette effects after regular geometry has populated depth.
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_outline_pipeline);
+        vkCmdSetCullMode(cmd, VK_CULL_MODE_FRONT_BIT);
+
+        for (GFX_Mesh_Batch *batch = mesh_pass.first_batch; batch != 0; batch = batch->next) {
+          if (!(batch->flags & GFX_MESH_FLAG__OUTLINE) ||
+              batch->vertex_buffer == 0 ||
+              batch->vertex_buffer->main.buffer == VK_NULL_HANDLE ||
+              batch->vertex_buffer->kind != GFX_BUFFER_KIND__VERTEX ||
+              batch->index_buffer == 0 ||
+              batch->index_buffer->main.buffer == VK_NULL_HANDLE ||
+              batch->index_buffer->kind != GFX_BUFFER_KIND__INDEX ||
+              batch->vertex_count == 0 ||
+              batch->index_count == 0 ||
+              batch->instance_count == 0 ||
+              batch->vertex_offset % sizeof(GFX_Mesh_Vertex) != 0 ||
+              batch->index_offset % sizeof(I1) != 0 ||
+              batch->index_count > I1_MAX ||
+              batch->vertex_offset > batch->vertex_buffer->main.size ||
+              batch->vertex_count > (batch->vertex_buffer->main.size - batch->vertex_offset) / sizeof(GFX_Mesh_Vertex) ||
+              batch->index_offset > batch->index_buffer->main.size ||
+              batch->index_count > (batch->index_buffer->main.size - batch->index_offset) / sizeof(I1)) {
+            continue;
+          }
+
+          if (mesh_instance_count + batch->instance_count > MAX_MESH_INSTANCE_COUNT) {
+            printf("Max mesh instance count reached for frame. Skipping outline batch.\n");
+            continue;
+          }
+
+          memmove(mesh_instances + mesh_instance_count, batch->instances, batch->instance_count*sizeof(GFX_Mesh_Instance));
+
+          VkBuffer vertex_buffers[] = {
+            batch->vertex_buffer->main.buffer,
+            frame->mesh_instance_buffer.buffer,
+          };
+          VkDeviceSize vertex_offsets[] = {
+            batch->vertex_offset,
+            mesh_instance_count * sizeof(GFX_Mesh_Instance),
+          };
+          vkCmdBindVertexBuffers(cmd, 0, ArrayCount(vertex_buffers), vertex_buffers, vertex_offsets);
+          vkCmdBindIndexBuffer(cmd, batch->index_buffer->main.buffer, batch->index_offset, VK_INDEX_TYPE_UINT32);
+          vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
+
+          mesh_instance_count += batch->instance_count;
+        }
+
+        vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
       }
     }
 

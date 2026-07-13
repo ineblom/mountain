@@ -17,13 +17,17 @@ typedef enum Side {
 } Side;
 #define side_flip(s) ((Side)(!(s)))
 
-typedef enum Axis {
+typedef I1 Axis;
+enum {
   AXIS__INVALID = -1,
   AXIS__X,
   AXIS__Y,
-  AXIS_COUNT,
-} Axis;
-#define axis_flip(a) ((Axis)(!(a)))
+  AXIS__Z,
+
+  AXIS2_COUNT = 2,
+  AXIS3_COUNT = 3,
+};
+#define axis2_flip(a) ((Axis)(!(a)))
 
 typedef I1 Dir;
 enum {

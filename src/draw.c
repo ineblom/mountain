@@ -269,7 +269,7 @@ Internal void dr_mesh_viewport(F4 rect) {
   }
 }
 
-Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count, GFX_Buffer *index_buffer, L1 index_offset, L1 index_count, M4F transform, F4 color) {
+Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count, GFX_Buffer *index_buffer, L1 index_offset, L1 index_count, M4F transform, F4 color, GFX_Mesh_Flags flags) {
   ProfFuncBegin();
 
   GFX_Mesh_Instance *result = 0;
@@ -289,7 +289,8 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
                                 batch->vertex_count != vertex_count ||
                                 batch->index_buffer != index_buffer ||
                                 batch->index_offset != index_offset ||
-                                batch->index_count != index_count;
+                                batch->index_count != index_count ||
+                                batch->flags != flags;
     }
 
     if (batch == 0 || out_of_space || mesh_requires_new_batch) {
@@ -300,6 +301,7 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
       batch->index_buffer = index_buffer;
       batch->index_offset = index_offset;
       batch->index_count = index_count;
+      batch->flags = flags;
       batch->instance_cap = 256;
       batch->instances = push_array(dr_state->arena, GFX_Mesh_Instance, batch->instance_cap);
       SLLQueuePush(pass->first_batch, pass->last_batch, batch);
@@ -311,6 +313,7 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
     result[0] = (GFX_Mesh_Instance){
       .transform = transform,
       .color = color,
+      .flags = flags,
     };
   }
 

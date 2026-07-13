@@ -204,6 +204,7 @@ struct GFX_Mesh_Vertex {
 typedef I1 GFX_Mesh_Feature_Flags;
 enum {
   GFX_MESH_FEATURE__NONE = 0,
+  GFX_MESH_FEATURE__UNLIT = 1 << 0,
 };
 
 typedef struct GFX_Mesh_Instance GFX_Mesh_Instance;
@@ -1314,6 +1315,19 @@ Internal void gfx_init() {
   VkPipelineDepthStencilStateCreateInfo mesh_outline_depth_stencil = mesh_depth_stencil;
   mesh_outline_depth_stencil.depthWriteEnable = VK_FALSE;
 
+  VkVertexInputAttributeDescription mesh_outline_attribute_descriptions[] = {
+    {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Vertex, pos)},
+    {.location = 4, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[0])},
+    {.location = 5, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[1])},
+    {.location = 6, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[2])},
+    {.location = 7, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, transform.r[3])},
+    {.location = 8, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = offsetof(GFX_Mesh_Instance, color)},
+  };
+
+  VkPipelineVertexInputStateCreateInfo mesh_outline_vertex_input = mesh_vertex_input;
+  mesh_outline_vertex_input.vertexAttributeDescriptionCount = ArrayCount(mesh_outline_attribute_descriptions);
+  mesh_outline_vertex_input.pVertexAttributeDescriptions = mesh_outline_attribute_descriptions;
+
   VkShaderModule mesh_outline_vert_shader = gfx_vk_create_shader_module(
     os_read_entire_file(arena, str8("./shaders/mesh_outline.vert.spv")));
   VkShaderModule mesh_outline_frag_shader = gfx_vk_create_shader_module(
@@ -1337,6 +1351,7 @@ Internal void gfx_init() {
   VkGraphicsPipelineCreateInfo mesh_outline_pipeline_ci = mesh_pipeline_ci;
   mesh_outline_pipeline_ci.stageCount = ArrayCount(mesh_outline_shader_stages);
   mesh_outline_pipeline_ci.pStages = mesh_outline_shader_stages;
+  mesh_outline_pipeline_ci.pVertexInputState = &mesh_outline_vertex_input;
   mesh_outline_pipeline_ci.pDepthStencilState = &mesh_outline_depth_stencil;
 
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_outline_pipeline_ci, 0, &gfx_state->mesh_outline_pipeline);

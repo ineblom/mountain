@@ -462,7 +462,7 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
 
   if (kind == VIEW_KIND__VIEWPORT) {
     view->camera = (Camera){
-      .pos = (F4){0.0f, 0.0f, -7.0f},
+      .pos = (F4){0.0f, 1.0f, -7.0f},
       .fov = 70.0f * PI/180.0f,
       .near_z = 0.1f,
       .far_z = 100.0f,
@@ -1175,9 +1175,9 @@ Internal void lane(Arena *arena) {
                   //- kti: 3D viewport.
                   case VIEW_KIND__VIEWPORT: {
                     //- kti: Animate camera.
-                    view->camera.pos = lerp_snap_F4(view->camera.pos, 0.15f, view->target_camera.pos, 0.001f);
-                    view->camera.pitch = lerp_snap_F1(view->camera.pitch, 0.2f, view->target_camera.pitch, 0.001f);
-                    view->camera.yaw = lerp_snap_F1(view->camera.yaw, 0.2f, view->target_camera.yaw, 0.001f);
+                    view->camera.pos = lerp_snap_F4(view->camera.pos, 0.2f, view->target_camera.pos, 0.001f);
+                    view->camera.pitch = lerp_snap_F1(view->camera.pitch, 0.3f, view->target_camera.pitch, 0.001f);
+                    view->camera.yaw = lerp_snap_F1(view->camera.yaw, 0.3f, view->target_camera.yaw, 0.001f);
                     view->camera.fov = lerp_snap_F1(view->camera.fov, 0.15f, view->target_camera.fov, 0.001f);
                     view->camera.near_z = lerp_snap_F1(view->camera.near_z, 0.15f, view->target_camera.near_z, 0.001f);
                     view->camera.far_z = lerp_snap_F1(view->camera.far_z, 0.15f, view->target_camera.far_z, 0.001f);
@@ -1213,7 +1213,7 @@ Internal void lane(Arena *arena) {
                           rotate_y_M4F(view->camera.yaw));
                       F4 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
                       F4 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
-                      F1 pan_speed = 0.01f;
+                      F1 pan_speed = 0.015f;
                       view->target_camera.pos = view->camera_drag_start_pos -
                         drag_delta[0]*pan_speed*camera_right +
                         drag_delta[1]*pan_speed*camera_up;
@@ -1226,7 +1226,7 @@ Internal void lane(Arena *arena) {
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_DRAGGING) {
-                      F1 rotate_speed = 0.005f;
+                      F1 rotate_speed = 0.003f;
                       view->target_camera.yaw = view->camera_drag_start_yaw + drag_delta[0]*rotate_speed;
                       view->target_camera.pitch = Clamp(-0.49f*PI,
                           view->camera_drag_start_pitch + drag_delta[1]*rotate_speed,

@@ -167,6 +167,7 @@ struct Cmd {
 
 typedef enum Lister_Entry_Kind {
   LISTER_ENTRY_KIND__HEADER,
+  LISTER_ENTRY_KIND__TEXTEDIT,
   LISTER_ENTRY_KIND__F1,
   LISTER_ENTRY_KIND__XYZ,
   LISTER_ENTRY_KIND__COLOR,
@@ -179,6 +180,9 @@ struct Lister_Entry {
   Lister_Entry_Kind kind;
 
   String8 str;
+  B1 *text;
+  L1 *text_len;
+  L1 text_capacity;
   F1 pixels_per_unit;
   F1 default_f1;
   F1 min, max;
@@ -629,6 +633,17 @@ Internal Lister_Entry *lister_header(String8 str) {
   return entry;
 }
 
+Internal Lister_Entry *lister_textedit(B1 *text, L1 *text_len, L1 text_capacity) {
+  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__TEXTEDIT);
+  if (entry) {
+    entry->text = text;
+    entry->text_len = text_len;
+    entry->text_capacity = text_capacity;
+  }
+
+  return entry;
+}
+
 Internal Lister_Entry *lister_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__F1);
   if (entry) {
@@ -842,6 +857,7 @@ Internal void lane(Arena *arena) {
       {
         Entity *e = entity_from_handle(state->selected_entity);
         if (!entity_is_nil(e)) {
+          lister_textedit(e->name, &e->name_len, sizeof(e->name));
           lister_enum(str8("Shape"), &e->shape, shape_names, SHAPE_COUNT);
 
           lister_xyz(str8("Pos"), &e->pos, 0.0f, 50.0f, 0.0f, 0.0f);
@@ -1089,6 +1105,31 @@ Internal void lane(Arena *arena) {
                                                      UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                                      UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                      top_side , entry->str);
+                          } break;
+                          case LISTER_ENTRY_KIND__TEXTEDIT: {
+                            ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
+                            ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                              UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                              UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                              UI_BOX_FLAG__DISABLE_FOCUS_BORDER|
+                                              top_side);
+                            ui_set_next_omit_flags(UI_BOX_FLAG__DRAW_BORDER);
+                            UI_Text_Padding(10.0f) {
+                              UI_Signal signal = ui_textedit(&state->name_cursor,
+                                                             &state->name_mark,
+                                                             state->name_edit_buffer,
+                                                             sizeof(state->name_edit_buffer),
+                                                             &state->name_edit_buffer_len,
+                                                             (String8){entry->text, *entry->text_len},
+                                                             str8f(ui_build_arena(), "###entity_name_%p", entry->text));
+                              if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+                                cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                              }
+                              if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
+                                *entry->text_len = Min(state->name_edit_buffer_len, entry->text_capacity);
+                                memmove(entry->text, state->name_edit_buffer, *entry->text_len);
+                              }
+                            }
                           } break;
                           case LISTER_ENTRY_KIND__F1: {
                             ui_set_next_text_padding(10.0f);

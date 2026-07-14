@@ -2174,7 +2174,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
   //- kti: interact
   UI_Signal signal = ui_signal_from_box(box);
   I1 focus_cleared_this_frame = 0;
-  if (!is_focus_active && signal.flags&(UI_SIGNAL_FLAG__DOUBLE_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED)) {
+  if (!is_focus_active && signal.flags&(UI_SIGNAL_FLAG__LEFT_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED)) {
     String8 edit_string = pre_edit_value;
     edit_string.len = Min(edit_buffer_size, pre_edit_value.len);
     memmove(edit_buffer, edit_string.str, edit_string.len);

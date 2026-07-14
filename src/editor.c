@@ -159,7 +159,8 @@ struct Cmd {
 //~ kti: Lister.
 
 typedef enum Lister_Entry_Kind {
-  LISTER_ENTRY_KIND__F1 = 0,
+  LISTER_ENTRY_KIND__HEADER,
+  LISTER_ENTRY_KIND__F1,
   LISTER_ENTRY_KIND__XYZ,
   LISTER_ENTRY_KIND__COLOR,
   LISTER_ENTRY_KIND__ENUM,
@@ -598,14 +599,30 @@ Internal void entity_delete(Entity_Handle handle) {
 ////////////////////////////////
 //~ kti: Lister
 
-Internal Lister_Entry *lister_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+Internal Lister_Entry *lister_push(Lister_Entry_Kind kind) {
   Lister_Entry *entry = 0;
 
   if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
     entry = &state->lister_entries[state->lister_entry_count];
     state->lister_entry_count += 1;
+    entry->kind = kind;
+  }
 
-    entry->kind = LISTER_ENTRY_KIND__F1;
+  return entry;
+}
+
+Internal Lister_Entry *lister_header(String8 str) {
+  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__HEADER);
+  if (entry) {
+    entry->str = str;
+  }
+
+  return entry;
+}
+
+Internal Lister_Entry *lister_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__F1);
+  if (entry) {
     entry->str = str;
     entry->f1 = value;
     entry->pixels_per_unit = pixels_per_unit;
@@ -618,13 +635,8 @@ Internal Lister_Entry *lister_F1(String8 str, F1 *value, F1 default_value, F1 pi
 }
 
 Internal Lister_Entry *lister_xyz(String8 str, F4 *value, F1 pixels_per_unit) {
-  Lister_Entry *entry = 0;
-
-  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
-    entry = &state->lister_entries[state->lister_entry_count];
-    state->lister_entry_count += 1;
-
-    entry->kind = LISTER_ENTRY_KIND__XYZ;
+  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__XYZ);
+  if (entry) {
     entry->str = str;
     entry->f4 = value;
     entry->pixels_per_unit = pixels_per_unit;
@@ -634,13 +646,8 @@ Internal Lister_Entry *lister_xyz(String8 str, F4 *value, F1 pixels_per_unit) {
 }
 
 Internal Lister_Entry *lister_color(String8 str, F4 *value) {
-  Lister_Entry *entry = 0;
-
-  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
-    entry = &state->lister_entries[state->lister_entry_count];
-    state->lister_entry_count += 1;
-
-    entry->kind = LISTER_ENTRY_KIND__COLOR;
+  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__COLOR);
+  if (entry) {
     entry->str = str;
     entry->f4 = value;
   }
@@ -649,13 +656,8 @@ Internal Lister_Entry *lister_color(String8 str, F4 *value) {
 }
 
 Internal Lister_Entry *lister_enum(String8 str, I1 *value, String8 *names, L1 count) {
-  Lister_Entry *entry = 0;
-
-  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
-    entry = &state->lister_entries[state->lister_entry_count];
-    state->lister_entry_count += 1;
-
-    entry->kind = LISTER_ENTRY_KIND__ENUM;
+  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__ENUM);
+  if (entry) {
     entry->str = str;
     entry->enum_value = value;
     entry->enum_names = names;
@@ -666,13 +668,8 @@ Internal Lister_Entry *lister_enum(String8 str, I1 *value, String8 *names, L1 co
 }
 
 Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
-  Lister_Entry *entry = 0;
-
-  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
-    entry = &state->lister_entries[state->lister_entry_count];
-    state->lister_entry_count += 1;
-
-    entry->kind = LISTER_ENTRY_KIND__CMD;
+  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__CMD);
+  if (entry) {
     entry->str = str;
     entry->cmd = cmd;
   }
@@ -824,6 +821,8 @@ Internal void lane(Arena *arena) {
 
           lister_xyz(str8("Pos"), &e->pos, 50.0f);
           lister_xyz(str8("Size"), &e->size, 50.0f);
+
+          lister_header(str8("Material"));
 
           lister_color(str8("Base"), &e->material.base_color);
           lister_F1(str8("Metallic"), &e->material.metallic, 0.3f, 300.0f, 0.0f, 1.0f);
@@ -1038,6 +1037,17 @@ Internal void lane(Arena *arena) {
                         UI_Box_Flags top_side = (i == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
 
                         switch (entry->kind) {
+                          case LISTER_ENTRY_KIND__HEADER: {
+                            ui_set_next_text_padding(10.0f);
+                            ui_set_next_background_color(oklch(0.192f, 0.0f, 0.0f, 1.0f));
+                            ui_set_next_text_color(oklch(0.507f, 0.208f, 29.2f, 1.0f));
+                            ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
+                                                     UI_BOX_FLAG__DRAW_BACKGROUND|
+                                                     UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                                     UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                                     UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                                     top_side , entry->str);
+                          } break;
                           case LISTER_ENTRY_KIND__F1: {
                             ui_set_next_text_padding(10.0f);
                             ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
@@ -1335,7 +1345,7 @@ Internal void lane(Arena *arena) {
                 if (!entity_is_nil(selected) && selected->flags & ENTITY_FLAG__SHAPE) {
                   Mesh *mesh = &state->meshes[selected->shape];
                   M4F transform = mul_M4F(scale_M4F(selected->size), translate_M4F(selected->pos));
-                  F4 color = {1.0f, 0.35f, 0.03f, 1.0f};
+                  F4 color = {0.619f, 0.823f, 1.0f, 1.0f};
                   dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
                                   mesh->index_buffer, 0, mesh->index_count,
                                   transform, color, 3.0f);

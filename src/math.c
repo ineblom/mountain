@@ -86,18 +86,38 @@ Inline F1 lerp_snap_F1(F1 a, F1 t, F1 b, F1 min_dist) {
 ////////////////////////////////
 //~ F2
 
-Inline F1 dot_F2(F2 v) {
-  F1 result = v[0]*v[0] + v[1]*v[1];
+Inline F1 dot_F2(F2 a, F2 b) {
+  F1 result = a[0]*b[0] + a[1]*b[1];
   return result;
 }
 
 Inline F1 length_sq_F2(F2 v) {
-  F1 result = dot_F2(v);
+  F1 result = dot_F2(v, v);
   return result;
 }
 
 Inline F1 length_F2(F2 v) {
   F1 result = sqrtf(length_sq_F2(v));
+  return result;
+}
+
+Internal F1 distance_to_segment_F2(F2 p, F2 a, F2 b) {
+  F2 ab = b - a;
+  F1 ab_len_sq = dot_F2(ab, ab);
+
+  if (ab_len_sq <= 0.00001f) {
+    return length_F2(p - a);
+  }
+
+  F1 t = dot_F2(p - a, ab) / ab_len_sq;
+  t = Clamp(0.0f, t, 1.0f);
+
+  F2 closest = a + t*ab;
+  return length_F2(p - closest);
+}
+
+Inline F2 F2_from_F4(F4 v) {
+  F2 result = {v[0], v[1]};
   return result;
 }
 

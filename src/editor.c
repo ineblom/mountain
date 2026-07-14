@@ -1196,11 +1196,11 @@ Internal void lane(Arena *arena) {
                     if (viewport_signal.scroll[1] != 0.0f) {
                       M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera.pitch), rotate_y_M4F(view->camera.yaw));
                       F4 camera_forward = mul_M4F_F4(camera_rotation, (F4){0.0f, 0.0f, 1.0f, 0.0f});
-                      F1 dolly_speed = 0.05f;
+                      F1 dolly_speed = 0.025f;
                       view->target_camera.pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
                     }
 
-                    I1 is_click = dot_F2(drag_delta) <= Square(4.0f);
+                    I1 is_click = dot_F2(drag_delta, drag_delta) <= Square(4.0f);
 
                     //- kti: Panning
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
@@ -1213,7 +1213,7 @@ Internal void lane(Arena *arena) {
                           rotate_y_M4F(view->camera.yaw));
                       F4 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
                       F4 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
-                      F1 pan_speed = 0.015f;
+                      F1 pan_speed = 0.01f;
                       view->target_camera.pos = view->camera_drag_start_pos -
                         drag_delta[0]*pan_speed*camera_right +
                         drag_delta[1]*pan_speed*camera_up;
@@ -1328,7 +1328,8 @@ Internal void lane(Arena *arena) {
                 M4F view_matrix = translate_M4F(-view->camera.pos);
                 view_matrix = mul_M4F(view_matrix, rotate_y_M4F(-view->camera.yaw));
                 view_matrix = mul_M4F(view_matrix, rotate_x_M4F(-view->camera.pitch));
-                dr_mesh_view_projection(mul_M4F(view_matrix, projection));
+                M4F view_projection = mul_M4F(view_matrix, projection);
+                dr_mesh_view_projection(view_projection);
 
                 //- kti: Draw scene.
                 for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
@@ -1357,26 +1358,60 @@ Internal void lane(Arena *arena) {
                   mesh = &state->meshes[SHAPE__BOX];
                   F1 thickness = 0.025f; 
 
-                  //- kti: X Axis
-                  transform = mul_M4F(scale_M4F((F4){1.0f, thickness, thickness, 1.0f}), translate_M4F(selected->pos+(F4){0.5f-thickness*0.5f, 0.0f, 0.0f, 0.0f}));
-                  color = (F4){1.0f, 0.0f, 0.0f, 1.0f};
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
-                          mesh->index_buffer, 0, mesh->index_count,
-                          transform, color, GFX_MESH_FEATURE__UNLIT);
+                  F2 mouse_local = ui_mouse() - (F2){viewport_rect[0], viewport_rect[1]};
 
-                  //- kti: Y axis
-                  transform = mul_M4F(scale_M4F((F4){thickness, 1.0f, thickness, 1.0f}), translate_M4F(selected->pos+(F4){0.0f, 0.5f+thickness*0.5f, 0.0f, 0.0f}));
-                  color = (F4){0.0f, 1.0f, 0.0f, 1.0f};
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
-                          mesh->index_buffer, 0, mesh->index_count,
-                          transform, color, GFX_MESH_FEATURE__UNLIT);
+                  I1 closest_axis = AXIS__INVALID;
+                  F1 closest_dist = F1_MAX;
 
-                  //- kti: Z axis
-                  transform = mul_M4F(scale_M4F((F4){thickness, thickness, 1.0f, 1.0f}), translate_M4F(selected->pos+(F4){0.0f, 0.0f, 0.5f+thickness*0.5f, 0.0f}));
-                  color = (F4){0.0f, 0.0f, 1.0f, 1.0f};
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
-                          mesh->index_buffer, 0, mesh->index_count,
-                          transform, color, GFX_MESH_FEATURE__UNLIT);
+                  for (L1 axis = 0; axis < AXIS3_COUNT; axis += 1) {
+                    F1 offset = (axis == 0) ? -thickness*0.5f : thickness*0.5f;
+                    F4 world = selected->pos;
+                    world[axis] += 0.5f+offset;
+
+                    F4 scale = (F4){thickness, thickness, thickness, 1.0f};
+                    scale[axis] = 1.0f;
+
+                    transform = mul_M4F(scale_M4F(scale), translate_M4F(world));
+
+                    color = (F4){0.0f, 0.0f, 0.0f, 1.0f};
+                    color[axis] = 1.0f;
+
+                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
+                            mesh->index_buffer, 0, mesh->index_count,
+                            transform, color, GFX_MESH_FEATURE__UNLIT);
+
+                    //- kti: Mouse distance.
+                    F4 begin_world = selected->pos;
+                    begin_world[3] = 1.0f;
+                    F4 end_world = begin_world;
+                    end_world[axis] += 1.0f;
+
+                    F4 begin_clip = mul_M4F_F4(view_projection, begin_world);
+                    F4 end_clip = mul_M4F_F4(view_projection, end_world);
+                    if (begin_clip[3] > 0.0f && end_clip[3] > 0.0f) {
+                      F2 begin_ndc = F2_from_F4(begin_clip / begin_clip[3]);
+                      F2 end_ndc = F2_from_F4(end_clip / end_clip[3]);
+
+                      F2 begin_local = {
+                        (begin_ndc[0]*0.5f + 0.5f)*viewport_rect[2],
+                        (0.5f - begin_ndc[1]*0.5f)*viewport_rect[3],
+                      };
+                      F2 end_local = {
+                        (end_ndc[0]*0.5f + 0.5f)*viewport_rect[2],
+                        (0.5f - end_ndc[1]*0.5f)*viewport_rect[3],
+                      };
+
+                      F1 dist = distance_to_segment_F2(mouse_local, begin_local, end_local);
+                      if (dist < closest_dist) {
+                        closest_dist = dist;
+                        closest_axis = axis;
+                      }
+                    }
+                  }
+
+                  if (closest_axis != AXIS__INVALID) {
+                    printf("%u - %f\n", closest_axis, closest_dist);
+                  }
                 }
               }
             }

@@ -124,6 +124,12 @@ Inline F2 F2_from_F4(F4 v) {
 ////////////////////////////////
 //~ F4
 
+Inline F4 F4_with_w(F4 v, F1 w) {
+  F4 result = v;
+  result[3] = w;
+  return result;
+}
+
 Inline F1 dot_F4(F4 a, F4 b) {
   F1 result = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
   return result;

@@ -40,6 +40,12 @@ struct View {
   F4 camera_drag_start_pos;
   F1 camera_drag_start_yaw;
   F1 camera_drag_start_pitch;
+
+  //- kti: Translation gizmo.
+  Axis gizmo_hot_axis;
+  Axis gizmo_active_axis;
+  F4 gizmo_drag_start_pos;
+  F2 gizmo_drag_axis_screen;
 };
 
 typedef struct Panel Panel;
@@ -468,6 +474,8 @@ Internal void panel_push_view(Panel *panel, View_Kind kind) {
       .far_z = 100.0f,
     };
     view->target_camera = view->camera;
+    view->gizmo_hot_axis = AXIS__INVALID;
+    view->gizmo_active_axis = AXIS__INVALID;
   }
 }
 
@@ -675,6 +683,19 @@ Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
   }
 
   return entry;
+}
+
+////////////////////////////////
+//~ kti: Camera
+
+Internal M4F camera_view_projection(Camera camera, F1 width, F1 height) {
+  F1 aspect = width / height;
+  M4F projection = perspective_fov_M4F(camera.fov, aspect, camera.near_z, camera.far_z);
+  M4F view = translate_M4F(-camera.pos);
+  view = mul_M4F(view, rotate_y_M4F(-camera.yaw));
+  view = mul_M4F(view, rotate_x_M4F(-camera.pitch));
+  M4F view_projection = mul_M4F(view, projection);
+  return view_projection;
 }
 
 ////////////////////////////////
@@ -1192,6 +1213,72 @@ Internal void lane(Arena *arena) {
                     UI_Signal viewport_signal = ui_signal_from_box(view->viewport_box);
                     F2 drag_delta = ui_drag_delta();
 
+                    //- kto: Gizmo
+                    Entity *selected_entity = entity_from_handle(state->selected_entity);
+                    if (view->gizmo_active_axis == AXIS__INVALID) {
+                      // - kti: Find axis closest to mouse.
+                      view->gizmo_hot_axis = AXIS__INVALID;
+                      F1 closest_dist = 8.0f;
+                      F4 rect = view->viewport_box->rect;
+                      F2 mouse_local = ui_mouse() - (F2){rect[0], rect[1]};
+
+                      if (!entity_is_nil(selected_entity) && selected_entity->flags & ENTITY_FLAG__SHAPE && rect[2] > 0.0f && rect[3] > 0.0f) {
+                        M4F view_projection = camera_view_projection(view->camera, rect[2], rect[3]);
+
+                        for (L1 axis = 0; axis < AXIS3_COUNT; axis += 1) {
+                          F4 begin_world = F4_with_w(selected_entity->pos, 1.0f);
+                          F4 end_world = begin_world;
+                          end_world[axis] += 1.0f;
+                          F4 begin_clip = mul_M4F_F4(view_projection, begin_world);
+                          F4 end_clip = mul_M4F_F4(view_projection, end_world);
+
+                          if (begin_clip[3] > 0.0f && end_clip[3] > 0.0f) {
+                            F2 begin_ndc = F2_from_F4(begin_clip / begin_clip[3]);
+                            F2 end_ndc = F2_from_F4(end_clip / end_clip[3]);
+                            F2 begin_local = {
+                              (begin_ndc[0]*0.5f + 0.5f)*rect[2],
+                              (0.5f - begin_ndc[1]*0.5f)*rect[3],
+                            };
+                            F2 end_local = {
+                              (end_ndc[0]*0.5f + 0.5f)*rect[2],
+                              (0.5f - end_ndc[1]*0.5f)*rect[3],
+                            };
+                            F1 dist = distance_to_segment_F2(mouse_local, begin_local, end_local);
+                            if (dist < closest_dist) {
+                              closest_dist = dist;
+                              view->gizmo_hot_axis = axis;
+                              view->gizmo_drag_axis_screen = end_local - begin_local;
+                            }
+                          }
+                        }
+                      }
+                    } else {
+                      view->gizmo_hot_axis = view->gizmo_active_axis;
+                    }
+
+                    //- kti: Capture press on axis.
+                    I1 mouse_captured = view->gizmo_active_axis != AXIS__INVALID;
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED &&
+                        view->gizmo_hot_axis != AXIS__INVALID &&
+                        !entity_is_nil(selected_entity)) {
+                      view->gizmo_active_axis = view->gizmo_hot_axis;
+                      view->gizmo_drag_start_pos = selected_entity->pos;
+                      mouse_captured = 1;
+                      cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                    }
+
+                    //- kti: Move along axis when dragging.
+                    if (mouse_captured &&
+                        viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING &&
+                        !entity_is_nil(selected_entity)) {
+                      F1 axis_len_sq = dot_F2(view->gizmo_drag_axis_screen, view->gizmo_drag_axis_screen);
+                      if (axis_len_sq > 1.0f) {
+                        F1 world_delta = dot_F2(drag_delta, view->gizmo_drag_axis_screen) / axis_len_sq;
+                        selected_entity->pos = view->gizmo_drag_start_pos;
+                        selected_entity->pos[view->gizmo_active_axis] += world_delta;
+                      }
+                    }
+
                     //- kti: Dolly.
                     if (viewport_signal.scroll[1] != 0.0f) {
                       M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera.pitch), rotate_y_M4F(view->camera.yaw));
@@ -1203,14 +1290,12 @@ Internal void lane(Arena *arena) {
                     I1 is_click = dot_F2(drag_delta, drag_delta) <= Square(4.0f);
 
                     //- kti: Panning
-                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED && !mouse_captured) {
                       view->camera_drag_start_pos = view->camera.pos;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
-                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !is_click) {
-                      M4F camera_rotation = mul_M4F(
-                          rotate_x_M4F(view->camera.pitch),
-                          rotate_y_M4F(view->camera.yaw));
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !is_click && !mouse_captured) {
+                      M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera.pitch), rotate_y_M4F(view->camera.yaw));
                       F4 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
                       F4 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
                       F1 pan_speed = 0.01f;
@@ -1234,7 +1319,7 @@ Internal void lane(Arena *arena) {
                     }
 
                     //- kti: Entity Selecting / Selection
-                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && is_click) {
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && is_click && !mouse_captured) {
                       F2 mouse = ui_mouse();
                       F4 rect = view->viewport_box->rect;
                       F1 aspect = rect[2] / rect[3];
@@ -1274,6 +1359,11 @@ Internal void lane(Arena *arena) {
                       }
 
                       state->selected_entity = selected_entity;
+                    }
+
+                    //- kti: Reset active axis on mouse release.
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_RELEASED) {
+                      view->gizmo_active_axis = AXIS__INVALID;
                     }
                   } break;
                 }
@@ -1323,12 +1413,7 @@ Internal void lane(Arena *arena) {
                 dr_mesh_viewport(viewport_rect);
 
                 //- kti: Projection
-                F1 aspect = viewport_rect[2] / viewport_rect[3];
-                M4F projection = perspective_fov_M4F(view->camera.fov, aspect, view->camera.near_z, view->camera.far_z);
-                M4F view_matrix = translate_M4F(-view->camera.pos);
-                view_matrix = mul_M4F(view_matrix, rotate_y_M4F(-view->camera.yaw));
-                view_matrix = mul_M4F(view_matrix, rotate_x_M4F(-view->camera.pitch));
-                M4F view_projection = mul_M4F(view_matrix, projection);
+                M4F view_projection = camera_view_projection(view->camera, viewport_rect[2], viewport_rect[3]);
                 dr_mesh_view_projection(view_projection);
 
                 //- kti: Draw scene.
@@ -1358,59 +1443,27 @@ Internal void lane(Arena *arena) {
                   mesh = &state->meshes[SHAPE__BOX];
                   F1 thickness = 0.025f; 
 
-                  F2 mouse_local = ui_mouse() - (F2){viewport_rect[0], viewport_rect[1]};
-
-                  I1 closest_axis = AXIS__INVALID;
-                  F1 closest_dist = F1_MAX;
-
                   for (L1 axis = 0; axis < AXIS3_COUNT; axis += 1) {
-                    F1 offset = (axis == 0) ? -thickness*0.5f : thickness*0.5f;
+                    I1 is_hot = view->gizmo_hot_axis == axis;
+                    I1 is_active = view->gizmo_active_axis == axis;
+                    F1 axis_thickness = thickness * (is_hot ? 1.45f : 1.0f);
+                    F1 offset = (axis == 0) ? -axis_thickness*0.5f : axis_thickness*0.5f;
                     F4 world = selected->pos;
                     world[axis] += 0.5f+offset;
 
-                    F4 scale = (F4){thickness, thickness, thickness, 1.0f};
+                    F4 scale = (F4){axis_thickness, axis_thickness, axis_thickness, 1.0f};
                     scale[axis] = 1.0f;
 
                     transform = mul_M4F(scale_M4F(scale), translate_M4F(world));
 
-                    color = (F4){0.0f, 0.0f, 0.0f, 1.0f};
-                    color[axis] = 1.0f;
+                    F1 base_brightness = is_active ? 0.35f : 0.0f;
+                    color = (F4){base_brightness, base_brightness, base_brightness, 1.0f};
+                    color[axis] = is_active ? 1.0f : 0.8f;
 
                     dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
                             mesh->index_buffer, 0, mesh->index_count,
                             transform, color, GFX_MESH_FEATURE__UNLIT);
 
-                    //- kti: Mouse distance.
-                    F4 begin_world = selected->pos;
-                    begin_world[3] = 1.0f;
-                    F4 end_world = begin_world;
-                    end_world[axis] += 1.0f;
-
-                    F4 begin_clip = mul_M4F_F4(view_projection, begin_world);
-                    F4 end_clip = mul_M4F_F4(view_projection, end_world);
-                    if (begin_clip[3] > 0.0f && end_clip[3] > 0.0f) {
-                      F2 begin_ndc = F2_from_F4(begin_clip / begin_clip[3]);
-                      F2 end_ndc = F2_from_F4(end_clip / end_clip[3]);
-
-                      F2 begin_local = {
-                        (begin_ndc[0]*0.5f + 0.5f)*viewport_rect[2],
-                        (0.5f - begin_ndc[1]*0.5f)*viewport_rect[3],
-                      };
-                      F2 end_local = {
-                        (end_ndc[0]*0.5f + 0.5f)*viewport_rect[2],
-                        (0.5f - end_ndc[1]*0.5f)*viewport_rect[3],
-                      };
-
-                      F1 dist = distance_to_segment_F2(mouse_local, begin_local, end_local);
-                      if (dist < closest_dist) {
-                        closest_dist = dist;
-                        closest_axis = axis;
-                      }
-                    }
-                  }
-
-                  if (closest_axis != AXIS__INVALID) {
-                    printf("%u - %f\n", closest_axis, closest_dist);
                   }
                 }
               }

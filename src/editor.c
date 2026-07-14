@@ -642,12 +642,15 @@ Internal Lister_Entry *lister_F1(String8 str, F1 *value, F1 default_value, F1 pi
   return entry;
 }
 
-Internal Lister_Entry *lister_xyz(String8 str, F4 *value, F1 pixels_per_unit) {
+Internal Lister_Entry *lister_xyz(String8 str, F4 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__XYZ);
   if (entry) {
     entry->str = str;
     entry->f4 = value;
+    entry->default_f1 = default_value;
     entry->pixels_per_unit = pixels_per_unit;
+    entry->min = min;
+    entry->max = max;
   }
 
   return entry;
@@ -840,8 +843,8 @@ Internal void lane(Arena *arena) {
         if (!entity_is_nil(e)) {
           lister_enum(str8("Shape"), &e->shape, shape_names, SHAPE_COUNT);
 
-          lister_xyz(str8("Pos"), &e->pos, 50.0f);
-          lister_xyz(str8("Size"), &e->size, 50.0f);
+          lister_xyz(str8("Pos"), &e->pos, 0.0f, 50.0f, 0.0f, 0.0f);
+          lister_xyz(str8("Size"), &e->size, 1.0f, 50.0f, 0.0f, F1_MAX);
 
           lister_header(str8("Material"));
 
@@ -1089,11 +1092,11 @@ Internal void lane(Arena *arena) {
                                                        entry->str);
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_drag_F1(str8("X"), &entry->f4[0][0], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
+                                ui_drag_F1(str8("X"), &entry->f4[0][0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_drag_F1(str8("Y"), &entry->f4[0][1], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
+                                ui_drag_F1(str8("Y"), &entry->f4[0][1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_drag_F1(str8("Z"), &entry->f4[0][2], 0.0f, entry->pixels_per_unit, 0.0f, 0.0f);
+                                ui_drag_F1(str8("Z"), &entry->f4[0][2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                               }
                             }
                           } break;

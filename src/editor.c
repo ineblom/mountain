@@ -1340,15 +1340,42 @@ Internal void lane(Arena *arena) {
                   }
                 }
 
-                //- kti: Draw the selected entity's silhouette in a separate pass.
+                //- kti: Draw extra stuff for selected entity.
                 Entity *selected = entity_from_handle(state->selected_entity);
                 if (!entity_is_nil(selected) && selected->flags & ENTITY_FLAG__SHAPE) {
                   Mesh *mesh = &state->meshes[selected->shape];
                   M4F transform = mul_M4F(scale_M4F(selected->size), translate_M4F(selected->pos));
+
+                  //- kti: Outline.
                   F4 color = {0.619f, 0.823f, 1.0f, 1.0f};
                   dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
                                   mesh->index_buffer, 0, mesh->index_count,
                                   transform, color, 3.0f);
+
+                  //- kti: Gizmo
+                  mesh = &state->meshes[SHAPE__BOX];
+                  F1 thickness = 0.025f; 
+
+                  //- kti: X Axis
+                  transform = mul_M4F(scale_M4F((F4){1.0f, thickness, thickness, 1.0f}), translate_M4F(selected->pos+(F4){0.5f, 0.0f, 0.0f, 0.0f}));
+                  color = (F4){1.0f, 0.0f, 0.0f, 1.0f};
+                  dr_mesh_overlay(mesh->vertex_buffer, 0, mesh->vertex_count,
+                                  mesh->index_buffer, 0, mesh->index_count,
+                                  transform, color, GFX_MESH_FEATURE__UNLIT);
+
+                  //- kti: Y axis
+                  transform = mul_M4F(scale_M4F((F4){thickness, 1.0f, thickness, 1.0f}), translate_M4F(selected->pos+(F4){0.0f, 0.5f, 0.0f, 0.0f}));
+                  color = (F4){0.0f, 1.0f, 0.0f, 1.0f};
+                  dr_mesh_overlay(mesh->vertex_buffer, 0, mesh->vertex_count,
+                                  mesh->index_buffer, 0, mesh->index_count,
+                                  transform, color, GFX_MESH_FEATURE__UNLIT);
+
+                  //- kti: Z axis
+                  transform = mul_M4F(scale_M4F((F4){thickness, thickness, 1.0f, 1.0f}), translate_M4F(selected->pos+(F4){0.0f, 0.0f, 0.5f, 0.0f}));
+                  color = (F4){0.0f, 0.0f, 1.0f, 1.0f};
+                  dr_mesh_overlay(mesh->vertex_buffer, 0, mesh->vertex_count,
+                                  mesh->index_buffer, 0, mesh->index_count,
+                                  transform, color, GFX_MESH_FEATURE__UNLIT);
                 }
               }
             }

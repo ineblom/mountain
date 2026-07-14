@@ -273,6 +273,7 @@ typedef enum GFX_Pass_Kind  {
   GFX_PASS_KIND__RECT,
   GFX_PASS_KIND__MESH,
   GFX_PASS_KIND__MESH_OUTLINE,
+  GFX_PASS_KIND__MESH_OVERLAY,
 } GFX_Pass_Kind;
 
 typedef struct GFX_Pass GFX_Pass;
@@ -307,6 +308,7 @@ struct GFX_State {
   VkPipeline pipeline;
   VkPipelineLayout mesh_pipeline_layout;
   VkPipeline mesh_pipeline;
+  VkPipeline mesh_overlay_pipeline;
   VkPipeline mesh_outline_mask_pipeline;
   VkPipeline mesh_outline_pipeline;
 
@@ -1327,6 +1329,20 @@ Internal void gfx_init() {
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_pipeline_ci, 0, &gfx_state->mesh_pipeline);
   Assert(result == VK_SUCCESS);
 
+  ////////////////////////////////
+  //~ kti: Mesh Overlay Pipeline
+
+  VkPipelineDepthStencilStateCreateInfo mesh_overlay_depth_stencil = mesh_depth_stencil;
+  mesh_overlay_depth_stencil.depthTestEnable = VK_FALSE;
+  mesh_overlay_depth_stencil.depthWriteEnable = VK_FALSE;
+  mesh_overlay_depth_stencil.stencilTestEnable = VK_FALSE;
+
+  VkGraphicsPipelineCreateInfo mesh_overlay_pipeline_ci = mesh_pipeline_ci;
+  mesh_overlay_pipeline_ci.pDepthStencilState = &mesh_overlay_depth_stencil;
+
+  result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_overlay_pipeline_ci, 0, &gfx_state->mesh_overlay_pipeline);
+  Assert(result == VK_SUCCESS);
+
   gfx_vk_destroy_shader_modules(mesh_shader_modules);
 
   ////////////////////////////////
@@ -1942,9 +1958,12 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
           rect_instances_count += batch->instance_count;
         }
-      } else if (pass->kind == GFX_PASS_KIND__MESH || pass->kind == GFX_PASS_KIND__MESH_OUTLINE) {
+      } else if (pass->kind == GFX_PASS_KIND__MESH ||
+                 pass->kind == GFX_PASS_KIND__MESH_OUTLINE ||
+                 pass->kind == GFX_PASS_KIND__MESH_OVERLAY) {
         GFX_Mesh_Pass mesh_pass = pass->mesh;
         I1 is_outline_pass = pass->kind == GFX_PASS_KIND__MESH_OUTLINE;
+        I1 is_overlay_pass = pass->kind == GFX_PASS_KIND__MESH_OVERLAY;
 
         F4 viewport_rect = mesh_pass.viewport_rect;
         if (viewport_rect[2] <= 0.0f || viewport_rect[3] <= 0.0f) {
@@ -1981,7 +2000,9 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           .viewport_size = {viewport_rect[2], viewport_rect[3]},
         };
 
-        VkPipeline mesh_pipeline = is_outline_pass ? gfx_state->mesh_outline_pipeline : gfx_state->mesh_pipeline;
+        VkPipeline mesh_pipeline = is_outline_pass ? gfx_state->mesh_outline_pipeline :
+                                   is_overlay_pass ? gfx_state->mesh_overlay_pipeline :
+                                                     gfx_state->mesh_pipeline;
         VkCullModeFlags cull_mode = is_outline_pass ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_NONE;
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline);
         vkCmdSetCullMode(cmd, cull_mode);

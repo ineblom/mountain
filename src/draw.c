@@ -146,7 +146,9 @@ Internal GFX_Pass *dr_pass_from_kind(DR_Bucket *bucket, GFX_Pass_Kind kind) {
     pass->kind = kind;
     pass->next = 0;
     MemoryZeroStruct(&pass->rect);
-    if (kind == GFX_PASS_KIND__MESH || kind == GFX_PASS_KIND__MESH_OUTLINE) {
+    if (kind == GFX_PASS_KIND__MESH ||
+        kind == GFX_PASS_KIND__MESH_OUTLINE ||
+        kind == GFX_PASS_KIND__MESH_OVERLAY) {
       pass->mesh.view_projection = identity_M4F();
     }
     SLLQueuePush(bucket->passes.first, bucket->passes.last, pass);
@@ -306,6 +308,14 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
   return dr_mesh_ex(GFX_PASS_KIND__MESH, vertex_buffer, vertex_offset, vertex_count,
                   index_buffer, index_offset, index_count, transform, color,
                   feature_flags, 0.0f);
+}
+
+Internal GFX_Mesh_Instance *dr_mesh_overlay(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count,
+                                            GFX_Buffer *index_buffer, L1 index_offset, L1 index_count,
+                                            M4F transform, F4 color, GFX_Mesh_Feature_Flags feature_flags) {
+  return dr_mesh_ex(GFX_PASS_KIND__MESH_OVERLAY, vertex_buffer, vertex_offset, vertex_count,
+                    index_buffer, index_offset, index_count, transform, color,
+                    feature_flags, 0.0f);
 }
 
 Internal GFX_Mesh_Instance *dr_mesh_outline(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count,

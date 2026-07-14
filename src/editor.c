@@ -144,6 +144,7 @@ enum {
   CMD_KIND__CLOSE_PANEL,
   CMD_KIND__FOCUS_PANEL,
 
+  CMD_KIND__SELECT_ENTITY,
   CMD_KIND__CREATE_ENTITY,
   CMD_KIND__DELETE_ENTITY,
 
@@ -857,8 +858,20 @@ Internal void lane(Arena *arena) {
             .kind = CMD_KIND__DELETE_ENTITY,
             .entity = state->selected_entity,
           });
+        } else {
+          lister_header(str8("Entities"));
+          for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+            lister_cmd((String8){
+              .str = entity->name,
+              .len = entity->name_len,
+            }, (Cmd){
+              .kind = CMD_KIND__SELECT_ENTITY,
+              .entity = entity_handle(entity),
+            });
+          }
         }
 
+        lister_header(str8("Actions"));
         lister_cmd(str8("Create Entity"), (Cmd){
           .kind = CMD_KIND__CREATE_ENTITY,
         });
@@ -880,6 +893,11 @@ Internal void lane(Arena *arena) {
             state->focused_panel = cmd.panel;
           } break;
 
+          case CMD_KIND__SELECT_ENTITY: {
+            if (!entity_is_nil(entity_from_handle(cmd.entity))) {
+              state->selected_entity = cmd.entity;
+            }
+          } break;
           case CMD_KIND__CREATE_ENTITY: {
             Entity *new = entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
             state->selected_entity = entity_handle(new);
@@ -1175,7 +1193,7 @@ Internal void lane(Arena *arena) {
                           case LISTER_ENTRY_KIND__CMD: {
                             ui_set_next_background_color(oklch(0.2f, 0.1, 27.0f, 1.0f));
                             ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-                            UI_Box *cmd_box = ui_build_box_from_string(
+                            UI_Box *cmd_box = ui_build_box_from_stringf(
                                 UI_BOX_FLAG__CLICKABLE|
                                 UI_BOX_FLAG__DRAW_TEXT|
                                 UI_BOX_FLAG__DRAW_BACKGROUND|
@@ -1185,7 +1203,9 @@ Internal void lane(Arena *arena) {
                                 UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                 UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                 top_side,
-                                entry->str);
+                                "%.*s##lister_cmd_%p",
+                                (int)entry->str.len, entry->str.str,
+                                (void *)entry);
                             UI_Signal signal = ui_signal_from_box(cmd_box);
                             if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
                               cmd_push(entry->cmd);

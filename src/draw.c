@@ -146,9 +146,7 @@ Internal GFX_Pass *dr_pass_from_kind(DR_Bucket *bucket, GFX_Pass_Kind kind) {
     pass->kind = kind;
     pass->next = 0;
     MemoryZeroStruct(&pass->rect);
-    if (kind == GFX_PASS_KIND__MESH ||
-        kind == GFX_PASS_KIND__MESH_OUTLINE ||
-        kind == GFX_PASS_KIND__MESH_OVERLAY) {
+    if (kind == GFX_PASS_KIND__MESH || kind == GFX_PASS_KIND__MESH_OUTLINE) {
       pass->mesh.view_projection = identity_M4F();
     }
     SLLQueuePush(bucket->passes.first, bucket->passes.last, pass);
@@ -310,12 +308,15 @@ Internal GFX_Mesh_Instance *dr_mesh(GFX_Buffer *vertex_buffer, L1 vertex_offset,
                   feature_flags, 0.0f);
 }
 
-Internal GFX_Mesh_Instance *dr_mesh_overlay(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count,
-                                            GFX_Buffer *index_buffer, L1 index_offset, L1 index_count,
-                                            M4F transform, F4 color, GFX_Mesh_Feature_Flags feature_flags) {
-  return dr_mesh_ex(GFX_PASS_KIND__MESH_OVERLAY, vertex_buffer, vertex_offset, vertex_count,
-                    index_buffer, index_offset, index_count, transform, color,
-                    feature_flags, 0.0f);
+Internal void dr_clear_depth(void) {
+  DR_Bucket *bucket = dr_state->top_bucket;
+  if (bucket != 0) {
+    GFX_Pass *pass = push_array(dr_state->arena, GFX_Pass, 1);
+    pass->kind = GFX_PASS_KIND__CLEAR_DEPTH;
+    pass->clear_depth.rect = bucket->mesh_viewport_rect;
+    pass->clear_depth.depth = 1.0f;
+    SLLQueuePush(bucket->passes.first, bucket->passes.last, pass);
+  }
 }
 
 Internal GFX_Mesh_Instance *dr_mesh_outline(GFX_Buffer *vertex_buffer, L1 vertex_offset, L1 vertex_count,

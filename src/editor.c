@@ -1353,29 +1353,30 @@ Internal void lane(Arena *arena) {
                                   transform, color, 3.0f);
 
                   //- kti: Gizmo
+                  dr_clear_depth();
                   mesh = &state->meshes[SHAPE__BOX];
                   F1 thickness = 0.025f; 
 
                   //- kti: X Axis
-                  transform = mul_M4F(scale_M4F((F4){1.0f, thickness, thickness, 1.0f}), translate_M4F(selected->pos+(F4){0.5f, 0.0f, 0.0f, 0.0f}));
+                  transform = mul_M4F(scale_M4F((F4){1.0f, thickness, thickness, 1.0f}), translate_M4F(selected->pos+(F4){0.5f-thickness*0.5f, 0.0f, 0.0f, 0.0f}));
                   color = (F4){1.0f, 0.0f, 0.0f, 1.0f};
-                  dr_mesh_overlay(mesh->vertex_buffer, 0, mesh->vertex_count,
-                                  mesh->index_buffer, 0, mesh->index_count,
-                                  transform, color, GFX_MESH_FEATURE__UNLIT);
+                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
+                          mesh->index_buffer, 0, mesh->index_count,
+                          transform, color, GFX_MESH_FEATURE__UNLIT);
 
                   //- kti: Y axis
-                  transform = mul_M4F(scale_M4F((F4){thickness, 1.0f, thickness, 1.0f}), translate_M4F(selected->pos+(F4){0.0f, 0.5f, 0.0f, 0.0f}));
+                  transform = mul_M4F(scale_M4F((F4){thickness, 1.0f, thickness, 1.0f}), translate_M4F(selected->pos+(F4){0.0f, 0.5f+thickness*0.5f, 0.0f, 0.0f}));
                   color = (F4){0.0f, 1.0f, 0.0f, 1.0f};
-                  dr_mesh_overlay(mesh->vertex_buffer, 0, mesh->vertex_count,
-                                  mesh->index_buffer, 0, mesh->index_count,
-                                  transform, color, GFX_MESH_FEATURE__UNLIT);
+                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
+                          mesh->index_buffer, 0, mesh->index_count,
+                          transform, color, GFX_MESH_FEATURE__UNLIT);
 
                   //- kti: Z axis
-                  transform = mul_M4F(scale_M4F((F4){thickness, thickness, 1.0f, 1.0f}), translate_M4F(selected->pos+(F4){0.0f, 0.0f, 0.5f, 0.0f}));
+                  transform = mul_M4F(scale_M4F((F4){thickness, thickness, 1.0f, 1.0f}), translate_M4F(selected->pos+(F4){0.0f, 0.0f, 0.5f+thickness*0.5f, 0.0f}));
                   color = (F4){0.0f, 0.0f, 1.0f, 1.0f};
-                  dr_mesh_overlay(mesh->vertex_buffer, 0, mesh->vertex_count,
-                                  mesh->index_buffer, 0, mesh->index_count,
-                                  transform, color, GFX_MESH_FEATURE__UNLIT);
+                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
+                          mesh->index_buffer, 0, mesh->index_count,
+                          transform, color, GFX_MESH_FEATURE__UNLIT);
                 }
               }
             }

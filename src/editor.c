@@ -216,6 +216,11 @@ struct State {
   Txt_Pt name_cursor;
   Txt_Pt name_mark;
 
+  L1 f1_edit_buffer_len;
+  B1 f1_edit_buffer[64];
+  Txt_Pt f1_edit_cursor;
+  Txt_Pt f1_edit_mark;
+
   //- kti: Entities.
   Entity *first_entity;
   Entity *last_entity;
@@ -537,6 +542,71 @@ Internal void cmd_push(Cmd cmd) {
     L1 idx = atomic_add_L1(&state->cmd_count, 1);
     state->cmds[idx] = cmd;
   }
+}
+
+Internal UI_Signal editor_drag_F1(Panel *panel, String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+  String8 key_string = str8f(ui_build_arena(), "drag_%p", value);
+  UI_Key key = ui_key_from_string(ui_active_seed_key(), key_string);
+  I1 is_editing = ui_is_key_auto_focus_active(key);
+  String8 value_string = str8f(ui_build_arena(), "%.9g", value[0]);
+  String8 display_string = str8f(ui_build_arena(), "%.*s %.2f", (int)str.len, str.str, value[0]);
+
+  UI_Signal signal = {0};
+  UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+  UI_Text_Padding(0.0f) {
+    ui_set_next_omit_flags(UI_BOX_FLAG__DRAW_BORDER);
+    signal = ui_textedit_ex(&state->f1_edit_cursor,
+                            &state->f1_edit_mark,
+                            state->f1_edit_buffer,
+                            sizeof(state->f1_edit_buffer)-1,
+                            &state->f1_edit_buffer_len,
+                            value_string,
+                            display_string,
+                            UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
+                            1,
+                            key_string);
+  }
+
+  if (!is_editing && !(signal.flags & UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED) && signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+      ui_store_drag_struct(value);
+    }
+    F1 initial_value = ui_get_drag_struct(F1)[0];
+    value[0] = initial_value + ui_drag_delta()[0] / pixels_per_unit;
+  }
+
+  if (!is_editing && signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
+    value[0] = default_value;
+  }
+
+  if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+    cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+  }
+
+  if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
+    state->f1_edit_buffer[state->f1_edit_buffer_len] = 0;
+    SB1 *end = 0;
+    F1 new_value = strtof((SB1 *)state->f1_edit_buffer, &end);
+    while (char_is_space(end[0])) {
+      end += 1;
+    }
+
+    I1 is_valid = (end != (SB1 *)state->f1_edit_buffer &&
+                   end[0] == 0 &&
+                   new_value == new_value &&
+                   new_value >= -F1_MAX && new_value <= F1_MAX);
+    if (is_valid) {
+      value[0] = new_value;
+    } else {
+      ui_set_auto_focus_active_key(key);
+    }
+  }
+
+  if (min != 0 || max != 0) {
+    value[0] = Clamp(min, value[0], max);
+  }
+
+  return signal;
 }
 
 ////////////////////////////////
@@ -1132,12 +1202,13 @@ Internal void lane(Arena *arena) {
                             }
                           } break;
                           case LISTER_ENTRY_KIND__F1: {
-                            ui_set_next_text_padding(10.0f);
-                            ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
-                                              UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                              UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                              top_side);
-                            ui_drag_F1(entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                            UI_Text_Padding(10.0f) {
+                              ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                                UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                                UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                                top_side);
+                              editor_drag_F1(panel, entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                            }
                           } break;
                           case LISTER_ENTRY_KIND__XYZ: {
                             UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry->f4);
@@ -1151,11 +1222,11 @@ Internal void lane(Arena *arena) {
                                                        entry->str);
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_drag_F1(str8("X"), &entry->f4[0][0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                editor_drag_F1(panel, str8("X"), &entry->f4[0][0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_drag_F1(str8("Y"), &entry->f4[0][1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                editor_drag_F1(panel, str8("Y"), &entry->f4[0][1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_drag_F1(str8("Z"), &entry->f4[0][2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                editor_drag_F1(panel, str8("Z"), &entry->f4[0][2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                               }
                             }
                           } break;
@@ -1182,13 +1253,13 @@ Internal void lane(Arena *arena) {
                                 F1 pixels_per_unit = 300.0f;
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.1f, 27.0f, 1.0f));
-                                ui_drag_F1(str8("R"), &entry->f4[0][0], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                editor_drag_F1(panel, str8("R"), &entry->f4[0][0], 0.0f, pixels_per_unit, 0.0f, 1.0f);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 143.0f, 1.0f));
-                                ui_drag_F1(str8("G"), &entry->f4[0][1], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                editor_drag_F1(panel, str8("G"), &entry->f4[0][1], 0.0f, pixels_per_unit, 0.0f, 1.0f);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 256.0f, 1.0f));
-                                ui_drag_F1(str8("B"), &entry->f4[0][2], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                editor_drag_F1(panel, str8("B"), &entry->f4[0][2], 0.0f, pixels_per_unit, 0.0f, 1.0f);
                               }
                             }
                           } break;

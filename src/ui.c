@@ -182,6 +182,7 @@ enum {
   UI_BOX_FLAG__DRAW_SIDE_BOTTOM         = (1LLU<<39),
   UI_BOX_FLAG__DRAW_SIDE_LEFT           = (1LLU<<40),
   UI_BOX_FLAG__DRAW_SIDE_RIGHT          = (1LLU<<41),
+  UI_BOX_FLAG__INSET_FOCUS_BORDER       = (1LLU<<42),
 
   UI_BOX_FLAG__CLICKABLE         = (UI_BOX_FLAG__MOUSE_CLICKABLE|UI_BOX_FLAG__KEYBOARD_CLICKABLE),
   UI_BOX_FLAG__FLOATING          = (UI_BOX_FLAG__FLOATING_X|UI_BOX_FLAG__FLOATING_Y),
@@ -2075,7 +2076,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
   return op;
 }
 
-Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
+Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 display_value, UI_Signal_Flags activate_flags, I1 fill_text_width, String8 string) {
   edit_string_size_out[0] = Min(edit_string_size_out[0], edit_buffer_size);
   cursor->column = Min(cursor->column, edit_string_size_out[0]);
   mark->column = Min(mark->column, edit_string_size_out[0]);
@@ -2096,6 +2097,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
   //- kti: Build top level box.
   UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND |
                                       UI_BOX_FLAG__DRAW_BORDER |
+                                      UI_BOX_FLAG__INSET_FOCUS_BORDER |
                                       UI_BOX_FLAG__MOUSE_CLICKABLE |
                                       UI_BOX_FLAG__CLICK_TO_FOCUS |
                                       UI_BOX_FLAG__CLIP |
@@ -2149,14 +2151,14 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
     String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
     if (!is_focus_active || is_focus_active_disabled) {
       String8 display_string = ui_display_part_from_key_string(string);
-      if (pre_edit_value.len != 0) {
-        display_string = pre_edit_value;
+      if (display_value.len != 0) {
+        display_string = display_value;
       }
-      ui_set_next_pref_width(ui_text_dim(0.0f, 0.0f));
+      ui_set_next_pref_width(fill_text_width ? ui_pct(1.0f, 0.0f) : ui_text_dim(0.0f, 0.0f));
       ui_label(display_string);
     } else {
       F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];
-      ui_set_next_pref_width(ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
+      ui_set_next_pref_width(fill_text_width ? ui_pct(1.0f, 0.0f) : ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
       UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, str8("###editstr"));
     
       UI_Line_Edit_Draw_Data *draw_data = push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
@@ -2174,7 +2176,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
   //- kti: interact
   UI_Signal signal = ui_signal_from_box(box);
   I1 focus_cleared_this_frame = 0;
-  if (!is_focus_active && signal.flags&(UI_SIGNAL_FLAG__LEFT_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED)) {
+  if (!is_focus_active && signal.flags&activate_flags) {
     String8 edit_string = pre_edit_value;
     edit_string.len = Min(edit_buffer_size, pre_edit_value.len);
     memmove(edit_buffer, edit_string.str, edit_string.len);
@@ -2216,6 +2218,14 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
   ui_pop_focus_active();
 
   return signal;
+}
+
+Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
+  return ui_textedit_ex(cursor, mark, edit_buffer, edit_buffer_size, edit_string_size_out,
+                        pre_edit_value, pre_edit_value,
+                        UI_SIGNAL_FLAG__LEFT_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
+                        0,
+                        string);
 }
 
 Internal void ui_draw(void) {
@@ -2360,7 +2370,8 @@ Internal void ui_draw(void) {
 
       //- kti: Border
       if (b->flags & UI_BOX_FLAG__DRAW_BORDER || draw_focus_border) {
-        F4 border_rect = rect_pad(b->rect, 1.0f);
+        F1 border_pad = (draw_focus_border && b->flags & UI_BOX_FLAG__INSET_FOCUS_BORDER) ? -2.0f : 1.0f;
+        F4 border_rect = rect_pad(b->rect, border_pad);
         GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, b_softness);
         inst->corner_radii = b->corner_radii;
         for (L1 corner_idx = 0; corner_idx < 4; corner_idx += 1) {

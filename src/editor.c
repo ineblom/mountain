@@ -147,7 +147,7 @@ enum {
 
   CMD_KIND__SELECT_ENTITY,
   CMD_KIND__CREATE_ENTITY,
-  CMD_KIND__DELETE_ENTITY,
+  CMD_KIND__DELETE_ENTITIES,
 
   CMD_KIND_COUNT,
 };
@@ -159,6 +159,8 @@ struct Cmd {
   Window *window;
   Panel *panel;
   Entity_Handle entity;
+  Entity_Handle *entities;
+  L1 entity_count;
 
   Dir dir;
 };
@@ -176,22 +178,30 @@ typedef enum Lister_Entry_Kind {
   LISTER_ENTRY_KIND__CMD,
 } Lister_Entry_Kind;
 
+typedef I1 Lister_Apply;
+enum {
+  LISTER_APPLY__DELTA,
+  LISTER_APPLY__SET,
+};
+
 typedef struct Lister_Entry Lister_Entry;
 struct Lister_Entry {
   Lister_Entry_Kind kind;
+  Lister_Apply apply;
 
   String8 str;
-  B1 *text;
-  L1 *text_len;
-  L1 text_capacity;
+  B1 **texts;
+  L1 **text_lens;
+  L1 *text_capacities;
   F1 pixels_per_unit;
   F1 default_f1;
   F1 min, max;
-  F1 *f1;
-  F4 *f4;
-  I1 *enum_value;
+  F1 **f1s;
+  F4 **f4s;
+  I1 **enum_values;
   String8 *enum_names;
   L1 enum_count;
+  L1 value_count;
   Cmd cmd;
 };
 
@@ -641,12 +651,14 @@ Internal Entity *entity_create(L1 flags, String8 name) {
   return entity;
 }
 
-Internal void entity_delete(Entity_Handle handle) {
-  Entity *entity = entity_from_handle(handle);
-  if (!entity_is_nil(entity)) {
-    entity->gen += 1;
-    DLLRemove(state->first_entity, state->last_entity, entity);
-    SLLStackPush(state->first_free_entity, entity);
+Internal void entity_delete(Entity_Handle *handles, L1 count) {
+  for (L1 i = 0; i < count; i += 1) {
+    Entity *entity = entity_from_handle(handles[i]);
+    if (!entity_is_nil(entity)) {
+      entity->gen += 1;
+      DLLRemove(state->first_entity, state->last_entity, entity);
+      SLLStackPush(state->first_free_entity, entity);
+    }
   }
 }
 
@@ -659,6 +671,7 @@ Internal Lister_Entry *lister_push(Lister_Entry_Kind kind) {
   if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
     entry = &state->lister_entries[state->lister_entry_count];
     state->lister_entry_count += 1;
+    MemoryZeroStruct(entry);
     entry->kind = kind;
   }
 
@@ -674,22 +687,25 @@ Internal Lister_Entry *lister_header(String8 str) {
   return entry;
 }
 
-Internal Lister_Entry *lister_textedit(B1 *text, L1 *text_len, L1 text_capacity) {
-  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__TEXTEDIT);
+Internal Lister_Entry *lister_textedits(B1 **texts, L1 **text_lens, L1 *text_capacities, L1 count) {
+  Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__TEXTEDIT) : 0;
   if (entry) {
-    entry->text = text;
-    entry->text_len = text_len;
-    entry->text_capacity = text_capacity;
+    entry->texts = texts;
+    entry->text_lens = text_lens;
+    entry->text_capacities = text_capacities;
+    entry->value_count = count;
   }
 
   return entry;
 }
 
-Internal Lister_Entry *lister_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
-  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__F1);
+Internal Lister_Entry *lister_F1s(String8 str, F1 **values, L1 count, Lister_Apply apply, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+  Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__F1) : 0;
   if (entry) {
     entry->str = str;
-    entry->f1 = value;
+    entry->apply = apply;
+    entry->f1s = values;
+    entry->value_count = count;
     entry->pixels_per_unit = pixels_per_unit;
     entry->default_f1 = default_value;
     entry->min = min;
@@ -699,11 +715,13 @@ Internal Lister_Entry *lister_F1(String8 str, F1 *value, F1 default_value, F1 pi
   return entry;
 }
 
-Internal Lister_Entry *lister_xyz(String8 str, F4 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
-  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__XYZ);
+Internal Lister_Entry *lister_xyzs(String8 str, F4 **values, L1 count, Lister_Apply apply, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+  Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__XYZ) : 0;
   if (entry) {
     entry->str = str;
-    entry->f4 = value;
+    entry->apply = apply;
+    entry->f4s = values;
+    entry->value_count = count;
     entry->default_f1 = default_value;
     entry->pixels_per_unit = pixels_per_unit;
     entry->min = min;
@@ -713,23 +731,56 @@ Internal Lister_Entry *lister_xyz(String8 str, F4 *value, F1 default_value, F1 p
   return entry;
 }
 
-Internal Lister_Entry *lister_color(String8 str, F4 *value) {
-  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__COLOR);
+Internal Lister_Entry *lister_colors(String8 str, F4 **values, L1 count, Lister_Apply apply) {
+  Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__COLOR) : 0;
   if (entry) {
     entry->str = str;
-    entry->f4 = value;
+    entry->apply = apply;
+    entry->f4s = values;
+    entry->value_count = count;
+    entry->min = 0.0f;
+    entry->max = 1.0f;
   }
 
   return entry;
 }
 
-Internal Lister_Entry *lister_enum(String8 str, I1 *value, String8 *names, L1 count) {
-  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__ENUM);
+Internal void lister_apply_F1s(Lister_Entry *entry, F1 before, F1 after) {
+  if (before != after) {
+    F1 value = entry->apply == LISTER_APPLY__DELTA ? after - before : after;
+    for (L1 i = 0; i < entry->value_count; i += 1) {
+      if (entry->apply == LISTER_APPLY__DELTA) {
+        *entry->f1s[i] += value;
+      } else {
+        *entry->f1s[i] = value;
+      }
+    }
+  }
+}
+
+Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
+  for (L1 component = 0; component < 4; component += 1) {
+    if (before[component] != after[component]) {
+      F1 value = entry->apply == LISTER_APPLY__DELTA ? after[component] - before[component] : after[component];
+      for (L1 i = 0; i < entry->value_count; i += 1) {
+        if (entry->apply == LISTER_APPLY__DELTA) {
+          (*entry->f4s[i])[component] += value;
+        } else {
+          (*entry->f4s[i])[component] = value;
+        }
+      }
+    }
+  }
+}
+
+Internal Lister_Entry *lister_enums(String8 str, I1 **values, L1 value_count, String8 *names, L1 enum_count) {
+  Lister_Entry *entry = value_count != 0 ? lister_push(LISTER_ENTRY_KIND__ENUM) : 0;
   if (entry) {
     entry->str = str;
-    entry->enum_value = value;
+    entry->enum_values = values;
+    entry->value_count = value_count;
     entry->enum_names = names;
-    entry->enum_count = count;
+    entry->enum_count = enum_count;
   }
 
   return entry;
@@ -896,30 +947,61 @@ Internal void lane(Arena *arena) {
       state->lister_entry_count = 0;
 
       {
-        Entity *e = &state->nil_entity;
+        L1 selected_count = 0;
         for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
           if (entity->flags & ENTITY_FLAG__SELECTED) {
-            e = entity;
-            break;
+            selected_count += 1;
           }
         }
-        if (!entity_is_nil(e)) {
-          lister_textedit(e->name, &e->name_len, sizeof(e->name));
-          lister_enum(str8("Shape"), &e->shape, shape_names, SHAPE_COUNT);
 
-          lister_xyz(str8("Pos"), &e->pos, 0.0f, 50.0f, 0.0f, 0.0f);
-          lister_xyz(str8("Size"), &e->size, 1.0f, 50.0f, 0.0f, F1_MAX);
+        if (selected_count != 0) {
+          B1 **names = push_array(scratch.arena, B1 *, selected_count);
+          L1 **name_lens = push_array(scratch.arena, L1 *, selected_count);
+          L1 *name_capacities = push_array(scratch.arena, L1, selected_count);
+          I1 **shapes = push_array(scratch.arena, I1 *, selected_count);
+          F4 **positions = push_array(scratch.arena, F4 *, selected_count);
+          F4 **sizes = push_array(scratch.arena, F4 *, selected_count);
+          F4 **base_colors = push_array(scratch.arena, F4 *, selected_count);
+          F1 **metallics = push_array(scratch.arena, F1 *, selected_count);
+          F1 **roughnesses = push_array(scratch.arena, F1 *, selected_count);
+          F4 **emissives = push_array(scratch.arena, F4 *, selected_count);
+          Entity_Handle *entities = push_array(scratch.arena, Entity_Handle, selected_count);
+
+          L1 selected_idx = 0;
+          for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+            if (entity->flags & ENTITY_FLAG__SELECTED) {
+              names[selected_idx] = entity->name;
+              name_lens[selected_idx] = &entity->name_len;
+              name_capacities[selected_idx] = sizeof(entity->name);
+              shapes[selected_idx] = &entity->shape;
+              positions[selected_idx] = &entity->pos;
+              sizes[selected_idx] = &entity->size;
+              base_colors[selected_idx] = &entity->material.base_color;
+              metallics[selected_idx] = &entity->material.metallic;
+              roughnesses[selected_idx] = &entity->material.roughness;
+              emissives[selected_idx] = &entity->material.emissive;
+              entities[selected_idx] = entity_handle(entity);
+              selected_idx += 1;
+            }
+          }
+
+          lister_textedits(names, name_lens, name_capacities, selected_count);
+          lister_enums(str8("Shape"), shapes, selected_count, shape_names, SHAPE_COUNT);
+
+          lister_xyzs(str8("Pos"), positions, selected_count, LISTER_APPLY__DELTA, 0.0f, 50.0f, 0.0f, 0.0f);
+          lister_xyzs(str8("Size"), sizes, selected_count, LISTER_APPLY__DELTA, 1.0f, 50.0f, 0.0f, F1_MAX);
 
           lister_header(str8("Material"));
 
-          lister_color(str8("Base"), &e->material.base_color);
-          lister_F1(str8("Metallic"), &e->material.metallic, 0.3f, 300.0f, 0.0f, 1.0f);
-          lister_F1(str8("Roughness"), &e->material.roughness, 0.3f, 300.0f, 0.0f, 1.0f);
-          lister_color(str8("Emissive"), &e->material.emissive);
+          lister_colors(str8("Base"), base_colors, selected_count, LISTER_APPLY__SET);
+          lister_F1s(str8("Metallic"), metallics, selected_count, LISTER_APPLY__DELTA, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_F1s(str8("Roughness"), roughnesses, selected_count, LISTER_APPLY__DELTA, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_colors(str8("Emissive"), emissives, selected_count, LISTER_APPLY__SET);
 
           lister_cmd(str8("Delete"), (Cmd){
-            .kind = CMD_KIND__DELETE_ENTITY,
-            .entity = entity_handle(e),
+            .kind = CMD_KIND__DELETE_ENTITIES,
+            .entities = entities,
+            .entity_count = selected_count,
           });
         } else {
           lister_header(str8("Entities"));
@@ -939,38 +1021,6 @@ Internal void lane(Arena *arena) {
           .kind = CMD_KIND__CREATE_ENTITY,
         });
       }
-
-      ////////////////////////////////
-      //~ kti: Execute Cmds
-
-      for (L1 i = 0; i < state->cmd_count; i += 1) {
-        Cmd cmd = state->cmds[i];
-        switch (cmd.kind) {
-          case CMD_KIND__OPEN_PANEL: {
-            panel_insert(panel_alloc(), cmd.panel, cmd.dir);
-          } break;
-          case CMD_KIND__CLOSE_PANEL: {
-            panel_close(&cmd.window->root_panel, cmd.panel);
-          } break;
-          case CMD_KIND__FOCUS_PANEL: {
-            state->focused_panel = cmd.panel;
-          } break;
-
-          case CMD_KIND__SELECT_ENTITY: {
-            if (!entity_is_nil(entity_from_handle(cmd.entity))) {
-              entity_select(cmd.entity, 0);
-            }
-          } break;
-          case CMD_KIND__CREATE_ENTITY: {
-            Entity *new = entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
-            entity_select(entity_handle(new), 0);
-          } break;
-          case CMD_KIND__DELETE_ENTITY: {
-            entity_delete(cmd.entity);
-          } break;
-        }
-      }
-      state->cmd_count = 0;
 
       ////////////////////////////////
       //~ UI
@@ -1163,28 +1213,37 @@ Internal void lane(Arena *arena) {
                                                              state->name_edit_buffer,
                                                              sizeof(state->name_edit_buffer),
                                                              &state->name_edit_buffer_len,
-                                                             (String8){entry->text, *entry->text_len},
-                                                             str8f(ui_build_arena(), "###entity_name_%p", entry->text));
+                                                             (String8){entry->texts[0], *entry->text_lens[0]},
+                                                             str8f(ui_build_arena(), "###entity_name_%p", entry->texts[0]));
                               if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
                                 cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                               }
                               if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
-                                *entry->text_len = Min(state->name_edit_buffer_len, entry->text_capacity);
-                                memmove(entry->text, state->name_edit_buffer, *entry->text_len);
+                                for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
+                                  *entry->text_lens[value_idx] = Min(state->name_edit_buffer_len, entry->text_capacities[value_idx]);
+                                  memmove(entry->texts[value_idx], state->name_edit_buffer, *entry->text_lens[value_idx]);
+                                }
                               }
                             }
                           } break;
                           case LISTER_ENTRY_KIND__F1: {
-                            UI_Text_Padding(10.0f) {
-                              ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
-                                                UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                                UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                                top_side);
-                              focus_on_press(panel, ui_drag_F1(entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
+                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_f1%p", entry);
+                            UI_Parent(drag_box) {
+                              UI_Text_Padding(10.0f) {
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
+                                                  UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+                                                  UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                                  top_side);
+                                F1 before = *entry->f1s[0];
+                                F1 after = before;
+                                UI_Signal signal = ui_drag_F1(entry->str, &after, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                focus_on_press(panel, signal);
+                                lister_apply_F1s(entry, before, after);
+                              }
                             }
                           } break;
                           case LISTER_ENTRY_KIND__XYZ: {
-                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry->f4);
+                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
                             UI_Parent(drag_box) {
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
@@ -1194,17 +1253,23 @@ Internal void lane(Arena *arena) {
                                                        top_side,
                                                        entry->str);
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
+                                F4 before = *entry->f4s[0];
+                                F4 after = before;
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                focus_on_press(panel, ui_drag_F1(str8("X"), &entry->f4[0][0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
+                                UI_Signal signal = ui_drag_F1(str8("X"), &after[0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                focus_on_press(panel, signal);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                focus_on_press(panel, ui_drag_F1(str8("Y"), &entry->f4[0][1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
+                                signal = ui_drag_F1(str8("Y"), &after[1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                focus_on_press(panel, signal);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                focus_on_press(panel, ui_drag_F1(str8("Z"), &entry->f4[0][2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
+                                signal = ui_drag_F1(str8("Z"), &after[2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                focus_on_press(panel, signal);
+                                lister_apply_F4s(entry, before, after);
                               }
                             }
                           } break;
                           case LISTER_ENTRY_KIND__COLOR: {
-                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry->f4);
+                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
                             UI_Parent(drag_box) {
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
@@ -1214,7 +1279,9 @@ Internal void lane(Arena *arena) {
                                                        top_side,
                                                        entry->str);
 
-                              ui_set_next_background_color(oklch_from_linear_rgb(entry->f4[0]));
+                              F4 before = *entry->f4s[0];
+                              F4 after = before;
+                              ui_set_next_background_color(oklch_from_linear_rgb(after));
                               ui_set_next_pref_width(ui_px(30.0f, 1.0f));
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND|
                                                        UI_BOX_FLAG__DRAW_SIDE_RIGHT|
@@ -1226,19 +1293,23 @@ Internal void lane(Arena *arena) {
                                 F1 pixels_per_unit = 300.0f;
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.1f, 27.0f, 1.0f));
-                                focus_on_press(panel, ui_drag_F1(str8("R"), &entry->f4[0][0], 0.0f, pixels_per_unit, 0.0f, 1.0f));
+                                UI_Signal signal = ui_drag_F1(str8("R"), &after[0], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                focus_on_press(panel, signal);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 143.0f, 1.0f));
-                                focus_on_press(panel, ui_drag_F1(str8("G"), &entry->f4[0][1], 0.0f, pixels_per_unit, 0.0f, 1.0f));
+                                signal = ui_drag_F1(str8("G"), &after[1], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                focus_on_press(panel, signal);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 256.0f, 1.0f));
-                                focus_on_press(panel, ui_drag_F1(str8("B"), &entry->f4[0][2], 0.0f, pixels_per_unit, 0.0f, 1.0f));
+                                signal = ui_drag_F1(str8("B"), &after[2], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                focus_on_press(panel, signal);
+                                lister_apply_F4s(entry, before, after);
                               }
                             }
                           } break;
                           case LISTER_ENTRY_KIND__ENUM: {
                             ui_set_next_child_layout_axis(AXIS__X);
-                            UI_Box *enum_box = ui_build_box_from_stringf(0, "enum_%p", entry->enum_value);
+                            UI_Box *enum_box = ui_build_box_from_stringf(0, "enum_%p", entry);
                             UI_Parent(enum_box) {
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
@@ -1249,8 +1320,16 @@ Internal void lane(Arena *arena) {
 
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                               UI_Pref_Width(ui_pct(1.0f/(F1)entry->enum_count, 1.0f)) {
+                                I1 enum_value = *entry->enum_values[0];
+                                I1 enum_is_mixed = 0;
+                                for (L1 value_idx = 1; value_idx < entry->value_count; value_idx += 1) {
+                                  if (*entry->enum_values[value_idx] != enum_value) {
+                                    enum_is_mixed = 1;
+                                    break;
+                                  }
+                                }
                                 for (L1 option = 0; option < entry->enum_count; option += 1) {
-                                  if (*entry->enum_value == option) {
+                                  if (!enum_is_mixed && enum_value == option) {
                                     ui_set_next_background_color(oklch(0.35f, 0.08f, 252.0f, 1.0f));
                                   }
 
@@ -1266,10 +1345,12 @@ Internal void lane(Arena *arena) {
                                       top_side,
                                       "%.*s##enum_%p_%llu",
                                       (int)name.len, name.str,
-                                      entry->enum_value, option);
+                                      entry, option);
                                   UI_Signal signal = ui_signal_from_box(option_box);
                                   if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
-                                    *entry->enum_value = option;
+                                    for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
+                                      *entry->enum_values[value_idx] = option;
+                                    }
                                   }
                                 }
                               }
@@ -1598,6 +1679,38 @@ Internal void lane(Arena *arena) {
 
         ProfEnd();
       }
+
+      ////////////////////////////////
+      //~ kti: Execute Cmds
+
+      for (L1 i = 0; i < state->cmd_count; i += 1) {
+        Cmd cmd = state->cmds[i];
+        switch (cmd.kind) {
+          case CMD_KIND__OPEN_PANEL: {
+            panel_insert(panel_alloc(), cmd.panel, cmd.dir);
+          } break;
+          case CMD_KIND__CLOSE_PANEL: {
+            panel_close(&cmd.window->root_panel, cmd.panel);
+          } break;
+          case CMD_KIND__FOCUS_PANEL: {
+            state->focused_panel = cmd.panel;
+          } break;
+
+          case CMD_KIND__SELECT_ENTITY: {
+            if (!entity_is_nil(entity_from_handle(cmd.entity))) {
+              entity_select(cmd.entity, 0);
+            }
+          } break;
+          case CMD_KIND__CREATE_ENTITY: {
+            Entity *new = entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
+            entity_select(entity_handle(new), 0);
+          } break;
+          case CMD_KIND__DELETE_ENTITIES: {
+            entity_delete(cmd.entities, cmd.entity_count);
+          } break;
+        }
+      }
+      state->cmd_count = 0;
     }
 
     scratch_end(scratch);

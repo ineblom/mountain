@@ -225,6 +225,30 @@ Internal String8 push_str8_copy(Arena *arena, String8 str) {
   return new;
 }
 
+Internal I1 F1_from_str8(String8 string, F1 *value_out) {
+  Temp_Arena scratch = scratch_begin(0, 0);
+  String8 cstring = push_str8_copy(scratch.arena, string);
+  SB1 *start = (SB1 *)cstring.str;
+  SB1 *end = 0;
+  F1 value = strtof(start, &end);
+
+  L1 end_idx = end-start;
+  while (end_idx < string.len && char_is_space(string.str[end_idx])) {
+    end_idx += 1;
+  }
+
+  I1 is_valid = (end != start &&
+                 end_idx == string.len &&
+                 value == value &&
+                 value >= -F1_MAX && value <= F1_MAX);
+  if (is_valid) {
+    value_out[0] = value;
+  }
+
+  scratch_end(scratch);
+  return is_valid;
+}
+
 Internal I1 str8_match(String8 a, String8 b) {
   L1 result = 0;
 

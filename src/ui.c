@@ -333,6 +333,11 @@ struct UI_State {
   Arena *drag_arena;
   String8 drag_data;
 
+  L1 f1_edit_buffer_len;
+  B1 f1_edit_buffer[64];
+  Txt_Pt f1_edit_cursor;
+  Txt_Pt f1_edit_mark;
+
   Arena *build_arenas[2];
   L1 build_index;
 
@@ -1816,42 +1821,6 @@ Internal UI_Signal ui_buttonf(CString fmt, ...) {
   return result;
 }
 
-Internal UI_Signal ui_drag_F1(String8 str, F1 *value,  F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
-  // TODO: Automatic pixels_per_unit calculation (if 0)
-
-  UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_%p", value));
-  UI_Box *box = ui_build_box_from_key(
-    UI_BOX_FLAG__CLICKABLE|
-    UI_BOX_FLAG__DRAW_BACKGROUND|
-    UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-    UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
-    UI_BOX_FLAG__DRAW_TEXT,
-    key);
-  ui_box_equip_display_string(box, str8f(ui_build_arena(), "%.*s %.2f", str.len, str.str, value[0]));
-
-  UI_Signal signal = ui_signal_from_box(box);
-
-  if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-      ui_store_drag_struct(value);
-    }
-
-    F1 initial_value = ui_get_drag_struct(F1)[0];
-    F1 change = ui_drag_delta()[0] / pixels_per_unit;
-    value[0] = initial_value + change;
-  }
-
-  if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
-    value[0] = default_value;
-  }
-
-  if (min != 0 || max != 0) {
-    value[0] = Clamp(min, value[0], max);
-  }
-
-  return signal;
-}
-
 Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
   UI_Signal signal = {0};
 
@@ -2076,13 +2045,10 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
   return op;
 }
 
-Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 display_value, UI_Signal_Flags activate_flags, I1 fill_text_width, String8 string) {
+Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 display_value, UI_Signal_Flags activate_flags, I1 fill_text_width, UI_Key key) {
   edit_string_size_out[0] = Min(edit_string_size_out[0], edit_buffer_size);
   cursor->column = Min(cursor->column, edit_string_size_out[0]);
   mark->column = Min(mark->column, edit_string_size_out[0]);
-
-  //- kti: Make key.
-  UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 
   //- kti: Calculate focus.
   I1 is_auto_focus_hot = ui_is_key_auto_focus_hot(key);
@@ -2150,12 +2116,8 @@ Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer,
   UI_Parent(box) {
     String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
     if (!is_focus_active || is_focus_active_disabled) {
-      String8 display_string = ui_display_part_from_key_string(string);
-      if (display_value.len != 0) {
-        display_string = display_value;
-      }
       ui_set_next_pref_width(fill_text_width ? ui_pct(1.0f, 0.0f) : ui_text_dim(0.0f, 0.0f));
-      ui_label(display_string);
+      ui_label(display_value);
     } else {
       F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];
       ui_set_next_pref_width(fill_text_width ? ui_pct(1.0f, 0.0f) : ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
@@ -2221,11 +2183,66 @@ Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer,
 }
 
 Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
+  UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
   return ui_textedit_ex(cursor, mark, edit_buffer, edit_buffer_size, edit_string_size_out,
                         pre_edit_value, pre_edit_value,
                         UI_SIGNAL_FLAG__LEFT_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
                         0,
-                        string);
+                        key);
+}
+
+Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+  // TODO: Automatic pixels_per_unit calculation (if 0)
+
+  String8 key_string = str8f(ui_build_arena(), "drag_%p", value);
+  UI_Key key = ui_key_from_string(ui_active_seed_key(), key_string);
+  I1 is_editing = ui_is_key_auto_focus_active(key);
+  String8 value_string = str8f(ui_build_arena(), "%.9g", value[0]);
+  String8 display_string = str8f(ui_build_arena(), "%.*s %.2f", (int)str.len, str.str, value[0]);
+
+  UI_Signal signal = {0};
+  UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+  UI_Text_Padding(0.0f) {
+    ui_set_next_omit_flags(UI_BOX_FLAG__DRAW_BORDER);
+    signal = ui_textedit_ex(&ui_state->f1_edit_cursor,
+                            &ui_state->f1_edit_mark,
+                            ui_state->f1_edit_buffer,
+                            sizeof(ui_state->f1_edit_buffer),
+                            &ui_state->f1_edit_buffer_len,
+                            value_string,
+                            display_string,
+                            UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
+                            1,
+                            key);
+  }
+
+  if (!is_editing && !(signal.flags & UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED) && signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+      ui_store_drag_struct(value);
+    }
+    F1 initial_value = ui_get_drag_struct(F1)[0];
+    value[0] = initial_value + ui_drag_delta()[0] / pixels_per_unit;
+  }
+
+  if (!is_editing && signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
+    value[0] = default_value;
+  }
+
+  if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
+    String8 edit_string = {ui_state->f1_edit_buffer, ui_state->f1_edit_buffer_len};
+    F1 new_value = 0;
+    if (F1_from_str8(edit_string, &new_value)) {
+      value[0] = new_value;
+    } else {
+      ui_set_auto_focus_active_key(key);
+    }
+  }
+
+  if (min != 0 || max != 0) {
+    value[0] = Clamp(min, value[0], max);
+  }
+
+  return signal;
 }
 
 Internal void ui_draw(void) {

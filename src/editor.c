@@ -44,7 +44,7 @@ struct View {
   //- kti: Translation gizmo.
   Axis gizmo_hot_axis;
   Axis gizmo_active_axis;
-  F4 gizmo_drag_start_pos;
+  F1 gizmo_drag_applied_delta;
   F2 gizmo_drag_axis_screen;
 };
 
@@ -90,6 +90,7 @@ struct Window {
 enum {
   ENTITY_FLAG__SHAPE  = 1 << 0,
   ENTITY_FLAG__CAMERA = 1 << 1,
+  ENTITY_FLAG__SELECTED = 1 << 2,
 };
 
 typedef I1 Shape;
@@ -221,8 +222,6 @@ struct State {
   Entity *last_entity;
   Entity *first_free_entity;
   Entity nil_entity;
-
-  Entity_Handle selected_entity;
 
   //- kti: Lister.
   L1 lister_entry_count;
@@ -583,6 +582,41 @@ Internal Entity_Handle entity_handle(Entity *entity) {
   return result;
 }
 
+Internal void entity_selection_clear(void) {
+  for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+    entity->flags &= ~ENTITY_FLAG__SELECTED;
+  }
+}
+
+Internal void entity_select(Entity_Handle handle, I1 additive) {
+  Entity *entity = entity_from_handle(handle);
+  if (!additive) {
+    entity_selection_clear();
+  }
+  if (!entity_is_nil(entity)) {
+    if (additive) {
+      entity->flags ^= ENTITY_FLAG__SELECTED;
+    } else {
+      entity->flags |= ENTITY_FLAG__SELECTED;
+    }
+  }
+}
+
+Internal I1 entity_selection_average_pos(F4 *average_out) {
+  F4 sum = {0};
+  L1 count = 0;
+  for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+    if (entity->flags & ENTITY_FLAG__SELECTED) {
+      sum += entity->pos;
+      count += 1;
+    }
+  }
+  if (count != 0) {
+    *average_out = sum / (F1)count;
+  }
+  return count != 0;
+}
+
 Internal Entity *entity_create(L1 flags, String8 name) {
   Entity *entity = state->first_free_entity;
   if (entity == 0) {
@@ -765,7 +799,7 @@ Internal void lane(Arena *arena) {
     viewport_panel->pct_of_parent = 0.7f;
 
     Entity *starting_entity = entity_create(ENTITY_FLAG__SHAPE, str8("Starting Entity"));
-    state->selected_entity = entity_handle(starting_entity);
+    entity_select(entity_handle(starting_entity), 0);
   }
 
   lane_sync();
@@ -862,7 +896,13 @@ Internal void lane(Arena *arena) {
       state->lister_entry_count = 0;
 
       {
-        Entity *e = entity_from_handle(state->selected_entity);
+        Entity *e = &state->nil_entity;
+        for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+          if (entity->flags & ENTITY_FLAG__SELECTED) {
+            e = entity;
+            break;
+          }
+        }
         if (!entity_is_nil(e)) {
           lister_textedit(e->name, &e->name_len, sizeof(e->name));
           lister_enum(str8("Shape"), &e->shape, shape_names, SHAPE_COUNT);
@@ -879,7 +919,7 @@ Internal void lane(Arena *arena) {
 
           lister_cmd(str8("Delete"), (Cmd){
             .kind = CMD_KIND__DELETE_ENTITY,
-            .entity = state->selected_entity,
+            .entity = entity_handle(e),
           });
         } else {
           lister_header(str8("Entities"));
@@ -918,18 +958,15 @@ Internal void lane(Arena *arena) {
 
           case CMD_KIND__SELECT_ENTITY: {
             if (!entity_is_nil(entity_from_handle(cmd.entity))) {
-              state->selected_entity = cmd.entity;
+              entity_select(cmd.entity, 0);
             }
           } break;
           case CMD_KIND__CREATE_ENTITY: {
             Entity *new = entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
-            state->selected_entity = entity_handle(new);
+            entity_select(entity_handle(new), 0);
           } break;
           case CMD_KIND__DELETE_ENTITY: {
             entity_delete(cmd.entity);
-            if (entity_handle_match(cmd.entity, state->selected_entity)) {
-              state->selected_entity = entity_handle_zero();
-            }
           } break;
         }
       }
@@ -1285,7 +1322,8 @@ Internal void lane(Arena *arena) {
                     F2 drag_delta = ui_drag_delta();
 
                     //- kto: Gizmo
-                    Entity *selected_entity = entity_from_handle(state->selected_entity);
+                    F4 gizmo_pos = {0};
+                    I1 has_selection = entity_selection_average_pos(&gizmo_pos);
                     if (view->gizmo_active_axis == AXIS__INVALID) {
                       // - kti: Find axis closest to mouse.
                       view->gizmo_hot_axis = AXIS__INVALID;
@@ -1293,11 +1331,11 @@ Internal void lane(Arena *arena) {
                       F4 rect = view->viewport_box->rect;
                       F2 mouse_local = ui_mouse() - (F2){rect[0], rect[1]};
 
-                      if (!entity_is_nil(selected_entity) && selected_entity->flags & ENTITY_FLAG__SHAPE && rect[2] > 0.0f && rect[3] > 0.0f) {
+                      if (has_selection && rect[2] > 0.0f && rect[3] > 0.0f) {
                         M4F view_projection = camera_view_projection(view->camera, rect[2], rect[3]);
 
                         for (L1 axis = 0; axis < AXIS3_COUNT; axis += 1) {
-                          F4 begin_world = F4_with_w(selected_entity->pos, 1.0f);
+                          F4 begin_world = F4_with_w(gizmo_pos, 1.0f);
                           F4 end_world = begin_world;
                           end_world[axis] += 1.0f;
                           F4 begin_clip = mul_M4F_F4(view_projection, begin_world);
@@ -1331,9 +1369,9 @@ Internal void lane(Arena *arena) {
                     I1 mouse_captured = view->gizmo_active_axis != AXIS__INVALID;
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED &&
                         view->gizmo_hot_axis != AXIS__INVALID &&
-                        !entity_is_nil(selected_entity)) {
+                        has_selection) {
                       view->gizmo_active_axis = view->gizmo_hot_axis;
-                      view->gizmo_drag_start_pos = selected_entity->pos;
+                      view->gizmo_drag_applied_delta = 0.0f;
                       mouse_captured = 1;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
@@ -1341,12 +1379,17 @@ Internal void lane(Arena *arena) {
                     //- kti: Move along axis when dragging.
                     if (mouse_captured &&
                         viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING &&
-                        !entity_is_nil(selected_entity)) {
+                        has_selection) {
                       F1 axis_len_sq = dot_F2(view->gizmo_drag_axis_screen, view->gizmo_drag_axis_screen);
                       if (axis_len_sq > 1.0f) {
                         F1 world_delta = dot_F2(drag_delta, view->gizmo_drag_axis_screen) / axis_len_sq;
-                        selected_entity->pos = view->gizmo_drag_start_pos;
-                        selected_entity->pos[view->gizmo_active_axis] += world_delta;
+                        F1 delta = world_delta - view->gizmo_drag_applied_delta;
+                        for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+                          if (entity->flags & ENTITY_FLAG__SELECTED) {
+                            entity->pos[view->gizmo_active_axis] += delta;
+                          }
+                        }
+                        view->gizmo_drag_applied_delta = world_delta;
                       }
                     }
 
@@ -1411,7 +1454,7 @@ Internal void lane(Arena *arena) {
 
                       F1 min_hit_distance = 0.001f;
                       F1 closest_t = F1_MAX;
-                      Entity_Handle selected_entity = entity_handle_zero();
+                      Entity_Handle picked_entity = entity_handle_zero();
                       for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
 
                         F1 t = 0.0f;
@@ -1425,11 +1468,14 @@ Internal void lane(Arena *arena) {
 
                         if (t > min_hit_distance && t < closest_t) {
                           closest_t = t;
-                          selected_entity = entity_handle(e);
+                          picked_entity = entity_handle(e);
                         }
                       }
 
-                      state->selected_entity = selected_entity;
+                      I1 additive = !!(viewport_signal.modifiers & OS_MODIFIER_FLAG__SHIFT);
+                      if (!additive || !entity_is_nil(entity_from_handle(picked_entity))) {
+                        entity_select(picked_entity, additive);
+                      }
                     }
 
                     //- kti: Reset active axis on mouse release.
@@ -1497,21 +1543,23 @@ Internal void lane(Arena *arena) {
                   }
                 }
 
-                //- kti: Draw extra stuff for selected entity.
-                Entity *selected = entity_from_handle(state->selected_entity);
-                if (!entity_is_nil(selected) && selected->flags & ENTITY_FLAG__SHAPE) {
-                  Mesh *mesh = &state->meshes[selected->shape];
-                  M4F transform = mul_M4F(scale_M4F(selected->size), translate_M4F(selected->pos));
+                //- kti: Draw extra stuff for selected entities.
+                for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+                  if (entity->flags & ENTITY_FLAG__SELECTED && entity->flags & ENTITY_FLAG__SHAPE) {
+                    Mesh *mesh = &state->meshes[entity->shape];
+                    M4F transform = mul_M4F(scale_M4F(entity->size), translate_M4F(entity->pos));
+                    F4 color = {0.619f, 0.823f, 1.0f, 1.0f};
+                    dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
+                                    mesh->index_buffer, 0, mesh->index_count,
+                                    transform, color, 3.0f);
+                  }
+                }
 
-                  //- kti: Outline.
-                  F4 color = {0.619f, 0.823f, 1.0f, 1.0f};
-                  dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
-                                  mesh->index_buffer, 0, mesh->index_count,
-                                  transform, color, 3.0f);
-
-                  //- kti: Gizmo
+                //- kti: Gizmo.
+                F4 gizmo_pos = {0};
+                if (entity_selection_average_pos(&gizmo_pos)) {
                   dr_clear_depth();
-                  mesh = &state->meshes[SHAPE__BOX];
+                  Mesh *mesh = &state->meshes[SHAPE__BOX];
                   F1 thickness = 0.025f; 
 
                   for (L1 axis = 0; axis < AXIS3_COUNT; axis += 1) {
@@ -1519,16 +1567,16 @@ Internal void lane(Arena *arena) {
                     I1 is_active = view->gizmo_active_axis == axis;
                     F1 axis_thickness = thickness * (is_hot ? 1.45f : 1.0f);
                     F1 offset = (axis == 0) ? -axis_thickness*0.5f : axis_thickness*0.5f;
-                    F4 world = selected->pos;
+                    F4 world = gizmo_pos;
                     world[axis] += 0.5f+offset;
 
                     F4 scale = (F4){axis_thickness, axis_thickness, axis_thickness, 1.0f};
                     scale[axis] = 1.0f;
 
-                    transform = mul_M4F(scale_M4F(scale), translate_M4F(world));
+                    M4F transform = mul_M4F(scale_M4F(scale), translate_M4F(world));
 
                     F1 base_brightness = is_active ? 0.35f : 0.0f;
-                    color = (F4){base_brightness, base_brightness, base_brightness, 1.0f};
+                    F4 color = (F4){base_brightness, base_brightness, base_brightness, 1.0f};
                     color[axis] = is_active ? 1.0f : 0.8f;
 
                     dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,

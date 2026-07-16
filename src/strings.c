@@ -225,25 +225,80 @@ Internal String8 push_str8_copy(Arena *arena, String8 str) {
   return new;
 }
 
+Internal I1 try_F1_from_str8(String8 string, F1 *out) {
+  B1 *ptr = string.str;
+  B1 *opl = string.str + string.len;
+
+  while (ptr < opl && char_is_space(ptr[0]))  { ptr += 1; }
+  while (opl > ptr && char_is_space(opl[-1])) { opl -= 1; }
+
+  D1 sign = 1.0;
+  if (ptr < opl && (ptr[0] == '+' || ptr[0] == '-')) {
+    sign = (ptr[0] == '-') ? -1.0 : 1.0;
+    ptr += 1;
+  }
+
+  D1 mantissa = 0.0;
+  SL1 exponent = 0;
+  L1 digit_count = 0;
+  for (; ptr < opl && '0' <= ptr[0] && ptr[0] <= '9'; ptr += 1) {
+    mantissa = mantissa*10.0 + (D1)(ptr[0] - '0');
+    digit_count += 1;
+  }
+  if (ptr < opl && ptr[0] == '.') {
+    ptr += 1;
+    for (; ptr < opl && '0' <= ptr[0] && ptr[0] <= '9'; ptr += 1) {
+      mantissa = mantissa*10.0 + (D1)(ptr[0] - '0');
+      exponent -= 1;
+      digit_count += 1;
+    }
+  }
+
+  I1 is_valid = (digit_count > 0);
+
+  if (is_valid && ptr < opl && (ptr[0] == 'e' || ptr[0] == 'E')) {
+    ptr += 1;
+    SL1 exp_sign = 1;
+    if (ptr < opl && (ptr[0] == '+' || ptr[0] == '-')) {
+      exp_sign = (ptr[0] == '-') ? -1 : 1;
+      ptr += 1;
+    }
+    L1 exp_digit_count = 0;
+    SL1 exp_value = 0;
+    for (; ptr < opl && '0' <= ptr[0] && ptr[0] <= '9'; ptr += 1) {
+      exp_value = Min(exp_value*10 + (ptr[0] - '0'), 512);
+      exp_digit_count += 1;
+    }
+    exponent += exp_sign*exp_value;
+    is_valid = (exp_digit_count > 0);
+  }
+
+  is_valid = is_valid && (ptr == opl);
+
+  if (is_valid && mantissa != 0.0) {
+    LocalPersist D1 pow10[9] = { 1e1, 1e2, 1e4, 1e8, 1e16, 1e32, 1e64, 1e128, 1e256 };
+    SL1 e = Clamp(-511, exponent, 511);
+    D1 scale = 1.0;
+    for (L1 bit = 0, n = (e < 0) ? -e : e; n > 0; n >>= 1, bit += 1) {
+      if (n & 1) {
+        scale *= pow10[bit];
+      }
+    }
+    mantissa = (e < 0) ? mantissa/scale : mantissa*scale;
+    is_valid = (mantissa <= F1_MAX);
+  }
+
+  if (is_valid) {
+    out[0] = (F1)(sign*mantissa);
+  }
+
+  return is_valid;
+}
+
 Internal F1 F1_from_str8(String8 string) {
-  Temp_Arena scratch = scratch_begin(0, 0);
-  String8 cstring = push_str8_copy(scratch.arena, string);
-  SB1 *start = (SB1 *)cstring.str;
-  SB1 *end = 0;
-  F1 value = strtof(start, &end);
-
-  L1 end_idx = end-start;
-  while (end_idx < string.len && char_is_space(string.str[end_idx])) {
-    end_idx += 1;
-  }
-
-  I1 is_valid = (end != start && end_idx == string.len && value == value && value >= -F1_MAX && value <= F1_MAX);
-  if (!is_valid) {
-    value = 0;
-  }
-
-  scratch_end(scratch);
-  return value;
+  F1 result = 0;
+  try_F1_from_str8(string, &result);
+  return result;
 }
 
 Internal I1 str8_match(String8 a, String8 b) {

@@ -2230,7 +2230,7 @@ Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixel
 
   if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
     String8 edit_string = {ui_state->f1_edit_buffer, ui_state->f1_edit_buffer_len};
-    value[0] = F1_from_str8(edit_string);
+    try_F1_from_str8(edit_string, &value[0]);
   }
 
   if (min != 0 || max != 0) {

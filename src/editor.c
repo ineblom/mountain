@@ -539,7 +539,7 @@ Internal void cmd_push(Cmd cmd) {
   }
 }
 
-Internal UI_Signal editor_focus_panel_on_press(Panel *panel, UI_Signal signal) {
+Internal UI_Signal focus_on_press(Panel *panel, UI_Signal signal) {
   if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
     cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
   }
@@ -1143,7 +1143,7 @@ Internal void lane(Arena *arena) {
                                                 UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                                 UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                 top_side);
-                              editor_focus_panel_on_press(panel, ui_drag_F1(entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
+                              focus_on_press(panel, ui_drag_F1(entry->str, entry->f1, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
                             }
                           } break;
                           case LISTER_ENTRY_KIND__XYZ: {
@@ -1158,11 +1158,11 @@ Internal void lane(Arena *arena) {
                                                        entry->str);
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                editor_focus_panel_on_press(panel, ui_drag_F1(str8("X"), &entry->f4[0][0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
+                                focus_on_press(panel, ui_drag_F1(str8("X"), &entry->f4[0][0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                editor_focus_panel_on_press(panel, ui_drag_F1(str8("Y"), &entry->f4[0][1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
+                                focus_on_press(panel, ui_drag_F1(str8("Y"), &entry->f4[0][1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                editor_focus_panel_on_press(panel, ui_drag_F1(str8("Z"), &entry->f4[0][2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
+                                focus_on_press(panel, ui_drag_F1(str8("Z"), &entry->f4[0][2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max));
                               }
                             }
                           } break;
@@ -1189,13 +1189,13 @@ Internal void lane(Arena *arena) {
                                 F1 pixels_per_unit = 300.0f;
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.1f, 27.0f, 1.0f));
-                                editor_focus_panel_on_press(panel, ui_drag_F1(str8("R"), &entry->f4[0][0], 0.0f, pixels_per_unit, 0.0f, 1.0f));
+                                focus_on_press(panel, ui_drag_F1(str8("R"), &entry->f4[0][0], 0.0f, pixels_per_unit, 0.0f, 1.0f));
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 143.0f, 1.0f));
-                                editor_focus_panel_on_press(panel, ui_drag_F1(str8("G"), &entry->f4[0][1], 0.0f, pixels_per_unit, 0.0f, 1.0f));
+                                focus_on_press(panel, ui_drag_F1(str8("G"), &entry->f4[0][1], 0.0f, pixels_per_unit, 0.0f, 1.0f));
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 256.0f, 1.0f));
-                                editor_focus_panel_on_press(panel, ui_drag_F1(str8("B"), &entry->f4[0][2], 0.0f, pixels_per_unit, 0.0f, 1.0f));
+                                focus_on_press(panel, ui_drag_F1(str8("B"), &entry->f4[0][2], 0.0f, pixels_per_unit, 0.0f, 1.0f));
                               }
                             }
                           } break;

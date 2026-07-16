@@ -2230,12 +2230,7 @@ Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixel
 
   if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
     String8 edit_string = {ui_state->f1_edit_buffer, ui_state->f1_edit_buffer_len};
-    F1 new_value = 0;
-    if (F1_from_str8(edit_string, &new_value)) {
-      value[0] = new_value;
-    } else {
-      ui_set_auto_focus_active_key(key);
-    }
+    value[0] = F1_from_str8(edit_string);
   }
 
   if (min != 0 || max != 0) {

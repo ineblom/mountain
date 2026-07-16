@@ -1181,7 +1181,6 @@ Internal void lane(Arena *arena) {
                             ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
                                               UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                               UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                              UI_BOX_FLAG__DISABLE_FOCUS_BORDER|
                                               top_side);
                             ui_set_next_omit_flags(UI_BOX_FLAG__DRAW_BORDER);
                             UI_Text_Padding(10.0f) {

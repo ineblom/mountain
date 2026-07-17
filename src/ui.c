@@ -2192,8 +2192,6 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 }
 
 Internal UI_Signal ui_drag_F1_ex(String8 str, CString display_format, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
-  // TODO: Automatic pixels_per_unit calculation (if 0)
-
   String8 key_string = str8f(ui_build_arena(), "drag_%p", value);
   UI_Key key = ui_key_from_string(ui_active_seed_key(), key_string);
   I1 is_editing = ui_is_key_auto_focus_active(key);
@@ -2214,6 +2212,14 @@ Internal UI_Signal ui_drag_F1_ex(String8 str, CString display_format, F1 *value,
                             UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
                             1,
                             key);
+  }
+
+  if (pixels_per_unit == 0.0f) {
+    pixels_per_unit = 50.0f;
+    if ((min != 0.0f || max != 0.0f) && max > min && max < F1_MAX && signal.box->rect[2] > 0.0f) {
+      D1 range = (D1)max - (D1)min;
+      pixels_per_unit = (F1)((D1)signal.box->rect[2] / range);
+    }
   }
 
   if (!is_editing && !(signal.flags & UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED) && signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {

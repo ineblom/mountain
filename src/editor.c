@@ -853,7 +853,7 @@ Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Sign
                 ? entry->f1s[value_idx]
                 : &entry->f4s[value_idx][0][component];
             F1 default_value = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->default_f1;
-            F1 pixels_per_unit = entry->kind == LISTER_ENTRY_KIND__COLOR ? 300.0f : entry->pixels_per_unit;
+            F1 pixels_per_unit = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->pixels_per_unit;
             ui_drag_F1_ex(str8(""), "%.*s%.2f", value, default_value, pixels_per_unit, entry->min, entry->max);
           }
         }
@@ -1081,13 +1081,13 @@ Internal void lane(Arena *arena) {
           lister_enums(str8("Shape"), shapes, selected_count, shape_names, SHAPE_COUNT);
 
           lister_xyzs(str8("Pos"), value_names, positions, selected_count, LISTER_APPLY__DELTA, 0.0f, 50.0f, 0.0f, 0.0f);
-          lister_xyzs(str8("Size"), value_names, sizes, selected_count, LISTER_APPLY__DELTA, 1.0f, 50.0f, 0.0f, F1_MAX);
+          lister_xyzs(str8("Size"), value_names, sizes, selected_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
 
           lister_header(str8("Material"));
 
           lister_colors(str8("Base"), value_names, base_colors, selected_count, LISTER_APPLY__SET);
-          lister_F1s(str8("Metallic"), value_names, metallics, selected_count, LISTER_APPLY__DELTA, 0.3f, 300.0f, 0.0f, 1.0f);
-          lister_F1s(str8("Roughness"), value_names, roughnesses, selected_count, LISTER_APPLY__DELTA, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_F1s(str8("Metallic"), value_names, metallics, selected_count, LISTER_APPLY__DELTA, 0.3f, 0.0f, 0.0f, 1.0f);
+          lister_F1s(str8("Roughness"), value_names, roughnesses, selected_count, LISTER_APPLY__DELTA, 0.3f, 0.0f, 0.0f, 1.0f);
           lister_colors(str8("Emissive"), value_names, emissives, selected_count, LISTER_APPLY__SET);
 
           lister_cmd(str8("Delete"), (Cmd){
@@ -1393,7 +1393,7 @@ Internal void lane(Arena *arena) {
 
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                               UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f)) {
-                                F1 pixels_per_unit = 300.0f;
+                                F1 pixels_per_unit = 0.0f;
                                 UI_Signal signals[3] = {0};
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.1f, 27.0f, 1.0f));

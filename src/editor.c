@@ -1213,15 +1213,15 @@ Internal void lane(Arena *arena) {
                                                              state->name_edit_buffer,
                                                              sizeof(state->name_edit_buffer),
                                                              &state->name_edit_buffer_len,
-                                                             (String8){entry->texts[0], *entry->text_lens[0]},
+                                                             (String8){entry->texts[0], entry->text_lens[0][0]},
                                                              str8f(ui_build_arena(), "###entity_name_%p", entry->texts[0]));
                               if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
                                 cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                               }
                               if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
                                 for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
-                                  *entry->text_lens[value_idx] = Min(state->name_edit_buffer_len, entry->text_capacities[value_idx]);
-                                  memmove(entry->texts[value_idx], state->name_edit_buffer, *entry->text_lens[value_idx]);
+                                  entry->text_lens[value_idx][0] = Min(state->name_edit_buffer_len, entry->text_capacities[value_idx]);
+                                  memmove(entry->texts[value_idx], state->name_edit_buffer, entry->text_lens[value_idx][0]);
                                 }
                               }
                             }
@@ -1234,7 +1234,7 @@ Internal void lane(Arena *arena) {
                                                   UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                                   UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                   top_side);
-                                F1 before = *entry->f1s[0];
+                                F1 before = entry->f1s[0][0];
                                 F1 after = before;
                                 UI_Signal signal = ui_drag_F1(entry->str, &after, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                                 focus_on_press(panel, signal);
@@ -1253,7 +1253,7 @@ Internal void lane(Arena *arena) {
                                                        top_side,
                                                        entry->str);
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
-                                F4 before = *entry->f4s[0];
+                                F4 before = entry->f4s[0][0];
                                 F4 after = before;
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 UI_Signal signal = ui_drag_F1(str8("X"), &after[0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
@@ -1279,7 +1279,7 @@ Internal void lane(Arena *arena) {
                                                        top_side,
                                                        entry->str);
 
-                              F4 before = *entry->f4s[0];
+                              F4 before = entry->f4s[0][0];
                               F4 after = before;
                               ui_set_next_background_color(oklch_from_linear_rgb(after));
                               ui_set_next_pref_width(ui_px(30.0f, 1.0f));
@@ -1320,10 +1320,10 @@ Internal void lane(Arena *arena) {
 
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                               UI_Pref_Width(ui_pct(1.0f/(F1)entry->enum_count, 1.0f)) {
-                                I1 enum_value = *entry->enum_values[0];
+                                I1 enum_value = entry->enum_values[0][0];
                                 I1 enum_is_mixed = 0;
                                 for (L1 value_idx = 1; value_idx < entry->value_count; value_idx += 1) {
-                                  if (*entry->enum_values[value_idx] != enum_value) {
+                                  if (entry->enum_values[value_idx][0] != enum_value) {
                                     enum_is_mixed = 1;
                                     break;
                                   }
@@ -1349,7 +1349,7 @@ Internal void lane(Arena *arena) {
                                   UI_Signal signal = ui_signal_from_box(option_box);
                                   if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
                                     for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
-                                      *entry->enum_values[value_idx] = option;
+                                      entry->enum_values[value_idx][0] = option;
                                     }
                                   }
                                 }

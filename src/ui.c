@@ -2191,14 +2191,14 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
                         key);
 }
 
-Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+Internal UI_Signal ui_drag_F1_ex(String8 str, CString display_format, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   // TODO: Automatic pixels_per_unit calculation (if 0)
 
   String8 key_string = str8f(ui_build_arena(), "drag_%p", value);
   UI_Key key = ui_key_from_string(ui_active_seed_key(), key_string);
   I1 is_editing = ui_is_key_auto_focus_active(key);
   String8 value_string = str8f(ui_build_arena(), "%.9g", value[0]);
-  String8 display_string = str8f(ui_build_arena(), "%.*s %.2f", (int)str.len, str.str, value[0]);
+  String8 display_string = str8f(ui_build_arena(), display_format, (int)str.len, str.str, value[0]);
 
   UI_Signal signal = {0};
   UI_Text_Align(UI_TEXT_ALIGN__CENTER)
@@ -2238,6 +2238,10 @@ Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixel
   }
 
   return signal;
+}
+
+Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+  return ui_drag_F1_ex(str, "%.*s %.2f", value, default_value, pixels_per_unit, min, max);
 }
 
 Internal void ui_draw(void) {

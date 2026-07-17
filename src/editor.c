@@ -190,6 +190,7 @@ struct Lister_Entry {
   Lister_Apply apply;
 
   String8 str;
+  String8 *value_names;
   B1 **texts;
   L1 **text_lens;
   L1 *text_capacities;
@@ -699,10 +700,11 @@ Internal Lister_Entry *lister_textedits(B1 **texts, L1 **text_lens, L1 *text_cap
   return entry;
 }
 
-Internal Lister_Entry *lister_F1s(String8 str, F1 **values, L1 count, Lister_Apply apply, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+Internal Lister_Entry *lister_F1s(String8 str, String8 *value_names, F1 **values, L1 count, Lister_Apply apply, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__F1) : 0;
   if (entry) {
     entry->str = str;
+    entry->value_names = value_names;
     entry->apply = apply;
     entry->f1s = values;
     entry->value_count = count;
@@ -715,10 +717,11 @@ Internal Lister_Entry *lister_F1s(String8 str, F1 **values, L1 count, Lister_App
   return entry;
 }
 
-Internal Lister_Entry *lister_xyzs(String8 str, F4 **values, L1 count, Lister_Apply apply, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+Internal Lister_Entry *lister_xyzs(String8 str, String8 *value_names, F4 **values, L1 count, Lister_Apply apply, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__XYZ) : 0;
   if (entry) {
     entry->str = str;
+    entry->value_names = value_names;
     entry->apply = apply;
     entry->f4s = values;
     entry->value_count = count;
@@ -731,10 +734,11 @@ Internal Lister_Entry *lister_xyzs(String8 str, F4 **values, L1 count, Lister_Ap
   return entry;
 }
 
-Internal Lister_Entry *lister_colors(String8 str, F4 **values, L1 count, Lister_Apply apply) {
+Internal Lister_Entry *lister_colors(String8 str, String8 *value_names, F4 **values, L1 count, Lister_Apply apply) {
   Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__COLOR) : 0;
   if (entry) {
     entry->str = str;
+    entry->value_names = value_names;
     entry->apply = apply;
     entry->f4s = values;
     entry->value_count = count;
@@ -767,6 +771,58 @@ Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
           (*entry->f4s[i])[component] += value;
         } else {
           (*entry->f4s[i])[component] = value;
+        }
+      }
+    }
+  }
+}
+
+Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Signal signal, L1 component) {
+  if (entry->value_count > 1 && signal.flags & (UI_SIGNAL_FLAG__HOVERING | UI_SIGNAL_FLAG__DRAGGING)) {
+    UI_Parent(overlay) {
+      ui_set_next_fixed_x(signal.box->rect[0]);
+      ui_set_next_fixed_y(signal.box->rect[1] + signal.box->rect[3]);
+      ui_set_next_pref_width(ui_children_sum(1.0f));
+      ui_set_next_pref_height(ui_children_sum(1.0f));
+      ui_set_next_child_layout_axis(AXIS__X);
+      ui_set_next_background_color(oklch(0.15f, 0.0f, 0.0f, 1.0f));
+      ui_set_next_corner_radius(0.0f);
+      UI_Box *tooltip = ui_build_box_from_stringf(
+          UI_BOX_FLAG__DRAW_BACKGROUND |
+          UI_BOX_FLAG__DRAW_BORDER |
+          UI_BOX_FLAG__DRAW_DROP_SHADOW,
+          "##lister_value_tooltip_%p_%llu", entry, component);
+
+      UI_Parent(tooltip) {
+        ui_set_next_pref_width(ui_children_sum(1.0f));
+        ui_set_next_pref_height(ui_children_sum(1.0f));
+        ui_set_next_child_layout_axis(AXIS__Y);
+        UI_Box *name_column = ui_build_box_from_stringf(0, "##lister_tooltip_names_%p_%llu", entry, component);
+        UI_Parent(name_column)
+        UI_Text_Padding(6.0f)
+        UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+        UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+          for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
+            UI_Box *name = ui_build_box_from_key(UI_BOX_FLAG__DRAW_TEXT, ui_key_zero());
+            ui_box_equip_display_string(name, entry->value_names[value_idx]);
+          }
+        }
+
+        ui_set_next_pref_width(ui_children_sum(1.0f));
+        ui_set_next_pref_height(ui_children_sum(1.0f));
+        ui_set_next_child_layout_axis(AXIS__Y);
+        UI_Box *value_column = ui_build_box_from_stringf(0, "##lister_tooltip_values_%p_%llu", entry, component);
+        UI_Parent(value_column)
+        UI_Text_Padding(6.0f)
+        UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+        UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+          for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
+            F1 value = entry->kind == LISTER_ENTRY_KIND__F1
+                ? entry->f1s[value_idx][0]
+                : entry->f4s[value_idx][0][component];
+            UI_Box *value_box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_TEXT, ui_key_zero());
+            ui_box_equip_display_string(value_box, str8f(ui_build_arena(), "%.2f", value));
+          }
         }
       }
     }
@@ -958,6 +1014,7 @@ Internal void lane(Arena *arena) {
           B1 **names = push_array(scratch.arena, B1 *, selected_count);
           L1 **name_lens = push_array(scratch.arena, L1 *, selected_count);
           L1 *name_capacities = push_array(scratch.arena, L1, selected_count);
+          String8 *value_names = push_array(scratch.arena, String8, selected_count);
           I1 **shapes = push_array(scratch.arena, I1 *, selected_count);
           F4 **positions = push_array(scratch.arena, F4 *, selected_count);
           F4 **sizes = push_array(scratch.arena, F4 *, selected_count);
@@ -973,6 +1030,7 @@ Internal void lane(Arena *arena) {
               names[selected_idx] = entity->name;
               name_lens[selected_idx] = &entity->name_len;
               name_capacities[selected_idx] = sizeof(entity->name);
+              value_names[selected_idx] = (String8){entity->name, entity->name_len};
               shapes[selected_idx] = &entity->shape;
               positions[selected_idx] = &entity->pos;
               sizes[selected_idx] = &entity->size;
@@ -988,15 +1046,15 @@ Internal void lane(Arena *arena) {
           lister_textedits(names, name_lens, name_capacities, selected_count);
           lister_enums(str8("Shape"), shapes, selected_count, shape_names, SHAPE_COUNT);
 
-          lister_xyzs(str8("Pos"), positions, selected_count, LISTER_APPLY__DELTA, 0.0f, 50.0f, 0.0f, 0.0f);
-          lister_xyzs(str8("Size"), sizes, selected_count, LISTER_APPLY__DELTA, 1.0f, 50.0f, 0.0f, F1_MAX);
+          lister_xyzs(str8("Pos"), value_names, positions, selected_count, LISTER_APPLY__DELTA, 0.0f, 50.0f, 0.0f, 0.0f);
+          lister_xyzs(str8("Size"), value_names, sizes, selected_count, LISTER_APPLY__DELTA, 1.0f, 50.0f, 0.0f, F1_MAX);
 
           lister_header(str8("Material"));
 
-          lister_colors(str8("Base"), base_colors, selected_count, LISTER_APPLY__SET);
-          lister_F1s(str8("Metallic"), metallics, selected_count, LISTER_APPLY__DELTA, 0.3f, 300.0f, 0.0f, 1.0f);
-          lister_F1s(str8("Roughness"), roughnesses, selected_count, LISTER_APPLY__DELTA, 0.3f, 300.0f, 0.0f, 1.0f);
-          lister_colors(str8("Emissive"), emissives, selected_count, LISTER_APPLY__SET);
+          lister_colors(str8("Base"), value_names, base_colors, selected_count, LISTER_APPLY__SET);
+          lister_F1s(str8("Metallic"), value_names, metallics, selected_count, LISTER_APPLY__DELTA, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_F1s(str8("Roughness"), value_names, roughnesses, selected_count, LISTER_APPLY__DELTA, 0.3f, 300.0f, 0.0f, 1.0f);
+          lister_colors(str8("Emissive"), value_names, emissives, selected_count, LISTER_APPLY__SET);
 
           lister_cmd(str8("Delete"), (Cmd){
             .kind = CMD_KIND__DELETE_ENTITIES,
@@ -1041,6 +1099,12 @@ Internal void lane(Arena *arena) {
         ui_push_border_color((F4){0.5f, 0.0f, 0.0f, 1.0f});
 
         F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
+        ui_set_next_fixed_rect(root_plane_rect);
+        UI_Box *overlay = ui_build_box_from_stringf(
+            UI_BOX_FLAG__FLOATING |
+            UI_BOX_FLAG__ALLOW_OVERFLOW_X |
+            UI_BOX_FLAG__ALLOW_OVERFLOW_Y,
+            "##overlay_%p", w);
 
         //- kti: Non leaf panel ui
         F1 resize_box_w = 8;
@@ -1236,9 +1300,10 @@ Internal void lane(Arena *arena) {
                                                   top_side);
                                 F1 before = entry->f1s[0][0];
                                 F1 after = before;
-                                UI_Signal signal = ui_drag_F1(entry->str, &after, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                UI_Signal signal = ui_drag_F1_ex(entry->str, entry->value_count == 1 ? "%.*s %.2f" : "%.*s", &after, entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
                                 focus_on_press(panel, signal);
                                 lister_apply_F1s(entry, before, after);
+                                lister_value_tooltip(overlay, entry, signal, 0);
                               }
                             }
                           } break;
@@ -1255,16 +1320,20 @@ Internal void lane(Arena *arena) {
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
                                 F4 before = entry->f4s[0][0];
                                 F4 after = before;
+                                UI_Signal signals[3] = {0};
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                UI_Signal signal = ui_drag_F1(str8("X"), &after[0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
-                                focus_on_press(panel, signal);
+                                signals[0] = ui_drag_F1_ex(str8("X"), entry->value_count == 1 ? "%.*s %.2f" : "%.*s", &after[0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                focus_on_press(panel, signals[0]);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                signal = ui_drag_F1(str8("Y"), &after[1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
-                                focus_on_press(panel, signal);
+                                signals[1] = ui_drag_F1_ex(str8("Y"), entry->value_count == 1 ? "%.*s %.2f" : "%.*s", &after[1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                focus_on_press(panel, signals[1]);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                signal = ui_drag_F1(str8("Z"), &after[2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
-                                focus_on_press(panel, signal);
+                                signals[2] = ui_drag_F1_ex(str8("Z"), entry->value_count == 1 ? "%.*s %.2f" : "%.*s", &after[2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                focus_on_press(panel, signals[2]);
                                 lister_apply_F4s(entry, before, after);
+                                for (L1 component = 0; component < 3; component += 1) {
+                                  lister_value_tooltip(overlay, entry, signals[component], component);
+                                }
                               }
                             }
                           } break;
@@ -1291,19 +1360,23 @@ Internal void lane(Arena *arena) {
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                               UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f)) {
                                 F1 pixels_per_unit = 300.0f;
+                                UI_Signal signals[3] = {0};
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.1f, 27.0f, 1.0f));
-                                UI_Signal signal = ui_drag_F1(str8("R"), &after[0], 0.0f, pixels_per_unit, 0.0f, 1.0f);
-                                focus_on_press(panel, signal);
+                                signals[0] = ui_drag_F1_ex(str8("R"), entry->value_count == 1 ? "%.*s %.2f" : "%.*s", &after[0], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                focus_on_press(panel, signals[0]);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 143.0f, 1.0f));
-                                signal = ui_drag_F1(str8("G"), &after[1], 0.0f, pixels_per_unit, 0.0f, 1.0f);
-                                focus_on_press(panel, signal);
+                                signals[1] = ui_drag_F1_ex(str8("G"), entry->value_count == 1 ? "%.*s %.2f" : "%.*s", &after[1], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                focus_on_press(panel, signals[1]);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 256.0f, 1.0f));
-                                signal = ui_drag_F1(str8("B"), &after[2], 0.0f, pixels_per_unit, 0.0f, 1.0f);
-                                focus_on_press(panel, signal);
+                                signals[2] = ui_drag_F1_ex(str8("B"), entry->value_count == 1 ? "%.*s %.2f" : "%.*s", &after[2], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                focus_on_press(panel, signals[2]);
                                 lister_apply_F4s(entry, before, after);
+                                for (L1 component = 0; component < 3; component += 1) {
+                                  lister_value_tooltip(overlay, entry, signals[component], component);
+                                }
                               }
                             }
                           } break;

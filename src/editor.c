@@ -778,7 +778,24 @@ Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
 }
 
 Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Signal signal, L1 component) {
-  if (entry->value_count > 1 && signal.flags & (UI_SIGNAL_FLAG__HOVERING | UI_SIGNAL_FLAG__DRAGGING)) {
+  String8 tooltip_id = str8f(ui_build_arena(), "##lister_value_tooltip_%p_%llu", entry, component);
+  UI_Key tooltip_key = ui_key_from_string(overlay->key, tooltip_id);
+  UI_Box *previous_tooltip = ui_box_from_key(tooltip_key);
+  I1 tooltip_hovered = !ui_box_is_nil(previous_tooltip) && rect_contains(previous_tooltip->rect, ui_mouse());
+  I1 tooltip_dragging = 0;
+  if (!ui_box_is_nil(previous_tooltip)) {
+    UI_Box *active_box = ui_box_from_key(ui_active_key(OS_MOUSE_BUTTON__LEFT));
+    for (UI_Box *box = active_box; !ui_box_is_nil(box); box = box->parent) {
+      if (box == previous_tooltip) {
+        tooltip_dragging = 1;
+        break;
+      }
+    }
+  }
+
+  if (entry->value_count > 1 &&
+      (signal.flags & (UI_SIGNAL_FLAG__HOVERING | UI_SIGNAL_FLAG__DRAGGING) ||
+       tooltip_hovered || tooltip_dragging)) {
     UI_Parent(overlay) {
       ui_set_next_fixed_x(signal.box->rect[0]);
       ui_set_next_fixed_y(signal.box->rect[1] + signal.box->rect[3]);
@@ -788,10 +805,11 @@ Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Sign
       ui_set_next_background_color(oklch(0.15f, 0.0f, 0.0f, 1.0f));
       ui_set_next_corner_radius(0.0f);
       UI_Box *tooltip = ui_build_box_from_stringf(
+          UI_BOX_FLAG__MOUSE_CLICKABLE |
           UI_BOX_FLAG__DRAW_BACKGROUND |
           UI_BOX_FLAG__DRAW_BORDER |
           UI_BOX_FLAG__DRAW_DROP_SHADOW,
-          "##lister_value_tooltip_%p_%llu", entry, component);
+          "%.*s", (int)tooltip_id.len, tooltip_id.str);
 
       UI_Parent(tooltip) {
         ui_set_next_pref_width(ui_children_sum(1.0f));
@@ -808,23 +826,39 @@ Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Sign
           }
         }
 
+        F1 value_width = 0.0f;
+        F1 value_height = 0.0f;
+        for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
+          F1 value = entry->kind == LISTER_ENTRY_KIND__F1
+              ? entry->f1s[value_idx][0]
+              : entry->f4s[value_idx][0][component];
+          String8 value_string = str8f(ui_build_arena(), "%.2f", value);
+          F2 value_dim = fc_dim_from_tag_size_string(
+              ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), value_string);
+          value_width = Max(value_width, value_dim[0]);
+          value_height = Max(value_height, value_dim[1]);
+        }
+        value_width += 12.0f;
+        value_height += 12.0f;
+
         ui_set_next_pref_width(ui_children_sum(1.0f));
         ui_set_next_pref_height(ui_children_sum(1.0f));
         ui_set_next_child_layout_axis(AXIS__Y);
         UI_Box *value_column = ui_build_box_from_stringf(0, "##lister_tooltip_values_%p_%llu", entry, component);
         UI_Parent(value_column)
-        UI_Text_Padding(6.0f)
-        UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-        UI_Pref_Height(ui_text_dim(0.0f, 1.0f)) {
+        UI_Pref_Width(ui_px(value_width, 1.0f))
+        UI_Pref_Height(ui_px(value_height, 1.0f)) {
           for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
-            F1 value = entry->kind == LISTER_ENTRY_KIND__F1
-                ? entry->f1s[value_idx][0]
-                : entry->f4s[value_idx][0][component];
-            UI_Box *value_box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_TEXT, ui_key_zero());
-            ui_box_equip_display_string(value_box, str8f(ui_build_arena(), "%.2f", value));
+            F1 *value = entry->kind == LISTER_ENTRY_KIND__F1
+                ? entry->f1s[value_idx]
+                : &entry->f4s[value_idx][0][component];
+            F1 default_value = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->default_f1;
+            F1 pixels_per_unit = entry->kind == LISTER_ENTRY_KIND__COLOR ? 300.0f : entry->pixels_per_unit;
+            ui_drag_F1_ex(str8(""), "%.*s%.2f", value, default_value, pixels_per_unit, entry->min, entry->max);
           }
         }
       }
+      ui_signal_from_box(tooltip);
     }
   }
 }

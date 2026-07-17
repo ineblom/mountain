@@ -1629,7 +1629,7 @@ Internal void lane(Arena *arena) {
                   if (entity->flags & ENTITY_FLAG__SELECTED && entity->flags & ENTITY_FLAG__SHAPE) {
                     Mesh *mesh = &state->meshes[entity->shape];
                     M4F transform = mul_M4F(scale_M4F(entity->size), translate_M4F(entity->pos));
-                    F4 color = {0.619f, 0.823f, 1.0f, 1.0f};
+                    F4 color = {0.9f, 0.0f, 0.9f, 1.0f};
                     dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
                                     mesh->index_buffer, 0, mesh->index_count,
                                     transform, color, 3.0f);

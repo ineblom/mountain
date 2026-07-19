@@ -1,43 +1,24 @@
 #!/bin/sh
 
-glslangValidator -S vert -V shaders/shader.vert \
-  --glsl-version 460 --target-env spirv1.5 -o ./shaders/bloat.spv
-if [ $? -eq 0 ]; then
-  spirv-opt ./shaders/bloat.spv -o ./shaders/shader.vert.spv --skip-validation
-  rm ./shaders/bloat.spv
+set -eu
+
+if ! command -v glslangValidator >/dev/null 2>&1; then
+  echo "glslangValidator was not found on PATH." >&2
+  exit 1
+fi
+if ! command -v spirv-opt >/dev/null 2>&1; then
+  echo "spirv-opt was not found on PATH." >&2
+  exit 1
 fi
 
-glslangValidator -S frag -V shaders/shader.frag \
-  --glsl-version 460 --target-env spirv1.5 -o ./shaders/bloat.spv
-if [ $? -eq 0 ]; then
-  spirv-opt ./shaders/bloat.spv -o ./shaders/shader.frag.spv --skip-validation
-  rm ./shaders/bloat.spv
-fi
+TEMP_SPV="shaders/.mountain-shader.tmp.spv"
+trap 'rm -f "$TEMP_SPV"' EXIT HUP INT TERM
 
-glslangValidator -S vert -V shaders/mesh.vert \
-  --glsl-version 460 --target-env spirv1.5 -o ./shaders/bloat.spv
-if [ $? -eq 0 ]; then
-  spirv-opt ./shaders/bloat.spv -o ./shaders/mesh.vert.spv --skip-validation
-  rm ./shaders/bloat.spv
-fi
-
-glslangValidator -S frag -V shaders/mesh.frag \
-  --glsl-version 460 --target-env spirv1.5 -o ./shaders/bloat.spv
-if [ $? -eq 0 ]; then
-  spirv-opt ./shaders/bloat.spv -o ./shaders/mesh.frag.spv --skip-validation
-  rm ./shaders/bloat.spv
-fi
-
-glslangValidator -S vert -V shaders/mesh_outline.vert \
-  --glsl-version 460 --target-env spirv1.5 -o ./shaders/bloat.spv
-if [ $? -eq 0 ]; then
-  spirv-opt ./shaders/bloat.spv -o ./shaders/mesh_outline.vert.spv --skip-validation
-  rm ./shaders/bloat.spv
-fi
-
-glslangValidator -S frag -V shaders/mesh_outline.frag \
-  --glsl-version 460 --target-env spirv1.5 -o ./shaders/bloat.spv
-if [ $? -eq 0 ]; then
-  spirv-opt ./shaders/bloat.spv -o ./shaders/mesh_outline.frag.spv --skip-validation
-  rm ./shaders/bloat.spv
-fi
+for SOURCE_PATH in shaders/*.vert shaders/*.frag; do
+  STAGE="${SOURCE_PATH##*.}"
+  OUTPUT_PATH="$SOURCE_PATH.spv"
+  echo "Compiling $SOURCE_PATH"
+  glslangValidator -S "$STAGE" -V "$SOURCE_PATH" \
+    --glsl-version 460 --target-env spirv1.5 -o "$TEMP_SPV"
+  spirv-opt "$TEMP_SPV" -o "$OUTPUT_PATH"
+done

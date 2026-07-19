@@ -331,7 +331,7 @@ Internal void dr_text_run(FC_Run run, F2 pos, F4 color) {
   for (L1 i = 0; i < run.pieces.count; i += 1) {
     FC_Piece *piece = &run.pieces.v[i];
     SW4 subrect = piece->subrect;
-    SW2 offset = piece->offset;
+    F2 offset = piece->offset;
 
     F1 dst_w = (F1)subrect[2] * piece->scale;
     F1 dst_h = (F1)subrect[3] * piece->scale;

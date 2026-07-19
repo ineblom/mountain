@@ -1,40 +1,74 @@
 #!/bin/sh
 
-COMPILER="gcc"
 WARN="-Wall -Wno-unused-function -Wno-unused-variable"
 DEFS="-DDEV=1"
-INC="-I/usr/include/freetype2"
-LIB="-lm -lwayland-client -lwayland-cursor -lxkbcommon -lfreetype"
-OPT="-maes -mssse3 -fno-omit-frame-pointer" # -march=native  
-# OPT="-O0 -g3 -gdwarf-4 -fno-omit-frame-pointer -fno-optimize-sibling-calls -maes -mssse3" # -march=native  
+OPT="-fno-omit-frame-pointer"
+
+case "$(uname -s)" in
+  Darwin)
+    COMPILER="${CC:-clang}"
+    LANGUAGE="-x objective-c"
+    LANGUAGE_END="-x none"
+    LIB="-lm -framework Cocoa -framework QuartzCore"
+    INC="-I../deps/freetype/include -I../deps/vulkan/include -I../deps/wayland"
+
+    if [ -n "$VULKAN_SDK" ] && [ -d "$VULKAN_SDK/lib" ]; then
+      LIB="-L$VULKAN_SDK/lib -Wl,-rpath,$VULKAN_SDK/lib $LIB"
+    fi
+    ;;
+  *)
+    COMPILER="${CC:-gcc}"
+    LANGUAGE=""
+    LANGUAGE_END=""
+    INC="-I../deps/freetype/include -I../deps/vulkan/include -I../deps/wayland"
+    LIB="-lm -lwayland-client -lwayland-cursor -lxkbcommon"
+    OPT="$OPT -maes -mssse3"
+    ;;
+esac
+
+./deps/freetype/build.sh || exit $?
+LIB="../deps/freetype/build/libfreetype.a $LIB"
 
 echo Building...
 
-if [ "$1" = "META" ]; then
-  cd src
-  $COMPILER $WARN $DEFS $INC $LIB $OPT -DMETA_APP=1 build.c -o ../meta
-  BUILD_STATUS=$?
-  cd ..
-
-  if [ $BUILD_STATUS -eq 0 ]; then
-    echo META build successful, running...
-    ./meta
-  else
-    echo META build failed
-    exit
+SHADERS_DIRTY=0
+for SHADER_SOURCE in shaders/*.vert shaders/*.frag; do
+  if [ ! -f "$SHADER_SOURCE.spv" ] || [ "$SHADER_SOURCE" -nt "$SHADER_SOURCE.spv" ]; then
+    SHADERS_DIRTY=1
+    break
   fi
-
-  echo "Meta program done."
+done
+if [ $SHADERS_DIRTY -eq 1 ]; then
+  echo "Building shaders..."
+  ./build-shaders.sh || exit $?
 fi
 
-cd src
-$COMPILER $WARN $DEFS $INC $LIB $OPT build.c -o ../m
+if [ "$1" = "META" ]; then
+  cd src || exit 1
+  $COMPILER $LANGUAGE $WARN $DEFS $INC $OPT -DMETA_APP=1 build.c -o ../meta $LANGUAGE_END $LIB
+  BUILD_STATUS=$?
+  cd .. || exit 1
+
+  if [ $BUILD_STATUS -eq 0 ]; then
+    echo "META build successful."
+    ./meta
+  else
+    echo "META build failed."
+    exit $BUILD_STATUS
+  fi
+fi
+
+cd src || exit 1
+$COMPILER $LANGUAGE $WARN $DEFS $INC $OPT build.c -o ../m $LANGUAGE_END $LIB
 BUILD_STATUS=$?
-cd ..
+cd .. || exit 1
 
 if [ $BUILD_STATUS -eq 0 ]; then
-  echo Build successful, running...
-  ./m
+  echo "Build successful."
+  if [ "${BUILD_ONLY:-0}" != "1" ]; then
+    ./m
+  fi
 else
-  echo Build failed
+  echo "Build failed."
+  exit $BUILD_STATUS
 fi

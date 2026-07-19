@@ -9,7 +9,11 @@
 #define Volatile     volatile
 #define ThreadLocal  _Thread_local
 #define W_           __attribute__((__stdcall__)) __attribute__((__force_align_arg_pointer__))
+#if defined(__APPLE__)
+#define Read_Only    const __attribute__((section("__TEXT,__const")))
+#else
 #define Read_Only    const __attribute__((section(".rodata")))
+#endif
 
 typedef float     F1;
 typedef double    D1;
@@ -50,8 +54,8 @@ typedef short          SW4 VEC_TYPE(4, short);
 
 typedef void VoidProc(void);
 
-#define F1_MAX 3.4028234664e+38
-#define F1_MIN 1.1754943508e-38
+#define F1_MAX 3.4028234664e+38f
+#define F1_MIN 1.1754943508e-38f
 #define I1_MAX 0xFFFFFFFF
 #define L1_MAX 0xFFFFFFFFFFFFFFFF
 
@@ -64,10 +68,10 @@ Inline I1 LeSL1(L1 a, L1 b) { return (SL1)a <= (SL1)b; }
 Inline I1 LtSI1(I1 a, I1 b) { return (SI1)a <  (SI1)b; }
 Inline I1 LtSL1(L1 a, L1 b) { return (SL1)a <  (SL1)b; }
 
-Inline void BarC(void) { asm volatile("":::"memory"); } // Complier Barrier
-Inline void BarM(void) { __builtin_ia32_mfence(); }     // Memory Barrier
-Inline void BarR(void) { __builtin_ia32_lfence();}      // Read Barrier
-Inline void BarW(void) { __builtin_ia32_sfence();}      // Write Barrier
+Inline void BarC(void) { __atomic_signal_fence(__ATOMIC_SEQ_CST); } // Compiler Barrier
+Inline void BarM(void) { __atomic_thread_fence(__ATOMIC_SEQ_CST); } // Memory Barrier
+Inline void BarR(void) { __atomic_thread_fence(__ATOMIC_ACQUIRE); } // Read Barrier
+Inline void BarW(void) { __atomic_thread_fence(__ATOMIC_RELEASE); } // Write Barrier
 
 // TODO(kti): Use rdtsc for faster clock query.
 // https://github.com/colrdavidson/spall-web/blob/master/examples/manual_tracing/advanced_threads_example_linux.c
@@ -81,35 +85,27 @@ Inline L1 ClockL1(void) {
   asm volatile("rdtsc":"=a"(aa),"=d"(dd));
   return (L1_(dd) << 32) | L1_(aa);
 }*/
-Inline void Pause(void) { asm volatile("pause":::"memory"); }
+Inline void Pause(void) {
+#if defined(__aarch64__)
+  asm volatile("yield":::"memory");
+#elif defined(__x86_64__) || defined(__i386__)
+  asm volatile("pause":::"memory");
+#else
+  BarC();
+#endif
+}
 
 Inline I1 atomic_add_I1(I1 *a, I1 v) {
-  asm volatile("lock xaddl %0,%1"
-               : "=r"(v),"=m"(*a)
-               : "0"(v),"m"(*a)
-               : "memory","cc");
-  return v;
+  return __atomic_fetch_add(a, v, __ATOMIC_SEQ_CST);
 }
 Inline L1 atomic_add_L1(L1 *a, L1 v) {
-  asm volatile("lock xaddq %0,%1"
-               : "=r"(v),"=m"(*a)
-               : "0"(v),"m"(*a)
-               : "memory","cc");
-  return v;
+  return __atomic_fetch_add(a, v, __ATOMIC_SEQ_CST);
 }
 Inline I1 atomic_swap_I1(I1 *a, I1 v) {
-  asm volatile("xchgl %0,%1"
-               : "=r"(v),"=m"(*a)
-               : "0"(v),"m"(*a)
-               : "memory");
-  return v;
+  return __atomic_exchange_n(a, v, __ATOMIC_SEQ_CST);
 }
 Inline L1 atomic_swap_L1(L1 *a, L1 v) {
-  asm volatile("xchgq %0,%1"
-               : "=r"(v),"=m"(*a)
-               : "0"(v),"m"(*a)
-               : "memory");
-  return v;
+  return __atomic_exchange_n(a, v, __ATOMIC_SEQ_CST);
 }
 
 #define DeferLoop(a, b) for (int _i_ = ((a), 0); !_i_; _i_ += 1, (b))

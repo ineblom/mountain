@@ -118,12 +118,16 @@ SI1 main(void) {
   }
 
   OS_Thread *threads = push_array(threads_arena, OS_Thread, thread_count);
-  for (L1 i = 0; i < thread_count; i += 1) {
+  for (L1 i = 1; i < thread_count; i += 1) {
     LaneCtx *lane_ctx = lane_contexts + i;
     threads[i] = os_thread_launch(&lane_thread_entrypoint, lane_ctx);
   }
 
-  for (L1 i = 0; i < thread_count; i += 1) {
+  // Lane zero owns the main thread. This is required by AppKit and is also
+  // useful for other platform APIs that attach state to the process thread.
+  lane_thread_entrypoint(&lane_contexts[0]);
+
+  for (L1 i = 1; i < thread_count; i += 1) {
     os_thread_join(threads[i]);
   }
 

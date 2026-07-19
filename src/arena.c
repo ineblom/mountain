@@ -27,7 +27,7 @@ Internal Arena *arena_alloc(L1 max_size) {
 }
 
 Internal void arena_release(Arena *arena) {
-  os_release(arena, arena->reserved);
+  os_memory_release(arena, arena->reserved);
 }
 
 Inline L1 arena_pos(Arena *arena) {

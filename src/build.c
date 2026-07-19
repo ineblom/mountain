@@ -39,6 +39,7 @@ NoInline void WrmEnd(void) { Crash(1); }
 //- kti: Core
 #include "arena.c"
 #include "strings.c"
+#include "hash.c"
 #include "os.c"
 #include "lane.c"
 #include "profile.c"

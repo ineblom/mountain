@@ -11,3 +11,4 @@ shaders/*.spv
 **/*.meta.c
 tags
 *.rdi
+deps/*/build/

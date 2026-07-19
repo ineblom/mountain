@@ -1,7 +1,17 @@
 #if (HEADER)
 #define VK_NO_PROTOTYPES
+#if defined(__APPLE__)
+#define VK_USE_PLATFORM_METAL_EXT
+#else
 #define VK_USE_PLATFORM_WAYLAND_KHR
-#include "vulkan.h"
+#endif
+#include <vulkan/vulkan.h>
+
+#if defined(__APPLE__)
+#define GFX_VK_PLATFORM_FUNCTIONS X(vkCreateMetalSurfaceEXT)
+#else
+#define GFX_VK_PLATFORM_FUNCTIONS X(vkCreateWaylandSurfaceKHR)
+#endif
 
 #define VK_CORE_FUNCTIONS \
   X(vkCreateInstance) \
@@ -63,8 +73,6 @@
   X(vkCmdCopyBuffer) \
   X(vkCmdDraw) \
   X(vkCmdDrawIndexed) \
-  X(vkCreateWaylandSurfaceKHR) \
-  X(vkGetPhysicalDeviceWaylandPresentationSupportKHR) \
   X(vkCmdPushConstants) \
   X(vkCreateImage) \
   X(vkGetImageMemoryRequirements) \
@@ -81,7 +89,8 @@
   X(vkFreeMemory) \
   X(vkDestroyFence) \
   X(vkGetDeviceProcAddr) \
-  X(vkDestroySemaphore)
+  X(vkDestroySemaphore) \
+  GFX_VK_PLATFORM_FUNCTIONS
 
 #define VK_EXTENSION_FUNCTIONS \
   X(vkCreateDebugReportCallbackEXT) \
@@ -468,14 +477,14 @@ Internal void gfx_vk_create_shader_stages(Arena *arena, String8 paths[2],
   for (L1 i = 0; i < ArrayCount(stage_flags); i += 1) {
     String8 code = os_read_entire_file(arena, paths[i]);
     modules[i] = VK_NULL_HANDLE;
-    if (code.len > 0) {
-      VkShaderModuleCreateInfo shader_ci = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = code.len,
-        .pCode = (const uint32_t *)code.str,
-      };
-      vkCreateShaderModule(gfx_state->device, &shader_ci, 0, &modules[i]);
-    }
+    Assert(code.len > 0 && (code.len % sizeof(uint32_t)) == 0);
+    VkShaderModuleCreateInfo shader_ci = {
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = code.len,
+      .pCode = (const uint32_t *)code.str,
+    };
+    VkResult result = vkCreateShaderModule(gfx_state->device, &shader_ci, 0, &modules[i]);
+    Assert(result == VK_SUCCESS && modules[i] != VK_NULL_HANDLE);
     stages[i] = (VkPipelineShaderStageCreateInfo) {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
       .stage = stage_flags[i],
@@ -487,7 +496,9 @@ Internal void gfx_vk_create_shader_stages(Arena *arena, String8 paths[2],
 
 Internal void gfx_vk_destroy_shader_modules(VkShaderModule modules[2]) {
   for (L1 i = 0; i < 2; i += 1) {
-    vkDestroyShaderModule(gfx_state->device, modules[i], 0);
+    if (modules[i] != VK_NULL_HANDLE) {
+      vkDestroyShaderModule(gfx_state->device, modules[i], 0);
+    }
   }
 }
 
@@ -751,9 +762,14 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
 
     VkCommandBuffer cmd = gfx_vk_immediate_begin();
 
-    if (pixels != 0) {
-      //- kti: Upload to staging buffer.
-      memmove(staging.ptr, pixels, image_size);
+    if (pixels != 0 || usage == GFX_TEXTURE_USAGE__DYNAMIC) {
+      //- kti: Upload to staging buffer. Empty dynamic textures must start
+      // transparent because atlas filtering samples their unused texels.
+      if (pixels != 0) {
+        memmove(staging.ptr, pixels, image_size);
+      } else {
+        MemoryZero(staging.ptr, image_size);
+      }
 
       //- kti: Upload via command buffer.
       gfx_vk_transition_image_layout(cmd, texture->image.image,
@@ -891,7 +907,28 @@ Internal void gfx_init() {
   ////////////////////////////////
   //~ kti: Load Core Procedures
 
-  void *lib = os_library_open(str8("libvulkan.so.1"));
+  void *lib = 0;
+#if defined(__APPLE__)
+  CString vulkan_sdk = getenv("VULKAN_SDK");
+  if (vulkan_sdk != 0) {
+    String8 loader_path = str8f(arena, "%s/lib/libvulkan.1.dylib", vulkan_sdk);
+    lib = os_library_open(loader_path);
+    if (lib == 0) {
+      String8 moltenvk_path = str8f(arena, "%s/lib/libMoltenVK.dylib", vulkan_sdk);
+      lib = os_library_open(moltenvk_path);
+    }
+  }
+  String8 vulkan_library_names[] = {
+    str8("libvulkan.1.dylib"),
+    str8("libvulkan.dylib"),
+    str8("libMoltenVK.dylib"),
+  };
+#else
+  String8 vulkan_library_names[] = {str8("libvulkan.so.1")};
+#endif
+  for (L1 i = 0; i < ArrayCount(vulkan_library_names) && lib == 0; i += 1) {
+    lib = os_library_open(vulkan_library_names[i]);
+  }
   Assert(lib != 0);
 
 #define X(name) *(void **)&name = os_library_load_proc(lib, str8(#name));
@@ -910,7 +947,6 @@ Internal void gfx_init() {
 
   I1 layer_count = 0;
   vkEnumerateInstanceLayerProperties(&layer_count, 0);
-  Assert(layer_count > 0);
 
   VkLayerProperties *layers = push_array(arena, VkLayerProperties, layer_count);
   vkEnumerateInstanceLayerProperties(&layer_count, layers);
@@ -927,9 +963,21 @@ Internal void gfx_init() {
   VkExtensionProperties *extensions = push_array(arena, VkExtensionProperties, extension_count);
   vkEnumerateInstanceExtensionProperties(0, &extension_count, extensions);
 
-  const char *required_extensions[] = {"VK_KHR_surface", "VK_KHR_wayland_surface", "VK_EXT_debug_report"};
+#if defined(__APPLE__)
+  const char *required_extensions[] = {
+    "VK_KHR_surface",
+    "VK_EXT_metal_surface",
+    "VK_KHR_portability_enumeration",
+  };
+#else
+  const char *required_extensions[] = {"VK_KHR_surface", "VK_KHR_wayland_surface"};
+#endif
   I1 found_extension_count = 0;
+  I1 found_debug_report = 0;
   for (L1 i = 0; i < extension_count; i += 1) {
+    if (cstr_compare("VK_EXT_debug_report", extensions[i].extensionName)) {
+      found_debug_report = 1;
+    }
     for (L1 j = 0; j < ArrayCount(required_extensions); j += 1) {
       if (cstr_compare(required_extensions[j], extensions[i].extensionName)) {
         found_extension_count += 1;
@@ -939,12 +987,24 @@ Internal void gfx_init() {
 
   Assert(found_extension_count == ArrayCount(required_extensions));
 
+  const char *enabled_extensions[ArrayCount(required_extensions) + 1];
+  I1 enabled_extension_count = 0;
+  for (L1 i = 0; i < ArrayCount(required_extensions); i += 1) {
+    enabled_extensions[enabled_extension_count++] = required_extensions[i];
+  }
+  if (found_debug_report) {
+    enabled_extensions[enabled_extension_count++] = "VK_EXT_debug_report";
+  }
+
   VkInstanceCreateInfo inst_info = {
     .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     .pApplicationInfo = &app_info,
-    .enabledExtensionCount = ArrayCount(required_extensions),
-    .ppEnabledExtensionNames = required_extensions,
+    .enabledExtensionCount = enabled_extension_count,
+    .ppEnabledExtensionNames = enabled_extensions,
   };
+#if defined(__APPLE__)
+  inst_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
   const char *layer_names[] = { "VK_LAYER_KHRONOS_validation" };
   if (found_validation) {
@@ -972,8 +1032,10 @@ Internal void gfx_init() {
     .pUserData = 0,
   };
 
-  result = vkCreateDebugReportCallbackEXT(gfx_state->instance, &callback_ci, 0, &gfx_state->vk_debug_callback);
-  Assert(result == VK_SUCCESS);
+  if (vkCreateDebugReportCallbackEXT != 0) {
+    result = vkCreateDebugReportCallbackEXT(gfx_state->instance, &callback_ci, 0, &gfx_state->vk_debug_callback);
+    Assert(result == VK_SUCCESS);
+  }
 
   ////////////////////////////////
   //~ kti: Physical Device
@@ -1056,15 +1118,21 @@ Internal void gfx_init() {
     .pQueuePriorities = queue_priorities,
   };
 
-  const char *device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_push_descriptor" };
+#if defined(__APPLE__)
+  const char *device_extensions[] = {"VK_KHR_swapchain", "VK_KHR_push_descriptor", "VK_KHR_portability_subset"};
+#else
+  const char *device_extensions[] = {"VK_KHR_swapchain", "VK_KHR_push_descriptor"};
+#endif
   VkDeviceCreateInfo device_info = {
     .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
     .pNext = &enable_device_features2,
     .queueCreateInfoCount = 1,
     .pQueueCreateInfos = &queue_ci,
 
-    .enabledLayerCount = ArrayCount(layer_names),
-    .ppEnabledLayerNames = layer_names,
+    // Device layers are legacy and must remain disabled. Validation is
+    // enabled only through VkInstanceCreateInfo above.
+    .enabledLayerCount = 0,
+    .ppEnabledLayerNames = 0,
 
     .enabledExtensionCount = ArrayCount(device_extensions),
     .ppEnabledExtensionNames = device_extensions,
@@ -1167,7 +1235,6 @@ Internal void gfx_init() {
     VK_DYNAMIC_STATE_SCISSOR,
     VK_DYNAMIC_STATE_CULL_MODE,
     VK_DYNAMIC_STATE_FRONT_FACE,
-    VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
   };
 
   VkPipelineColorBlendAttachmentState blend_attachment = {
@@ -1255,6 +1322,7 @@ Internal void gfx_init() {
   };
 
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &pipeline_ci, 0, &gfx_state->pipeline);
+  Assert(result == VK_SUCCESS && gfx_state->pipeline != VK_NULL_HANDLE);
 
   gfx_vk_destroy_shader_modules(shader_modules);
 
@@ -1334,6 +1402,7 @@ Internal void gfx_init() {
   };
 
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_pipeline_ci, 0, &gfx_state->mesh_pipeline);
+  Assert(result == VK_SUCCESS && gfx_state->mesh_pipeline != VK_NULL_HANDLE);
   Assert(result == VK_SUCCESS);
 
   gfx_vk_destroy_shader_modules(mesh_shader_modules);
@@ -1402,6 +1471,7 @@ Internal void gfx_init() {
   mesh_outline_pipeline_ci.pDepthStencilState = &mesh_outline_depth_stencil;
 
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_outline_pipeline_ci, 0, &gfx_state->mesh_outline_pipeline);
+  Assert(result == VK_SUCCESS && gfx_state->mesh_outline_pipeline != VK_NULL_HANDLE);
   Assert(result == VK_SUCCESS);
 
   VkGraphicsPipelineCreateInfo mesh_outline_mask_pipeline_ci = mesh_outline_pipeline_ci;
@@ -1409,6 +1479,7 @@ Internal void gfx_init() {
   mesh_outline_mask_pipeline_ci.pColorBlendState = &mesh_outline_mask_blend;
 
   result = vkCreateGraphicsPipelines(gfx_state->device, VK_NULL_HANDLE, 1, &mesh_outline_mask_pipeline_ci, 0, &gfx_state->mesh_outline_mask_pipeline);
+  Assert(result == VK_SUCCESS && gfx_state->mesh_outline_mask_pipeline != VK_NULL_HANDLE);
   Assert(result == VK_SUCCESS);
 
   gfx_vk_destroy_shader_modules(mesh_outline_shader_modules);
@@ -1493,8 +1564,8 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
 
   VkExtent2D surface_resolution = surface_capabilities.currentExtent;
   if (surface_resolution.width == I1_MAX) {
-    surface_resolution.width = os_window->width;
-    surface_resolution.height = os_window->height;
+    surface_resolution.width = (I1)(os_window->width * os_window->pixel_ratio);
+    surface_resolution.height = (I1)(os_window->height * os_window->pixel_ratio);
   }
 
   VkSurfaceTransformFlagBitsKHR pre_transform = surface_capabilities.currentTransform;
@@ -1581,15 +1652,28 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window) {
   ////////////////////////////////
   //~ kti: Surface
 
+  VkResult result;
+#if defined(__APPLE__)
+  if (vkCreateMetalSurfaceEXT == 0) {
+    vkCreateMetalSurfaceEXT = (PFN_vkCreateMetalSurfaceEXT)vkGetInstanceProcAddr(gfx_state->instance, "vkCreateMetalSurfaceEXT");
+  }
+  VkMetalSurfaceCreateInfoEXT surface_ci = {
+    .sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
+    .pLayer = window->metal_layer,
+  };
+  result = vkCreateMetalSurfaceEXT(gfx_state->instance, &surface_ci, 0, &vkw->surface);
+#else
   VkWaylandSurfaceCreateInfoKHR surface_ci = {
     .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
     .display = os_gfx_state->display,
     .surface = window->surface,
   };
-  VkResult result = vkCreateWaylandSurfaceKHR(gfx_state->instance, &surface_ci, 0, &vkw->surface);
+  result = vkCreateWaylandSurfaceKHR(gfx_state->instance, &surface_ci, 0, &vkw->surface);
+#endif
   Assert(result == VK_SUCCESS);
 
-  VkBool32 supports = vkGetPhysicalDeviceWaylandPresentationSupportKHR(gfx_state->physical_device, gfx_state->present_queue_index, os_gfx_state->display);
+  VkBool32 supports = VK_FALSE;
+  vkGetPhysicalDeviceSurfaceSupportKHR(gfx_state->physical_device, gfx_state->present_queue_index, vkw->surface, &supports);
   Assert(supports);
 
   vkGetPhysicalDeviceSurfaceFormatsKHR(gfx_state->physical_device, vkw->surface, &vkw->surface_format_count, 0);
@@ -1704,7 +1788,9 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   //~ kti: Acquire image
 
   //- kti: Check for window resize.
-  if (os_window->width != vkw->swapchain_extent.width || os_window->height != vkw->swapchain_extent.height) {
+  I1 framebuffer_width = (I1)(os_window->width * os_window->pixel_ratio);
+  I1 framebuffer_height = (I1)(os_window->height * os_window->pixel_ratio);
+  if (framebuffer_width != vkw->swapchain_extent.width || framebuffer_height != vkw->swapchain_extent.height) {
     ProfBegin("Recreate swapchain");
     gfx_vk_recreate_swapchain(os_window, vkw);
     ProfEnd();
@@ -1851,7 +1937,6 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
 
     vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
     vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
-    vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
     vkw->per_frame[image_idx].rect_instances_count = 0;
     vkw->per_frame[image_idx].mesh_instance_count = 0;
@@ -1902,13 +1987,14 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           };
           if (batch->clip_rect[0] != 0.0f || batch->clip_rect[1] != 0.0f ||
               batch->clip_rect[2] > 0.0f || batch->clip_rect[3] > 0.0f) {
-            F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+            F4 screen_rect = {0, 0, os_window->width, os_window->height};
             F4 intersection = rect_overlap(screen_rect, batch->clip_rect);
             if (intersection[2] >= 0.0f && intersection[3] >= 0.0f) {
-              scissor.offset.x = intersection[0];
-              scissor.offset.y = intersection[1];
-              scissor.extent.width = intersection[2];
-              scissor.extent.height = intersection[3];
+              D1 scale = os_window->pixel_ratio;
+              scissor.offset.x = floor(intersection[0] * scale);
+              scissor.offset.y = floor(intersection[1] * scale);
+              scissor.extent.width = ceil((intersection[0] + intersection[2]) * scale) - scissor.offset.x;
+              scissor.extent.height = ceil((intersection[1] + intersection[3]) * scale) - scissor.offset.y;
             } else {
               // NOTE(kti): Clip and screen rect don't overlap, we can skip the batch.
               continue;
@@ -1940,7 +2026,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
           //- kti: Push Constants
           F1 push_data[4] = {
-            vkw->swapchain_extent.width, vkw->swapchain_extent.height,
+            os_window->width, os_window->height,
             (F1)texture->width, (F1)texture->height
           };
           vkCmdPushConstants(cmd, gfx_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_data), push_data);
@@ -1953,7 +2039,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
         }
       } else if (pass->kind == GFX_PASS_KIND__CLEAR_DEPTH) {
         F4 clear_rect = rect_overlap(
-            (F4){0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height},
+            (F4){0, 0, os_window->width, os_window->height},
             pass->clear_depth.rect);
 
         if (clear_rect[2] > 0.0f && clear_rect[3] > 0.0f) {
@@ -1964,12 +2050,12 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           VkClearRect vk_clear_rect = {
             .rect = {
               .offset = {
-                .x = clear_rect[0],
-                .y = clear_rect[1],
+                .x = clear_rect[0] * os_window->pixel_ratio,
+                .y = clear_rect[1] * os_window->pixel_ratio,
               },
               .extent = {
-                .width = clear_rect[2],
-                .height = clear_rect[3],
+                .width = clear_rect[2] * os_window->pixel_ratio,
+                .height = clear_rect[3] * os_window->pixel_ratio,
               },
             },
             .baseArrayLayer = 0,
@@ -1984,31 +2070,31 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
         F4 viewport_rect = mesh_pass.viewport_rect;
         if (viewport_rect[2] <= 0.0f || viewport_rect[3] <= 0.0f) {
-          viewport_rect = (F4){0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+          viewport_rect = (F4){0, 0, os_window->width, os_window->height};
         }
-        F4 screen_rect = {0, 0, vkw->swapchain_extent.width, vkw->swapchain_extent.height};
+        F4 screen_rect = {0, 0, os_window->width, os_window->height};
         viewport_rect = rect_overlap(screen_rect, viewport_rect);
         if (viewport_rect[2] <= 0.0f || viewport_rect[3] <= 0.0f) {
           continue;
         }
 
         VkViewport viewport = {
-          .x = viewport_rect[0],
-          .y = viewport_rect[1] + viewport_rect[3],
-          .width = viewport_rect[2],
-          .height = -viewport_rect[3],
+          .x = viewport_rect[0] * os_window->pixel_ratio,
+          .y = (viewport_rect[1] + viewport_rect[3]) * os_window->pixel_ratio,
+          .width = viewport_rect[2] * os_window->pixel_ratio,
+          .height = -viewport_rect[3] * os_window->pixel_ratio,
           .minDepth = 0.0f,
           .maxDepth = 1.0f,
         };
 
         VkRect2D scissor = {
           .offset = {
-            .x = viewport_rect[0],
-            .y = viewport_rect[1],
+            .x = viewport_rect[0] * os_window->pixel_ratio,
+            .y = viewport_rect[1] * os_window->pixel_ratio,
           },
           .extent = {
-            .width  = viewport_rect[2],
-            .height = viewport_rect[3],
+            .width  = viewport_rect[2] * os_window->pixel_ratio,
+            .height = viewport_rect[3] * os_window->pixel_ratio,
           },
         };
 

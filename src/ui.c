@@ -472,8 +472,8 @@ Internal String8 ui_display_part_from_key_string(String8 key) {
 Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string) {
   UI_Key result = {0};
   if (string.len != 0) {
-    meow_u128 hash = MeowHash(MeowDefaultSeed, string.len, string.str);
-    result.l1[0] = MeowU64From(hash, 0) ^ seed_key.l1[0];
+    Hash128 hash = hash128(string.str, string.len);
+    result.l1[0] = hash.l1[0] ^ seed_key.l1[0];
   }
   return result;
 }

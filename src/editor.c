@@ -118,6 +118,10 @@ struct Entity {
   F4 size;
   Shape shape;
   RT_Material material;
+  F4 camera_forward;
+  F1 camera_vertical_fov;
+  F1 camera_aperture_radius;
+  F1 camera_focal_distance;
 };
 
 typedef struct Entity_Handle Entity_Handle;
@@ -147,6 +151,7 @@ enum {
 
   CMD_KIND__SELECT_ENTITY,
   CMD_KIND__CREATE_ENTITY,
+  CMD_KIND__CREATE_CAMERA,
   CMD_KIND__DELETE_ENTITIES,
 
   CMD_KIND_COUNT,
@@ -1039,9 +1044,17 @@ Internal void lane(Arena *arena) {
 
       {
         L1 selected_count = 0;
+        L1 selected_shape_count = 0;
+        L1 selected_camera_count = 0;
+        I1 has_camera = 0;
         for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+          if (entity->flags & ENTITY_FLAG__CAMERA) {
+            has_camera = 1;
+          }
           if (entity->flags & ENTITY_FLAG__SELECTED) {
             selected_count += 1;
+            selected_shape_count += !!(entity->flags & ENTITY_FLAG__SHAPE);
+            selected_camera_count += !!(entity->flags & ENTITY_FLAG__CAMERA);
           }
         }
 
@@ -1050,46 +1063,80 @@ Internal void lane(Arena *arena) {
           L1 **name_lens = push_array(scratch.arena, L1 *, selected_count);
           L1 *name_capacities = push_array(scratch.arena, L1, selected_count);
           String8 *value_names = push_array(scratch.arena, String8, selected_count);
-          I1 **shapes = push_array(scratch.arena, I1 *, selected_count);
           F4 **positions = push_array(scratch.arena, F4 *, selected_count);
-          F4 **sizes = push_array(scratch.arena, F4 *, selected_count);
-          F4 **base_colors = push_array(scratch.arena, F4 *, selected_count);
-          F1 **metallics = push_array(scratch.arena, F1 *, selected_count);
-          F1 **roughnesses = push_array(scratch.arena, F1 *, selected_count);
-          F4 **emissives = push_array(scratch.arena, F4 *, selected_count);
           Entity_Handle *entities = push_array(scratch.arena, Entity_Handle, selected_count);
 
+          String8 *shape_value_names = push_array(scratch.arena, String8, selected_shape_count);
+          I1 **shapes = push_array(scratch.arena, I1 *, selected_shape_count);
+          F4 **sizes = push_array(scratch.arena, F4 *, selected_shape_count);
+          F4 **base_colors = push_array(scratch.arena, F4 *, selected_shape_count);
+          F1 **metallics = push_array(scratch.arena, F1 *, selected_shape_count);
+          F1 **roughnesses = push_array(scratch.arena, F1 *, selected_shape_count);
+          F4 **emissives = push_array(scratch.arena, F4 *, selected_shape_count);
+
+          String8 *camera_value_names = push_array(scratch.arena, String8, selected_camera_count);
+          F4 **forwards = push_array(scratch.arena, F4 *, selected_camera_count);
+          F1 **vertical_fovs = push_array(scratch.arena, F1 *, selected_camera_count);
+          F1 **aperture_radii = push_array(scratch.arena, F1 *, selected_camera_count);
+          F1 **focal_distances = push_array(scratch.arena, F1 *, selected_camera_count);
+
           L1 selected_idx = 0;
+          L1 selected_shape_idx = 0;
+          L1 selected_camera_idx = 0;
           for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
             if (entity->flags & ENTITY_FLAG__SELECTED) {
+              String8 entity_name = (String8){entity->name, entity->name_len};
               names[selected_idx] = entity->name;
               name_lens[selected_idx] = &entity->name_len;
               name_capacities[selected_idx] = sizeof(entity->name);
-              value_names[selected_idx] = (String8){entity->name, entity->name_len};
-              shapes[selected_idx] = &entity->shape;
+              value_names[selected_idx] = entity_name;
               positions[selected_idx] = &entity->pos;
-              sizes[selected_idx] = &entity->size;
-              base_colors[selected_idx] = &entity->material.base_color;
-              metallics[selected_idx] = &entity->material.metallic;
-              roughnesses[selected_idx] = &entity->material.roughness;
-              emissives[selected_idx] = &entity->material.emissive;
               entities[selected_idx] = entity_handle(entity);
               selected_idx += 1;
+
+              if (entity->flags & ENTITY_FLAG__SHAPE) {
+                shape_value_names[selected_shape_idx] = entity_name;
+                shapes[selected_shape_idx] = &entity->shape;
+                sizes[selected_shape_idx] = &entity->size;
+                base_colors[selected_shape_idx] = &entity->material.base_color;
+                metallics[selected_shape_idx] = &entity->material.metallic;
+                roughnesses[selected_shape_idx] = &entity->material.roughness;
+                emissives[selected_shape_idx] = &entity->material.emissive;
+                selected_shape_idx += 1;
+              }
+
+              if (entity->flags & ENTITY_FLAG__CAMERA) {
+                camera_value_names[selected_camera_idx] = entity_name;
+                forwards[selected_camera_idx] = &entity->camera_forward;
+                vertical_fovs[selected_camera_idx] = &entity->camera_vertical_fov;
+                aperture_radii[selected_camera_idx] = &entity->camera_aperture_radius;
+                focal_distances[selected_camera_idx] = &entity->camera_focal_distance;
+                selected_camera_idx += 1;
+              }
             }
           }
 
           lister_textedits(names, name_lens, name_capacities, selected_count);
-          lister_enums(str8("Shape"), shapes, selected_count, shape_names, SHAPE_COUNT);
-
           lister_xyzs(str8("Pos"), value_names, positions, selected_count, LISTER_APPLY__DELTA, 0.0f, 50.0f, 0.0f, 0.0f);
-          lister_xyzs(str8("Size"), value_names, sizes, selected_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
 
-          lister_header(str8("Material"));
+          if (selected_shape_count != 0) {
+            lister_enums(str8("Shape"), shapes, selected_shape_count, shape_names, SHAPE_COUNT);
+            lister_xyzs(str8("Size"), shape_value_names, sizes, selected_shape_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
 
-          lister_colors(str8("Base"), value_names, base_colors, selected_count, LISTER_APPLY__SET);
-          lister_F1s(str8("Metallic"), value_names, metallics, selected_count, LISTER_APPLY__DELTA, 0.3f, 0.0f, 0.0f, 1.0f);
-          lister_F1s(str8("Roughness"), value_names, roughnesses, selected_count, LISTER_APPLY__DELTA, 0.3f, 0.0f, 0.0f, 1.0f);
-          lister_colors(str8("Emissive"), value_names, emissives, selected_count, LISTER_APPLY__SET);
+            lister_header(str8("Material"));
+            lister_colors(str8("Base"), shape_value_names, base_colors, selected_shape_count, LISTER_APPLY__SET);
+            lister_F1s(str8("Metallic"), shape_value_names, metallics, selected_shape_count, LISTER_APPLY__DELTA, 0.3f, 0.0f, 0.0f, 1.0f);
+            lister_F1s(str8("Roughness"), shape_value_names, roughnesses, selected_shape_count, LISTER_APPLY__DELTA, 0.3f, 0.0f, 0.0f, 1.0f);
+            lister_colors(str8("Emissive"), shape_value_names, emissives, selected_shape_count, LISTER_APPLY__SET);
+          }
+
+          if (selected_camera_count != 0) {
+            lister_header(str8("Camera"));
+            lister_xyzs(str8("Forward"), camera_value_names, forwards, selected_camera_count, LISTER_APPLY__SET, 0.0f, 50.0f, -1.0f, 1.0f);
+            lister_F1s(str8("Vertical FOV"), camera_value_names, vertical_fovs, selected_camera_count, LISTER_APPLY__SET, 70.0f*PI/180.0f, 0.0f, PI/180.0f, 179.0f*PI/180.0f);
+            lister_F1s(str8("Aperture Radius"), camera_value_names, aperture_radii, selected_camera_count, LISTER_APPLY__SET, 0.0f, 0.0f, 0.0f, F1_MAX);
+            lister_F1s(str8("Focal Distance"), camera_value_names, focal_distances, selected_camera_count, LISTER_APPLY__SET, 5.0f, 0.0f, 0.001f, F1_MAX);
+          }
 
           lister_cmd(str8("Delete"), (Cmd){
             .kind = CMD_KIND__DELETE_ENTITIES,
@@ -1113,6 +1160,11 @@ Internal void lane(Arena *arena) {
         lister_cmd(str8("Create Entity"), (Cmd){
           .kind = CMD_KIND__CREATE_ENTITY,
         });
+        if (!has_camera) {
+          lister_cmd(str8("Create Camera"), (Cmd){
+            .kind = CMD_KIND__CREATE_CAMERA,
+          });
+        }
       }
 
       ////////////////////////////////
@@ -1672,6 +1724,9 @@ Internal void lane(Arena *arena) {
                       F1 closest_t = F1_MAX;
                       Entity_Handle picked_entity = entity_handle_zero();
                       for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
+                        if (!(e->flags & ENTITY_FLAG__SHAPE)) {
+                          continue;
+                        }
 
                         F1 t = 0.0f;
                         if (e->shape == SHAPE__BOX) {
@@ -1838,6 +1893,15 @@ Internal void lane(Arena *arena) {
           } break;
           case CMD_KIND__CREATE_ENTITY: {
             Entity *new = entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
+            entity_select(entity_handle(new), 0);
+          } break;
+          case CMD_KIND__CREATE_CAMERA: {
+            Entity *new = entity_create(ENTITY_FLAG__CAMERA, str8("Camera"));
+            new->pos = (F4){0.0f, -5.0f, 0.5f};
+            new->camera_forward = normalize_F4((F4){0.0f, 5.0f, -0.5f});
+            new->camera_vertical_fov = 70.0f*PI/180.0f;
+            new->camera_aperture_radius = 0.0f;
+            new->camera_focal_distance = 5.0f;
             entity_select(entity_handle(new), 0);
           } break;
           case CMD_KIND__DELETE_ENTITIES: {

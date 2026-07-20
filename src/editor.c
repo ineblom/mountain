@@ -116,6 +116,7 @@ struct Entity {
   L1 name_len;
   F4 pos;
   F4 size;
+  F1 sphere_diameter;
   Shape shape;
   RT_Material material;
   F4 camera_forward;
@@ -189,6 +190,11 @@ enum {
   LISTER_APPLY__SET,
 };
 
+typedef L1 Lister_Entry_Flags;
+enum {
+  LISTER_ENTRY_FLAG__NORMALIZE_F4 = 1 << 0,
+};
+
 typedef struct Lister_Entry Lister_Entry;
 struct Lister_Entry {
   Lister_Entry_Kind kind;
@@ -208,7 +214,7 @@ struct Lister_Entry {
   String8 *enum_names;
   L1 enum_count;
   L1 value_count;
-  I1 normalize_f4;
+  Lister_Entry_Flags flags;
   Cmd cmd;
 };
 
@@ -650,6 +656,7 @@ Internal Entity *entity_create(L1 flags, String8 name) {
 
   entity->flags = flags;
   entity->size = (F4){1.0f, 1.0f, 1.0f};
+  entity->sphere_diameter = 1.0f;
   entity->name_len = Min(name.len, sizeof(entity->name));
   entity->material.base_color = (F4){0.9f, 0.9f, 0.9f, 1.0f};
   entity->material.emissive = (F4){0.0f, 0.0f, 0.0f, 1.0f};
@@ -783,7 +790,7 @@ Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
       }
     }
 
-    if (entry->normalize_f4) {
+    if (entry->flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
       F4 value = F4_with_w(entry->f4s[i][0], 0.0f);
       F1 length_sq = length_sq_F4(value);
       if (length_sq > Square(0.00001f)) {
@@ -1076,6 +1083,8 @@ Internal void lane(Arena *arena) {
       {
         L1 selected_count = 0;
         L1 selected_shape_count = 0;
+        L1 selected_box_count = 0;
+        L1 selected_sphere_count = 0;
         L1 selected_camera_count = 0;
         I1 has_camera = 0;
         for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
@@ -1085,7 +1094,13 @@ Internal void lane(Arena *arena) {
           if (entity->flags & ENTITY_FLAG__SELECTED) {
             selected_count += 1;
             selected_shape_count += !!(entity->flags & ENTITY_FLAG__SHAPE);
+            selected_box_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__BOX);
+            selected_sphere_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__SPHERE);
             selected_camera_count += !!(entity->flags & ENTITY_FLAG__CAMERA);
+          }
+          if ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__SPHERE) {
+            F1 diameter = entity->sphere_diameter;
+            entity->size = (F4){diameter, diameter, diameter, 1.0f};
           }
         }
 
@@ -1099,11 +1114,16 @@ Internal void lane(Arena *arena) {
 
           String8 *shape_value_names = push_array(scratch.arena, String8, selected_shape_count);
           I1 **shapes = push_array(scratch.arena, I1 *, selected_shape_count);
-          F4 **sizes = push_array(scratch.arena, F4 *, selected_shape_count);
           F4 **base_colors = push_array(scratch.arena, F4 *, selected_shape_count);
           F1 **metallics = push_array(scratch.arena, F1 *, selected_shape_count);
           F1 **roughnesses = push_array(scratch.arena, F1 *, selected_shape_count);
           F4 **emissives = push_array(scratch.arena, F4 *, selected_shape_count);
+
+          String8 *box_value_names = push_array(scratch.arena, String8, selected_box_count);
+          F4 **box_sizes = push_array(scratch.arena, F4 *, selected_box_count);
+
+          String8 *sphere_value_names = push_array(scratch.arena, String8, selected_sphere_count);
+          F1 **sphere_diameters = push_array(scratch.arena, F1 *, selected_sphere_count);
 
           String8 *camera_value_names = push_array(scratch.arena, String8, selected_camera_count);
           F4 **forwards = push_array(scratch.arena, F4 *, selected_camera_count);
@@ -1113,6 +1133,8 @@ Internal void lane(Arena *arena) {
 
           L1 selected_idx = 0;
           L1 selected_shape_idx = 0;
+          L1 selected_box_idx = 0;
+          L1 selected_sphere_idx = 0;
           L1 selected_camera_idx = 0;
           for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
             if (entity->flags & ENTITY_FLAG__SELECTED) {
@@ -1128,12 +1150,21 @@ Internal void lane(Arena *arena) {
               if (entity->flags & ENTITY_FLAG__SHAPE) {
                 shape_value_names[selected_shape_idx] = entity_name;
                 shapes[selected_shape_idx] = &entity->shape;
-                sizes[selected_shape_idx] = &entity->size;
                 base_colors[selected_shape_idx] = &entity->material.base_color;
                 metallics[selected_shape_idx] = &entity->material.metallic;
                 roughnesses[selected_shape_idx] = &entity->material.roughness;
                 emissives[selected_shape_idx] = &entity->material.emissive;
                 selected_shape_idx += 1;
+
+                if (entity->shape == SHAPE__BOX) {
+                  box_value_names[selected_box_idx] = entity_name;
+                  box_sizes[selected_box_idx] = &entity->size;
+                  selected_box_idx += 1;
+                } else if (entity->shape == SHAPE__SPHERE) {
+                  sphere_value_names[selected_sphere_idx] = entity_name;
+                  sphere_diameters[selected_sphere_idx] = &entity->sphere_diameter;
+                  selected_sphere_idx += 1;
+                }
               }
 
               if (entity->flags & ENTITY_FLAG__CAMERA) {
@@ -1152,7 +1183,8 @@ Internal void lane(Arena *arena) {
 
           if (selected_shape_count != 0) {
             lister_enums(str8("Shape"), shapes, selected_shape_count, shape_names, SHAPE_COUNT);
-            lister_xyzs(str8("Size"), shape_value_names, sizes, selected_shape_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
+            lister_xyzs(str8("Size"), box_value_names, box_sizes, selected_box_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
+            lister_F1s(str8("Diameter"), sphere_value_names, sphere_diameters, selected_sphere_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
 
             lister_header(str8("Material"));
             lister_colors(str8("Base"), shape_value_names, base_colors, selected_shape_count, LISTER_APPLY__SET);
@@ -1164,7 +1196,7 @@ Internal void lane(Arena *arena) {
           if (selected_camera_count != 0) {
             lister_header(str8("Camera"));
             Lister_Entry *forward_entry = lister_xyzs(str8("Forward"), camera_value_names, forwards, selected_camera_count, LISTER_APPLY__SET, 0.0f, 50.0f, -1.0f, 1.0f);
-            forward_entry->normalize_f4 = 1;
+            forward_entry->flags |= LISTER_ENTRY_FLAG__NORMALIZE_F4;
             lister_F1s(str8("Vertical FOV"), camera_value_names, vertical_fovs, selected_camera_count, LISTER_APPLY__SET, 70.0f*PI/180.0f, 0.0f, PI/180.0f, 179.0f*PI/180.0f);
             lister_F1s(str8("Aperture Radius"), camera_value_names, aperture_radii, selected_camera_count, LISTER_APPLY__SET, 0.0f, 0.0f, 0.0f, F1_MAX);
             lister_F1s(str8("Focal Distance"), camera_value_names, focal_distances, selected_camera_count, LISTER_APPLY__SET, 5.0f, 0.0f, 0.001f, F1_MAX);
@@ -1766,7 +1798,7 @@ Internal void lane(Arena *arena) {
                           F4 max = e->pos + e->size*0.5f;
                           t = ray_aabb_intersect(view->camera.pos, ray_direction, min, max);
                         } else if (e->shape == SHAPE__SPHERE) {
-                          t = ray_sphere_intersect(view->camera.pos, ray_direction, e->pos, e->size[0]*0.5f);
+                          t = ray_sphere_intersect(view->camera.pos, ray_direction, e->pos, e->sphere_diameter*0.5f);
                         }
 
                         if (t > min_hit_distance && t < closest_t) {

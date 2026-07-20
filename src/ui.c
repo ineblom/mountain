@@ -333,11 +333,6 @@ struct UI_State {
   Arena *drag_arena;
   String8 drag_data;
 
-  L1 f1_edit_buffer_len;
-  B1 f1_edit_buffer[64];
-  Txt_Pt f1_edit_cursor;
-  Txt_Pt f1_edit_mark;
-
   Arena *build_arenas[2];
   L1 build_index;
 
@@ -2045,10 +2040,12 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
   return op;
 }
 
-Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 display_value, UI_Signal_Flags activate_flags, I1 fill_text_width, UI_Key key) {
+Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
   edit_string_size_out[0] = Min(edit_string_size_out[0], edit_buffer_size);
   cursor->column = Min(cursor->column, edit_string_size_out[0]);
   mark->column = Min(mark->column, edit_string_size_out[0]);
+
+  UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 
   //- kti: Calculate focus.
   I1 is_auto_focus_hot = ui_is_key_auto_focus_hot(key);
@@ -2116,11 +2113,11 @@ Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer,
   UI_Parent(box) {
     String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
     if (!is_focus_active || is_focus_active_disabled) {
-      ui_set_next_pref_width(fill_text_width ? ui_pct(1.0f, 0.0f) : ui_text_dim(0.0f, 0.0f));
-      ui_label(display_value);
+      ui_set_next_pref_width(ui_text_dim(0.0f, 0.0f));
+      ui_label(pre_edit_value);
     } else {
       F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];
-      ui_set_next_pref_width(fill_text_width ? ui_pct(1.0f, 0.0f) : ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
+      ui_set_next_pref_width(ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
       UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, str8("###editstr"));
     
       UI_Line_Edit_Draw_Data *draw_data = push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
@@ -2138,7 +2135,7 @@ Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer,
   //- kti: interact
   UI_Signal signal = ui_signal_from_box(box);
   I1 focus_cleared_this_frame = 0;
-  if (!is_focus_active && signal.flags&activate_flags) {
+  if (!is_focus_active && signal.flags&(UI_SIGNAL_FLAG__LEFT_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED)) {
     String8 edit_string = pre_edit_value;
     edit_string.len = Min(edit_buffer_size, pre_edit_value.len);
     memmove(edit_buffer, edit_string.str, edit_string.len);
@@ -2182,37 +2179,14 @@ Internal UI_Signal ui_textedit_ex(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer,
   return signal;
 }
 
-Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
-  UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
-  return ui_textedit_ex(cursor, mark, edit_buffer, edit_buffer_size, edit_string_size_out,
-                        pre_edit_value, pre_edit_value,
-                        UI_SIGNAL_FLAG__LEFT_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
-                        0,
-                        key);
-}
-
-Internal UI_Signal ui_drag_F1_ex(String8 str, CString display_format, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+Internal UI_Signal ui_drag_F1(F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
   String8 key_string = str8f(ui_build_arena(), "drag_%p", value);
   UI_Key key = ui_key_from_string(ui_active_seed_key(), key_string);
-  I1 is_editing = ui_is_key_auto_focus_active(key);
-  String8 value_string = str8f(ui_build_arena(), "%.9g", value[0]);
-  String8 display_string = str8f(ui_build_arena(), display_format, (int)str.len, str.str, value[0]);
-
-  UI_Signal signal = {0};
-  UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-  UI_Text_Padding(0.0f) {
-    ui_set_next_omit_flags(UI_BOX_FLAG__DRAW_BORDER);
-    signal = ui_textedit_ex(&ui_state->f1_edit_cursor,
-                            &ui_state->f1_edit_mark,
-                            ui_state->f1_edit_buffer,
-                            sizeof(ui_state->f1_edit_buffer),
-                            &ui_state->f1_edit_buffer_len,
-                            value_string,
-                            display_string,
-                            UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED,
-                            1,
-                            key);
-  }
+  UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__MOUSE_CLICKABLE |
+                                      UI_BOX_FLAG__DRAW_BACKGROUND |
+                                      UI_BOX_FLAG__DRAW_HOT_EFFECTS,
+                                      key);
+  UI_Signal signal = ui_signal_from_box(box);
 
   if (pixels_per_unit == 0.0f) {
     pixels_per_unit = 50.0f;
@@ -2222,32 +2196,35 @@ Internal UI_Signal ui_drag_F1_ex(String8 str, CString display_format, F1 *value,
     }
   }
 
-  if (!is_editing && !(signal.flags & UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED) && signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+  I1 value_changed = 0;
+  if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
     if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
       ui_store_drag_struct(value);
     }
     F1 initial_value = ui_get_drag_struct(F1)[0];
     value[0] = initial_value + ui_drag_delta()[0] / pixels_per_unit;
+    value_changed = 1;
   }
 
-  if (!is_editing && signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
+  if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
     value[0] = default_value;
+    value_changed = 1;
   }
 
-  if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
-    String8 edit_string = {ui_state->f1_edit_buffer, ui_state->f1_edit_buffer_len};
-    try_F1_from_str8(edit_string, &value[0]);
-  }
-
-  if (min != 0 || max != 0) {
+  if (value_changed && (min != 0 || max != 0)) {
     value[0] = Clamp(min, value[0], max);
   }
 
   return signal;
 }
 
-Internal UI_Signal ui_drag_F1(String8 str, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
-  return ui_drag_F1_ex(str, "%.*s %.2f", value, default_value, pixels_per_unit, min, max);
+Internal UI_Signal ui_drag_F1_label(String8 string, CString format, F1 *value, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
+  UI_Signal signal = ui_drag_F1(value, default_value, pixels_per_unit, min, max);
+  UI_Parent(signal.box) {
+    ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+    ui_label(str8f(ui_build_arena(), format, (int)string.len, string.str, value[0]));
+  }
+  return signal;
 }
 
 Internal void ui_draw(void) {

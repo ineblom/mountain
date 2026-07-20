@@ -24,27 +24,28 @@ typedef struct RT_Sphere RT_Sphere;
 struct RT_Sphere {
   F4 p;
   F1 r;
-  I1 material_idx;
+  RT_Material material;
 };
 
 typedef struct RT_Plane RT_Plane;
 struct RT_Plane {
   F4 n;
   F1 d;
-  I1 material_idx;
+  RT_Material material;
 };
 
 typedef struct RT_Box RT_Box;
 struct RT_Box {
   F4 min;
   F4 max;
-  I1 material_idx;
+  RT_Material material;
 };
 
 typedef struct RT_Camera RT_Camera;
 struct RT_Camera {
   F4 pos;
   F4 forward;
+  F1 vertical_fov;
   F1 aperture_radius;
   F1 focal_distance;
 };
@@ -66,9 +67,6 @@ struct RT_Scene {
   F1 bloom_overlay_strength;
 
   RT_Camera camera;
-
-  L1 material_count;
-  RT_Material *materials;
 
   L1 plane_count;
   RT_Plane *planes;
@@ -185,52 +183,52 @@ Internal F4 ray_cast(RT_Scene scene, F4 ray_origin, F4 ray_direction) {
   for (L1 ray_index = 0; ray_index < scene.max_num_bounces; ray_index += 1) {
     F1 hit_distance = F1_MAX;
 
-    I1 hit_material_idx = -1;
+    RT_Material const *hit_material = 0;
     F4 next_origin;
     F4 next_normal;
 
     // Check planes
     for (L1 plane_index = 0; plane_index < scene.plane_count; plane_index += 1) {
-      RT_Plane plane = scene.planes[plane_index];
+      RT_Plane *plane = &scene.planes[plane_index];
 
-      F1 denom = dot_F4(plane.n, ray_direction);
+      F1 denom = dot_F4(plane->n, ray_direction);
       if (denom < -tolerance || denom > tolerance) {
-        F1 t = (-plane.d - dot_F4(plane.n, ray_origin)) / denom;
+        F1 t = (-plane->d - dot_F4(plane->n, ray_origin)) / denom;
         if (t > min_hit_distance && t < hit_distance) {
           hit_distance = t;
-          hit_material_idx = plane.material_idx;
+          hit_material = &plane->material;
 
           next_origin = ray_origin + t*ray_direction;
-          next_normal = plane.n;
+          next_normal = plane->n;
         }
       }
     }
 
     // Check spheres
     for (L1 sphere_index = 0; sphere_index < scene.sphere_count; sphere_index += 1) {
-      RT_Sphere sphere = scene.spheres[sphere_index];
+      RT_Sphere *sphere = &scene.spheres[sphere_index];
 
-      F1 t = ray_sphere_intersect(ray_origin, ray_direction, sphere.p, sphere.r);
+      F1 t = ray_sphere_intersect(ray_origin, ray_direction, sphere->p, sphere->r);
       if (t > min_hit_distance && t < hit_distance) {
         hit_distance = t;
-        hit_material_idx = sphere.material_idx;
+        hit_material = &sphere->material;
 
         next_origin = ray_origin + t*ray_direction;
-        next_normal = normalize_F4(next_origin - sphere.p);
+        next_normal = normalize_F4(next_origin - sphere->p);
       }
     }
 
     // Check boxes
     for (L1 box_index = 0; box_index < scene.box_count; box_index += 1) {
-      RT_Box box = scene.boxes[box_index];
+      RT_Box *box = &scene.boxes[box_index];
 
-      F1 t_min = ray_aabb_intersect(ray_origin, ray_direction, box.min, box.max);
+      F1 t_min = ray_aabb_intersect(ray_origin, ray_direction, box->min, box->max);
 
       if (t_min > min_hit_distance && t_min < hit_distance) {
         next_origin = ray_origin + t_min * ray_direction;
-        F4 center = (box.min + box.max) * 0.5f;
+        F4 center = (box->min + box->max) * 0.5f;
         F4 local_hit = next_origin - center;
-        F4 box_size = box.max - box.min;
+        F4 box_size = box->max - box->min;
 
         F4 d = abs_F4(local_hit) / (box_size * 0.5f);
         if (d[0] > d[1] && d[0] > d[2]) next_normal = sign_F1(local_hit[0]) * (F4){1,0,0};
@@ -238,13 +236,13 @@ Internal F4 ray_cast(RT_Scene scene, F4 ray_origin, F4 ray_direction) {
         else next_normal = sign_F1(local_hit[2]) * (F4){0,0,1};
 
         hit_distance = t_min;
-        hit_material_idx = box.material_idx;
+        hit_material = &box->material;
       }
 
     }
 
-    if (hit_material_idx != (I1)(-1)) {
-      RT_Material mat = scene.materials[hit_material_idx];
+    if (hit_material != 0) {
+      RT_Material mat = *hit_material;
 
       result += attenuation * mat.emissive;
 
@@ -399,16 +397,15 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene scene) {
   lane_sync();
 
   F4 camera_p = scene.camera.pos;
-  F4 camera_z = scene.camera.forward;
-  F4 camera_x = normalize_F4(cross_F4((F4){0, 0, 1}, camera_z));
-  F4 camera_y = normalize_F4(cross_F4(camera_z, camera_x));
+  F4 camera_forward = normalize_F4(scene.camera.forward);
+  F4 camera_x = normalize_F4(cross_F4(camera_forward, (F4){0, 0, 1}));
+  F4 camera_y = normalize_F4(cross_F4(camera_x, camera_forward));
 
   F1 film_dist   = 1.0f;
-  F1 film_w      = (F1)scene.output_width/(F1)scene.output_height;
-  F1 film_h      = 1.0f;
-  F1 half_film_w = film_w*0.5f;
-  F1 half_film_h = film_h*0.5f;
-  F4 film_center = camera_p - film_dist * camera_z;
+  F1 aspect      = (F1)scene.output_width/(F1)scene.output_height;
+  F1 half_film_h = tanf(scene.camera.vertical_fov*0.5f)*film_dist;
+  F1 half_film_w = aspect*half_film_h;
+  F4 film_center = camera_p + film_dist*camera_forward;
 
   F1 half_pixel_w = 0.5f/(F1)scene.output_width;
   F1 half_pixel_h = 0.5f/(F1)scene.output_height;
@@ -658,39 +655,15 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene scene) {
 
 #ifdef RT_APP
 Internal void lane(Arena *arena) {
-  RT_Material materials[] = {
-    { // ground
-      .base_color  = (F4){0.63f, 0.53f, 0.13f},
-      .metallic = 0.3f,
-      .roughness = 0.5f,
-    },
-    { // left
-      .base_color  = (F4){1.0f, 1.0f, 1.0f},
-      .metallic = 1.0f,
-      .roughness = 0.40f,
-    },
-    { // right
-      .base_color  = (F4){0.1f, 1.0f, 1.0f},
-      .metallic = 0.0f,
-      .roughness = 0.10f,
-    },
-    { // pink glow
-      .base_color  = (F4){1.0f, 0.2f, 1.0f},
-      .emissive = (F4){2.0f, 0.6f, 2.0f},
-      .metallic = 0.1f,
-      .roughness = 1.00f,
-    },
-    { // blue glow
-      .base_color  = (F4){1.0f, 1.0f, 1.0f},
-      .emissive = (F4){1.0f, 1.0f, 6.0f},
-    },
-  };
-
   RT_Plane planes[] = {
     {
       .n = (F4){0, 0, 1},
       .d = 1.0f,
-      .material_idx = 0
+      .material = {
+        .base_color = (F4){0.63f, 0.53f, 0.13f},
+        .metallic = 0.3f,
+        .roughness = 0.5f,
+      },
     }
   };
 
@@ -698,17 +671,30 @@ Internal void lane(Arena *arena) {
     {
       .p = (F4){-2.0f, 2.0f, 0.0f},
       .r = 1.0f,
-      .material_idx = 1,
+      .material = {
+        .base_color = (F4){1.0f, 1.0f, 1.0f},
+        .metallic = 1.0f,
+        .roughness = 0.40f,
+      },
     },
     {
       .p = (F4){2.0f, 0.0f, 0.0f},
       .r = 1.0f,
-      .material_idx = 2,
+      .material = {
+        .base_color = (F4){0.1f, 1.0f, 1.0f},
+        .metallic = 0.0f,
+        .roughness = 0.10f,
+      },
     },
     {
       .p = (F4){0.0f, 20.0f, 0.0f},
       .r = 1.0f,
-      .material_idx = 3,
+      .material = {
+        .base_color = (F4){1.0f, 0.2f, 1.0f},
+        .emissive = (F4){2.0f, 0.6f, 2.0f},
+        .metallic = 0.1f,
+        .roughness = 1.00f,
+      },
     },
   };
 
@@ -716,13 +702,17 @@ Internal void lane(Arena *arena) {
     {
       .min = {-2.6f, -2.0f,-1.0},
       .max = {-2.5f,  0.7f,-0.5},
-      .material_idx = 4,
+      .material = {
+        .base_color = (F4){1.0f, 1.0f, 1.0f},
+        .emissive = (F4){1.0f, 1.0f, 6.0f},
+      },
     }
   };
 
   RT_Camera camera = {0};
   camera.pos = (F4){0.0f, -5.0f, 0.5f};
-  camera.forward = normalize_F4(camera.pos);
+  camera.forward = normalize_F4(-camera.pos);
+  camera.vertical_fov = 70.0f*PI/180.0f;
   camera.aperture_radius =  0.02f;
   camera.focal_distance = 5.0f;
 
@@ -742,9 +732,6 @@ Internal void lane(Arena *arena) {
     .bloom_overlay_strength = 2.0f,
 
     .camera = camera,
-
-    .materials = materials,
-    .material_count = ArrayCount(materials),
 
     .spheres = spheres,
     .sphere_count = ArrayCount(spheres),

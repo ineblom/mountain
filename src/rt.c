@@ -1,7 +1,7 @@
 // rt.c - Ray Tracer
 
 // Coordinate system:
-// +x right, +y forwards, +z up
+// +x right, +y up, +z forwards
 
 // TODO:
 // Shadow rays (higher quality w/ lower ray counts)
@@ -319,7 +319,7 @@ Internal F4 ray_cast(RT_Scene scene, F4 ray_origin, F4 ray_direction) {
 
       ray_origin = next_origin + next_normal * min_hit_distance;
     } else {
-      // F1 height = (ray_direction.z + 1) * 0.5;
+      // F1 height = (ray_direction.y + 1) * 0.5;
       // F4 sky_color = lerp_F4((F4){1.0f, 1.0f, 1.0f}, height, (F4){0.2f, 0.4f, 1.0f});
       // result += attenuation * sky_color;
       break;
@@ -398,8 +398,9 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene scene) {
 
   F4 camera_p = scene.camera.pos;
   F4 camera_forward = normalize_F4(scene.camera.forward);
-  F4 camera_x = normalize_F4(cross_F4(camera_forward, (F4){0, 0, 1}));
-  F4 camera_y = normalize_F4(cross_F4(camera_x, camera_forward));
+  F4 world_up = {0, 1, 0};
+  F4 camera_right = normalize_F4(cross_F4(world_up, camera_forward));
+  F4 camera_up = normalize_F4(cross_F4(camera_forward, camera_right));
 
   F1 film_dist   = 1.0f;
   F1 aspect      = (F1)scene.output_width/(F1)scene.output_height;
@@ -435,11 +436,11 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene scene) {
       for (L1 ray_index = 0; ray_index < scene.rays_per_pixel; ray_index += 1) {
         F1 off_x  = film_x + random_bilateral(rng)*half_pixel_w;
         F1 off_y  = film_y + random_bilateral(rng)*half_pixel_h;
-        F4 film_p = film_center + off_x*half_film_w*camera_x + off_y*half_film_h*camera_y;
+        F4 film_p = film_center + off_x*half_film_w*camera_right + off_y*half_film_h*camera_up;
 
         F1 r = scene.camera.aperture_radius * sqrtf(random_unilateral(rng));
         F1 theta = 2.0f * PI * random_unilateral(rng);
-        F4 aperture_offset = r * cosf(theta) * camera_x + r * sinf(theta) * camera_y;
+        F4 aperture_offset = r * cosf(theta) * camera_right + r * sinf(theta) * camera_up;
         F4 ray_origin = camera_p + aperture_offset;
 
         F4 focus_point = camera_p + scene.camera.focal_distance  * normalize_F4(film_p - camera_p);
@@ -657,7 +658,7 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene scene) {
 Internal void lane(Arena *arena) {
   RT_Plane planes[] = {
     {
-      .n = (F4){0, 0, 1},
+      .n = (F4){0, 1, 0},
       .d = 1.0f,
       .material = {
         .base_color = (F4){0.63f, 0.53f, 0.13f},
@@ -669,7 +670,7 @@ Internal void lane(Arena *arena) {
 
   RT_Sphere spheres[] = {
     {
-      .p = (F4){-2.0f, 2.0f, 0.0f},
+      .p = (F4){-2.0f, 0.0f, 2.0f},
       .r = 1.0f,
       .material = {
         .base_color = (F4){1.0f, 1.0f, 1.0f},
@@ -687,7 +688,7 @@ Internal void lane(Arena *arena) {
       },
     },
     {
-      .p = (F4){0.0f, 20.0f, 0.0f},
+      .p = (F4){0.0f, 0.0f, 20.0f},
       .r = 1.0f,
       .material = {
         .base_color = (F4){1.0f, 0.2f, 1.0f},
@@ -700,8 +701,8 @@ Internal void lane(Arena *arena) {
 
   RT_Box boxes[] = {
     {
-      .min = {-2.6f, -2.0f,-1.0},
-      .max = {-2.5f,  0.7f,-0.5},
+      .min = {-2.6f, -1.0f, -2.0f},
+      .max = {-2.5f, -0.5f,  0.7f},
       .material = {
         .base_color = (F4){1.0f, 1.0f, 1.0f},
         .emissive = (F4){1.0f, 1.0f, 6.0f},
@@ -710,7 +711,7 @@ Internal void lane(Arena *arena) {
   };
 
   RT_Camera camera = {0};
-  camera.pos = (F4){0.0f, -5.0f, 0.5f};
+  camera.pos = (F4){0.0f, 0.5f, -5.0f};
   camera.forward = normalize_F4(-camera.pos);
   camera.vertical_fov = 70.0f*PI/180.0f;
   camera.aperture_radius =  0.02f;

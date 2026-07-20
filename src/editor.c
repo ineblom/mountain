@@ -208,6 +208,7 @@ struct Lister_Entry {
   String8 *enum_names;
   L1 enum_count;
   L1 value_count;
+  I1 normalize_f4;
   Cmd cmd;
 };
 
@@ -759,24 +760,38 @@ Internal void lister_apply_F1s(Lister_Entry *entry, F1 before, F1 after) {
     F1 value = entry->apply == LISTER_APPLY__DELTA ? after - before : after;
     for (L1 i = 0; i < entry->value_count; i += 1) {
       if (entry->apply == LISTER_APPLY__DELTA) {
-        *entry->f1s[i] += value;
+        entry->f1s[i][0] += value;
       } else {
-        *entry->f1s[i] = value;
+        entry->f1s[i][0] = value;
       }
     }
   }
 }
 
 Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
-  for (L1 component = 0; component < 4; component += 1) {
-    if (before[component] != after[component]) {
-      F1 value = entry->apply == LISTER_APPLY__DELTA ? after[component] - before[component] : after[component];
-      for (L1 i = 0; i < entry->value_count; i += 1) {
-        if (entry->apply == LISTER_APPLY__DELTA) {
-          (*entry->f4s[i])[component] += value;
-        } else {
-          (*entry->f4s[i])[component] = value;
+  F4 delta = after - before;
+  for (L1 i = 0; i < entry->value_count; i += 1) {
+    F4 old_value = entry->f4s[i][0];
+    if (entry->apply == LISTER_APPLY__DELTA) {
+      entry->f4s[i][0] += delta;
+    } else {
+      // Preserve components that were not edited when setting multiple values.
+      for (L1 component = 0; component < 4; component += 1) {
+        if (delta[component] != 0.0f) {
+          entry->f4s[i][0][component] = after[component];
         }
+      }
+    }
+
+    if (entry->normalize_f4) {
+      F4 value = F4_with_w(entry->f4s[i][0], 0.0f);
+      F1 length_sq = length_sq_F4(value);
+      if (length_sq > Square(0.00001f)) {
+        entry->f4s[i][0] = value * (1.0f / sqrt_F1(length_sq));
+      } else {
+        old_value = F4_with_w(old_value, 0.0f);
+        F1 old_length_sq = length_sq_F4(old_value);
+        entry->f4s[i][0] = old_length_sq > Square(0.00001f) ? old_value * (1.0f / sqrt_F1(old_length_sq)) : (F4){0.0f, 0.0f, 1.0f, 0.0f};
       }
     }
   }
@@ -903,6 +918,22 @@ Internal M4F camera_view_projection(Camera camera, F1 width, F1 height) {
   view = mul_M4F(view, rotate_x_M4F(-camera.pitch));
   M4F view_projection = mul_M4F(view, projection);
   return view_projection;
+}
+
+Internal M4F line_transform_M4F(F4 begin, F4 direction, F1 thickness) {
+  F4 line_axis = F4_with_w(direction, 0.0f);
+  F4 reference_axis = abs_F1(line_axis[1]) < 0.99f
+    ? (F4){0.0f, 1.0f, 0.0f, 0.0f}
+    : (F4){1.0f, 0.0f, 0.0f, 0.0f};
+  F4 side_axis = normalize_F4(cross_F4(line_axis, reference_axis));
+  F4 up_axis = normalize_F4(cross_F4(side_axis, line_axis));
+
+  M4F result = identity_M4F();
+  result.r[0] = line_axis;
+  result.r[1] = thickness*side_axis;
+  result.r[2] = thickness*up_axis;
+  result.r[3] = F4_with_w(begin + 0.5f*line_axis, 1.0f);
+  return result;
 }
 
 ////////////////////////////////
@@ -1132,7 +1163,8 @@ Internal void lane(Arena *arena) {
 
           if (selected_camera_count != 0) {
             lister_header(str8("Camera"));
-            lister_xyzs(str8("Forward"), camera_value_names, forwards, selected_camera_count, LISTER_APPLY__SET, 0.0f, 50.0f, -1.0f, 1.0f);
+            Lister_Entry *forward_entry = lister_xyzs(str8("Forward"), camera_value_names, forwards, selected_camera_count, LISTER_APPLY__SET, 0.0f, 50.0f, -1.0f, 1.0f);
+            forward_entry->normalize_f4 = 1;
             lister_F1s(str8("Vertical FOV"), camera_value_names, vertical_fovs, selected_camera_count, LISTER_APPLY__SET, 70.0f*PI/180.0f, 0.0f, PI/180.0f, 179.0f*PI/180.0f);
             lister_F1s(str8("Aperture Radius"), camera_value_names, aperture_radii, selected_camera_count, LISTER_APPLY__SET, 0.0f, 0.0f, 0.0f, F1_MAX);
             lister_F1s(str8("Focal Distance"), camera_value_names, focal_distances, selected_camera_count, LISTER_APPLY__SET, 5.0f, 0.0f, 0.001f, F1_MAX);
@@ -1826,6 +1858,20 @@ Internal void lane(Arena *arena) {
                   }
                 }
 
+                //- kti: Camera forward markers.
+                dr_clear_depth();
+                for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+                  if (entity->flags & ENTITY_FLAG__CAMERA) {
+                    Mesh *mesh = &state->meshes[SHAPE__BOX];
+                    F1 thickness = 0.025f;
+                    M4F transform = line_transform_M4F(entity->pos, entity->camera_forward, thickness);
+                    F4 color = {0.9f, 0.75f, 0.15f, 1.0f};
+                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
+                            mesh->index_buffer, 0, mesh->index_count,
+                            transform, color, GFX_MESH_FEATURE__UNLIT);
+                  }
+                }
+
                 //- kti: Gizmo.
                 F4 gizmo_pos = {0};
                 if (entity_selection_average_pos(&gizmo_pos)) {
@@ -1897,8 +1943,8 @@ Internal void lane(Arena *arena) {
           } break;
           case CMD_KIND__CREATE_CAMERA: {
             Entity *new = entity_create(ENTITY_FLAG__CAMERA, str8("Camera"));
-            new->pos = (F4){0.0f, -5.0f, 0.5f};
-            new->camera_forward = normalize_F4((F4){0.0f, 5.0f, -0.5f});
+            new->pos = (F4){0.0f, 0.5f, -5.0f};
+            new->camera_forward = normalize_F4((F4){0.0f, -0.5f, 5.0f});
             new->camera_vertical_fov = 70.0f*PI/180.0f;
             new->camera_aperture_radius = 0.0f;
             new->camera_focal_distance = 5.0f;

@@ -50,6 +50,7 @@ enum {
 ////////////////////////////////
 //~ F1
 
+#define sqrt_F1(x) sqrtf(x)
 #define abs_F1(x) fabsf(x)
 #define abs_SI1(x) abs(x)
 #define abs_SL1(x) llabs(x)
@@ -97,7 +98,7 @@ Inline F1 length_sq_F2(F2 v) {
 }
 
 Inline F1 length_F2(F2 v) {
-  F1 result = sqrtf(length_sq_F2(v));
+  F1 result = sqrt_F1(length_sq_F2(v));
   return result;
 }
 
@@ -141,7 +142,7 @@ Inline F1 length_sq_F4(F4 v) {
 }
 
 Inline F1 length_F4(F4 v) {
-  F1 result = sqrtf(length_sq_F4(v));
+  F1 result = sqrt_F1(length_sq_F4(v));
   return result;
 }
 
@@ -328,7 +329,7 @@ Internal F1 ray_sphere_intersect(F4 ray_origin, F4 ray_direction, F4 sphere_orig
 
   F1 discriminant = b*b - 4.0f*c;
   if (discriminant > 0.0f) {
-    F1 root_term = sqrtf(discriminant);
+    F1 root_term = sqrt_F1(discriminant);
     if (root_term > 0.0001f) {
       F1 tp = (-b + root_term) / 2.0f;
       F1 tn = (-b - root_term) / 2.0f;
@@ -460,7 +461,7 @@ F4 oklch_from_linear_rgb(F4 rgba) {
   F1 ok_a = 1.9779984951f*l_ - 2.4285922050f*m_ + 0.4505937099f*s_;
   F1 ok_b = 0.0259040371f*l_ + 0.7827717662f*m_ - 0.8086757660f*s_;
 
-  F1 chroma = sqrtf(ok_a*ok_a + ok_b*ok_b);
+  F1 chroma = sqrt_F1(ok_a*ok_a + ok_b*ok_b);
   F1 hue = atan2f(ok_b, ok_a);
   if (hue < 0.0f) hue += 2.0f*PI;
 

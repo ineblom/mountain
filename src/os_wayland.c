@@ -8,18 +8,32 @@
 #include <poll.h>
 
 struct OS_Window {
+  OS_Window *prev;
+  OS_Window *next;
+
+  SI1 width;
+  SI1 height;
+  D1 pixel_ratio;
+
   struct wl_surface *surface;
   struct xdg_surface *xdg_surface;
   struct xdg_toplevel *xdg_toplevel;
   struct xdg_surface_listener xdg_surface_listener;
   struct xdg_toplevel_listener xdg_toplevel_listener;
   I1 configured;
-  OS_WINDOW_COMMON_MEMBERS;
 };
 
 typedef struct OS_GFX_State OS_GFX_State;
 struct OS_GFX_State {
-  OS_GFX_STATE_COMMON_MEMBERS;
+  Arena *arena;
+  OS_Window *hovered_window;
+  OS_Window *focused_window;
+  OS_Window *first_window;
+  Arena *event_arena;
+  OS_Event_List events;
+  B1 key_states[OS_KEY_COUNT];
+  D1 mouse_x;
+  D1 mouse_y;
 
   struct wl_display *display;
   struct wl_compositor *compositor;

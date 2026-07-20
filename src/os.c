@@ -224,24 +224,6 @@ enum {
 #define OS_MOUSE_BUTTON__RIGHT  OS_KEY__RIGHT_MOUSE_BUTTON
 #define OS_MOUSE_BUTTON_COUNT 3
 
-#define OS_WINDOW_COMMON_MEMBERS \
-  SI1 width; \
-  SI1 height; \
-  D1 pixel_ratio; \
-  OS_Window *prev; \
-  OS_Window *next
-
-#define OS_GFX_STATE_COMMON_MEMBERS \
-  Arena *arena; \
-  OS_Window *hovered_window; \
-  OS_Window *focused_window; \
-  OS_Window *first_window; \
-  Arena *event_arena; \
-  OS_Event_List events; \
-  B1 key_states[OS_KEY_COUNT]; \
-  D1 mouse_x; \
-  D1 mouse_y
-
 Internal void *os_reserve(L1);
 Internal void os_commit(void *, L1);
 Internal void os_memory_release(void *, L1);

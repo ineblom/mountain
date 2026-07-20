@@ -1,5 +1,6 @@
 **/*.bmp
 **/*.spall
+*.swp
 history
 .tags
 .tags_sorted_by_file

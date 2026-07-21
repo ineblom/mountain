@@ -30,6 +30,16 @@ struct Image {
   B1 *pixels;
 };
 
+typedef struct Image_Bloom_Params Image_Bloom_Params;
+struct Image_Bloom_Params {
+  L1 pass_count;
+  F1 threshold;
+  F1 strength;
+  F1 knee;
+  Image overlay;
+  F1 overlay_strength;
+};
+
 #endif
 
 
@@ -48,7 +58,7 @@ Inline Image image_alloc(Arena *arena, I1 width, I1 height, I1 bytes_per_pixel) 
   return image;
 }
 
-Inline L1 image_xy_to_index(Image image, L1 x, L1 y) {
+Inline L1 image_index_from_xy(Image image, L1 x, L1 y) {
   if (LtSL1(x, 0)) x = 0;
   if (LtSL1(y, 0)) y = 0;
   if (x > image.width-1) x = image.width-1;
@@ -200,6 +210,165 @@ Internal void image_write_to_file(Image image, String8 filename) {
   }
 
   scratch_end(scratch);
+}
+
+Internal Image image_apply_boom(Arena *arena, Image hdr, Image_Bloom_Params params) {
+  Temp_Arena scratch = scratch_begin(&arena, 1);
+  Image *bloom_passes = push_array(scratch.arena, Image, params.pass_count);
+
+  bloom_passes[0] = image_alloc(scratch.arena, hdr.width, hdr.height, sizeof(F4));
+
+  //- kti: Copy bright pixels to pass 0.
+
+  F4 *in = (F4 *)hdr.pixels;
+  F4 *out = (F4 *)bloom_passes[0].pixels;
+  for (L1 pixel_index = 0; pixel_index < bloom_passes[0].width*bloom_passes[0].height; pixel_index += 1) {
+    F4 color = in[0];
+
+    F1 luminance = luminance_F4(color);
+
+    F1 soft_threshold = params.threshold - params.knee;
+    F1 knee_range = 2.0f*params.knee;
+    F1 contrib = 0.0f;
+
+    if (luminance > params.threshold + params.knee) {
+      contrib = 1.0f;
+    } else if (luminance > soft_threshold) {
+      F1 x = luminance - soft_threshold;
+      F1 knee_contrib = (x*x) / (4.0f*knee_range*knee_range);
+      contrib = knee_contrib;
+    }
+
+    if (contrib > 0.0f && luminance > 1e-6f) {
+      F1 excess_luminance = Max(0.0f, luminance - params.threshold);
+      color = color * (excess_luminance/luminance)*contrib;
+    } else {
+      color = (F4){0};
+    }
+
+    out[0] = color;
+
+    in  += 1;
+    out += 1;
+  }
+
+  //- kti: Downsample multiple times.
+
+  for (L1 pass_index = 0; pass_index < params.pass_count-1; pass_index += 1) {
+    Image in = bloom_passes[pass_index];
+    Image out = image_alloc(scratch.arena, in.width/2, in.height/2, sizeof(F4));
+
+    bloom_passes[pass_index+1] = out;
+
+    for (L1 y = 0; y < out.height; y += 1) {
+      L1 sy = y*2;
+      for (L1 x = 0; x < out.width; x += 1) {
+        L1 sx = x*2;
+
+        // TODO: look into 13-tap bilinear tent filter.
+
+        F4 sum = {0};
+        F4 *in_p = (F4 *)in.pixels;
+
+        // Center (4)
+        sum += in_p[image_index_from_xy(in,sx+0,sy+0)] * 4.0f;
+        sum += in_p[image_index_from_xy(in,sx+1,sy+0)] * 4.0f;
+        sum += in_p[image_index_from_xy(in,sx+1,sy+1)] * 4.0f;
+        sum += in_p[image_index_from_xy(in,sx+0,sy+1)] * 4.0f;
+
+        // Edges (2)
+        sum += in_p[image_index_from_xy(in,sx-1,sy+0)] * 2.0f;
+        sum += in_p[image_index_from_xy(in,sx-1,sy+1)] * 2.0f;
+
+        sum += in_p[image_index_from_xy(in,sx+2,sy+0)] * 2.0f;
+        sum += in_p[image_index_from_xy(in,sx+2,sy+1)] * 2.0f;
+
+        sum += in_p[image_index_from_xy(in,sx+0,sy-1)] * 2.0f;
+        sum += in_p[image_index_from_xy(in,sx+1,sy-1)] * 2.0f;
+
+        sum += in_p[image_index_from_xy(in,sx+0,sy+2)] * 2.0f;
+        sum += in_p[image_index_from_xy(in,sx+1,sy+2)] * 2.0f;
+
+        // Corners (1)
+        sum += in_p[image_index_from_xy(in,sx-1,sy-1)] * 1.0f;
+        sum += in_p[image_index_from_xy(in,sx+2,sy-1)] * 1.0f;
+        sum += in_p[image_index_from_xy(in,sx-1,sy+2)] * 1.0f;
+        sum += in_p[image_index_from_xy(in,sx+2,sy+2)] * 1.0f;
+
+        sum /= 36.0f;
+        F4 karis_average = sum / (1.0f + luminance_F4(sum));
+
+        ((F4 *)out.pixels)[x + y*out.width] = karis_average;
+      }
+    }
+  }
+
+  //- kti: Upsample and sum.
+
+  for (L1 pass_index = params.pass_count-1; pass_index >= 1; pass_index -= 1) {
+    Image in = bloom_passes[pass_index];
+    Image out = bloom_passes[pass_index-1];
+
+    for (L1 y = 0; y < out.height; y += 1) {
+      L1 sy = y/2;
+      for (L1 x = 0; x < out.width; x += 1) {
+        L1 sx = x/2;
+
+        F4 sum = {0};
+        F4 *in_p = (F4 *)in.pixels;
+
+        // center
+        sum += in_p[image_index_from_xy(in,sx,sy)]*4.0f;
+
+        // edges
+        sum += in_p[image_index_from_xy(in,sx-1,sy)]*2.0f;
+        sum += in_p[image_index_from_xy(in,sx+1,sy)]*2.0f;
+        sum += in_p[image_index_from_xy(in,sx,sy-1)]*2.0f;
+        sum += in_p[image_index_from_xy(in,sx,sy+1)]*2.0f;
+
+        // corners
+        sum += in_p[image_index_from_xy(in,sx-1,sy-1)]*1.0f;
+        sum += in_p[image_index_from_xy(in,sx+1,sy-1)]*1.0f;
+        sum += in_p[image_index_from_xy(in,sx-1,sy+1)]*1.0f;
+        sum += in_p[image_index_from_xy(in,sx+1,sy+1)]*1.0f;
+
+        sum /= 16.0f;
+
+        ((F4 *)out.pixels)[x + y*out.width] += sum;
+      }
+    }
+  }
+
+  //- kti: Combine input image and bloom result, optionally use overlay image.
+  Image result = image_alloc(arena, hdr.width, hdr.height, sizeof(F4));
+
+  F4 *in_hdr = (F4 *)hdr.pixels;
+  F4 *in_bloom = (F4 *)bloom_passes[0].pixels;
+  out = (F4 *)result.pixels;
+  for (L1 y = 0; y < result.height; y += 1) {
+    for (L1 x = 0; x < result.width; x += 1) {
+      F1 u = (F1)x / (F1)result.width;
+      F1 v = (F1)y / (F1)result.height;
+
+      // TODO: make sure this returns 0 on invalid image or smth.
+      F4 bloom_overlay = image_sample_bilinear_I1_to_F4(params.overlay, u, v);
+      F4 hdr = in_hdr[0];
+      F4 bloom = in_bloom[0];
+
+      bloom *= 1.0f + luminance_F4(bloom_overlay)*params.overlay_strength;
+
+      F4 color = hdr * (1.0f - 0.5f*params.strength) + params.strength*bloom;
+      out[0] = color;
+
+      in_hdr += 1;
+      in_bloom += 1;
+      out += 1;
+    }
+  }
+
+  scratch_end(scratch);
+
+  return result;
 }
 
 #endif

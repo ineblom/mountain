@@ -84,7 +84,7 @@ struct Window {
   Panel root_panel;
 };
 
-////////////////////////////////
+///////////////////////////////
 //~ kti: Entity
 
 enum {
@@ -155,6 +155,8 @@ enum {
   CMD_KIND__CREATE_CAMERA,
   CMD_KIND__DELETE_ENTITIES,
 
+  CMD_KIND__RENDER,
+
   CMD_KIND_COUNT,
 };
 
@@ -218,6 +220,19 @@ struct Lister_Entry {
   Cmd cmd;
 };
 
+////////////////////////////////
+//~ kti: Render
+
+typedef struct Render_Settings Render_Settings;
+struct Render_Settings {
+  L1 width;
+  L1 height;
+  L1 rays_per_pixel;
+  L1 max_num_bounces;
+
+  Image_Bloom_Params bloom;
+  String8 output_filename;
+};
 
 ////////////////////////////////
 //~ kti: State
@@ -241,6 +256,7 @@ struct State {
   Txt_Pt name_mark;
 
   //- kti: Entities.
+  L1 entity_count;
   Entity *first_entity;
   Entity *last_entity;
   Entity *first_free_entity;
@@ -252,6 +268,12 @@ struct State {
 
   //- kti: Graphics.
   Mesh meshes[SHAPE_COUNT];
+
+  //- kti: Render.
+  Render_Settings render_settings;
+  Arena *render_arena;
+  RT_Scene *render_scene;
+  Image render_postprocessed;
 };
 
 #endif
@@ -662,6 +684,8 @@ Internal Entity *entity_create(L1 flags, String8 name) {
   entity->material.emissive = (F4){0.0f, 0.0f, 0.0f, 1.0f};
   memmove(entity->name, name.str, entity->name_len);
 
+  state->entity_count += 1;
+
   return entity;
 }
 
@@ -672,6 +696,7 @@ Internal void entity_delete(Entity_Handle *handles, L1 count) {
       entity->gen += 1;
       DLLRemove(state->first_entity, state->last_entity, entity);
       SLLStackPush(state->first_free_entity, entity);
+      state->entity_count -= 1;
     }
   }
 }
@@ -972,6 +997,7 @@ Internal void lane(Arena *arena) {
     Window *window = window_open();
 
     //- kti: Create initial state.
+
     Panel *lister_panel = panel_alloc();
     panel_push_view(lister_panel, VIEW_KIND__LISTER);
     panel_insert(lister_panel, &window->root_panel, 0);
@@ -985,6 +1011,11 @@ Internal void lane(Arena *arena) {
 
     Entity *starting_entity = entity_create(ENTITY_FLAG__SHAPE, str8("Starting Entity"));
     entity_select(entity_handle(starting_entity), 0);
+
+    state->render_settings.width = 1280;
+    state->render_settings.height = 720;
+    state->render_settings.rays_per_pixel = 64;
+    state->render_settings.max_num_bounces = 8;
   }
 
   lane_sync();
@@ -1227,6 +1258,10 @@ Internal void lane(Arena *arena) {
         if (!has_camera) {
           lister_cmd(str8("Create Camera"), (Cmd){
             .kind = CMD_KIND__CREATE_CAMERA,
+          });
+        } else if (state->entity_count >= 2) {
+          lister_cmd(str8("Render"), (Cmd){
+            .kind = CMD_KIND__RENDER,
           });
         }
       }
@@ -1985,9 +2020,78 @@ Internal void lane(Arena *arena) {
           case CMD_KIND__DELETE_ENTITIES: {
             entity_delete(cmd.entities, cmd.entity_count);
           } break;
+          case CMD_KIND__RENDER: {
+            if (state->render_arena == 0) {
+              state->render_arena = arena_alloc(GiB(1));
+            }
+
+            MemoryZeroStruct(&state->render_postprocessed);
+            
+            Entity *camera_entity = &state->nil_entity; 
+
+            L1 shape_counts[SHAPE_COUNT] = {0};
+            for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
+              if (it->flags & ENTITY_FLAG__CAMERA) {
+                camera_entity = it;
+              }
+              if (it->flags & ENTITY_FLAG__SHAPE) {
+                shape_counts[it->shape] += 1;
+              }
+            }
+
+            L1 sphere_idx = 0;
+            RT_Sphere *spheres = push_array(state->render_arena, RT_Sphere, shape_counts[SHAPE__SPHERE]);
+            L1 box_idx = 0;
+            RT_Box *boxes = push_array(state->render_arena, RT_Box, shape_counts[SHAPE__BOX]);
+
+            for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
+              if (it->flags & ENTITY_FLAG__SHAPE) {
+                if (it->shape == SHAPE__SPHERE) {
+                  spheres[sphere_idx].p = it->pos;
+                  spheres[sphere_idx].r = it->sphere_diameter*0.5f;
+                  spheres[sphere_idx].material = it->material;
+                  sphere_idx += 1;
+                } else if (it->shape == SHAPE__BOX) {
+                  boxes[box_idx].min = it->pos - it->size*0.5f;
+                  boxes[box_idx].max = it->pos + it->size*0.5f;
+                  boxes[box_idx].material = it->material;
+                  box_idx += 1;
+                }
+              }
+            }
+
+            state->render_scene = push_array(state->render_arena, RT_Scene, 1);
+            state->render_scene[0] = (RT_Scene){
+              .width = state->render_settings.width,
+              .height = state->render_settings.height,
+              .rays_per_pixel = state->render_settings.rays_per_pixel,
+              .max_num_bounces = state->render_settings.max_num_bounces,
+
+              .camera = {
+                .pos = camera_entity->pos,  
+                .forward = camera_entity->camera_forward,
+                .vertical_fov = camera_entity->camera_vertical_fov,
+                .aperture_radius = camera_entity->camera_aperture_radius,
+                .focal_distance = camera_entity->camera_focal_distance,
+              },
+
+              .sphere_count = shape_counts[SHAPE__SPHERE],
+              .spheres = spheres,
+
+              .box_count = shape_counts[SHAPE__BOX],
+              .boxes = boxes,
+            };
+          } break;
         }
       }
       state->cmd_count = 0;
+    }
+
+    lane_sync();
+
+    RT_Scene *render_scene = state->render_scene;
+    if (render_scene != 0 && image_is_nil(render_scene->result)) {
+      rt_trace_scene(state->render_arena, render_scene);
     }
 
     scratch_end(scratch);

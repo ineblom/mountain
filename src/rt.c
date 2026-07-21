@@ -45,8 +45,6 @@ struct RT_Camera {
 
 typedef struct RT_Scene RT_Scene;
 struct RT_Scene {
-  Arena *arena;
-
   L1 width;
   L1 height;
   L1 rays_per_pixel;
@@ -307,13 +305,13 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
   return result;
 }
 
-Internal void rt_trace_scene(RT_Scene *scene) {
+Internal void rt_trace_scene(Arena *arena, RT_Scene *scene) {
   scene->tile_size = 8;
   L1 tile_cols = (scene->width  + scene->tile_size - 1) / scene->tile_size;
   L1 tile_rows = (scene->height + scene->tile_size - 1) / scene->tile_size;
 
   if (lane_idx() == 0 && scene->working_image.pixels == 0) {
-    scene->working_image = image_alloc(scene->arena, scene->width, scene->height, sizeof(F4));
+    scene->working_image = image_alloc(arena, scene->width, scene->height, sizeof(F4));
 
     scene->tile_count = tile_cols*tile_rows;
     scene->next_tile_idx = 0;

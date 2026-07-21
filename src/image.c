@@ -51,6 +51,11 @@ struct Image_Bloom_Params {
 
 #if (SOURCE)
 
+Internal I1 image_is_nil(Image image) {
+  I1 result = image.width == 0 || image.height == 0 || image.pixels == 0;
+  return result;
+}
+
 Inline L1 image_pixels_size(Image image) {
   return image.bytes_per_pixel * image.width * image.height;
 }
@@ -83,7 +88,7 @@ Inline F4 I1_to_F4(I1 pixel) {
 
 Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
   F4 result = {0};
-  if (image.width > 0 && image.height > 0 && image.pixels != 0 && image.bytes_per_pixel == sizeof(F4)) {
+  if (!image_is_nil(image) && image.bytes_per_pixel == sizeof(F4)) {
     u = clamp01_F1(u);
     v = clamp01_F1(v);
 
@@ -115,7 +120,7 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
 
 Inline F4 image_sample_bilinear_F4_from_I1(Image image, F1 u, F1 v) {
   F4 result = {0};
-  if (image.width > 0 && image.height > 0 && image.pixels != 0 && image.bytes_per_pixel == sizeof(I1)) {
+  if (!image_is_nil(image) && image.bytes_per_pixel == sizeof(I1)) {
     u = clamp01_F1(u);
     v = clamp01_F1(v);
 
@@ -151,37 +156,37 @@ Inline F4 image_sample_bilinear_F4_from_I1(Image image, F1 u, F1 v) {
 }
 
 Internal Image image_read_from_file(Arena *arena, String8 filename) {
-  String8 contents = os_read_entire_file(arena, filename);
-  Assert(contents.len > 0 && "failed to read image file");
-
-  Bitmap_Header *header = (Bitmap_Header *)contents.str;
-  Assert(header->file_type == 0x4D42);
-  Assert(header->bits_per_pixel == 24 || header->bits_per_pixel == 32);
-  Assert(header->compression == 0);
-
   Image result = {0};
 
-  result.width = header->width;
-  result.height = header->height;
-  result.bytes_per_pixel = 4;
+  String8 contents = os_read_entire_file(arena, filename);
 
-  if (header->bits_per_pixel == 32) {
-    result.pixels = contents.str + header->bitmap_offset;
-  } else {
-    L1 pixel_count = result.width * result.height;
-    result.pixels = push_array(arena, B1, pixel_count*result.bytes_per_pixel);
+  Bitmap_Header *header = (Bitmap_Header *)contents.str;
+  if(contents.len > 0 && header &&
+      header->file_type == 0x4D42 &&
+      (header->bits_per_pixel == 24 || header->bits_per_pixel == 32) &&
+      header->compression == 0) {
+    result.width = header->width;
+    result.height = header->height;
+    result.bytes_per_pixel = 4;
 
-    B1 *src = contents.str + header->bitmap_offset;
-    B1 *dst = result.pixels;
-    for (L1 pixel_index = 0; pixel_index < pixel_count; pixel_index += 1) {
-      B1 b = src[0];
-      B1 g = src[1];
-      B1 r = src[2];
+    if (header->bits_per_pixel == 32) {
+      result.pixels = contents.str + header->bitmap_offset;
+    } else {
+      L1 pixel_count = result.width * result.height;
+      result.pixels = push_array(arena, B1, pixel_count*result.bytes_per_pixel);
 
-      ((I1 *)dst)[0] = 0xFF000000 | (r << 16) | (g << 8) | b;
+      B1 *src = contents.str + header->bitmap_offset;
+      B1 *dst = result.pixels;
+      for (L1 pixel_index = 0; pixel_index < pixel_count; pixel_index += 1) {
+        B1 b = src[0];
+        B1 g = src[1];
+        B1 r = src[2];
 
-      src += 3;
-      dst += 4;
+        ((I1 *)dst)[0] = 0xFF000000 | (r << 16) | (g << 8) | b;
+
+        src += 3;
+        dst += 4;
+      }
     }
   }
 

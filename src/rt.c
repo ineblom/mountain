@@ -307,55 +307,6 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
   return result;
 }
 
-Inline F1 linear_to_srgb(F1 l) {
-  if (l < 0.0f) l = 0.0f;
-  if (l > 1.0f) l = 1.0f;
-
-  F1 s = l * 12.92f;
-  if (l > 0.0031308f) {
-    s = 1.055f*powf(l, 1.0f/2.4f) - 0.055f;
-  }
-
-  return s;
-}
-
-Inline F4 tonemap_aces(F4 v) {
-  const F1 a = 2.51f;
-  const F1 b = 0.03f;
-  const F1 c = 2.43f;
-  const F1 d = 0.59f;
-  const F1 e = 0.14f;
-  F4 result = clamp01_F4((v * (a * v + b)) / (v * (c * v + d) + e));
-  return result;
-}
-
-Inline F4 tonemap_reinhard(F4 v) {
-  F4 result = v / (1.0f + v);
-  return result;
-}
-
-Inline F4 tonemap_lottes(F4 v) {
-  // Lottes 2016, "Advanced Techniques and Optimization of HDR Color Pipelines"
-  const F1 a = 1.6f;
-  const F1 d = 0.977f;
-  const F1 hdr_max = 8.0f;
-  const F1 mid_in = 0.18f;
-  const F1 mid_out = 0.267f;
-
-  // TODO: Precompute
-  const F1 b =
-      (-powf(mid_in, a) + powf(hdr_max, a) * mid_out) /
-      ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
-  const float c =
-      (powf(hdr_max, a * d) * powf(mid_in, a) - powf(hdr_max, a) * powf(mid_in, a * d) * mid_out) /
-      ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
-
-  F4 result = pow_F4(v, a) / (pow_F4(v, a * d) * b + c);
-  return result;
-}
-
-#define tonemap tonemap_lottes
-
 Internal void rt_trace_scene(RT_Scene *scene) {
   scene->tile_size = 8;
   L1 tile_cols = (scene->width  + scene->tile_size - 1) / scene->tile_size;

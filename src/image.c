@@ -1,6 +1,12 @@
 
 #if (HEADER)
 
+typedef enum {
+  TONEMAP_KIND__ACES,
+  TONEMAP_KIND__REINHARD,
+  TONEMAP_KIND__LOTTES,
+} Tonemap_Kind;
+
 #pragma pack(push, 1)
 typedef struct Bitmap_Header Bitmap_Header;
 struct Bitmap_Header {
@@ -76,66 +82,70 @@ Inline F4 I1_to_F4(I1 pixel) {
 }
 
 Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
-  Assert(image.bytes_per_pixel == sizeof(F4));
+  F4 result = {0};
+  if (image.width > 0 && image.height > 0 && image.pixels != 0 && image.bytes_per_pixel == sizeof(F4)) {
+    u = clamp01_F1(u);
+    v = clamp01_F1(v);
 
-  u = clamp01_F1(u);
-  v = clamp01_F1(v);
+    F1 tex_x = u * (F1)(image.width-1);
+    F1 tex_y = v * (F1)(image.height-1);
 
-  F1 tex_x = u * (F1)(image.width-1);
-  F1 tex_y = v * (F1)(image.height-1);
+    L1 x0 = (L1)tex_x;
+    L1 y0 = (L1)tex_y;
+    L1 x1 = Min(x0+1, image.width-1);
+    L1 y1 = Min(y0+1, image.height-1);
 
-  L1 x0 = (L1)tex_x;
-  L1 y0 = (L1)tex_y;
-  L1 x1 = Min(x0+1, image.width-1);
-  L1 y1 = Min(y0+1, image.height-1);
+    F1 fx = tex_x - (F1)x0;
+    F1 fy = tex_y - (F1)y0;
 
-  F1 fx = tex_x - (F1)x0;
-  F1 fy = tex_y - (F1)y0;
+    F4 *p = (F4 *)image.pixels;
+    F4 c00 = p[x0+y0*image.width];
+    F4 c10 = p[x1+y0*image.width];
+    F4 c01 = p[x0+y1*image.width];
+    F4 c11 = p[x1+y1*image.width];
 
-  F4 *p = (F4 *)image.pixels;
-  F4 c00 = p[x0+y0*image.width];
-  F4 c10 = p[x1+y0*image.width];
-  F4 c01 = p[x0+y1*image.width];
-  F4 c11 = p[x1+y1*image.width];
+    F4 top_row = lerp_F4(c00, fx, c10);
+    F4 bot_row = lerp_F4(c01, fx, c11);
 
-  F4 top_row = lerp_F4(c00, fx, c10);
-  F4 bot_row = lerp_F4(c01, fx, c11);
-  F4 result  = lerp_F4(top_row, fy, bot_row);
+    result  = lerp_F4(top_row, fy, bot_row);
+  }
 
   return result;
 }
 
-Inline F4 image_sample_bilinear_I1_to_F4(Image image, F1 u, F1 v) {
-  Assert(image.bytes_per_pixel == sizeof(I1));
+Inline F4 image_sample_bilinear_F4_from_I1(Image image, F1 u, F1 v) {
+  F4 result = {0};
+  if (image.width > 0 && image.height > 0 && image.pixels != 0 && image.bytes_per_pixel == sizeof(I1)) {
+    u = clamp01_F1(u);
+    v = clamp01_F1(v);
 
-  u = clamp01_F1(u);
-  v = clamp01_F1(v);
+    F1 tex_x = u * (F1)(image.width-1);
+    F1 tex_y = v * (F1)(image.height-1);
 
-  F1 tex_x = u * (F1)(image.width-1);
-  F1 tex_y = v * (F1)(image.height-1);
+    L1 x0 = (L1)tex_x;
+    L1 y0 = (L1)tex_y;
+    L1 x1 = Min(x0+1, image.width-1);
+    L1 y1 = Min(y0+1, image.height-1);
 
-  L1 x0 = (L1)tex_x;
-  L1 y0 = (L1)tex_y;
-  L1 x1 = Min(x0+1, image.width-1);
-  L1 y1 = Min(y0+1, image.height-1);
+    F1 fx = tex_x - (F1)x0;
+    F1 fy = tex_y - (F1)y0;
 
-  F1 fx = tex_x - (F1)x0;
-  F1 fy = tex_y - (F1)y0;
+    I1 *p = (I1 *)image.pixels;
+    I1 c00 = p[x0+y0*image.width];
+    I1 c10 = p[x1+y0*image.width];
+    I1 c01 = p[x0+y1*image.width];
+    I1 c11 = p[x1+y1*image.width];
 
-  I1 *p = (I1 *)image.pixels;
-  I1 c00 = p[x0+y0*image.width];
-  I1 c10 = p[x1+y0*image.width];
-  I1 c01 = p[x0+y1*image.width];
-  I1 c11 = p[x1+y1*image.width];
+    F4 c00rgb = I1_to_F4(c00);
+    F4 c10rgb = I1_to_F4(c10);
+    F4 c01rgb = I1_to_F4(c01);
+    F4 c11rgb = I1_to_F4(c11);
 
-  F4 c00rgb = I1_to_F4(c00);
-  F4 c10rgb = I1_to_F4(c10);
-  F4 c01rgb = I1_to_F4(c01);
-  F4 c11rgb = I1_to_F4(c11);
+    F4 top_row = lerp_F4(c00rgb,  fx, c10rgb);
+    F4 bot_row = lerp_F4(c01rgb,  fx, c11rgb);
 
-  F4 top_row = lerp_F4(c00rgb,  fx, c10rgb);
-  F4 bot_row = lerp_F4(c01rgb,  fx, c11rgb);
-  F4 result  = lerp_F4(top_row, fy, bot_row);
+    result  = lerp_F4(top_row, fy, bot_row);
+  }
 
   return result;
 }
@@ -350,8 +360,7 @@ Internal Image image_apply_boom(Arena *arena, Image hdr, Image_Bloom_Params para
       F1 u = (F1)x / (F1)result.width;
       F1 v = (F1)y / (F1)result.height;
 
-      // TODO: make sure this returns 0 on invalid image or smth.
-      F4 bloom_overlay = image_sample_bilinear_I1_to_F4(params.overlay, u, v);
+      F4 bloom_overlay = image_sample_bilinear_F4_from_I1(params.overlay, u, v);
       F4 hdr = in_hdr[0];
       F4 bloom = in_bloom[0];
 
@@ -367,6 +376,87 @@ Internal Image image_apply_boom(Arena *arena, Image hdr, Image_Bloom_Params para
   }
 
   scratch_end(scratch);
+
+  return result;
+}
+
+Inline F4 tonemap_aces(F4 v) {
+  const F1 a = 2.51f;
+  const F1 b = 0.03f;
+  const F1 c = 2.43f;
+  const F1 d = 0.59f;
+  const F1 e = 0.14f;
+  F4 result = clamp01_F4((v * (a * v + b)) / (v * (c * v + d) + e));
+  return result;
+}
+
+Inline F4 tonemap_reinhard(F4 v) {
+  F4 result = v / (1.0f + v);
+  return result;
+}
+
+Inline F4 tonemap_lottes(F4 v) {
+  // Lottes 2016, "Advanced Techniques and Optimization of HDR Color Pipelines"
+  const F1 a = 1.6f;
+  const F1 d = 0.977f;
+  const F1 hdr_max = 8.0f;
+  const F1 mid_in = 0.18f;
+  const F1 mid_out = 0.267f;
+
+  // TODO: Precompute
+  const F1 b =
+      (-powf(mid_in, a) + powf(hdr_max, a) * mid_out) /
+      ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
+  const float c = (powf(hdr_max, a * d) * powf(mid_in, a) - powf(hdr_max, a) * powf(mid_in, a * d) * mid_out) /
+      ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
+
+  F4 result = pow_F4(v, a) / (pow_F4(v, a * d) * b + c);
+  return result;
+}
+
+Internal F4 tonemap(Tonemap_Kind kind, F4 v) {
+  F4 result = v;
+  switch (kind) {
+    case TONEMAP_KIND__ACES:     result = tonemap_aces(v); break;
+    case TONEMAP_KIND__REINHARD: result = tonemap_reinhard(v); break;
+    case TONEMAP_KIND__LOTTES:   result = tonemap_aces(v); break;
+  }
+  return result;
+}
+
+Inline F1 srgb_from_linear(F1 l) {
+  if (l < 0.0f) l = 0.0f;
+  if (l > 1.0f) l = 1.0f;
+
+  F1 s = l * 12.92f;
+  if (l > 0.0031308f) {
+    s = 1.055f*powf(l, 1.0f/2.4f) - 0.055f;
+  }
+
+  return s;
+}
+
+Internal Image image_I1_from_F4_tonemap(Arena *arena, Image input, Tonemap_Kind tonemap_kind) {
+  Image result = {0};
+  if (input.bytes_per_pixel == sizeof(F4)) {
+    result = image_alloc(arena, input.width, input.height, sizeof(I1));
+    for (L1 pixel_index = 0; pixel_index < input.width*input.height; pixel_index += 1) {
+      F4 in_px = input.pixels[pixel_index];
+      F4 tonemapped = tonemap(tonemap_kind, in_px);
+      F4 out_color = {
+        255.0f*srgb_from_linear(tonemapped[0]),
+        255.0f*srgb_from_linear(tonemapped[1]),
+        255.0f*srgb_from_linear(tonemapped[2]),
+        255.0f,
+      };
+      I1 out_px =
+        0xFF000000             |
+        (I1)out_color[0] << 16 |
+        (I1)out_color[1] << 8  |
+        (I1)out_color[2] << 0;
+      result.pixels[pixel_index] = out_px;
+    }
+  }
 
   return result;
 }

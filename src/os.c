@@ -294,7 +294,7 @@ Internal void os_memory_release(void *ptr, L1 size) {
   munmap(ptr, size);
 }
 
-Internal I1 os_num_cores(void) {
+Internal I1 os_core_count(void) {
   long count = sysconf(_SC_NPROCESSORS_ONLN);
   return count > 0 ? (I1)count : 1;
 }

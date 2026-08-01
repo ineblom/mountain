@@ -1,11 +1,32 @@
 #if (HEADER)
-typedef struct LaneCtx LaneCtx;
-struct LaneCtx {
+
+typedef void Lane_Group_Proc(void *user_data);
+
+typedef struct Lane_Ctx Lane_Ctx;
+typedef struct Lane_Group Lane_Group;
+struct Lane_Group {
+  Arena *arena;
+
+  L1 lane_count;
+  L1 sync_L1_val;
+  OS_Thread *threads;
+  Lane_Ctx *contexts;
+
+  OS_Barrier barrier;
+
+  Lane_Group_Proc *proc;
+  void *user_data;
+
+  L1 remaining_thread_count;
+};
+
+struct Lane_Ctx {
+  Lane_Group *group;
+
   Arena *arena;
   Arena *scratch_arenas[2];
+
   L1 lane_idx;
-  L1 lane_count;
-  OS_Barrier *barrier;
 };
 
 typedef struct Range Range;
@@ -13,34 +34,30 @@ struct Range {
   L1 min, max;
 };
 
-Internal void lane(Arena *);
-
 Inline Temp_Arena scratch_begin(Arena **conflicts, L1 count);
 Inline void scratch_end(Temp_Arena temp);
 #endif
 
 #if (SOURCE)
 
-Global L1 sync_L1_val = 0;
-Global ThreadLocal LaneCtx *lane_ctx = 0;
+Global ThreadLocal Lane_Ctx *lane_ctx = 0;
 
 #define lane_idx() (lane_ctx->lane_idx)
-#define lane_count() (lane_ctx->lane_count)
-#define lane_from_task_idx(idx) ((idx) % lane_ctx->lane_count)
-#define lane_sync() os_barrier_wait(lane_ctx->barrier)
+#define lane_count() (lane_ctx->group->lane_count)
+#define lane_from_task_idx(idx) ((idx) % lane_ctx->group->lane_count)
+#define lane_sync() os_barrier_wait(&lane_ctx->group->barrier)
 #define lane_range(count) lane_range_for_section(lane_idx(), lane_count(), count)
+#define lane_arena() (lane_ctx->arena)
 
 Inline void lane_sync_L1(L1 *ptr, L1 src_lane_idx) {
-  ProfFuncBegin();
+  Lane_Group *group = lane_ctx->group;
 
   if (lane_idx() == src_lane_idx) {
-    sync_L1_val = ptr[0];
+    group->sync_L1_val = ptr[0];
   }
   lane_sync();
-  ptr[0] = sync_L1_val;
+  ptr[0] = group->sync_L1_val;
   lane_sync();
-
-  ProfEnd();
 }
 
 Internal Range lane_range_for_section(L1 section_idx, L1 section_count, L1 count) {
@@ -88,57 +105,70 @@ Inline void scratch_end(Temp_Arena temp) {
 }
 
 Internal void *lane_thread_entrypoint(void *arg) {
-  lane_ctx = (LaneCtx *)arg;
-  Arena *arena = lane_ctx->arena;
-  lane(arena);
+  Lane_Ctx *ctx = (Lane_Ctx *)arg;
+  lane_ctx = ctx;
+
+  Lane_Group *group = ctx->group;
+  group->proc(group->user_data);
 
   return 0;
 }
 
-SI1 main(void) {
-  I1 thread_count = os_num_cores();
+Internal Lane_Group *lane_group_launch(L1 lane_count, Lane_Group_Proc *proc, void *user_data) {
+  Arena *arena = arena_alloc(MiB(1));
 
-  OS_Barrier barrier = os_barrier_alloc(thread_count);
+  Lane_Group *group = push_array(arena, Lane_Group, 1);
+  group->arena = arena;
 
-  Arena *threads_arena = arena_alloc(MiB(1));
+  group->lane_count = lane_count;
+  group->proc = proc;
+  group->user_data = user_data;
 
-  LaneCtx *lane_contexts = push_array(threads_arena, LaneCtx, thread_count);
+  group->barrier = os_barrier_alloc(lane_count);
 
-  for (L1 i = 0; i < thread_count; i += 1) {
-    LaneCtx ctx = {
-      .arena = arena_alloc(GiB(1)),
-      .lane_idx = i,
-      .lane_count = thread_count,
-      .barrier = &barrier,
-    };
-    for (L1 j = 0; j < ArrayCount(ctx.scratch_arenas); j += 1) {
-      ctx.scratch_arenas[j] = arena_alloc(MiB(64));
+  group->threads = push_array(arena, OS_Thread, lane_count);
+  group->contexts = push_array(arena, Lane_Ctx, lane_count);
+
+  for (L1 i = 0; i < lane_count; i += 1) {
+    Lane_Ctx *ctx = &group->contexts[i];
+
+    ctx->group = group;
+    ctx->lane_idx = i;
+    ctx->arena = arena_alloc(GiB(1));
+
+    for (L1 j = 0; j < ArrayCount(ctx->scratch_arenas); j += 1) {
+      ctx->scratch_arenas[j] = arena_alloc(MiB(64));
     }
-    lane_contexts[i] = ctx;
   }
 
-  OS_Thread *threads = push_array(threads_arena, OS_Thread, thread_count);
-  for (L1 i = 1; i < thread_count; i += 1) {
-    LaneCtx *lane_ctx = lane_contexts + i;
-    threads[i] = os_thread_launch(&lane_thread_entrypoint, lane_ctx);
+  for (L1 i = 1; i < lane_count; i += 1) {
+    Lane_Ctx *ctx = &group->contexts[i];
+    group->threads[i] = os_thread_launch(&lane_thread_entrypoint, ctx);
   }
 
   // Lane zero owns the main thread. This is required by AppKit and is also
   // useful for other platform APIs that attach state to the process thread.
-  lane_thread_entrypoint(&lane_contexts[0]);
+  lane_thread_entrypoint(&group->contexts[0]);
 
-  for (L1 i = 1; i < thread_count; i += 1) {
-    os_thread_join(threads[i]);
+  return group;
+}
+
+Internal void lane_group_join(Lane_Group *group) {
+  for (L1 i = 1; i < group->lane_count; i += 1) {
+    os_thread_join(group->threads[i]);
   }
 
-  for (L1 i = 0; i < thread_count; i += 1) {
-    arena_release(lane_contexts[i].arena);
+  for (L1 i = 0; i < group->lane_count; i += 1) {
+    Lane_Ctx *ctx = &group->contexts[i];
+    for (L1 j = 0; j < ArrayCount(ctx->scratch_arenas); j += 1) {
+      arena_release(ctx->scratch_arenas[j]);
+    }
+    arena_release(ctx->arena);
   }
 
-  os_barrier_release(&barrier);
-  arena_release(threads_arena);
+  os_barrier_release(&group->barrier);
 
-  return 0;
+  arena_release(group->arena);
 }
 
 #endif

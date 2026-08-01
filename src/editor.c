@@ -972,7 +972,9 @@ Internal M4F line_transform_M4F(F4 begin, F4 direction, F1 thickness) {
 ////////////////////////////////
 //~ kti: Main
 
-Internal void lane(Arena *arena) {
+Internal void lane(void *user_data) {
+  Arena *arena = lane_arena();
+
   L1 frame_count = 0;
   L1 total_frame_time = 0;
   L1 min_frame_time = L1_MAX;
@@ -2175,6 +2177,13 @@ Internal void lane(Arena *arena) {
 
     ProfShutdown();
   }
+}
+
+SI1 main(void) {
+  Lane_Group *group = lane_group_launch(os_core_count(), lane, 0);
+  lane_group_join(group);
+
+  return 0;
 }
 
 #endif

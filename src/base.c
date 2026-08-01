@@ -95,6 +95,12 @@ Inline void Pause(void) {
 #endif
 }
 
+Inline I1 atomic_load_I1(I1 *value) {
+  return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+}
+Inline L1 atomic_load_L1(L1 *value) {
+  return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+}
 Inline I1 atomic_add_I1(I1 *a, I1 v) {
   return __atomic_fetch_add(a, v, __ATOMIC_SEQ_CST);
 }

@@ -2,6 +2,19 @@
 
 typedef void Lane_Group_Proc(void *user_data);
 
+typedef struct Lane_Group_Params Lane_Group_Params;
+struct Lane_Group_Params {
+  L1 count;
+
+  Lane_Group_Proc *proc;
+  void *user_data;
+
+  L1 arena_size; 
+  L1 scratch_size; 
+
+  I1 lane_zero_on_caller;
+};
+
 typedef struct Lane_Ctx Lane_Ctx;
 typedef struct Lane_Group Lane_Group;
 struct Lane_Group {
@@ -17,7 +30,7 @@ struct Lane_Group {
   Lane_Group_Proc *proc;
   void *user_data;
 
-  L1 remaining_thread_count;
+  L1 lanes_completed;
 };
 
 struct Lane_Ctx {
@@ -111,50 +124,59 @@ Internal void *lane_thread_entrypoint(void *arg) {
   Lane_Group *group = ctx->group;
   group->proc(group->user_data);
 
+  atomic_add_L1(&group->lanes_completed, 1);
+
   return 0;
 }
 
-Internal Lane_Group *lane_group_launch(L1 lane_count, Lane_Group_Proc *proc, void *user_data) {
+Internal Lane_Group *lane_group_start(Lane_Group_Params params) {
   Arena *arena = arena_alloc(MiB(1));
 
   Lane_Group *group = push_array(arena, Lane_Group, 1);
   group->arena = arena;
 
-  group->lane_count = lane_count;
-  group->proc = proc;
-  group->user_data = user_data;
+  group->lane_count = params.count;
+  group->proc = params.proc;
+  group->user_data = params.user_data;
 
-  group->barrier = os_barrier_alloc(lane_count);
+  group->barrier = os_barrier_alloc(params.count);
 
-  group->threads = push_array(arena, OS_Thread, lane_count);
-  group->contexts = push_array(arena, Lane_Ctx, lane_count);
+  group->threads = push_array(arena, OS_Thread, params.count);
+  group->contexts = push_array(arena, Lane_Ctx, params.count);
 
-  for (L1 i = 0; i < lane_count; i += 1) {
+  for (L1 i = 0; i < params.count; i += 1) {
     Lane_Ctx *ctx = &group->contexts[i];
 
     ctx->group = group;
     ctx->lane_idx = i;
-    ctx->arena = arena_alloc(GiB(1));
+    ctx->arena = arena_alloc(params.arena_size);
 
     for (L1 j = 0; j < ArrayCount(ctx->scratch_arenas); j += 1) {
-      ctx->scratch_arenas[j] = arena_alloc(MiB(64));
+      ctx->scratch_arenas[j] = arena_alloc(params.scratch_size);
     }
   }
 
-  for (L1 i = 1; i < lane_count; i += 1) {
+  for (L1 i = params.lane_zero_on_caller; i < params.count; i += 1) {
     Lane_Ctx *ctx = &group->contexts[i];
     group->threads[i] = os_thread_launch(&lane_thread_entrypoint, ctx);
   }
 
-  // Lane zero owns the main thread. This is required by AppKit and is also
-  // useful for other platform APIs that attach state to the process thread.
-  lane_thread_entrypoint(&group->contexts[0]);
+  if (params.lane_zero_on_caller) {
+    // Lane zero owns the main thread. This is required by AppKit and is also
+    // useful for other platform APIs that attach state to the process thread.
+    lane_thread_entrypoint(&group->contexts[0]);
+  }
 
   return group;
 }
 
-Internal void lane_group_join(Lane_Group *group) {
-  for (L1 i = 1; i < group->lane_count; i += 1) {
+Inline I1 lane_group_has_completed(Lane_Group *group) {
+  I1 completed = atomic_load_L1(&group->lanes_completed) == group->lane_count;
+  return completed;
+}
+
+Internal void lane_group_stop(Lane_Group *group) {
+  for (L1 i = 0; i < group->lane_count; i += 1) {
     os_thread_join(group->threads[i]);
   }
 

@@ -578,8 +578,8 @@ Internal Window *window_from_os_window(OS_Window *os) {
 //~ kti: Cmd
 
 Internal void cmd_push(Cmd cmd) {
-  if (state->cmd_count < ArrayCount(state->cmds)) {
-    L1 idx = atomic_add_L1(&state->cmd_count, 1);
+  L1 idx = atomic_add_L1(&state->cmd_count, 1);
+  if (idx < ArrayCount(state->cmds)) {
     state->cmds[idx] = cmd;
   }
 }
@@ -2013,7 +2013,7 @@ Internal void lane(void *user_data) {
       ////////////////////////////////
       //~ kti: Execute Cmds
 
-      for (L1 i = 0; i < state->cmd_count; i += 1) {
+      for (L1 i = 0; i < state->cmd_count && i < ArrayCount(state->cmds); i += 1) {
         Cmd cmd = state->cmds[i];
         switch (cmd.kind) {
           case CMD_KIND__OPEN_PANEL: {
@@ -2180,8 +2180,17 @@ Internal void lane(void *user_data) {
 }
 
 SI1 main(void) {
-  Lane_Group *group = lane_group_launch(os_core_count(), lane, 0);
-  lane_group_join(group);
+  Lane_Group_Params params = {
+    .count = os_core_count(),
+    .proc = lane,
+
+    .arena_size = GiB(1),
+    .scratch_size = MiB(64),
+
+    .lane_zero_on_caller = 1,
+  };
+  Lane_Group *group = lane_group_start(params);
+  lane_group_stop(group);
 
   return 0;
 }

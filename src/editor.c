@@ -229,6 +229,7 @@ struct Render_Settings {
   L1 height;
   L1 rays_per_pixel;
   L1 max_num_bounces;
+  L1 tile_size;
 
   Image_Bloom_Params bloom;
   String8 output_filename;
@@ -1016,6 +1017,15 @@ Internal void lane(Arena *arena) {
     state->render_settings.height = 720;
     state->render_settings.rays_per_pixel = 64;
     state->render_settings.max_num_bounces = 8;
+
+    state->render_settings.bloom.pass_count = 8;
+    state->render_settings.bloom.threshold = 0.5f;
+    state->render_settings.bloom.strength = 0.4f;
+    state->render_settings.bloom.knee = 0.5f;
+
+    state->render_settings.output_filename = str8("output.bmp");
+
+    state->render_settings.tile_size = 8;
   }
 
   lane_sync();
@@ -1108,6 +1118,14 @@ Internal void lane(Arena *arena) {
     lane_sync();
 
     if (lane_idx() == 0) {
+      //- kti: Postprocess and write image to file.
+      if (state->render_scene && !image_is_nil(state->render_scene->result) && image_is_nil(state->render_postprocessed)) {
+        Image hdr = state->render_scene->result;
+        Image bloomed = image_apply_bloom(state->render_arena, hdr, state->render_settings.bloom);
+        state->render_postprocessed = image_I1_from_F4_tonemap(state->render_arena, bloomed, TONEMAP_KIND__LOTTES); 
+        image_write_to_file(state->render_postprocessed, state->render_settings.output_filename);
+      }
+
       //- kti: Build lister.
       state->lister_entry_count = 0;
 
@@ -1263,6 +1281,13 @@ Internal void lane(Arena *arena) {
           lister_cmd(str8("Render"), (Cmd){
             .kind = CMD_KIND__RENDER,
           });
+        }
+
+        RT_Scene *rt_scene = state->render_scene;
+        if (rt_scene != 0 && image_is_nil(rt_scene->result)) {
+          F1 progress = (F1)rt_scene->completed_tile_count / (F1)rt_scene->tile_count;
+          String8 str = str8f(scratch.arena, "%.2f%% traced", progress*100.0f);
+          lister_header(str);
         }
       }
 
@@ -2023,6 +2048,8 @@ Internal void lane(Arena *arena) {
           case CMD_KIND__RENDER: {
             if (state->render_arena == 0) {
               state->render_arena = arena_alloc(GiB(1));
+            } else {
+              arena_clear(state->render_arena);
             }
 
             MemoryZeroStruct(&state->render_postprocessed);
@@ -2080,6 +2107,8 @@ Internal void lane(Arena *arena) {
 
               .box_count = shape_counts[SHAPE__BOX],
               .boxes = boxes,
+
+              .tile_size = state->render_settings.tile_size,
             };
           } break;
         }
@@ -2087,10 +2116,10 @@ Internal void lane(Arena *arena) {
       state->cmd_count = 0;
     }
 
-    lane_sync();
 
     RT_Scene *render_scene = state->render_scene;
     if (render_scene != 0 && image_is_nil(render_scene->result)) {
+      lane_sync();
       rt_trace_scene(state->render_arena, render_scene);
     }
 

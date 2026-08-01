@@ -161,7 +161,7 @@ Internal Image image_read_from_file(Arena *arena, String8 filename) {
   String8 contents = os_read_entire_file(arena, filename);
 
   Bitmap_Header *header = (Bitmap_Header *)contents.str;
-  if(contents.len > 0 && header &&
+  if(contents.len >= sizeof(Bitmap_Header) && header &&
       header->file_type == 0x4D42 &&
       (header->bits_per_pixel == 24 || header->bits_per_pixel == 32) &&
       header->compression == 0) {
@@ -214,7 +214,7 @@ Internal void image_write_to_file(Image image, String8 filename) {
   String8 cstr_filename = push_str8_copy(scratch.arena, filename);
 
   // TODO: Create os_ functions for this
-  L1 file = open((CString)cstr_filename.str, O_CREAT | O_WRONLY, 0666);
+  L1 file = open((CString)cstr_filename.str, O_CREAT|O_WRONLY|O_TRUNC, 0666);
   if (GtSI1(file, 0)) {
     write(file, &header, sizeof(Bitmap_Header));
     write(file, image.pixels, pixels_size);
@@ -227,7 +227,7 @@ Internal void image_write_to_file(Image image, String8 filename) {
   scratch_end(scratch);
 }
 
-Internal Image image_apply_boom(Arena *arena, Image hdr, Image_Bloom_Params params) {
+Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params params) {
   Temp_Arena scratch = scratch_begin(&arena, 1);
   Image *bloom_passes = push_array(scratch.arena, Image, params.pass_count);
 
@@ -424,7 +424,7 @@ Internal F4 tonemap(Tonemap_Kind kind, F4 v) {
   switch (kind) {
     case TONEMAP_KIND__ACES:     result = tonemap_aces(v); break;
     case TONEMAP_KIND__REINHARD: result = tonemap_reinhard(v); break;
-    case TONEMAP_KIND__LOTTES:   result = tonemap_aces(v); break;
+    case TONEMAP_KIND__LOTTES:   result = tonemap_lottes(v); break;
   }
   return result;
 }
@@ -446,7 +446,7 @@ Internal Image image_I1_from_F4_tonemap(Arena *arena, Image input, Tonemap_Kind 
   if (input.bytes_per_pixel == sizeof(F4)) {
     result = image_alloc(arena, input.width, input.height, sizeof(I1));
     for (L1 pixel_index = 0; pixel_index < input.width*input.height; pixel_index += 1) {
-      F4 in_px = input.pixels[pixel_index];
+      F4 in_px = ((F4 *)input.pixels)[pixel_index];
       F4 tonemapped = tonemap(tonemap_kind, in_px);
       F4 out_color = {
         255.0f*srgb_from_linear(tonemapped[0]),
@@ -459,7 +459,7 @@ Internal Image image_I1_from_F4_tonemap(Arena *arena, Image input, Tonemap_Kind 
         (I1)out_color[0] << 16 |
         (I1)out_color[1] << 8  |
         (I1)out_color[2] << 0;
-      result.pixels[pixel_index] = out_px;
+      ((I1 *)result.pixels)[pixel_index] = out_px;
     }
   }
 

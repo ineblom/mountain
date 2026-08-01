@@ -295,9 +295,9 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
 
       ray_origin = next_origin + next_normal * min_hit_distance;
     } else {
-      // F1 height = (ray_direction.y + 1) * 0.5;
-      // F4 sky_color = lerp_F4((F4){1.0f, 1.0f, 1.0f}, height, (F4){0.2f, 0.4f, 1.0f});
-      // result += attenuation * sky_color;
+      F1 height = (ray_direction.y + 1) * 0.5;
+      F4 sky_color = lerp_F4((F4){1.0f, 1.0f, 1.0f}, height, (F4){0.2f, 0.4f, 1.0f});
+      result += attenuation * sky_color;
       break;
     }
   }
@@ -306,7 +306,6 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
 }
 
 Internal void rt_trace_scene(Arena *arena, RT_Scene *scene) {
-  scene->tile_size = 8;
   L1 tile_cols = (scene->width  + scene->tile_size - 1) / scene->tile_size;
   L1 tile_rows = (scene->height + scene->tile_size - 1) / scene->tile_size;
 
@@ -331,9 +330,6 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene *scene) {
   F1 half_film_w = aspect*half_film_h;
   F4 film_center = camera_p + film_dist*camera_forward;
 
-  F1 half_pixel_w = 0.5f/(F1)scene->width;
-  F1 half_pixel_h = 0.5f/(F1)scene->height;
-
   L1 tile_idx = atomic_add_L1(&scene->next_tile_idx, 1);
   if (tile_idx < scene->tile_count) {
     Random_State rng = {
@@ -352,16 +348,15 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene *scene) {
 
     for (L1 y = y0; y < y1; y += 1) {
       for (L1 x = x0; x < x1; x += 1) {
-        F1 film_x = -1 + 2 * (F1)x/(F1)scene->width;
-        F1 film_y = -1 + 2 * (F1)y/(F1)scene->height;
-
         F4 color = {0};
         F1 contrib = 1.0f / (F1)scene->rays_per_pixel;
 
         for (L1 ray_index = 0; ray_index < scene->rays_per_pixel; ray_index += 1) {
-          F1 off_x  = film_x + random_bilateral(&rng)*half_pixel_w;
-          F1 off_y  = film_y + random_bilateral(&rng)*half_pixel_h;
-          F4 film_p = film_center + off_x*half_film_w*camera_right + off_y*half_film_h*camera_up;
+          F1 sample_x = (F1)x + random_unilateral(&rng);
+          F1 sample_y = (F1)y + random_unilateral(&rng);
+          F1 film_x = -1.0f + 2.0f*sample_x/(F1)scene->width;
+          F1 film_y = -1.0f + 2.0f*sample_y/(F1)scene->height;
+          F4 film_p = film_center + film_x*half_film_w*camera_right + film_y*half_film_h*camera_up;
 
           F1 r = scene->camera.aperture_radius * sqrt_F1(random_unilateral(&rng));
           F1 theta = 2.0f * PI * random_unilateral(&rng);

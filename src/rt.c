@@ -45,8 +45,6 @@ struct RT_Camera {
 
 typedef struct RT_Scene RT_Scene;
 struct RT_Scene {
-  L1 width;
-  L1 height;
   L1 rays_per_pixel;
   L1 max_num_bounces;
 
@@ -60,14 +58,6 @@ struct RT_Scene {
 
   L1 box_count;
   RT_Box *boxes;
-
-  L1 tile_size;
-  L1 tile_count;
-  L1 next_tile_idx;
-  L1 completed_tile_count;
-
-  Image working_image;
-  Image result;
 };
 
 #endif
@@ -305,19 +295,7 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
   return result;
 }
 
-Internal void rt_trace_scene(Arena *arena, RT_Scene *scene) {
-  L1 tile_cols = (scene->width  + scene->tile_size - 1) / scene->tile_size;
-  L1 tile_rows = (scene->height + scene->tile_size - 1) / scene->tile_size;
-
-  if (lane_idx() == 0 && scene->working_image.pixels == 0) {
-    scene->working_image = image_alloc(arena, scene->width, scene->height, sizeof(F4));
-
-    scene->tile_count = tile_cols*tile_rows;
-    scene->next_tile_idx = 0;
-    scene->completed_tile_count = 0;
-  }
-  lane_sync();
-
+Internal void rt_trace_scene(RT_Scene *scene, Image output, Range pixel_range) {
   F4 camera_p = scene->camera.pos;
   F4 camera_forward = normalize_F4(scene->camera.forward);
   F4 world_up = {0, 1, 0};
@@ -325,58 +303,44 @@ Internal void rt_trace_scene(Arena *arena, RT_Scene *scene) {
   F4 camera_up = normalize_F4(cross_F4(camera_forward, camera_right));
 
   F1 film_dist   = 1.0f;
-  F1 aspect      = (F1)scene->width/(F1)scene->height;
+  F1 aspect      = (F1)output.width/(F1)output.height;
   F1 half_film_h = tan_F1(scene->camera.vertical_fov*0.5f)*film_dist;
   F1 half_film_w = aspect*half_film_h;
   F4 film_center = camera_p + film_dist*camera_forward;
 
-  L1 tile_idx = atomic_add_L1(&scene->next_tile_idx, 1);
-  if (tile_idx < scene->tile_count) {
+  F4 *pixels = (F4 *)output.pixels;
+
+  for (L1 i = pixel_range.min; i < Min(output.width*output.height, pixel_range.max); i += 1) {
+    L1 x = i % output.width;
+    L1 y = i / output.width;
+
     Random_State rng = {
-      .state = tile_idx*7^~((tile_idx-420)*11),
-      .inc = 2*tile_idx + 1,
+      .state = i*7^~((i-420)*11),
+      .inc = 2*i + 1,
     };
-    L1 tile_x = tile_idx%tile_cols;
-    L1 tile_y = tile_idx/tile_cols;
 
-    L1 x0 = tile_x*scene->tile_size;
-    L1 y0 = tile_y*scene->tile_size;
-    L1 x1 = Min(x0+scene->tile_size, scene->width);
-    L1 y1 = Min(y0+scene->tile_size, scene->height);
+    F4 color = {0};
+    F1 contrib = 1.0f / (F1)scene->rays_per_pixel;
 
-    F4 *pixels = (F4 *)scene->working_image.pixels;
+    for (L1 ray_index = 0; ray_index < scene->rays_per_pixel; ray_index += 1) {
+      F1 sample_x = (F1)x + random_unilateral(&rng);
+      F1 sample_y = (F1)y + random_unilateral(&rng);
+      F1 film_x = -1.0f + 2.0f*sample_x/(F1)output.width;
+      F1 film_y = -1.0f + 2.0f*sample_y/(F1)output.height;
+      F4 film_p = film_center + film_x*half_film_w*camera_right + film_y*half_film_h*camera_up;
 
-    for (L1 y = y0; y < y1; y += 1) {
-      for (L1 x = x0; x < x1; x += 1) {
-        F4 color = {0};
-        F1 contrib = 1.0f / (F1)scene->rays_per_pixel;
+      F1 r = scene->camera.aperture_radius * sqrt_F1(random_unilateral(&rng));
+      F1 theta = 2.0f * PI * random_unilateral(&rng);
+      F4 aperture_offset = r * cos_F1(theta) * camera_right + r * sin_F1(theta) * camera_up;
+      F4 ray_origin = camera_p + aperture_offset;
 
-        for (L1 ray_index = 0; ray_index < scene->rays_per_pixel; ray_index += 1) {
-          F1 sample_x = (F1)x + random_unilateral(&rng);
-          F1 sample_y = (F1)y + random_unilateral(&rng);
-          F1 film_x = -1.0f + 2.0f*sample_x/(F1)scene->width;
-          F1 film_y = -1.0f + 2.0f*sample_y/(F1)scene->height;
-          F4 film_p = film_center + film_x*half_film_w*camera_right + film_y*half_film_h*camera_up;
+      F4 focus_point = camera_p + scene->camera.focal_distance  * normalize_F4(film_p - camera_p);
+      F4 ray_direction = normalize_F4(focus_point - ray_origin);
 
-          F1 r = scene->camera.aperture_radius * sqrt_F1(random_unilateral(&rng));
-          F1 theta = 2.0f * PI * random_unilateral(&rng);
-          F4 aperture_offset = r * cos_F1(theta) * camera_right + r * sin_F1(theta) * camera_up;
-          F4 ray_origin = camera_p + aperture_offset;
-
-          F4 focus_point = camera_p + scene->camera.focal_distance  * normalize_F4(film_p - camera_p);
-          F4 ray_direction = normalize_F4(focus_point - ray_origin);
-
-          color += ray_cast(scene, &rng, ray_origin, ray_direction) * contrib;
-        }
-
-        pixels[x + y*scene->width] = color;
-      }
+      color += ray_cast(scene, &rng, ray_origin, ray_direction) * contrib;
     }
 
-    L1 completed_before = atomic_add_L1(&scene->completed_tile_count, 1);
-    if (completed_before + 1 == scene->tile_count) {
-      scene->result = scene->working_image;
-    }
+    pixels[i] = color;
   }
 }
 #endif

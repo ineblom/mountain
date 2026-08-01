@@ -229,7 +229,6 @@ struct Render_Settings {
   L1 height;
   L1 rays_per_pixel;
   L1 max_num_bounces;
-  L1 tile_size;
 
   Image_Bloom_Params bloom;
   String8 output_filename;
@@ -272,9 +271,7 @@ struct State {
 
   //- kti: Render.
   Render_Settings render_settings;
-  Arena *render_arena;
-  RT_Scene *render_scene;
-  Image render_postprocessed;
+  Lane_Group *render_lanes;
 };
 
 #endif
@@ -970,6 +967,88 @@ Internal M4F line_transform_M4F(F4 begin, F4 direction, F1 thickness) {
 }
 
 ////////////////////////////////
+//~ kti: Render
+
+Internal void render_lane(void *user_data) {
+  Arena *arena = lane_arena();
+
+  RT_Scene *scene = 0;
+  Image *hdr = 0;
+
+  if (lane_idx() == 0) {
+    Entity *camera_entity = &state->nil_entity; 
+
+    L1 shape_counts[SHAPE_COUNT] = {0};
+    for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
+      if (it->flags & ENTITY_FLAG__CAMERA) {
+        camera_entity = it;
+      }
+      if (it->flags & ENTITY_FLAG__SHAPE) {
+        shape_counts[it->shape] += 1;
+      }
+    }
+
+    L1 sphere_idx = 0;
+    RT_Sphere *spheres = push_array(arena, RT_Sphere, shape_counts[SHAPE__SPHERE]);
+    L1 box_idx = 0;
+    RT_Box *boxes = push_array(arena, RT_Box, shape_counts[SHAPE__BOX]);
+
+    for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
+      if (it->flags & ENTITY_FLAG__SHAPE) {
+        if (it->shape == SHAPE__SPHERE) {
+          spheres[sphere_idx].p = it->pos;
+          spheres[sphere_idx].r = it->sphere_diameter*0.5f;
+          spheres[sphere_idx].material = it->material;
+          sphere_idx += 1;
+        } else if (it->shape == SHAPE__BOX) {
+          boxes[box_idx].min = it->pos - it->size*0.5f;
+          boxes[box_idx].max = it->pos + it->size*0.5f;
+          boxes[box_idx].material = it->material;
+          box_idx += 1;
+        }
+      }
+    }
+
+    scene = push_array(arena, RT_Scene, 1);
+    scene[0] = (RT_Scene){
+      .rays_per_pixel = state->render_settings.rays_per_pixel,
+      .max_num_bounces = state->render_settings.max_num_bounces,
+
+      .camera = {
+        .pos = camera_entity->pos,  
+        .forward = camera_entity->camera_forward,
+        .vertical_fov = camera_entity->camera_vertical_fov,
+        .aperture_radius = camera_entity->camera_aperture_radius,
+        .focal_distance = camera_entity->camera_focal_distance,
+      },
+
+      .sphere_count = shape_counts[SHAPE__SPHERE],
+      .spheres = spheres,
+
+      .box_count = shape_counts[SHAPE__BOX],
+      .boxes = boxes,
+    };
+
+    hdr = push_array(arena, Image, 1);
+    hdr[0] = image_alloc(arena, state->render_settings.width, state->render_settings.height, sizeof(F4));
+  }
+
+  lane_sync_L1((L1 *)&scene, 0);
+  lane_sync_L1((L1 *)&hdr, 0);
+
+  rt_trace_scene(scene, hdr[0], lane_range(hdr->width*hdr->height));
+
+  lane_sync();
+
+  //- kti: Postprocess and write image to file.
+  if (lane_idx() == 0) {
+    Image bloomed = image_apply_bloom(arena, hdr[0], state->render_settings.bloom);
+    Image postprocessed = image_I1_from_F4_tonemap(arena, bloomed, TONEMAP_KIND__LOTTES); 
+    image_write_to_file(postprocessed, state->render_settings.output_filename);
+  }
+}
+
+////////////////////////////////
 //~ kti: Main
 
 Internal void lane(void *user_data) {
@@ -1026,8 +1105,6 @@ Internal void lane(void *user_data) {
     state->render_settings.bloom.knee = 0.5f;
 
     state->render_settings.output_filename = str8("output.bmp");
-
-    state->render_settings.tile_size = 8;
   }
 
   lane_sync();
@@ -1120,14 +1197,6 @@ Internal void lane(void *user_data) {
     lane_sync();
 
     if (lane_idx() == 0) {
-      //- kti: Postprocess and write image to file.
-      if (state->render_scene && !image_is_nil(state->render_scene->result) && image_is_nil(state->render_postprocessed)) {
-        Image hdr = state->render_scene->result;
-        Image bloomed = image_apply_bloom(state->render_arena, hdr, state->render_settings.bloom);
-        state->render_postprocessed = image_I1_from_F4_tonemap(state->render_arena, bloomed, TONEMAP_KIND__LOTTES); 
-        image_write_to_file(state->render_postprocessed, state->render_settings.output_filename);
-      }
-
       //- kti: Build lister.
       state->lister_entry_count = 0;
 
@@ -1283,13 +1352,6 @@ Internal void lane(void *user_data) {
           lister_cmd(str8("Render"), (Cmd){
             .kind = CMD_KIND__RENDER,
           });
-        }
-
-        RT_Scene *rt_scene = state->render_scene;
-        if (rt_scene != 0 && image_is_nil(rt_scene->result)) {
-          F1 progress = (F1)rt_scene->completed_tile_count / (F1)rt_scene->tile_count;
-          String8 str = str8f(scratch.arena, "%.2f%% traced", progress*100.0f);
-          lister_header(str);
         }
       }
 
@@ -2048,81 +2110,24 @@ Internal void lane(void *user_data) {
             entity_delete(cmd.entities, cmd.entity_count);
           } break;
           case CMD_KIND__RENDER: {
-            if (state->render_arena == 0) {
-              state->render_arena = arena_alloc(GiB(1));
-            } else {
-              arena_clear(state->render_arena);
-            }
+            Lane_Group_Params lane_params = {
+              .count = Max(1, os_core_count()/2),
 
-            MemoryZeroStruct(&state->render_postprocessed);
-            
-            Entity *camera_entity = &state->nil_entity; 
+              .proc = render_lane,
 
-            L1 shape_counts[SHAPE_COUNT] = {0};
-            for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
-              if (it->flags & ENTITY_FLAG__CAMERA) {
-                camera_entity = it;
-              }
-              if (it->flags & ENTITY_FLAG__SHAPE) {
-                shape_counts[it->shape] += 1;
-              }
-            }
-
-            L1 sphere_idx = 0;
-            RT_Sphere *spheres = push_array(state->render_arena, RT_Sphere, shape_counts[SHAPE__SPHERE]);
-            L1 box_idx = 0;
-            RT_Box *boxes = push_array(state->render_arena, RT_Box, shape_counts[SHAPE__BOX]);
-
-            for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
-              if (it->flags & ENTITY_FLAG__SHAPE) {
-                if (it->shape == SHAPE__SPHERE) {
-                  spheres[sphere_idx].p = it->pos;
-                  spheres[sphere_idx].r = it->sphere_diameter*0.5f;
-                  spheres[sphere_idx].material = it->material;
-                  sphere_idx += 1;
-                } else if (it->shape == SHAPE__BOX) {
-                  boxes[box_idx].min = it->pos - it->size*0.5f;
-                  boxes[box_idx].max = it->pos + it->size*0.5f;
-                  boxes[box_idx].material = it->material;
-                  box_idx += 1;
-                }
-              }
-            }
-
-            state->render_scene = push_array(state->render_arena, RT_Scene, 1);
-            state->render_scene[0] = (RT_Scene){
-              .width = state->render_settings.width,
-              .height = state->render_settings.height,
-              .rays_per_pixel = state->render_settings.rays_per_pixel,
-              .max_num_bounces = state->render_settings.max_num_bounces,
-
-              .camera = {
-                .pos = camera_entity->pos,  
-                .forward = camera_entity->camera_forward,
-                .vertical_fov = camera_entity->camera_vertical_fov,
-                .aperture_radius = camera_entity->camera_aperture_radius,
-                .focal_distance = camera_entity->camera_focal_distance,
-              },
-
-              .sphere_count = shape_counts[SHAPE__SPHERE],
-              .spheres = spheres,
-
-              .box_count = shape_counts[SHAPE__BOX],
-              .boxes = boxes,
-
-              .tile_size = state->render_settings.tile_size,
+              .arena_size = GiB(1),
+              .scratch_size = MiB(64),
             };
+            state->render_lanes = lane_group_start(lane_params);
           } break;
         }
       }
       state->cmd_count = 0;
-    }
 
-
-    RT_Scene *render_scene = state->render_scene;
-    if (render_scene != 0 && image_is_nil(render_scene->result)) {
-      lane_sync();
-      rt_trace_scene(state->render_arena, render_scene);
+      if (state->render_lanes && lane_group_completed(state->render_lanes)) {
+        lane_group_stop(state->render_lanes);
+        state->render_lanes = 0;
+      }
     }
 
     scratch_end(scratch);

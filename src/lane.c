@@ -170,7 +170,7 @@ Internal Lane_Group *lane_group_start(Lane_Group_Params params) {
   return group;
 }
 
-Inline I1 lane_group_has_completed(Lane_Group *group) {
+Inline I1 lane_group_completed(Lane_Group *group) {
   I1 completed = atomic_load_L1(&group->lanes_completed) == group->lane_count;
   return completed;
 }

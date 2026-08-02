@@ -97,12 +97,14 @@ typedef I1 Shape;
 enum {
   SHAPE__BOX = 0,
   SHAPE__SPHERE,
+  SHAPE__PLANE,
   SHAPE_COUNT,
 };
 
 Global String8 shape_names[SHAPE_COUNT] = {
   [SHAPE__BOX] = str8("Box"),
   [SHAPE__SPHERE] = str8("Sphere"),
+  [SHAPE__PLANE] = str8("Plane"),
 };
 
 typedef struct Entity Entity;
@@ -116,6 +118,7 @@ struct Entity {
   L1 name_len;
   F4 pos;
   F4 size;
+  F4 plane_normal;
   F1 sphere_diameter;
   Shape shape;
   RT_Material material;
@@ -362,6 +365,20 @@ Internal Mesh mesh_alloc_box(void) {
     0, 1, 2,  0, 2, 3,  4, 5, 6,  4, 6, 7,
     8, 9,10,  8,10,11, 12,13,14, 12,14,15,
     16,17,18, 16,18,19, 20,21,22, 20,22,23,
+  };
+  return mesh_alloc_from_vertices_indices(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
+}
+
+Internal Mesh mesh_alloc_plane(void) {
+  GFX_Mesh_Vertex vertices[] = {
+    {{-0.5f, 0.0f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
+    {{ 0.5f, 0.0f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
+    {{ 0.5f, 0.0f,  0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
+    {{-0.5f, 0.0f,  0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
+  };
+  I1 indices[] = {
+    0, 2, 1,
+    0, 3, 2,
   };
   return mesh_alloc_from_vertices_indices(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
 }
@@ -676,6 +693,7 @@ Internal Entity *entity_create(L1 flags, String8 name) {
 
   entity->flags = flags;
   entity->size = (F4){1.0f, 1.0f, 1.0f};
+  entity->plane_normal = (F4){0.0f, 1.0f, 0.0f, 0.0f};
   entity->sphere_diameter = 1.0f;
   entity->name_len = Min(name.len, sizeof(entity->name));
   entity->material.base_color = (F4){0.9f, 0.9f, 0.9f, 1.0f};
@@ -966,6 +984,37 @@ Internal M4F line_transform_M4F(F4 begin, F4 direction, F1 thickness) {
   return result;
 }
 
+Internal void plane_axes_from_normal(F4 normal, F4 *tangent_out, F4 *bitangent_out) {
+  F4 reference_axis = abs_F1(normal[1]) < 0.99f
+    ? (F4){0.0f, 1.0f, 0.0f, 0.0f}
+    : (F4){0.0f, 0.0f, 1.0f, 0.0f};
+  F4 tangent = normalize_F4(cross_F4(normal, reference_axis));
+  F4 bitangent = cross_F4(tangent, normal);
+
+  *tangent_out = tangent;
+  *bitangent_out = bitangent;
+}
+
+Internal M4F plane_transform_M4F(Entity *entity, Camera camera) {
+  F4 normal = normalize_F4(entity->plane_normal);
+  F4 tangent;
+  F4 bitangent;
+  plane_axes_from_normal(normal, &tangent, &bitangent);
+
+  // Keep the editor proxy centered under the viewport camera and large enough
+  // to cover the full visible range. The ray-traced plane itself is infinite.
+  F4 camera_to_plane = camera.pos - entity->pos;
+  F4 preview_center = camera.pos - dot_F4(normal, camera_to_plane)*normal;
+  F1 preview_size = 2.0f*camera.far_z;
+
+  M4F result = identity_M4F();
+  result.r[0] = preview_size*tangent;
+  result.r[1] = normal;
+  result.r[2] = preview_size*bitangent;
+  result.r[3] = F4_with_w(preview_center, 1.0f);
+  return result;
+}
+
 ////////////////////////////////
 //~ kti: Render
 
@@ -992,6 +1041,8 @@ Internal void render_lane(void *user_data) {
     RT_Sphere *spheres = push_array(arena, RT_Sphere, shape_counts[SHAPE__SPHERE]);
     L1 box_idx = 0;
     RT_Box *boxes = push_array(arena, RT_Box, shape_counts[SHAPE__BOX]);
+    L1 plane_idx = 0;
+    RT_Plane *planes = push_array(arena, RT_Plane, shape_counts[SHAPE__PLANE]);
 
     for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
       if (it->flags & ENTITY_FLAG__SHAPE) {
@@ -1005,6 +1056,12 @@ Internal void render_lane(void *user_data) {
           boxes[box_idx].max = it->pos + it->size*0.5f;
           boxes[box_idx].material = it->material;
           box_idx += 1;
+        } else if (it->shape == SHAPE__PLANE) {
+          F4 n = normalize_F4(it->plane_normal);
+          planes[plane_idx].n = n;
+          planes[plane_idx].d = -dot_F4(n, it->pos);
+          planes[plane_idx].material = it->material;
+          plane_idx += 1;
         }
       }
     }
@@ -1027,6 +1084,9 @@ Internal void render_lane(void *user_data) {
 
       .box_count = shape_counts[SHAPE__BOX],
       .boxes = boxes,
+
+      .plane_count = shape_counts[SHAPE__PLANE],
+      .planes = planes,
     };
 
     hdr = push_array(arena, Image, 1);
@@ -1075,6 +1135,7 @@ Internal void lane(void *user_data) {
 
     state->meshes[SHAPE__BOX] = mesh_alloc_box();
     state->meshes[SHAPE__SPHERE] = mesh_alloc_sphere(16, 32);
+    state->meshes[SHAPE__PLANE] = mesh_alloc_plane();
 
     Window *window = window_open();
 
@@ -1205,6 +1266,7 @@ Internal void lane(void *user_data) {
         L1 selected_shape_count = 0;
         L1 selected_box_count = 0;
         L1 selected_sphere_count = 0;
+        L1 selected_plane_count = 0;
         L1 selected_camera_count = 0;
         I1 has_camera = 0;
         for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
@@ -1216,6 +1278,7 @@ Internal void lane(void *user_data) {
             selected_shape_count += !!(entity->flags & ENTITY_FLAG__SHAPE);
             selected_box_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__BOX);
             selected_sphere_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__SPHERE);
+            selected_plane_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__PLANE);
             selected_camera_count += !!(entity->flags & ENTITY_FLAG__CAMERA);
           }
           if ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__SPHERE) {
@@ -1245,6 +1308,9 @@ Internal void lane(void *user_data) {
           String8 *sphere_value_names = push_array(scratch.arena, String8, selected_sphere_count);
           F1 **sphere_diameters = push_array(scratch.arena, F1 *, selected_sphere_count);
 
+          String8 *plane_value_names = push_array(scratch.arena, String8, selected_plane_count);
+          F4 **plane_normals = push_array(scratch.arena, F4 *, selected_plane_count);
+
           String8 *camera_value_names = push_array(scratch.arena, String8, selected_camera_count);
           F4 **forwards = push_array(scratch.arena, F4 *, selected_camera_count);
           F1 **vertical_fovs = push_array(scratch.arena, F1 *, selected_camera_count);
@@ -1255,6 +1321,7 @@ Internal void lane(void *user_data) {
           L1 selected_shape_idx = 0;
           L1 selected_box_idx = 0;
           L1 selected_sphere_idx = 0;
+          L1 selected_plane_idx = 0;
           L1 selected_camera_idx = 0;
           for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
             if (entity->flags & ENTITY_FLAG__SELECTED) {
@@ -1284,6 +1351,10 @@ Internal void lane(void *user_data) {
                   sphere_value_names[selected_sphere_idx] = entity_name;
                   sphere_diameters[selected_sphere_idx] = &entity->sphere_diameter;
                   selected_sphere_idx += 1;
+                } else if (entity->shape == SHAPE__PLANE) {
+                  plane_value_names[selected_plane_idx] = entity_name;
+                  plane_normals[selected_plane_idx] = &entity->plane_normal;
+                  selected_plane_idx += 1;
                 }
               }
 
@@ -1305,6 +1376,10 @@ Internal void lane(void *user_data) {
             lister_enums(str8("Shape"), shapes, selected_shape_count, shape_names, SHAPE_COUNT);
             lister_xyzs(str8("Size"), box_value_names, box_sizes, selected_box_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
             lister_F1s(str8("Diameter"), sphere_value_names, sphere_diameters, selected_sphere_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
+            Lister_Entry *normal_entry = lister_xyzs(str8("Normal"), plane_value_names, plane_normals, selected_plane_count, LISTER_APPLY__SET, 0.0f, 50.0f, -1.0f, 1.0f);
+            if (normal_entry) {
+              normal_entry->flags |= LISTER_ENTRY_FLAG__NORMALIZE_F4;
+            }
 
             lister_header(str8("Material"));
             lister_colors(str8("Base"), shape_value_names, base_colors, selected_shape_count, LISTER_APPLY__SET);
@@ -1923,6 +1998,10 @@ Internal void lane(void *user_data) {
                           t = ray_aabb_intersect(view->camera.pos, ray_direction, min, max);
                         } else if (e->shape == SHAPE__SPHERE) {
                           t = ray_sphere_intersect(view->camera.pos, ray_direction, e->pos, e->sphere_diameter*0.5f);
+                        } else if (e->shape == SHAPE__PLANE) {
+                          F4 normal = normalize_F4(e->plane_normal);
+                          F1 d = -dot_F4(normal, e->pos);
+                          t = ray_plane_intersect(view->camera.pos, ray_direction, normal, d);
                         }
 
                         if (t > min_hit_distance && t < closest_t) {
@@ -1996,7 +2075,9 @@ Internal void lane(void *user_data) {
                 for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
                   if (e->flags & ENTITY_FLAG__SHAPE) {
                     Mesh *mesh = &state->meshes[e->shape];
-                    M4F transform = mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
+                    M4F transform = e->shape == SHAPE__PLANE
+                      ? plane_transform_M4F(e, view->camera)
+                      : mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
                     F4 color = e->material.base_color;
                     dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__NONE);
                   }
@@ -2006,7 +2087,9 @@ Internal void lane(void *user_data) {
                 for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
                   if (entity->flags & ENTITY_FLAG__SELECTED && entity->flags & ENTITY_FLAG__SHAPE) {
                     Mesh *mesh = &state->meshes[entity->shape];
-                    M4F transform = mul_M4F(scale_M4F(entity->size), translate_M4F(entity->pos));
+                    M4F transform = entity->shape == SHAPE__PLANE
+                      ? plane_transform_M4F(entity, view->camera)
+                      : mul_M4F(scale_M4F(entity->size), translate_M4F(entity->pos));
                     F4 color = {0.9f, 0.0f, 0.9f, 1.0f};
                     dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
                                     mesh->index_buffer, 0, mesh->index_count,

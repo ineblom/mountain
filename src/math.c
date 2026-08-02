@@ -320,6 +320,20 @@ Inline F4 mul_M4F_F4(M4F m, F4 v) {
 ////////////////////////////////
 //~ Ray
 
+Internal F1 ray_plane_intersect(F4 ray_origin, F4 ray_direction, F4 plane_normal, F1 plane_d) {
+  F1 result = 0.0f;
+
+  F1 denom = dot_F4(plane_normal, ray_direction);
+  if (abs_F1(denom) > 0.0001f) {
+    F1 t = (-plane_d - dot_F4(plane_normal, ray_origin)) / denom;
+    if (t > 0.001f) {
+      result = t;
+    }
+  }
+
+  return result;
+}
+
 Internal F1 ray_sphere_intersect(F4 ray_origin, F4 ray_direction, F4 sphere_origin, F1 sphere_radius) {
   F1 result = 0.0f;
 

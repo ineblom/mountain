@@ -142,7 +142,6 @@ Inline F1 pdf_GGX(F4 n, F4 h, F4 v, F1 alpha) {
 
 Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_direction) {
   F1 min_hit_distance = 0.001f;
-  F1 tolerance = 0.0001f;
 
   F4 result = {0};
   F4 attenuation = {1, 1, 1};
@@ -157,16 +156,13 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
     for (L1 plane_index = 0; plane_index < scene->plane_count; plane_index += 1) {
       RT_Plane *plane = &scene->planes[plane_index];
 
-      F1 denom = dot_F4(plane->n, ray_direction);
-      if (denom < -tolerance || denom > tolerance) {
-        F1 t = (-plane->d - dot_F4(plane->n, ray_origin)) / denom;
-        if (t > min_hit_distance && t < hit_distance) {
-          hit_distance = t;
-          hit_material = &plane->material;
+      F1 t = ray_plane_intersect(ray_origin, ray_direction, plane->n, plane->d);
+      if (t > min_hit_distance && t < hit_distance) {
+        hit_distance = t;
+        hit_material = &plane->material;
 
-          next_origin = ray_origin + t*ray_direction;
-          next_normal = plane->n;
-        }
+        next_origin = ray_origin + t*ray_direction;
+        next_normal = dot_F4(plane->n, ray_direction) < 0.0f ? plane->n : -plane->n;
       }
     }
 

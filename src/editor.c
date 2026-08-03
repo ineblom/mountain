@@ -1090,7 +1090,7 @@ Internal void render_lane(void *user_data) {
     };
 
     hdr = push_array(arena, Image, 1);
-    hdr[0] = image_alloc(arena, state->render_settings.width, state->render_settings.height, sizeof(F4));
+    hdr[0] = image_alloc(arena, state->render_settings.width, state->render_settings.height, IMAGE_FORMAT__RGBA32F_LINEAR);
   }
 
   lane_sync_L1((L1 *)&scene, 0);

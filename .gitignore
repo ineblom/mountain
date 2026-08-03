@@ -13,3 +13,4 @@ shaders/*.spv
 tags
 *.rdi
 deps/*/build/
+**/.DS_Store

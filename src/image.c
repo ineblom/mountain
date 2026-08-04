@@ -82,13 +82,13 @@ Internal L1 image_format_alignment(Image_Format format) {
   L1 result = 1;
 
   switch (format) {
-    case IMAGE_FORMAT__RGBA8_SRGB: {
-      result = AlignOf(I1);
-    } break;
-    case IMAGE_FORMAT__RGBA32F_LINEAR: {
-      result = AlignOf(F4);
-    } break;
-    default: break;
+  case IMAGE_FORMAT__RGBA8_SRGB:
+    result = AlignOf(I1);
+    break;
+  case IMAGE_FORMAT__RGBA32F_LINEAR:
+    result = AlignOf(F4);
+    break;
+  default: break;
   }
 
   return result;
@@ -127,31 +127,55 @@ Internal Image image_read_from_file(Arena *arena, String8 filename) {
 
   Bitmap_Header *header = (Bitmap_Header *)contents.str;
   if(contents.len >= sizeof(Bitmap_Header) && header &&
-      header->file_type == 0x4D42 &&
-      (header->bits_per_pixel == 24 || header->bits_per_pixel == 32) &&
-      header->compression == 0) {
-    result.width = header->width;
-    result.height = header->height;
-    result.format = IMAGE_FORMAT__RGBA8_SRGB;
-    result.row_pitch = image_format_pixel_size(result.format)*result.width;
+     header->file_type == 0x4D42 &&
+     (header->bits_per_pixel == 24 || header->bits_per_pixel == 32) &&
+     header->compression == 0 &&
+     header->width > 0 && header->height != 0) {
 
-    if (header->bits_per_pixel == 32) {
-      result.pixels = contents.str + header->bitmap_offset;
-    } else {
-      L1 pixel_count = result.width * result.height;
+    L1 width = (L1)header->width;
+    L1 height = (header->height < 0) ? (L1)(-(SL1)header->height) : (L1)header->height;
+
+    L1 src_pixel_size = header->bits_per_pixel / 8;
+    L1 src_row_pitch = AlignPow2(width * src_pixel_size, 4);
+    L1 bitmap_offset = header->bitmap_offset;
+
+    I1 pixels_are_valid =
+      bitmap_offset >= sizeof(Bitmap_Header) &&
+      bitmap_offset <= contents.len &&
+      height <= (contents.len - bitmap_offset) / src_row_pitch;
+
+    if (pixels_are_valid) {
+      result.width = width;
+      result.height = height;
+      result.format = IMAGE_FORMAT__RGBA8_SRGB;
+      result.row_pitch = image_format_pixel_size(result.format)*result.width;
+
+      B1 *pixel_base = contents.str + header->bitmap_offset;
+
       result.pixels = arena_push(arena, result.row_pitch*result.height, Max(8, image_format_alignment(result.format)), 1);
 
-      B1 *src = contents.str + header->bitmap_offset;
-      B1 *dst = result.pixels;
-      for (L1 pixel_index = 0; pixel_index < pixel_count; pixel_index += 1) {
-        B1 b = src[0];
-        B1 g = src[1];
-        B1 r = src[2];
+      for (L1 y = 0; y < result.height; y += 1) {
+        L1 src_y = y;
 
-        ((I1 *)dst)[0] = 0xFF000000 | (r << 16) | (g << 8) | b;
+        if (header->height < 0) {
+          src_y = result.height - 1 - y;
+        }
 
-        src += 3;
-        dst += 4;
+        B1 *src_row = pixel_base + src_row_pitch*src_y;
+        I1 *dst_row = (I1 *)(result.pixels + y * result.row_pitch);
+
+        if (header->bits_per_pixel == 32) {
+          memcpy(dst_row, src_row, result.width * sizeof(I1));
+        } else {
+          for (L1 x = 0; x < result.width; x += 1) {
+            B1 *src = src_row + x*3;
+            B1 b = src[0];
+            B1 g = src[1];
+            B1 r = src[2];
+
+            dst_row[x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+          }
+        }
       }
     }
   }
@@ -229,7 +253,7 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
 Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params params) {
   Image result = hdr;
 
-  if (!image_is_nil(hdr) && params.pass_count > 0) {
+  if (!image_is_nil(hdr) && params.pass_count > 0 && hdr.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
     Temp_Arena scratch = scratch_begin(&arena, 1);
     Image *bloom_passes = push_array(scratch.arena, Image, 1+params.pass_count);
 
@@ -376,26 +400,19 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
     //- kti: Combine input image and bloom result, optionally use overlay image.
     result = image_alloc(arena, hdr.width, hdr.height, IMAGE_FORMAT__RGBA32F_LINEAR);
 
-    F4 *in_hdr = (F4 *)hdr.pixels;
-    F4 *in_bloom = (F4 *)bloom_passes[0].pixels;
-    F4 *out = (F4 *)result.pixels;
     for (L1 y = 0; y < result.height; y += 1) {
       for (L1 x = 0; x < result.width; x += 1) {
-        F1 u = (F1)x / (F1)result.width;
-        F1 v = (F1)y / (F1)result.height;
+        F1 u = (result.width > 1) ? (F1)x / (F1)(result.width-1) : 0;
+        F1 v = (result.height > 1) ? (F1)y / (F1)(result.height-1) : 0;
 
         F4 bloom_overlay = image_sample_bilinear_F4(params.overlay, u, v);
-        F4 hdr = in_hdr[0];
-        F4 bloom = in_bloom[0];
+        F4 hdr_px = image_row_F4(hdr, y)[x];
+        F4 bloom_px = image_row_F4(bloom_passes[0], y)[x];
 
-        bloom *= 1.0f + luminance_F4(bloom_overlay)*params.overlay_strength;
+        bloom_px *= 1.0f + luminance_F4(bloom_overlay)*params.overlay_strength;
 
-        F4 color = hdr * (1.0f - 0.5f*params.strength) + params.strength*bloom;
-        out[0] = color;
-
-        in_hdr += 1;
-        in_bloom += 1;
-        out += 1;
+        F4 color = hdr_px * (1.0f - 0.5f*params.strength) + params.strength*bloom_px;
+        image_row_F4(result, y)[x] = color;
       }
     }
 
@@ -465,21 +482,24 @@ Internal Image image_I1_from_F4_tonemap(Arena *arena, Image input, Tonemap_Kind 
   Image result = {0};
   if (input.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
     result = image_alloc(arena, input.width, input.height, IMAGE_FORMAT__RGBA8_SRGB);
-    for (L1 pixel_index = 0; pixel_index < input.width*input.height; pixel_index += 1) {
-      F4 in_px = ((F4 *)input.pixels)[pixel_index];
-      F4 tonemapped = tonemap(tonemap_kind, in_px);
-      F4 out_color = {
-        255.0f*srgb_from_linear(tonemapped[0]),
-        255.0f*srgb_from_linear(tonemapped[1]),
-        255.0f*srgb_from_linear(tonemapped[2]),
-        255.0f,
-      };
-      I1 out_px =
-        0xFF000000             |
-        (I1)out_color[0] << 16 |
-        (I1)out_color[1] << 8  |
-        (I1)out_color[2] << 0;
-      ((I1 *)result.pixels)[pixel_index] = out_px;
+    for (L1 y = 0; y < input.height; y += 1) {
+      for (L1 x = 0; x < input.width; x += 1) {
+        F4 in_px = image_row_F4(input, y)[x];
+        F4 tonemapped = tonemap(tonemap_kind, in_px);
+        F4 out_color = {
+          255.0f*srgb_from_linear(tonemapped[0]),
+          255.0f*srgb_from_linear(tonemapped[1]),
+          255.0f*srgb_from_linear(tonemapped[2]),
+          255.0f,
+        };
+        I1 out_px =
+          0xFF000000             |
+          (I1)out_color[0] << 16 |
+          (I1)out_color[1] << 8  |
+          (I1)out_color[2] << 0;
+        I1 *out_row = (I1 *)(result.pixels + y*result.row_pitch);
+        out_row[x] = out_px;
+      }
     }
   }
 

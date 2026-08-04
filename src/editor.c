@@ -708,6 +708,29 @@ Internal void entity_delete(Entity_Handle *handles, L1 count) {
   }
 }
 
+Internal Shape shape_from_entity(Entity *entity) {
+  Shape result = {.kind = entity->shape_kind};
+
+  switch (result.kind) {
+  case SHAPE_KIND__SPHERE:
+    result.sphere.pos = V3_from_F4(entity->pos);
+    result.sphere.radius = entity->sphere_diameter*0.5f;
+    break;
+  case SHAPE_KIND__BOX:
+    result.box.min = V3_from_F4(entity->pos - entity->size*0.5f);
+    result.box.max = V3_from_F4(entity->pos + entity->size*0.5f);
+    break;
+  case SHAPE_KIND__PLANE: {
+    F4 normal = normalize_F4(entity->plane_normal);
+    result.plane.normal = V3_from_F4(normal);
+    result.plane.d = -dot_F4(normal, entity->pos);
+  } break;
+  default: break;
+  }
+
+  return result;
+}
+
 ////////////////////////////////
 //~ kti: Lister
 
@@ -1034,21 +1057,7 @@ Internal void render_lane(void *user_data) {
 
     for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
       if (it->flags & ENTITY_FLAG__SHAPE) {
-        Shape *shape = &shapes[shape_idx];
-        shape->kind = it->shape_kind;
-
-        if (shape->kind == SHAPE_KIND__SPHERE) {
-          shape->sphere.pos = V3_from_F4(it->pos);
-          shape->sphere.radius = it->sphere_diameter*0.5f;
-        } else if (shape->kind == SHAPE_KIND__BOX) {
-          shape->box.min = V3_from_F4(it->pos - it->size*0.5f);
-          shape->box.max = V3_from_F4(it->pos + it->size*0.5f);
-        } else if (shape->kind == SHAPE_KIND__PLANE) {
-          F4 n = normalize_F4(it->plane_normal);
-          shape->plane.normal = V3_from_F4(n);
-          shape->plane.d = -dot_F4(n, it->pos);
-        }
-
+        shapes[shape_idx] = shape_from_entity(it);
         materials[shape_idx] = it->material;
         shape_idx += 1;
       }
@@ -1972,6 +1981,7 @@ Internal void lane(void *user_data) {
                         .pos = view->camera.pos,
                         .dir = mul_M4F_F4(camera_rotation, ray_dir_camera),
                       };
+                      ray.inv_dir = 1.0f/ray.dir;
 
                       F1 min_hit_distance = 0.001f;
                       F1 closest_t = F1_MAX;
@@ -1981,26 +1991,8 @@ Internal void lane(void *user_data) {
                           continue;
                         }
 
-                        F1 t = 0.0f;
-                        if (e->shape_kind == SHAPE_KIND__BOX) {
-                          Box box = {
-                            V3_from_F4(e->pos - e->size*0.5f),
-                            V3_from_F4(e->pos + e->size*0.5f),
-                          };
-                          t = ray_box_intersect(ray, box);
-                        } else if (e->shape_kind == SHAPE_KIND__SPHERE) {
-                          Sphere sphere = {
-                            V3_from_F4(e->pos),
-                            e->sphere_diameter*0.5f, 
-                          };
-                          t = ray_sphere_intersect(ray, sphere);
-                        } else if (e->shape_kind == SHAPE_KIND__PLANE) {
-                          Plane plane = {
-                            V3_from_F4(normalize_F4(e->plane_normal)),
-                            -dot_F4(normal, e->pos),
-                          };
-                          t = ray_plane_intersect(ray, plane);
-                        }
+                        Shape shape = shape_from_entity(e);
+                        F1 t = ray_shape_intersect(ray, shape);
 
                         if (t > min_hit_distance && t < closest_t) {
                           closest_t = t;

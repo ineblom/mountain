@@ -72,6 +72,7 @@ Internal L1 image_format_pixel_size(Image_Format format) {
     case IMAGE_FORMAT__RGBA32F_LINEAR: {
       result = sizeof(F4);
     } break;
+    default: break;
   }
 
   return result;
@@ -87,6 +88,7 @@ Internal L1 image_format_alignment(Image_Format format) {
     case IMAGE_FORMAT__RGBA32F_LINEAR: {
       result = AlignOf(F4);
     } break;
+    default: break;
   }
 
   return result;

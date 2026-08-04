@@ -147,7 +147,7 @@ enum {
   CMD_KIND__SELECT_ENTITY,
   CMD_KIND__CREATE_ENTITY,
   CMD_KIND__CREATE_CAMERA,
-  CMD_KIND__DELETE_ENTITIES,
+  CMD_KIND__DELETE_SELECTED_ENTITIES,
 
   CMD_KIND__RENDER,
 
@@ -161,8 +161,6 @@ struct Cmd {
   Window *window;
   Panel *panel;
   Entity_Handle entity;
-  Entity_Handle *entities;
-  L1 entity_count;
 
   Dir dir;
 };
@@ -191,31 +189,49 @@ enum {
   LISTER_ENTRY_FLAG__NORMALIZE_F4 = 1 << 0,
 };
 
+typedef struct Lister_Number_Options Lister_Number_Options;
+struct Lister_Number_Options {
+  Lister_Apply apply;
+  F1 default_f1;
+  F1 pixels_per_unit;
+  F1 min;
+  F1 max;
+  Lister_Entry_Flags flags;
+};
+
+typedef struct Lister_Enum_Options Lister_Enum_Options;
+struct Lister_Enum_Options {
+  String8 *names;
+  L1 count;
+};
+
+typedef struct Lister_Value Lister_Value;
+struct Lister_Value {
+  Lister_Value *next;
+  String8 name;
+  void *data;
+  L1 *text_len;
+  L1 text_capacity;
+};
+
 typedef struct Lister_Entry Lister_Entry;
 struct Lister_Entry {
+  Lister_Entry *hash_next;
   Lister_Entry_Kind kind;
-  Lister_Apply apply;
-
   String8 str;
-  String8 *value_names;
-  B1 **texts;
-  L1 **text_lens;
-  L1 *text_capacities;
-  F1 pixels_per_unit;
-  F1 default_f1;
-  F1 min, max;
-  F1 **f1s;
-  F4 **f4s;
-  I1 **enum_values;
-  String8 *enum_names;
-  L1 enum_count;
+  Lister_Value *first_value;
+  Lister_Value *last_value;
   L1 value_count;
-  Lister_Entry_Flags flags;
-  Cmd cmd;
+
+  union {
+    Lister_Number_Options number;
+    Lister_Enum_Options enum_options;
+    Cmd cmd;
+  } data;
 };
 
 ////////////////////////////////
-//~ kti: Render
+//~ kti: Render
 
 typedef struct Render_Settings Render_Settings;
 struct Render_Settings {
@@ -257,8 +273,10 @@ struct State {
   Entity nil_entity;
 
   //- kti: Lister.
+  Arena *lister_arena;
   L1 lister_entry_count;
   Lister_Entry lister_entries[512];
+  Lister_Entry *lister_entry_hash_table[128];
 
   //- kti: Graphics.
   Mesh meshes[SHAPE_KIND_COUNT];
@@ -696,10 +714,12 @@ Internal Entity *entity_create(L1 flags, String8 name) {
   return entity;
 }
 
-Internal void entity_delete(Entity_Handle *handles, L1 count) {
-  for (L1 i = 0; i < count; i += 1) {
-    Entity *entity = entity_from_handle(handles[i]);
-    if (!entity_is_nil(entity)) {
+Internal void entity_delete_selected(void) {
+  for (Entity *entity = state->first_entity, *next = 0;
+       !entity_is_nil(entity);
+       entity = next) {
+    next = entity->next;
+    if (entity->flags & ENTITY_FLAG__SELECTED) {
       entity->gen += 1;
       DLLRemove(state->first_entity, state->last_entity, entity);
       SLLStackPush(state->first_free_entity, entity);
@@ -731,10 +751,29 @@ Internal Shape shape_from_entity(Entity *entity) {
   return result;
 }
 
+Internal F4 entity_mesh_size(Entity *entity) {
+  F4 result = entity->size;
+  if (entity->shape_kind == SHAPE_KIND__SPHERE) {
+    result = (F4){
+      entity->sphere_diameter,
+      entity->sphere_diameter,
+      entity->sphere_diameter,
+      1.0f,
+    };
+  }
+  return result;
+}
+
 ////////////////////////////////
 //~ kti: Lister
 
-Internal Lister_Entry *lister_push(Lister_Entry_Kind kind) {
+Internal void lister_begin(Arena *arena) {
+  state->lister_arena = arena;
+  state->lister_entry_count = 0;
+  MemoryZeroArray(state->lister_entry_hash_table);
+}
+
+Internal Lister_Entry *lister_entry_push(Lister_Entry_Kind kind) {
   Lister_Entry *entry = 0;
 
   if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
@@ -747,84 +786,74 @@ Internal Lister_Entry *lister_push(Lister_Entry_Kind kind) {
   return entry;
 }
 
-Internal Lister_Entry *lister_header(String8 str) {
-  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__HEADER);
-  if (entry) {
-    entry->str = str;
+Internal Lister_Entry *lister_entry_get_or_push(Lister_Entry_Kind kind, String8 str) {
+  L1 hash = str8_hash(str) ^ (5381*kind);
+  Lister_Entry **slot = &state->lister_entry_hash_table[hash%ArrayCount(state->lister_entry_hash_table)];
+  Lister_Entry *entry = 0;
+
+  for (Lister_Entry *it = slot[0]; it != 0; it = it->hash_next) {
+    if (it->kind == kind && str8_match(it->str, str)) {
+      entry = it;
+      break;
+    }
   }
 
+  if (entry == 0) {
+    entry = lister_push(kind);
+    if (entry) {
+      entry->str = str;
+      entry->hash_next = slot[0];
+      slot[0] = entry;
+    }
+  }
   return entry;
 }
 
-Internal Lister_Entry *lister_textedits(B1 **texts, L1 **text_lens, L1 *text_capacities, L1 count) {
-  Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__TEXTEDIT) : 0;
-  if (entry) {
-    entry->texts = texts;
-    entry->text_lens = text_lens;
-    entry->text_capacities = text_capacities;
-    entry->value_count = count;
-  }
-
-  return entry;
+Internal void lister_header(String8 str) {
+  lister_entry_get_or_push(LISTER_ENTRY_KIND__HEADER, str);
 }
 
-Internal Lister_Entry *lister_F1s(String8 str, String8 *value_names, F1 **values, L1 count, Lister_Apply apply, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
-  Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__F1) : 0;
-  if (entry) {
-    entry->str = str;
-    entry->value_names = value_names;
-    entry->apply = apply;
-    entry->f1s = values;
-    entry->value_count = count;
-    entry->pixels_per_unit = pixels_per_unit;
-    entry->default_f1 = default_value;
-    entry->min = min;
-    entry->max = max;
+Internal Lister_Value *lister_value_push(Lister_Entry *entry, String8 name, void *data) {
+  Lister_Value *value = 0;
+  if (entry && data && state->lister_arena) {
+    value = push_array(state->lister_arena, Lister_Value, 1);
+    value->name = name;
+    value->data = data;
+    SLLQueuePush(entry->first_value, entry->last_value, value);
+    entry->value_count += 1;
   }
-
-  return entry;
+  return value;
 }
 
-Internal Lister_Entry *lister_xyzs(String8 str, String8 *value_names, F4 **values, L1 count, Lister_Apply apply, F1 default_value, F1 pixels_per_unit, F1 min, F1 max) {
-  Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__XYZ) : 0;
-  if (entry) {
-    entry->str = str;
-    entry->value_names = value_names;
-    entry->apply = apply;
-    entry->f4s = values;
-    entry->value_count = count;
-    entry->default_f1 = default_value;
-    entry->pixels_per_unit = pixels_per_unit;
-    entry->min = min;
-    entry->max = max;
+Internal void lister_textedit(String8 str, String8 name, B1 *data, L1 *len, L1 capacity) {
+  Lister_Value *value = lister_value_push(lister_entry_get_or_push(LISTER_ENTRY_KIND__TEXTEDIT, str), name, data);
+  if (value) {
+    value->text_len = len;
+    value->text_capacity = capacity;
   }
-
-  return entry;
 }
 
-Internal Lister_Entry *lister_colors(String8 str, String8 *value_names, F4 **values, L1 count, Lister_Apply apply) {
-  Lister_Entry *entry = count != 0 ? lister_push(LISTER_ENTRY_KIND__COLOR) : 0;
+Internal void lister_number(Lister_Entry_Kind kind, String8 str, String8 name, void *data, Lister_Number_Options options) {
+  Lister_Entry *entry = lister_entry_get_or_push(kind, str);
   if (entry) {
-    entry->str = str;
-    entry->value_names = value_names;
-    entry->apply = apply;
-    entry->f4s = values;
-    entry->value_count = count;
-    entry->min = 0.0f;
-    entry->max = 1.0f;
+    entry->data.number = options;
+    lister_value_push(entry, name, data);
   }
-
-  return entry;
 }
+
+#define lister_F1(str, name, data, ...) lister_number(LISTER_ENTRY_KIND__F1, (str), (name), (data), (Lister_Number_Options){__VA_ARGS__})
+#define lister_xyz(str, name, data, ...) lister_number(LISTER_ENTRY_KIND__XYZ, (str), (name), (data), (Lister_Number_Options){__VA_ARGS__})
+#define lister_color(str, name, data, apply_mode) lister_number(LISTER_ENTRY_KIND__COLOR, (str), (name), (data), (Lister_Number_Options){.apply = (apply_mode), .max = 1.0f})
+#define lister_value(value, T) ((T *)(value)->data)
 
 Internal void lister_apply_F1s(Lister_Entry *entry, F1 before, F1 after) {
   if (before != after) {
-    F1 value = entry->apply == LISTER_APPLY__DELTA ? after - before : after;
-    for (L1 i = 0; i < entry->value_count; i += 1) {
-      if (entry->apply == LISTER_APPLY__DELTA) {
-        entry->f1s[i][0] += value;
+    F1 value = entry->data.number.apply == LISTER_APPLY__DELTA ? after - before : after;
+    for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
+      if (entry->data.number.apply == LISTER_APPLY__DELTA) {
+        lister_value(it, F1)[0] += value;
       } else {
-        entry->f1s[i][0] = value;
+        lister_value(it, F1)[0] = value;
       }
     }
   }
@@ -832,28 +861,28 @@ Internal void lister_apply_F1s(Lister_Entry *entry, F1 before, F1 after) {
 
 Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
   F4 delta = after - before;
-  for (L1 i = 0; i < entry->value_count; i += 1) {
-    F4 old_value = entry->f4s[i][0];
-    if (entry->apply == LISTER_APPLY__DELTA) {
-      entry->f4s[i][0] += delta;
+  for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
+    F4 old_value = lister_value(it, F4)[0];
+    if (entry->data.number.apply == LISTER_APPLY__DELTA) {
+      lister_value(it, F4)[0] += delta;
     } else {
       // Preserve components that were not edited when setting multiple values.
       for (L1 component = 0; component < 4; component += 1) {
         if (delta[component] != 0.0f) {
-          entry->f4s[i][0][component] = after[component];
+          lister_value(it, F4)[0][component] = after[component];
         }
       }
     }
 
-    if (entry->flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
-      F4 value = F4_with_w(entry->f4s[i][0], 0.0f);
+    if (entry->data.number.flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
+      F4 value = F4_with_w(lister_value(it, F4)[0], 0.0f);
       F1 length_sq = length_sq_F4(value);
       if (length_sq > Square(0.00001f)) {
-        entry->f4s[i][0] = value * (1.0f / sqrt_F1(length_sq));
+        lister_value(it, F4)[0] = value * (1.0f / sqrt_F1(length_sq));
       } else {
         old_value = F4_with_w(old_value, 0.0f);
         F1 old_length_sq = length_sq_F4(old_value);
-        entry->f4s[i][0] = old_length_sq > Square(0.00001f) ? old_value * (1.0f / sqrt_F1(old_length_sq)) : (F4){0.0f, 0.0f, 1.0f, 0.0f};
+        lister_value(it, F4)[0] = old_length_sq > Square(0.00001f) ? old_value * (1.0f / sqrt_F1(old_length_sq)) : (F4){0.0f, 0.0f, 1.0f, 0.0f};
       }
     }
   }
@@ -897,13 +926,13 @@ Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Sign
         F1 name_width = 0.0f;
         F1 value_width = 0.0f;
         F1 row_height = 0.0f;
-        for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
+        for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
           F1 value = entry->kind == LISTER_ENTRY_KIND__F1
-              ? entry->f1s[value_idx][0]
-              : entry->f4s[value_idx][0][component];
+              ? lister_value(it, F1)[0]
+              : lister_value(it, F4)[0][component];
           String8 value_string = str8f(ui_build_arena(), "%.2f", value);
           F2 name_dim = fc_dim_from_tag_size_string(
-              ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), entry->value_names[value_idx]);
+              ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), it->name);
           F2 value_dim = fc_dim_from_tag_size_string(
               ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), value_string);
           name_width = Max(name_width, name_dim[0]);
@@ -914,25 +943,25 @@ Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Sign
         value_width += 12.0f;
         row_height += 12.0f;
 
-        for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
-          F1 default_value = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->default_f1;
-          F1 pixels_per_unit = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->pixels_per_unit;
+        for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
+          F1 default_value = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->data.number.default_f1;
+          F1 pixels_per_unit = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->data.number.pixels_per_unit;
           F1 *value = 0;
           if (entry->kind == LISTER_ENTRY_KIND__F1) {
-            value = entry->f1s[value_idx];
+            value = lister_value(it, F1);
           } else {
-            value = (F1 *)entry->f4s[value_idx] + component;
+            value = lister_value(it, F1) + component;
           }
 
           ui_set_next_pref_width(ui_children_sum(1.0f));
           ui_set_next_pref_height(ui_px(row_height, 1.0f));
           ui_set_next_child_layout_axis(AXIS__X);
-          UI_Signal drag_signal = ui_drag_F1(value, default_value, pixels_per_unit, entry->min, entry->max);
+          UI_Signal drag_signal = ui_drag_F1(value, default_value, pixels_per_unit, entry->data.number.min, entry->data.number.max);
           UI_Parent(drag_signal.box)
           UI_Text_Padding(6.0f) {
             ui_set_next_pref_width(ui_px(name_width, 1.0f));
             ui_set_next_pref_height(ui_px(row_height, 1.0f));
-            ui_label(entry->value_names[value_idx]);
+            ui_label(it->name);
 
             ui_set_next_pref_width(ui_px(value_width, 1.0f));
             ui_set_next_pref_height(ui_px(row_height, 1.0f));
@@ -946,24 +975,20 @@ Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Sign
   }
 }
 
-Internal Lister_Entry *lister_enums(String8 str, I1 **values, L1 value_count, String8 *names, L1 enum_count) {
-  Lister_Entry *entry = value_count != 0 ? lister_push(LISTER_ENTRY_KIND__ENUM) : 0;
+Internal void lister_enum(String8 str, String8 name, I1 *data, String8 *names, L1 enum_count) {
+  Lister_Entry *entry = lister_entry_get_or_push(LISTER_ENTRY_KIND__ENUM, str);
   if (entry) {
-    entry->str = str;
-    entry->enum_values = values;
-    entry->value_count = value_count;
-    entry->enum_names = names;
-    entry->enum_count = enum_count;
+    entry->data.enum_options.names = names;
+    entry->data.enum_options.count = enum_count;
+    lister_value_push(entry, name, data);
   }
-
-  return entry;
 }
 
 Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
-  Lister_Entry *entry = lister_push(LISTER_ENTRY_KIND__CMD);
+  Lister_Entry *entry = lister_entry_push(LISTER_ENTRY_KIND__CMD);
   if (entry) {
     entry->str = str;
-    entry->cmd = cmd;
+    entry->data.cmd = cmd;
   }
 
   return entry;
@@ -1251,153 +1276,105 @@ Internal void lane(void *user_data) {
 
     if (lane_idx() == 0) {
       //- kti: Build lister.
-      state->lister_entry_count = 0;
+      lister_begin(scratch.arena);
 
       {
-        L1 selected_count = 0;
-        L1 selected_shape_count = 0;
-        L1 selected_box_count = 0;
-        L1 selected_sphere_count = 0;
-        L1 selected_plane_count = 0;
-        L1 selected_camera_count = 0;
+        String8 *shape_names = push_array(scratch.arena, String8, SHAPE_KIND_COUNT);
+        for (L1 i = 0; i < SHAPE_KIND_COUNT; i += 1) {
+          shape_names[i] = shape_kind_name(i);
+        }
+
         I1 has_camera = 0;
         for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-          if (entity->flags & ENTITY_FLAG__CAMERA) {
-            has_camera = 1;
-          }
+          has_camera |= !!(entity->flags & ENTITY_FLAG__CAMERA);
           if (entity->flags & ENTITY_FLAG__SELECTED) {
-            selected_count += 1;
-            selected_shape_count += !!(entity->flags & ENTITY_FLAG__SHAPE);
-            selected_box_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__BOX);
-            selected_sphere_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__SPHERE);
-            selected_plane_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__PLANE);
-            selected_camera_count += !!(entity->flags & ENTITY_FLAG__CAMERA);
-          }
-          if ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__SPHERE) {
-            F1 diameter = entity->sphere_diameter;
-            entity->size = (F4){diameter, diameter, diameter, 1.0f};
+            String8 entity_name = (String8){entity->name, entity->name_len};
+            I1 is_shape = !!(entity->flags & ENTITY_FLAG__SHAPE);
+            I1 is_camera = !!(entity->flags & ENTITY_FLAG__CAMERA);
+
+            //- kti: Common entries.
+
+            lister_textedit(str8("Name"), entity_name, entity->name, &entity->name_len, sizeof(entity->name));
+
+            lister_xyz(str8("Pos"), entity_name,
+              &entity->pos,
+              .apply = LISTER_APPLY__DELTA,
+              .pixels_per_unit = 50.0f);
+
+            lister_enum(str8("Shape"), entity_name,
+              is_shape ? &entity->shape_kind : 0,
+              shape_names, SHAPE_KIND_COUNT);
+
+            //- kti: Shape specific entries.
+
+            lister_xyz(str8("Size"), entity_name,
+              (is_shape && entity->shape_kind == SHAPE_KIND__BOX) ? &entity->size : 0,
+              .apply = LISTER_APPLY__DELTA,
+              .default_f1 = 1.0f,
+              .max = F1_MAX);
+
+            lister_F1(str8("Diameter"), entity_name, (is_shape && entity->shape_kind == SHAPE_KIND__SPHERE) ? &entity->sphere_diameter : 0,
+              .apply = LISTER_APPLY__DELTA,
+              .default_f1 = 1.0f,
+              .max = F1_MAX);
+
+            lister_xyz(str8("Normal"), entity_name, (is_shape && entity->shape_kind == SHAPE_KIND__PLANE) ? &entity->plane_normal : 0,
+              .apply = LISTER_APPLY__SET,
+              .pixels_per_unit = 50.0f,
+              .min = -1.0f,
+              .max = 1.0f,
+              .flags = LISTER_ENTRY_FLAG__NORMALIZE_F4);
+
+            //- kti: For all shapes.
+
+            if (is_shape) {
+              lister_header(str8("Material"));
+              lister_color(str8("Base"), entity_name, &entity->material.base_color, LISTER_APPLY__SET);
+              lister_F1(str8("Metallic"), entity_name, &entity->material.metallic,
+                .apply = LISTER_APPLY__DELTA,
+                .default_f1 = 0.3f,
+                .max = 1.0f);
+              lister_F1(str8("Roughness"), entity_name, &entity->material.roughness,
+                .apply = LISTER_APPLY__DELTA,
+                .default_f1 = 0.3f,
+                .max = 1.0f);
+              lister_color(str8("Emissive"), entity_name, &entity->material.emissive, LISTER_APPLY__SET);
+            }
+
+            //- kti: Camera entries.
+
+            if (is_camera) {
+              lister_header(str8("Camera"));
+              lister_xyz(str8("Forward"), entity_name,
+                &entity->camera_forward,
+                .apply = LISTER_APPLY__SET,
+                .pixels_per_unit = 50.0f,
+                .min = -1.0f,
+                .max = 1.0f,
+                .flags = LISTER_ENTRY_FLAG__NORMALIZE_F4);
+              lister_F1(str8("Vertical FOV"), entity_name,
+                &entity->camera_vertical_fov,
+                .apply = LISTER_APPLY__SET,
+                .default_f1 = 70.0f*PI/180.0f,
+                .min = PI/180.0f,
+                .max = 179.0f*PI/180.0f);
+              lister_F1(str8("Aperture Radius"), entity_name,
+                &entity->camera_aperture_radius,
+                .apply = LISTER_APPLY__SET,
+                .max = F1_MAX);
+              lister_F1(str8("Focal Distance"), entity_name,
+                &entity->camera_focal_distance,
+                .apply = LISTER_APPLY__SET,
+                .default_f1 = 5.0f,
+                .min = 0.001f,
+                .max = F1_MAX);
+            }
           }
         }
 
-        if (selected_count != 0) {
-          B1 **names = push_array(scratch.arena, B1 *, selected_count);
-          L1 **name_lens = push_array(scratch.arena, L1 *, selected_count);
-          L1 *name_capacities = push_array(scratch.arena, L1, selected_count);
-          String8 *value_names = push_array(scratch.arena, String8, selected_count);
-          F4 **positions = push_array(scratch.arena, F4 *, selected_count);
-          Entity_Handle *entities = push_array(scratch.arena, Entity_Handle, selected_count);
-
-          String8 *shape_value_names = push_array(scratch.arena, String8, selected_shape_count);
-          I1 **shapes = push_array(scratch.arena, I1 *, selected_shape_count);
-          F4 **base_colors = push_array(scratch.arena, F4 *, selected_shape_count);
-          F1 **metallics = push_array(scratch.arena, F1 *, selected_shape_count);
-          F1 **roughnesses = push_array(scratch.arena, F1 *, selected_shape_count);
-          F4 **emissives = push_array(scratch.arena, F4 *, selected_shape_count);
-
-          String8 *box_value_names = push_array(scratch.arena, String8, selected_box_count);
-          F4 **box_sizes = push_array(scratch.arena, F4 *, selected_box_count);
-
-          String8 *sphere_value_names = push_array(scratch.arena, String8, selected_sphere_count);
-          F1 **sphere_diameters = push_array(scratch.arena, F1 *, selected_sphere_count);
-
-          String8 *plane_value_names = push_array(scratch.arena, String8, selected_plane_count);
-          F4 **plane_normals = push_array(scratch.arena, F4 *, selected_plane_count);
-
-          String8 *camera_value_names = push_array(scratch.arena, String8, selected_camera_count);
-          F4 **forwards = push_array(scratch.arena, F4 *, selected_camera_count);
-          F1 **vertical_fovs = push_array(scratch.arena, F1 *, selected_camera_count);
-          F1 **aperture_radii = push_array(scratch.arena, F1 *, selected_camera_count);
-          F1 **focal_distances = push_array(scratch.arena, F1 *, selected_camera_count);
-
-          L1 selected_idx = 0;
-          L1 selected_shape_idx = 0;
-          L1 selected_box_idx = 0;
-          L1 selected_sphere_idx = 0;
-          L1 selected_plane_idx = 0;
-          L1 selected_camera_idx = 0;
-          for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-            if (entity->flags & ENTITY_FLAG__SELECTED) {
-              String8 entity_name = (String8){entity->name, entity->name_len};
-              names[selected_idx] = entity->name;
-              name_lens[selected_idx] = &entity->name_len;
-              name_capacities[selected_idx] = sizeof(entity->name);
-              value_names[selected_idx] = entity_name;
-              positions[selected_idx] = &entity->pos;
-              entities[selected_idx] = entity_handle(entity);
-              selected_idx += 1;
-
-              if (entity->flags & ENTITY_FLAG__SHAPE) {
-                shape_value_names[selected_shape_idx] = entity_name;
-                shapes[selected_shape_idx] = &entity->shape_kind;
-                base_colors[selected_shape_idx] = &entity->material.base_color;
-                metallics[selected_shape_idx] = &entity->material.metallic;
-                roughnesses[selected_shape_idx] = &entity->material.roughness;
-                emissives[selected_shape_idx] = &entity->material.emissive;
-                selected_shape_idx += 1;
-
-                if (entity->shape_kind == SHAPE_KIND__BOX) {
-                  box_value_names[selected_box_idx] = entity_name;
-                  box_sizes[selected_box_idx] = &entity->size;
-                  selected_box_idx += 1;
-                } else if (entity->shape_kind == SHAPE_KIND__SPHERE) {
-                  sphere_value_names[selected_sphere_idx] = entity_name;
-                  sphere_diameters[selected_sphere_idx] = &entity->sphere_diameter;
-                  selected_sphere_idx += 1;
-                } else if (entity->shape_kind == SHAPE_KIND__PLANE) {
-                  plane_value_names[selected_plane_idx] = entity_name;
-                  plane_normals[selected_plane_idx] = &entity->plane_normal;
-                  selected_plane_idx += 1;
-                }
-              }
-
-              if (entity->flags & ENTITY_FLAG__CAMERA) {
-                camera_value_names[selected_camera_idx] = entity_name;
-                forwards[selected_camera_idx] = &entity->camera_forward;
-                vertical_fovs[selected_camera_idx] = &entity->camera_vertical_fov;
-                aperture_radii[selected_camera_idx] = &entity->camera_aperture_radius;
-                focal_distances[selected_camera_idx] = &entity->camera_focal_distance;
-                selected_camera_idx += 1;
-              }
-            }
-          }
-
-          lister_textedits(names, name_lens, name_capacities, selected_count);
-          lister_xyzs(str8("Pos"), value_names, positions, selected_count, LISTER_APPLY__DELTA, 0.0f, 50.0f, 0.0f, 0.0f);
-
-          if (selected_shape_count != 0) {
-            String8 *shape_names = push_array(scratch.arena, String8, SHAPE_KIND_COUNT);
-            for (L1 i = 0; i < SHAPE_KIND_COUNT; i += 1) {
-              shape_names[i] = shape_kind_name(i);
-            } 
-
-            lister_enums(str8("Shape"), shapes, selected_shape_count, shape_names, SHAPE_KIND_COUNT);
-            lister_xyzs(str8("Size"), box_value_names, box_sizes, selected_box_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
-            lister_F1s(str8("Diameter"), sphere_value_names, sphere_diameters, selected_sphere_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
-            Lister_Entry *normal_entry = lister_xyzs(str8("Normal"), plane_value_names, plane_normals, selected_plane_count, LISTER_APPLY__SET, 0.0f, 50.0f, -1.0f, 1.0f);
-            if (normal_entry) {
-              normal_entry->flags |= LISTER_ENTRY_FLAG__NORMALIZE_F4;
-            }
-
-            lister_header(str8("Material"));
-            lister_colors(str8("Base"), shape_value_names, base_colors, selected_shape_count, LISTER_APPLY__SET);
-            lister_F1s(str8("Metallic"), shape_value_names, metallics, selected_shape_count, LISTER_APPLY__DELTA, 0.3f, 0.0f, 0.0f, 1.0f);
-            lister_F1s(str8("Roughness"), shape_value_names, roughnesses, selected_shape_count, LISTER_APPLY__DELTA, 0.3f, 0.0f, 0.0f, 1.0f);
-            lister_colors(str8("Emissive"), shape_value_names, emissives, selected_shape_count, LISTER_APPLY__SET);
-          }
-
-          if (selected_camera_count != 0) {
-            lister_header(str8("Camera"));
-            Lister_Entry *forward_entry = lister_xyzs(str8("Forward"), camera_value_names, forwards, selected_camera_count, LISTER_APPLY__SET, 0.0f, 50.0f, -1.0f, 1.0f);
-            forward_entry->flags |= LISTER_ENTRY_FLAG__NORMALIZE_F4;
-            lister_F1s(str8("Vertical FOV"), camera_value_names, vertical_fovs, selected_camera_count, LISTER_APPLY__SET, 70.0f*PI/180.0f, 0.0f, PI/180.0f, 179.0f*PI/180.0f);
-            lister_F1s(str8("Aperture Radius"), camera_value_names, aperture_radii, selected_camera_count, LISTER_APPLY__SET, 0.0f, 0.0f, 0.0f, F1_MAX);
-            lister_F1s(str8("Focal Distance"), camera_value_names, focal_distances, selected_camera_count, LISTER_APPLY__SET, 5.0f, 0.0f, 0.001f, F1_MAX);
-          }
-
+        if (state->lister_entry_count != 0) {
           lister_cmd(str8("Delete"), (Cmd){
-            .kind = CMD_KIND__DELETE_ENTITIES,
-            .entities = entities,
-            .entity_count = selected_count,
+            .kind = CMD_KIND__DELETE_SELECTED_ENTITIES,
           });
         } else {
           lister_header(str8("Entities"));
@@ -1603,9 +1580,19 @@ Internal void lane(void *user_data) {
                     ui_set_next_child_layout_axis(AXIS__Y);
                     UI_Box *lister = ui_build_box_from_stringf(0, "lister%p", view);
                     UI_Parent(lister) {
+                      L1 visible_entry_idx = 0;
                       for (L1 i = 0; i < state->lister_entry_count; i += 1) {
                         Lister_Entry *entry = &state->lister_entries[i];
-                        UI_Box_Flags top_side = (i == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
+
+                        //- kti: Skip entries without values.
+                        if (entry->kind != LISTER_ENTRY_KIND__HEADER &&
+                            entry->kind != LISTER_ENTRY_KIND__CMD &&
+                            entry->value_count == 0) {
+                          continue;
+                        }
+
+                        UI_Box_Flags top_side = (visible_entry_idx == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
+                        visible_entry_idx += 1;
                         CString drag_label_format = entry->value_count == 1 ? "%.*s %.2f" : "%.*s";
 
                         switch (entry->kind) {
@@ -1621,6 +1608,7 @@ Internal void lane(void *user_data) {
                                                      top_side , entry->str);
                           } break;
                           case LISTER_ENTRY_KIND__TEXTEDIT: {
+                            Lister_Value *first_value = entry->first_value;
                             ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
                             ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
                                               UI_BOX_FLAG__DRAW_SIDE_RIGHT|
@@ -1633,15 +1621,15 @@ Internal void lane(void *user_data) {
                                                              state->name_edit_buffer,
                                                              sizeof(state->name_edit_buffer),
                                                              &state->name_edit_buffer_len,
-                                                             (String8){entry->texts[0], entry->text_lens[0][0]},
-                                                             str8f(ui_build_arena(), "###entity_name_%p", entry->texts[0]));
+                                                             (String8){first_value->data, first_value->text_len[0]},
+                                                             str8f(ui_build_arena(), "###entity_name_%p", first_value->data));
                               if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
                                 cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                               }
                               if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
-                                for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
-                                  entry->text_lens[value_idx][0] = Min(state->name_edit_buffer_len, entry->text_capacities[value_idx]);
-                                  memmove(entry->texts[value_idx], state->name_edit_buffer, entry->text_lens[value_idx][0]);
+                                for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
+                                  value->text_len[0] = Min(state->name_edit_buffer_len, value->text_capacity);
+                                  memmove(value->data, state->name_edit_buffer, value->text_len[0]);
                                 }
                               }
                             }
@@ -1655,12 +1643,12 @@ Internal void lane(void *user_data) {
                                                   UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                                   UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                   top_side);
-                                F1 before = entry->f1s[0][0];
+                                F1 before = lister_value(entry->first_value, F1)[0];
                                 F1 after = before;
                                 UI_Signal signal = ui_drag_F1_label(entry->str,
                                                                     drag_label_format,
-                                                                    &after, entry->default_f1, entry->pixels_per_unit,
-                                                                    entry->min, entry->max);
+                                                                    &after, entry->data.number.default_f1, entry->data.number.pixels_per_unit,
+                                                                    entry->data.number.min, entry->data.number.max);
                                 focus_on_press(panel, signal);
                                 lister_apply_F1s(entry, before, after);
                                 lister_value_tooltip(overlay, entry, signal, 0);
@@ -1678,21 +1666,21 @@ Internal void lane(void *user_data) {
                                                        top_side,
                                                        entry->str);
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
-                                F4 before = entry->f4s[0][0];
+                                F4 before = lister_value(entry->first_value, F4)[0];
                                 F4 after = before;
                                 F1 after_components[3] = {after[0], after[1], after[2]};
                                 UI_Signal signals[3] = {0};
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 signals[0] = ui_drag_F1_label(str8("X"), drag_label_format,
-                                                              &after_components[0], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                                              &after_components[0], entry->data.number.default_f1, entry->data.number.pixels_per_unit, entry->data.number.min, entry->data.number.max);
                                 focus_on_press(panel, signals[0]);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 signals[1] = ui_drag_F1_label(str8("Y"), drag_label_format,
-                                                              &after_components[1], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                                              &after_components[1], entry->data.number.default_f1, entry->data.number.pixels_per_unit, entry->data.number.min, entry->data.number.max);
                                 focus_on_press(panel, signals[1]);
                                 ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 signals[2] = ui_drag_F1_label(str8("Z"), drag_label_format,
-                                                              &after_components[2], entry->default_f1, entry->pixels_per_unit, entry->min, entry->max);
+                                                              &after_components[2], entry->data.number.default_f1, entry->data.number.pixels_per_unit, entry->data.number.min, entry->data.number.max);
                                 focus_on_press(panel, signals[2]);
                                 after[0] = after_components[0];
                                 after[1] = after_components[1];
@@ -1715,7 +1703,7 @@ Internal void lane(void *user_data) {
                                                        top_side,
                                                        entry->str);
 
-                              F4 before = entry->f4s[0][0];
+                              F4 before = lister_value(entry->first_value, F4)[0];
                               F4 after = before;
                               F1 after_components[3] = {after[0], after[1], after[2]};
                               ui_set_next_background_color(oklch_from_linear_rgb(after));
@@ -1766,21 +1754,21 @@ Internal void lane(void *user_data) {
                                                        entry->str);
 
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                              UI_Pref_Width(ui_pct(1.0f/(F1)entry->enum_count, 1.0f)) {
-                                I1 enum_value = entry->enum_values[0][0];
+                              UI_Pref_Width(ui_pct(1.0f/(F1)entry->data.enum_options.count, 1.0f)) {
+                                I1 enum_value = lister_value(entry->first_value, I1)[0];
                                 I1 enum_is_mixed = 0;
-                                for (L1 value_idx = 1; value_idx < entry->value_count; value_idx += 1) {
-                                  if (entry->enum_values[value_idx][0] != enum_value) {
+                                for (Lister_Value *value = entry->first_value->next; value != 0; value = value->next) {
+                                  if (lister_value(value, I1)[0] != enum_value) {
                                     enum_is_mixed = 1;
                                     break;
                                   }
                                 }
-                                for (L1 option = 0; option < entry->enum_count; option += 1) {
+                                for (L1 option = 0; option < entry->data.enum_options.count; option += 1) {
                                   if (!enum_is_mixed && enum_value == option) {
                                     ui_set_next_background_color(oklch(0.35f, 0.08f, 252.0f, 1.0f));
                                   }
 
-                                  String8 name = entry->enum_names[option];
+                                  String8 name = entry->data.enum_options.names[option];
                                   UI_Box *option_box = ui_build_box_from_stringf(
                                       UI_BOX_FLAG__CLICKABLE|
                                       UI_BOX_FLAG__DRAW_TEXT|
@@ -1795,8 +1783,8 @@ Internal void lane(void *user_data) {
                                       entry, option);
                                   UI_Signal signal = ui_signal_from_box(option_box);
                                   if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
-                                    for (L1 value_idx = 0; value_idx < entry->value_count; value_idx += 1) {
-                                      entry->enum_values[value_idx][0] = option;
+                                    for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
+                                      lister_value(value, I1)[0] = option;
                                     }
                                   }
                                 }
@@ -1821,7 +1809,7 @@ Internal void lane(void *user_data) {
                                 (void *)entry);
                             UI_Signal signal = ui_signal_from_box(cmd_box);
                             if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
-                              cmd_push(entry->cmd);
+                              cmd_push(entry->data.cmd);
                             }
                           } break;
                         }
@@ -2067,7 +2055,7 @@ Internal void lane(void *user_data) {
                     Mesh *mesh = &state->meshes[e->shape_kind];
                     M4F transform = e->shape_kind == SHAPE_KIND__PLANE
                       ? plane_transform_M4F(e, view->camera)
-                      : mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
+                      : mul_M4F(scale_M4F(entity_mesh_size(e)), translate_M4F(e->pos));
                     F4 color = e->material.base_color;
                     dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__NONE);
                   }
@@ -2079,7 +2067,7 @@ Internal void lane(void *user_data) {
                     Mesh *mesh = &state->meshes[entity->shape_kind];
                     M4F transform = entity->shape_kind == SHAPE_KIND__PLANE
                       ? plane_transform_M4F(entity, view->camera)
-                      : mul_M4F(scale_M4F(entity->size), translate_M4F(entity->pos));
+                      : mul_M4F(scale_M4F(entity_mesh_size(entity)), translate_M4F(entity->pos));
                     F4 color = {0.9f, 0.0f, 0.9f, 1.0f};
                     dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
                                     mesh->index_buffer, 0, mesh->index_count,
@@ -2179,8 +2167,8 @@ Internal void lane(void *user_data) {
             new->camera_focal_distance = 5.0f;
             entity_select(entity_handle(new), 0);
           } break;
-          case CMD_KIND__DELETE_ENTITIES: {
-            entity_delete(cmd.entities, cmd.entity_count);
+          case CMD_KIND__DELETE_SELECTED_ENTITIES: {
+            entity_delete_selected();
           } break;
           case CMD_KIND__RENDER: {
             Lane_Group_Params lane_params = {

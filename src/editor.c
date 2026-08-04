@@ -1,10 +1,7 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: Make shape descriminated union.
-// One struct with a enum determining the shape.
-// Then have functions with switches inside of them.
-// Every entity has a Shape var on them.
+//- kti: Simplify lister building code.
 
 #if (HEADER)
 

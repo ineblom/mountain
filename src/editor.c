@@ -799,7 +799,7 @@ Internal Lister_Entry *lister_entry_get_or_push(Lister_Entry_Kind kind, String8 
   }
 
   if (entry == 0) {
-    entry = lister_push(kind);
+    entry = lister_entry_push(kind);
     if (entry) {
       entry->str = str;
       entry->hash_next = slot[0];

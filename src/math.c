@@ -9,6 +9,12 @@ struct Random_State {
   L1 inc;
 };
 
+// NOTE(kti): Used for compact storage.
+typedef struct V3 V3;
+struct V3 {
+  F1 x, y, z;
+};
+
 typedef enum Side {
   SIDE__INVALID = -1,
   SIDE__MIN,
@@ -37,6 +43,49 @@ enum {
   DIR__DOWN,
 
   DIR_COUNT,
+};
+
+typedef enum Shape_Kind {
+  SHAPE_KIND__SPHERE,
+  SHAPE_KIND__BOX,
+  SHAPE_KIND__PLANE,
+
+  SHAPE_KIND_COUNT,
+} Shape_Kind;
+
+typedef struct Sphere Sphere;
+struct Sphere {
+  V3 pos;
+  F1 radius;
+};
+
+typedef struct Box Box;
+struct Box {
+  V3 min;
+  V3 max;
+};
+
+typedef struct Plane Plane;
+struct Plane {
+  V3 normal;
+  F1 d;
+};
+
+typedef struct Shape Shape;
+struct Shape {
+  Shape_Kind kind;
+  union {
+    Sphere sphere;
+    Box box;
+    Plane plane;
+  };
+};
+
+typedef struct Ray Ray;
+struct Ray {
+  F4 pos;
+  F4 dir;
+  F4 inv_dir;
 };
 
 #endif
@@ -123,7 +172,20 @@ Inline F2 F2_from_F4(F4 v) {
 }
 
 ////////////////////////////////
-//~ F4
+//~ kti: V3
+
+Inline V3 V3_from_F4(F4 v) {
+  V3 result = {v[0], v[1], v[2]};
+  return result;
+}
+
+////////////////////////////////
+//~ kti: F4
+
+Inline F4 F4_from_V3(V3 v) {
+  F4 result = {v.x, v.y, v.z, 0.0f};
+  return result;
+}
 
 Inline F4 F4_with_w(F4 v, F1 w) {
   F4 result = v;
@@ -318,14 +380,38 @@ Inline F4 mul_M4F_F4(M4F m, F4 v) {
 }
 
 ////////////////////////////////
-//~ Ray
+//~ kti: Shape
 
-Internal F1 ray_plane_intersect(F4 ray_origin, F4 ray_direction, F4 plane_normal, F1 plane_d) {
+Internal String8 shape_kind_name(Shape_Kind kind) {
+  String8 result = str8("Unknown");
+
+  switch (kind) {
+  case SHAPE_KIND__SPHERE:
+    result = str8("Sphere");
+    break;
+  case SHAPE_KIND__BOX:
+    result = str8("Box");
+    break;
+  case SHAPE_KIND__PLANE:
+    result = str8("Plane");
+    break;
+  default: break;
+  }
+
+  return result;
+}
+
+////////////////////////////////
+//~ kti: Ray
+
+Internal F1 ray_plane_intersect(Ray ray, Plane plane) {
   F1 result = 0.0f;
 
-  F1 denom = dot_F4(plane_normal, ray_direction);
+  F4 plane_normal = F4_from_V3(plane.normal);
+
+  F1 denom = dot_F4(plane_normal, ray.dir);
   if (abs_F1(denom) > 0.0001f) {
-    F1 t = (-plane_d - dot_F4(plane_normal, ray_origin)) / denom;
+    F1 t = (-plane.d - dot_F4(plane_normal, ray.pos)) / denom;
     if (t > 0.001f) {
       result = t;
     }
@@ -334,12 +420,14 @@ Internal F1 ray_plane_intersect(F4 ray_origin, F4 ray_direction, F4 plane_normal
   return result;
 }
 
-Internal F1 ray_sphere_intersect(F4 ray_origin, F4 ray_direction, F4 sphere_origin, F1 sphere_radius) {
+Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere) {
   F1 result = 0.0f;
 
-  F4 sphere_relative_ray_origin = ray_origin - sphere_origin;
-  F1 b = 2.0f * dot_F4(ray_direction, sphere_relative_ray_origin);
-  F1 c = dot_F4(sphere_relative_ray_origin, sphere_relative_ray_origin) - sphere_radius*sphere_radius;
+  F4 sphere_pos = F4_from_V3(sphere.pos);
+
+  F4 sphere_relative_ray_pos = ray.pos - sphere_pos;
+  F1 b = 2.0f * dot_F4(ray.dir, sphere_relative_ray_pos);
+  F1 c = dot_F4(sphere_relative_ray_pos, sphere_relative_ray_pos) - Square(sphere.radius);
 
   F1 discriminant = b*b - 4.0f*c;
   if (discriminant > 0.0f) {
@@ -352,16 +440,20 @@ Internal F1 ray_sphere_intersect(F4 ray_origin, F4 ray_direction, F4 sphere_orig
       if (tn > 0.001f && tn < tp) result = tn;
     }
   }
+
   return result;
 }
 
-Internal F1 ray_aabb_intersect(F4 ray_origin, F4 ray_direction, F4 aabb_min, F4 aabb_max) {
-  F1 t_min = (aabb_min[0] - ray_origin[0]) / ray_direction[0];
-  F1 t_max = (aabb_max[0] - ray_origin[0]) / ray_direction[0];
+Internal F1 ray_box_intersect(Ray ray, Box box) {
+  F4 aabb_min = F4_from_V3(box.min);
+  F4 aabb_max = F4_from_V3(box.max);
+
+  F1 t_min = (aabb_min[0] - ray.pos[0]) * ray.inv_dir[0];
+  F1 t_max = (aabb_max[0] - ray.pos[0]) * ray.inv_dir[0];
   if (t_min > t_max) Swap(t_min, t_max);
 
-  F1 ty_min = (aabb_min[1] - ray_origin[1]) / ray_direction[1];
-  F1 ty_max = (aabb_max[1] - ray_origin[1]) / ray_direction[1];
+  F1 ty_min = (aabb_min[1] - ray.pos[1]) * ray.inv_dir[1];
+  F1 ty_max = (aabb_max[1] - ray.pos[1]) * ray.inv_dir[1];
   if (ty_min > ty_max) Swap(ty_min, ty_max);
 
   t_min = Max(t_min, ty_min);
@@ -369,8 +461,8 @@ Internal F1 ray_aabb_intersect(F4 ray_origin, F4 ray_direction, F4 aabb_min, F4 
 
   if (t_min > t_max) return 0.0f;
 
-  F1 tz_min = (aabb_min[2] - ray_origin[2]) / ray_direction[2];
-  F1 tz_max = (aabb_max[2] - ray_origin[2]) / ray_direction[2];
+  F1 tz_min = (aabb_min[2] - ray.pos[2]) * ray.inv_dir[2];
+  F1 tz_max = (aabb_max[2] - ray.pos[2]) * ray.inv_dir[2];
   if (tz_min > tz_max) Swap(tz_min, tz_max);
 
   t_min = Max(t_min, tz_min);
@@ -379,6 +471,25 @@ Internal F1 ray_aabb_intersect(F4 ray_origin, F4 ray_direction, F4 aabb_min, F4 
   if (t_min > t_max) return 0.0f;
 
   return t_min;
+}
+
+Internal F1 ray_shape_intersect(Ray ray, Shape shape) {
+  F1 result = 0.0f;
+
+  switch (shape.kind) {
+  case SHAPE_KIND__SPHERE:
+    result = ray_sphere_intersect(ray, shape.sphere); 
+    break;
+  case SHAPE_KIND__BOX:
+    result = ray_box_intersect(ray, shape.box); 
+    break;
+  case SHAPE_KIND__PLANE:
+    result = ray_plane_intersect(ray, shape.plane); 
+    break;
+  default: break;
+  }
+
+  return result;
 }
 
 ////////////////////////////////

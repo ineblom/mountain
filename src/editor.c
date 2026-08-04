@@ -101,20 +101,6 @@ enum {
   ENTITY_FLAG__SELECTED = 1 << 2,
 };
 
-typedef I1 Shape;
-enum {
-  SHAPE__BOX = 0,
-  SHAPE__SPHERE,
-  SHAPE__PLANE,
-  SHAPE_COUNT,
-};
-
-Global String8 shape_names[SHAPE_COUNT] = {
-  [SHAPE__BOX] = str8("Box"),
-  [SHAPE__SPHERE] = str8("Sphere"),
-  [SHAPE__PLANE] = str8("Plane"),
-};
-
 typedef struct Entity Entity;
 struct Entity {
   Entity *next;
@@ -128,7 +114,7 @@ struct Entity {
   F4 size;
   F4 plane_normal;
   F1 sphere_diameter;
-  Shape shape;
+  Shape_Kind shape_kind;
   RT_Material material;
   F4 camera_forward;
   F1 camera_vertical_fov;
@@ -278,7 +264,7 @@ struct State {
   Lister_Entry lister_entries[512];
 
   //- kti: Graphics.
-  Mesh meshes[SHAPE_COUNT];
+  Mesh meshes[SHAPE_KIND_COUNT];
 
   //- kti: Render.
   Render_Settings render_settings;
@@ -1035,42 +1021,39 @@ Internal void render_lane(void *user_data) {
   if (lane_idx() == 0) {
     Entity *camera_entity = &state->nil_entity; 
 
-    L1 shape_counts[SHAPE_COUNT] = {0};
+    L1 shape_count = 0;
     for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
       if (it->flags & ENTITY_FLAG__CAMERA) {
         camera_entity = it;
       }
       if (it->flags & ENTITY_FLAG__SHAPE) {
-        shape_counts[it->shape] += 1;
+        shape_count += 1;
       }
     }
 
-    L1 sphere_idx = 0;
-    RT_Sphere *spheres = push_array(arena, RT_Sphere, shape_counts[SHAPE__SPHERE]);
-    L1 box_idx = 0;
-    RT_Box *boxes = push_array(arena, RT_Box, shape_counts[SHAPE__BOX]);
-    L1 plane_idx = 0;
-    RT_Plane *planes = push_array(arena, RT_Plane, shape_counts[SHAPE__PLANE]);
+    L1 shape_idx = 0;
+    Shape *shapes = push_array(arena, Shape, shape_count);
+    RT_Material *materials = push_array(arena, RT_Material, shape_count);
 
     for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
       if (it->flags & ENTITY_FLAG__SHAPE) {
-        if (it->shape == SHAPE__SPHERE) {
-          spheres[sphere_idx].p = it->pos;
-          spheres[sphere_idx].r = it->sphere_diameter*0.5f;
-          spheres[sphere_idx].material = it->material;
-          sphere_idx += 1;
-        } else if (it->shape == SHAPE__BOX) {
-          boxes[box_idx].min = it->pos - it->size*0.5f;
-          boxes[box_idx].max = it->pos + it->size*0.5f;
-          boxes[box_idx].material = it->material;
-          box_idx += 1;
-        } else if (it->shape == SHAPE__PLANE) {
+        Shape *shape = &shapes[shape_idx];
+        shape->kind = it->shape_kind;
+
+        if (shape->kind == SHAPE_KIND__SPHERE) {
+          shape->sphere.pos = V3_from_F4(it->pos);
+          shape->sphere.radius = it->sphere_diameter*0.5f;
+        } else if (shape->kind == SHAPE_KIND__BOX) {
+          shape->box.min = V3_from_F4(it->pos - it->size*0.5f);
+          shape->box.max = V3_from_F4(it->pos + it->size*0.5f);
+        } else if (shape->kind == SHAPE_KIND__PLANE) {
           F4 n = normalize_F4(it->plane_normal);
-          planes[plane_idx].n = n;
-          planes[plane_idx].d = -dot_F4(n, it->pos);
-          planes[plane_idx].material = it->material;
-          plane_idx += 1;
+          shape->plane.normal = V3_from_F4(n);
+          shape->plane.d = -dot_F4(n, it->pos);
         }
+
+        materials[shape_idx] = it->material;
+        shape_idx += 1;
       }
     }
 
@@ -1087,14 +1070,9 @@ Internal void render_lane(void *user_data) {
         .focal_distance = camera_entity->camera_focal_distance,
       },
 
-      .sphere_count = shape_counts[SHAPE__SPHERE],
-      .spheres = spheres,
-
-      .box_count = shape_counts[SHAPE__BOX],
-      .boxes = boxes,
-
-      .plane_count = shape_counts[SHAPE__PLANE],
-      .planes = planes,
+      .shape_count = shape_count,
+      .shapes = shapes,
+      .materials = materials,
     };
 
     hdr = push_array(arena, Image, 1);
@@ -1141,9 +1119,9 @@ Internal void lane(void *user_data) {
     state = push_array(arena, State, 1);
     state->arena = arena;
 
-    state->meshes[SHAPE__BOX] = mesh_alloc_box();
-    state->meshes[SHAPE__SPHERE] = mesh_alloc_sphere(16, 32);
-    state->meshes[SHAPE__PLANE] = mesh_alloc_plane();
+    state->meshes[SHAPE_KIND__SPHERE] = mesh_alloc_sphere(16, 32);
+    state->meshes[SHAPE_KIND__BOX] = mesh_alloc_box();
+    state->meshes[SHAPE_KIND__PLANE] = mesh_alloc_plane();
 
     Window *window = window_open();
 
@@ -1284,12 +1262,12 @@ Internal void lane(void *user_data) {
           if (entity->flags & ENTITY_FLAG__SELECTED) {
             selected_count += 1;
             selected_shape_count += !!(entity->flags & ENTITY_FLAG__SHAPE);
-            selected_box_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__BOX);
-            selected_sphere_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__SPHERE);
-            selected_plane_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__PLANE);
+            selected_box_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__BOX);
+            selected_sphere_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__SPHERE);
+            selected_plane_count += !!((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__PLANE);
             selected_camera_count += !!(entity->flags & ENTITY_FLAG__CAMERA);
           }
-          if ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape == SHAPE__SPHERE) {
+          if ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__SPHERE) {
             F1 diameter = entity->sphere_diameter;
             entity->size = (F4){diameter, diameter, diameter, 1.0f};
           }
@@ -1344,22 +1322,22 @@ Internal void lane(void *user_data) {
 
               if (entity->flags & ENTITY_FLAG__SHAPE) {
                 shape_value_names[selected_shape_idx] = entity_name;
-                shapes[selected_shape_idx] = &entity->shape;
+                shapes[selected_shape_idx] = &entity->shape_kind;
                 base_colors[selected_shape_idx] = &entity->material.base_color;
                 metallics[selected_shape_idx] = &entity->material.metallic;
                 roughnesses[selected_shape_idx] = &entity->material.roughness;
                 emissives[selected_shape_idx] = &entity->material.emissive;
                 selected_shape_idx += 1;
 
-                if (entity->shape == SHAPE__BOX) {
+                if (entity->shape_kind == SHAPE_KIND__BOX) {
                   box_value_names[selected_box_idx] = entity_name;
                   box_sizes[selected_box_idx] = &entity->size;
                   selected_box_idx += 1;
-                } else if (entity->shape == SHAPE__SPHERE) {
+                } else if (entity->shape_kind == SHAPE_KIND__SPHERE) {
                   sphere_value_names[selected_sphere_idx] = entity_name;
                   sphere_diameters[selected_sphere_idx] = &entity->sphere_diameter;
                   selected_sphere_idx += 1;
-                } else if (entity->shape == SHAPE__PLANE) {
+                } else if (entity->shape_kind == SHAPE_KIND__PLANE) {
                   plane_value_names[selected_plane_idx] = entity_name;
                   plane_normals[selected_plane_idx] = &entity->plane_normal;
                   selected_plane_idx += 1;
@@ -1381,7 +1359,12 @@ Internal void lane(void *user_data) {
           lister_xyzs(str8("Pos"), value_names, positions, selected_count, LISTER_APPLY__DELTA, 0.0f, 50.0f, 0.0f, 0.0f);
 
           if (selected_shape_count != 0) {
-            lister_enums(str8("Shape"), shapes, selected_shape_count, shape_names, SHAPE_COUNT);
+            String8 *shape_names = push_array(scratch.arena, String8, SHAPE_KIND_COUNT);
+            for (L1 i = 0; i < SHAPE_KIND_COUNT; i += 1) {
+              shape_names[i] = shape_kind_name(i);
+            } 
+
+            lister_enums(str8("Shape"), shapes, selected_shape_count, shape_names, SHAPE_KIND_COUNT);
             lister_xyzs(str8("Size"), box_value_names, box_sizes, selected_box_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
             lister_F1s(str8("Diameter"), sphere_value_names, sphere_diameters, selected_sphere_count, LISTER_APPLY__DELTA, 1.0f, 0.0f, 0.0f, F1_MAX);
             Lister_Entry *normal_entry = lister_xyzs(str8("Normal"), plane_value_names, plane_normals, selected_plane_count, LISTER_APPLY__SET, 0.0f, 50.0f, -1.0f, 1.0f);
@@ -1988,8 +1971,10 @@ Internal void lane(void *user_data) {
                       });
 
                       M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera.pitch), rotate_y_M4F(view->camera.yaw));
-
-                      F4 ray_direction = mul_M4F_F4(camera_rotation, ray_dir_camera);
+                      Ray ray = {
+                        .pos = view->camera.pos,
+                        .dir = mul_M4F_F4(camera_rotation, ray_dir_camera),
+                      };
 
                       F1 min_hit_distance = 0.001f;
                       F1 closest_t = F1_MAX;
@@ -2000,16 +1985,24 @@ Internal void lane(void *user_data) {
                         }
 
                         F1 t = 0.0f;
-                        if (e->shape == SHAPE__BOX) {
-                          F4 min = e->pos - e->size*0.5f;
-                          F4 max = e->pos + e->size*0.5f;
-                          t = ray_aabb_intersect(view->camera.pos, ray_direction, min, max);
-                        } else if (e->shape == SHAPE__SPHERE) {
-                          t = ray_sphere_intersect(view->camera.pos, ray_direction, e->pos, e->sphere_diameter*0.5f);
-                        } else if (e->shape == SHAPE__PLANE) {
-                          F4 normal = normalize_F4(e->plane_normal);
-                          F1 d = -dot_F4(normal, e->pos);
-                          t = ray_plane_intersect(view->camera.pos, ray_direction, normal, d);
+                        if (e->shape_kind == SHAPE_KIND__BOX) {
+                          Box box = {
+                            V3_from_F4(e->pos - e->size*0.5f),
+                            V3_from_F4(e->pos + e->size*0.5f),
+                          };
+                          t = ray_box_intersect(ray, box);
+                        } else if (e->shape_kind == SHAPE_KIND__SPHERE) {
+                          Sphere sphere = {
+                            V3_from_F4(e->pos),
+                            e->sphere_diameter*0.5f, 
+                          };
+                          t = ray_sphere_intersect(ray, sphere);
+                        } else if (e->shape_kind == SHAPE_KIND__PLANE) {
+                          Plane plane = {
+                            V3_from_F4(normalize_F4(e->plane_normal)),
+                            -dot_F4(normal, e->pos),
+                          };
+                          t = ray_plane_intersect(ray, plane);
                         }
 
                         if (t > min_hit_distance && t < closest_t) {
@@ -2082,8 +2075,8 @@ Internal void lane(void *user_data) {
                 //- kti: Draw scene.
                 for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
                   if (e->flags & ENTITY_FLAG__SHAPE) {
-                    Mesh *mesh = &state->meshes[e->shape];
-                    M4F transform = e->shape == SHAPE__PLANE
+                    Mesh *mesh = &state->meshes[e->shape_kind];
+                    M4F transform = e->shape_kind == SHAPE_KIND__PLANE
                       ? plane_transform_M4F(e, view->camera)
                       : mul_M4F(scale_M4F(e->size), translate_M4F(e->pos));
                     F4 color = e->material.base_color;
@@ -2094,8 +2087,8 @@ Internal void lane(void *user_data) {
                 //- kti: Draw extra stuff for selected entities.
                 for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
                   if (entity->flags & ENTITY_FLAG__SELECTED && entity->flags & ENTITY_FLAG__SHAPE) {
-                    Mesh *mesh = &state->meshes[entity->shape];
-                    M4F transform = entity->shape == SHAPE__PLANE
+                    Mesh *mesh = &state->meshes[entity->shape_kind];
+                    M4F transform = entity->shape_kind == SHAPE_KIND__PLANE
                       ? plane_transform_M4F(entity, view->camera)
                       : mul_M4F(scale_M4F(entity->size), translate_M4F(entity->pos));
                     F4 color = {0.9f, 0.0f, 0.9f, 1.0f};
@@ -2109,7 +2102,7 @@ Internal void lane(void *user_data) {
                 dr_clear_depth();
                 for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
                   if (entity->flags & ENTITY_FLAG__CAMERA) {
-                    Mesh *mesh = &state->meshes[SHAPE__BOX];
+                    Mesh *mesh = &state->meshes[SHAPE_KIND__BOX];
                     F1 thickness = 0.025f;
                     M4F transform = line_transform_M4F(entity->pos, entity->camera_forward, thickness);
                     F4 color = {0.9f, 0.75f, 0.15f, 1.0f};
@@ -2123,7 +2116,7 @@ Internal void lane(void *user_data) {
                 F4 gizmo_pos = {0};
                 if (entity_selection_average_pos(&gizmo_pos)) {
                   dr_clear_depth();
-                  Mesh *mesh = &state->meshes[SHAPE__BOX];
+                  Mesh *mesh = &state->meshes[SHAPE_KIND__BOX];
                   F1 thickness = 0.025f; 
 
                   for (L1 axis = 0; axis < AXIS3_COUNT; axis += 1) {

@@ -13,27 +13,6 @@ struct RT_Material {
   F4 emissive;
 };
 
-typedef struct RT_Sphere RT_Sphere;
-struct RT_Sphere {
-  F4 p;
-  F1 r;
-  RT_Material material;
-};
-
-typedef struct RT_Plane RT_Plane;
-struct RT_Plane {
-  F4 n;
-  F1 d;
-  RT_Material material;
-};
-
-typedef struct RT_Box RT_Box;
-struct RT_Box {
-  F4 min;
-  F4 max;
-  RT_Material material;
-};
-
 typedef struct RT_Camera RT_Camera;
 struct RT_Camera {
   F4 pos;
@@ -50,14 +29,9 @@ struct RT_Scene {
 
   RT_Camera camera;
 
-  L1 plane_count;
-  RT_Plane *planes;
-
-  L1 sphere_count;
-  RT_Sphere *spheres;
-
-  L1 box_count;
-  RT_Box *boxes;
+  L1 shape_count;
+  Shape *shapes;
+  RT_Material *materials;
 };
 
 #endif
@@ -140,7 +114,7 @@ Inline F1 pdf_GGX(F4 n, F4 h, F4 v, F1 alpha) {
   return result;
 }
 
-Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_direction) {
+Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, Ray ray) {
   F1 min_hit_distance = 0.001f;
 
   F4 result = {0};
@@ -148,63 +122,49 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
   for (L1 ray_index = 0; ray_index < scene->max_num_bounces; ray_index += 1) {
     F1 hit_distance = F1_MAX;
 
-    RT_Material const *hit_material = 0;
-    F4 next_origin;
-    F4 next_normal;
+    L1 hit_index = 0;
+    Shape *hit_shape = 0;
 
-    // Check planes
-    for (L1 plane_index = 0; plane_index < scene->plane_count; plane_index += 1) {
-      RT_Plane *plane = &scene->planes[plane_index];
+    for (L1 shape_index = 0; shape_index < scene->shape_count; shape_index += 1) {
+      Shape *shape = &scene->shapes[shape_index]; 
 
-      F1 t = ray_plane_intersect(ray_origin, ray_direction, plane->n, plane->d);
+      F1 t = ray_shape_intersect(ray, shape[0]);
       if (t > min_hit_distance && t < hit_distance) {
         hit_distance = t;
-        hit_material = &plane->material;
-
-        next_origin = ray_origin + t*ray_direction;
-        next_normal = dot_F4(plane->n, ray_direction) < 0.0f ? plane->n : -plane->n;
+        hit_shape = shape;
+        hit_index = shape_index;
       }
     }
 
-    // Check spheres
-    for (L1 sphere_index = 0; sphere_index < scene->sphere_count; sphere_index += 1) {
-      RT_Sphere *sphere = &scene->spheres[sphere_index];
+    if (hit_shape != 0) {
+      RT_Material mat = scene->materials[hit_index];
 
-      F1 t = ray_sphere_intersect(ray_origin, ray_direction, sphere->p, sphere->r);
-      if (t > min_hit_distance && t < hit_distance) {
-        hit_distance = t;
-        hit_material = &sphere->material;
+      F4 next_origin = ray.pos + hit_distance*ray.dir;
 
-        next_origin = ray_origin + t*ray_direction;
-        next_normal = normalize_F4(next_origin - sphere->p);
+      F4 next_normal = {0};
+      switch (hit_shape->kind) {
+        case SHAPE_KIND__SPHERE: {
+          F4 pos = F4_from_V3(hit_shape->sphere.pos); 
+          next_normal = normalize_F4(next_origin - pos);
+        } break;
+        case SHAPE_KIND__PLANE: {
+          F4 normal = F4_from_V3(hit_shape->plane.normal);
+          next_normal = dot_F4(normal, ray.dir) < 0.0f ? normal : normal;
+        } break;
+        case SHAPE_KIND__BOX: {
+          F4 min = F4_from_V3(hit_shape->box.min);
+          F4 max = F4_from_V3(hit_shape->box.max);
+
+          F4 center = (min + max) * 0.5f;
+          F4 local_hit = next_origin - center;
+          F4 box_size = max - min;
+          F4 d = abs_F4(local_hit) / (box_size * 0.5f);
+          if (d[0] > d[1] && d[0] > d[2]) next_normal = sign_F1(local_hit[0]) * (F4){1,0,0};
+          else if (d[1] > d[2]) next_normal = sign_F1(local_hit[1]) * (F4){0,1,0};
+          else next_normal = sign_F1(local_hit[2]) * (F4){0,0,1};
+        } break;
+        default: break;
       }
-    }
-
-    // Check boxes
-    for (L1 box_index = 0; box_index < scene->box_count; box_index += 1) {
-      RT_Box *box = &scene->boxes[box_index];
-
-      F1 t_min = ray_aabb_intersect(ray_origin, ray_direction, box->min, box->max);
-
-      if (t_min > min_hit_distance && t_min < hit_distance) {
-        next_origin = ray_origin + t_min * ray_direction;
-        F4 center = (box->min + box->max) * 0.5f;
-        F4 local_hit = next_origin - center;
-        F4 box_size = box->max - box->min;
-
-        F4 d = abs_F4(local_hit) / (box_size * 0.5f);
-        if (d[0] > d[1] && d[0] > d[2]) next_normal = sign_F1(local_hit[0]) * (F4){1,0,0};
-        else if (d[1] > d[2]) next_normal = sign_F1(local_hit[1]) * (F4){0,1,0};
-        else next_normal = sign_F1(local_hit[2]) * (F4){0,0,1};
-
-        hit_distance = t_min;
-        hit_material = &box->material;
-      }
-
-    }
-
-    if (hit_material != 0) {
-      RT_Material mat = *hit_material;
 
       result += attenuation * mat.emissive;
 
@@ -216,7 +176,7 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
 
       F1 specular_prob = 0.5f; // keep constant; MIS handles weighting
       if (random_unilateral(rng) < specular_prob) {
-        F4 v = -ray_direction;
+        F4 v = -ray.dir;
         F4 h = sample_GGX_half(rng, next_normal, alpha);
         F4 l = reflect_F4(-v, h);
 
@@ -243,12 +203,12 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
           F1 inv_pdf = 1.0f / Max(pdf_total, 1e-6f);
 
           attenuation *= (f_spec + f_diff) * (NoL * inv_pdf);
-          ray_direction = l;
+          ray.dir = l;
         } else {
           break; // absorb
         }
       } else {
-        F4 v = -ray_direction;
+        F4 v = -ray.dir;
         F4 l = sample_cosine_hemisphere(rng, next_normal);
         F1 NoL = saturate_F1(dot_F4(next_normal, l));
         if (NoL > 0.0f) {
@@ -273,15 +233,15 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, F4 ray_origin, F4 ray_d
           F1 inv_pdf = 1.0f / Max(pdf_total, 1e-6f);
 
           attenuation *= (f_spec + f_diff) * (NoL * inv_pdf);
-          ray_direction = l;
+          ray.dir = l;
         } else {
           break; // absorb
         }
       }
 
-      ray_origin = next_origin + next_normal * min_hit_distance;
+      ray.pos = next_origin + next_normal * min_hit_distance;
     } else {
-      F1 height = (ray_direction.y + 1) * 0.5;
+      F1 height = (ray.dir.y + 1) * 0.5;
       F4 sky_color = lerp_F4((F4){1.0f, 1.0f, 1.0f}, height, (F4){0.2f, 0.4f, 1.0f});
       result += attenuation * sky_color;
       break;
@@ -319,6 +279,8 @@ Internal void rt_trace_scene(RT_Scene *scene, Image output, Range pixel_range) {
     F1 contrib = 1.0f / (F1)scene->rays_per_pixel;
 
     for (L1 ray_index = 0; ray_index < scene->rays_per_pixel; ray_index += 1) {
+      Ray ray = {0};
+
       F1 sample_x = (F1)x + random_unilateral(&rng);
       F1 sample_y = (F1)y + random_unilateral(&rng);
       F1 film_x = -1.0f + 2.0f*sample_x/(F1)output.width;
@@ -328,12 +290,13 @@ Internal void rt_trace_scene(RT_Scene *scene, Image output, Range pixel_range) {
       F1 r = scene->camera.aperture_radius * sqrt_F1(random_unilateral(&rng));
       F1 theta = 2.0f * PI * random_unilateral(&rng);
       F4 aperture_offset = r * cos_F1(theta) * camera_right + r * sin_F1(theta) * camera_up;
-      F4 ray_origin = camera_p + aperture_offset;
+      ray.pos = camera_p + aperture_offset;
 
       F4 focus_point = camera_p + scene->camera.focal_distance  * normalize_F4(film_p - camera_p);
-      F4 ray_direction = normalize_F4(focus_point - ray_origin);
+      ray.dir = normalize_F4(focus_point - ray.pos);
+      ray.inv_dir = 1.0f / ray.dir;
 
-      color += ray_cast(scene, &rng, ray_origin, ray_direction) * contrib;
+      color += ray_cast(scene, &rng, ray) * contrib;
     }
 
     pixels[i] = color;

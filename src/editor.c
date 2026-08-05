@@ -1,7 +1,11 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: Simplify lister building code.
+//- kti: Render progress.
+
+//- kti: Render params in UI.
+
+//- kti: Define scene by code.
 
 #if (HEADER)
 

@@ -149,7 +149,7 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, Ray ray) {
         } break;
         case SHAPE_KIND__PLANE: {
           F4 normal = F4_from_V3(hit_shape->plane.normal);
-          next_normal = dot_F4(normal, ray.dir) < 0.0f ? normal : normal;
+          next_normal = dot_F4(normal, ray.dir) < 0.0f ? -normal : normal;
         } break;
         case SHAPE_KIND__BOX: {
           F4 min = F4_from_V3(hit_shape->box.min);
@@ -239,6 +239,7 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, Ray ray) {
         }
       }
 
+      ray.inv_dir = 1.0f / ray.dir;
       ray.pos = next_origin + next_normal * min_hit_distance;
     } else {
       F1 height = (ray.dir.y + 1) * 0.5;

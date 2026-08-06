@@ -64,7 +64,6 @@ struct OS_Event {
   D1 x, y;
   D1 delta_x, delta_y;
 };
-
 typedef struct OS_Event_List OS_Event_List;
 struct OS_Event_List {
   OS_Event *first;
@@ -303,6 +302,10 @@ Internal OS_Thread os_thread_launch(ThreadFunc *func, void *ptr) {
   OS_Thread result = {0};
   pthread_create(&result.handle, 0, func, ptr);
   return result;
+}
+
+Internal void os_thread_detach(OS_Thread thread) {
+  pthread_detach(thread.handle);
 }
 
 Internal void os_thread_join(OS_Thread thread) {

@@ -1,8 +1,6 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: Arrows in textedit adds symbols.
-
 //- kti: Avoid having lane_group_stop
 // Lane group could release itself.
 // Also add lane_group_is_nil function.
@@ -276,7 +274,7 @@ struct Render_Job {
 
   I1 cancel_requested;
 
-  Lane_Group *lanes;
+  I1 completed;
 };
 
 ////////////////////////////////
@@ -2289,13 +2287,15 @@ Internal void lane(void *user_data) {
               Lane_Group_Params lane_params = {
                 .count = Max(1, os_core_count()/2),
 
+                .completed = &job->completed,
+
                 .proc = render_lane,
                 .user_data = job,
 
                 .arena_size = GiB(1),
                 .scratch_size = MiB(64),
               };
-              job->lanes = lane_group_start(lane_params);
+              lane_group_launch(lane_params);
 
               state->active_render = job;
             }
@@ -2310,8 +2310,7 @@ Internal void lane(void *user_data) {
       state->cmd_count = 0;
 
       //- kti: End render job
-      if (state->active_render && lane_group_completed(state->active_render->lanes)) {
-        lane_group_stop(state->active_render->lanes);
+      if (state->active_render && atomic_load_I1(&state->active_render->completed)) {
         arena_release(state->active_render->arena);
         state->active_render = 0;
       }
@@ -2351,7 +2350,7 @@ Internal void lane(void *user_data) {
       if (remainder > 50000ULL) {
         os_sleep(remainder - 50000ULL);
       }
-      while (os_clock() - frame_begin_time < target_frame_time) { }
+      while (os_clock() - frame_begin_time < target_frame_time) {}
     }
 
     lane_sync();
@@ -2373,7 +2372,7 @@ Internal void lane(void *user_data) {
 
 SI1 main(void) {
   Lane_Group_Params params = {
-    .count = os_core_count(),
+    .count = os_core_count()/2,
     .proc = lane,
 
     .arena_size = GiB(1),
@@ -2381,8 +2380,7 @@ SI1 main(void) {
 
     .lane_zero_on_caller = 1,
   };
-  Lane_Group *group = lane_group_start(params);
-  lane_group_stop(group);
+  lane_group_launch(params);
 
   return 0;
 }

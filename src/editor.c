@@ -1421,35 +1421,40 @@ Internal void lane(void *user_data) {
           }
         }
 
+        //- kti: Actions.
         lister_header(str8("Actions"));
+
         lister_cmd(str8("Create Entity"), (Cmd){
           .kind = CMD_KIND__CREATE_ENTITY,
         });
+
         if (!has_camera) {
           lister_cmd(str8("Create Camera"), (Cmd){
             .kind = CMD_KIND__CREATE_CAMERA,
           });
         } else if (state->entity_count >= 2) {
+          // only allow 1 render at a time
           if (state->active_render == 0) {
             lister_cmd(str8("Render"), (Cmd){
               .kind = CMD_KIND__RENDER,
             });
           } else {
+            // grab progress values
             L1 completed = atomic_load_L1(&state->active_render->pixels_completed);
             L1 total = atomic_load_L1(&state->active_render->pixels_total);
             L1 phase = atomic_load_I1(&state->active_render->phase);
 
-            F1 progress = total > 0 ? (F1)completed / (F1)total : 0.0f;
+            F1 pct = (total > 0) ? (F1)completed/(F1)total : 0.0f;
 
-            String8 text = str8("Idle");
+            String8 display_text = str8("Idle");
             switch (phase) {
-            case RENDER_PHASE__TRACING: text = str8("Tracing"); break;
-            case RENDER_PHASE__POSTPROCESSING: text = str8("Postprocessing"); break;
-            case RENDER_PHASE__WRITING: text = str8("Writing"); break;
-            default: break;
+              case RENDER_PHASE__TRACING: display_text = str8("Tracing"); break;
+              case RENDER_PHASE__POSTPROCESSING: display_text = str8("Postprocessing"); break;
+              case RENDER_PHASE__WRITING: display_text = str8("Writing"); break;
+              default: break;
             }
 
-            lister_progress(text, progress); 
+            lister_progress(display_text, pct); 
 
             lister_cmd(str8("Cancel"), (Cmd){
               .kind = CMD_KIND__CANCEL_RENDER,

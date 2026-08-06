@@ -162,6 +162,7 @@ enum {
   CMD_KIND__DELETE_SELECTED_ENTITIES,
 
   CMD_KIND__RENDER,
+  CMD_KIND__CANCEL_RENDER,
 
   CMD_KIND_COUNT,
 };
@@ -1112,7 +1113,7 @@ Internal void render_lane(void *user_data) {
 
   Image *hdr = 0;
 
-  if (lane_idx() == 0) {
+  if (lane_idx() == 0 && atomic_load_I1(&job->cancel_requested) == 0) {
     //- kti: Allocate final image.
     hdr = push_array(arena, Image, 1);
     hdr[0] = image_alloc(arena, settings.width, settings.height, IMAGE_FORMAT__RGBA32F_LINEAR);
@@ -1131,7 +1132,7 @@ Internal void render_lane(void *user_data) {
   L1 pixels_total = hdr->width * hdr->height;
   L1 pixels_per_chunk = 256;
 
-  for (;;) {
+  while (atomic_load_I1(&job->cancel_requested) == 0) {
     L1 first_pixel = atomic_add_L1(&job->next_pixel, pixels_per_chunk);
     if (first_pixel >= pixels_total) break;
 
@@ -1144,7 +1145,7 @@ Internal void render_lane(void *user_data) {
   lane_sync();
 
   //- kti: Finalize image.
-  if (lane_idx() == 0) {
+  if (lane_idx() == 0 && atomic_load_I1(&job->cancel_requested) == 0) {
     //- kti: Postprocess.
     atomic_swap_I1(&job->phase, RENDER_PHASE__POSTPROCESSING);
     Image bloomed = image_apply_bloom(arena, hdr[0], settings.bloom);
@@ -1449,6 +1450,10 @@ Internal void lane(void *user_data) {
             }
 
             lister_progress(text, progress); 
+
+            lister_cmd(str8("Cancel"), (Cmd){
+              .kind = CMD_KIND__CANCEL_RENDER,
+            });
           }
         }
       }
@@ -2292,6 +2297,11 @@ Internal void lane(void *user_data) {
               job->lanes = lane_group_start(lane_params);
 
               state->active_render = job;
+            }
+          } break;
+          case CMD_KIND__CANCEL_RENDER: {
+            if (state->active_render) {
+              atomic_swap_I1(&state->active_render->cancel_requested, 1);
             }
           } break;
         }

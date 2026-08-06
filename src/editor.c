@@ -1,10 +1,6 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: Segfault on close while rendering
-// add cancellation flag
-// isolate rendering
-
 //- kti: Arrows in textedit adds symbols.
 
 //- kti: Avoid having lane_group_stop

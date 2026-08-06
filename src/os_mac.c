@@ -241,10 +241,13 @@ Internal void os_mac_push_mouse_button(OS_Window *window, NSEvent *event, I1 kin
     });
   }
 
-  NSData *utf8 = [event.characters dataUsingEncoding:NSUTF8StringEncoding];
+  NSString *characters = event.characters;
+  unichar first_character = characters.length > 0 ? [characters characterAtIndex:0] : 0;
+  I1 is_function_key = first_character >= 0xf700 && first_character <= 0xf8ff;
+  NSData *utf8 = [characters dataUsingEncoding:NSUTF8StringEncoding];
   B1 const *bytes = utf8.bytes;
   L1 byte_count = utf8.length;
-  if (byte_count > 0 && bytes[0] >= 0x20 && bytes[0] != 0x7f) {
+  if (!is_function_key && byte_count > 0 && bytes[0] >= 0x20 && bytes[0] != 0x7f) {
     L1 scalar_size = bytes[0] < 0x80 ? 1 : bytes[0] < 0xe0 ? 2 : bytes[0] < 0xf0 ? 3 : 4;
     scalar_size = Min(scalar_size, Min(byte_count, 4));
     OS_Event text_event = {

@@ -3,6 +3,10 @@
 
 //- kti: Render progress.
 
+//- kti: Avoid having lane_group_stop
+// Lane group could release itself.
+// Also add lane_group_is_nil function.
+
 //- kti: Render params in UI.
 
 //- kti: Define scene by code.
@@ -237,6 +241,23 @@ struct Lister_Entry {
 ////////////////////////////////
 //~ kti: Render
 
+typedef enum Render_Phase {
+  RENDER_PHASE__IDLE,
+  RENDER_PHASE__TRACING,
+  RENDER_PHASE__POSTPROCESSING,
+  RENDER_PHASE__WRITING,
+} Render_Phase;
+
+typedef struct Render_Progress Render_Progress;
+struct Render_Progress {
+  Render_Phase phase;
+
+  //- kti: Tracing
+  L1 next_pixel;
+  L1 pixels_completed;
+  L1 pixels_total;
+};
+
 typedef struct Render_Settings Render_Settings;
 struct Render_Settings {
   L1 width;
@@ -286,6 +307,7 @@ struct State {
   Mesh meshes[SHAPE_KIND_COUNT];
 
   //- kti: Render.
+  Render_Progress render_progress;
   Render_Settings render_settings;
   Lane_Group *render_lanes;
 };
@@ -1068,8 +1090,10 @@ Internal void render_lane(void *user_data) {
   Image *hdr = 0;
 
   if (lane_idx() == 0) {
+    //- kti: Build RT_Scene.
     Entity *camera_entity = &state->nil_entity; 
 
+    //- kti: Find camera and count number of shapes.
     L1 shape_count = 0;
     for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
       if (it->flags & ENTITY_FLAG__CAMERA) {
@@ -1080,6 +1104,7 @@ Internal void render_lane(void *user_data) {
       }
     }
 
+    //- kti: Build shapes and materials arrays.
     L1 shape_idx = 0;
     Shape *shapes = push_array(arena, Shape, shape_count);
     RT_Material *materials = push_array(arena, RT_Material, shape_count);
@@ -1092,6 +1117,7 @@ Internal void render_lane(void *user_data) {
       }
     }
 
+    //- kti: Create final scene struct.
     scene = push_array(arena, RT_Scene, 1);
     scene[0] = (RT_Scene){
       .rays_per_pixel = state->render_settings.rays_per_pixel,
@@ -1110,21 +1136,46 @@ Internal void render_lane(void *user_data) {
       .materials = materials,
     };
 
+    //- kti: Allocate final image.
     hdr = push_array(arena, Image, 1);
     hdr[0] = image_alloc(arena, state->render_settings.width, state->render_settings.height, IMAGE_FORMAT__RGBA32F_LINEAR);
+
+    //- kti: Initialize progress.
+    L1 pixels_total = state->render_settings.width * state->render_settings.height;
+    atomic_swap_L1(&state->render_progress.next_pixel, 0);
+    atomic_swap_L1(&state->render_progress.pixels_completed, 0);
+    atomic_swap_L1(&state->render_progress.pixels_total, pixels_total);
+    atomic_swap_I1(&state->render_progress.phase, RENDER_PHASE__TRACING);
   }
 
   lane_sync_L1((L1 *)&scene, 0);
   lane_sync_L1((L1 *)&hdr, 0);
 
-  rt_trace_scene(scene, hdr[0], lane_range(hdr->width*hdr->height));
+  //- kti: Trace
+  L1 pixels_total = hdr->width * hdr->height;
+  L1 pixels_per_chunk = 256;
+
+  for (;;) {
+    L1 first_pixel = atomic_add_L1(&state->render_progress.next_pixel, pixels_per_chunk);
+    if (first_pixel >= pixels_total) break;
+
+    Range range = { first_pixel, Min(first_pixel+pixels_per_chunk, pixels_total) };
+    rt_trace_scene(scene, hdr[0], range);
+
+    atomic_add_L1(&state->render_progress.pixels_completed, range.max-range.min);
+  }
 
   lane_sync();
 
-  //- kti: Postprocess and write image to file.
+  //- kti: Finalize image.
   if (lane_idx() == 0) {
+    //- kti: Postprocess.
+    atomic_swap_I1(&state->render_progress.phase, RENDER_PHASE__POSTPROCESSING);
     Image bloomed = image_apply_bloom(arena, hdr[0], state->render_settings.bloom);
     Image postprocessed = image_I1_from_F4_tonemap(arena, bloomed, TONEMAP_KIND__LOTTES); 
+
+    //- kti: Write to file.
+    atomic_swap_I1(&state->render_progress.phase, RENDER_PHASE__POSTPROCESSING);
     image_write_to_file(postprocessed, state->render_settings.output_filename);
   }
 }
@@ -2175,20 +2226,32 @@ Internal void lane(void *user_data) {
             entity_delete_selected();
           } break;
           case CMD_KIND__RENDER: {
-            Lane_Group_Params lane_params = {
-              .count = Max(1, os_core_count()/2),
+            //- kti: Start a render group.
+            if (state->render_lanes == 0) {
+              Lane_Group_Params lane_params = {
+                .count = Max(1, os_core_count()/2),
 
-              .proc = render_lane,
+                .proc = render_lane,
 
-              .arena_size = GiB(1),
-              .scratch_size = MiB(64),
-            };
-            state->render_lanes = lane_group_start(lane_params);
+                .arena_size = GiB(1),
+                .scratch_size = MiB(64),
+              };
+              MemoryZeroStruct(&state->render_progress);
+              state->render_lanes = lane_group_start(lane_params);
+            }
           } break;
         }
       }
       state->cmd_count = 0;
 
+      if (state->render_lanes) {
+        L1 completed = atomic_load_L1(&state->render_progress.pixels_completed);
+        L1 total = atomic_load_L1(&state->render_progress.pixels_total);
+        F1 progress = total > 0 ? (F1)completed / (F1)total : 0.0f;
+        printf("%.2f%%\n", progress*100.0f);
+      }
+
+      //- kti: If all lanes in the render group completed, stop it.
       if (state->render_lanes && lane_group_completed(state->render_lanes)) {
         lane_group_stop(state->render_lanes);
         state->render_lanes = 0;

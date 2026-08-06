@@ -114,19 +114,19 @@ Inline F1 pdf_GGX(F4 n, F4 h, F4 v, F1 alpha) {
   return result;
 }
 
-Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, Ray ray) {
+Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray) {
   F1 min_hit_distance = 0.001f;
 
   F4 result = {0};
   F4 attenuation = {1, 1, 1};
-  for (L1 ray_index = 0; ray_index < scene->max_num_bounces; ray_index += 1) {
+  for (L1 ray_index = 0; ray_index < scene.max_num_bounces; ray_index += 1) {
     F1 hit_distance = F1_MAX;
 
     L1 hit_index = 0;
     Shape *hit_shape = 0;
 
-    for (L1 shape_index = 0; shape_index < scene->shape_count; shape_index += 1) {
-      Shape *shape = &scene->shapes[shape_index]; 
+    for (L1 shape_index = 0; shape_index < scene.shape_count; shape_index += 1) {
+      Shape *shape = &scene.shapes[shape_index]; 
 
       F1 t = ray_shape_intersect(ray, shape[0]);
       if (t > min_hit_distance && t < hit_distance) {
@@ -137,7 +137,7 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, Ray ray) {
     }
 
     if (hit_shape != 0) {
-      RT_Material mat = scene->materials[hit_index];
+      RT_Material mat = scene.materials[hit_index];
 
       F4 next_origin = ray.pos + hit_distance*ray.dir;
 
@@ -252,16 +252,16 @@ Internal F4 ray_cast(RT_Scene *scene, Random_State *rng, Ray ray) {
   return result;
 }
 
-Internal void rt_trace_scene(RT_Scene *scene, Image output, Range pixel_range) {
-  F4 camera_p = scene->camera.pos;
-  F4 camera_forward = normalize_F4(scene->camera.forward);
+Internal void rt_trace_scene(RT_Scene scene, Image output, Range pixel_range) {
+  F4 camera_p = scene.camera.pos;
+  F4 camera_forward = normalize_F4(scene.camera.forward);
   F4 world_up = {0, 1, 0};
   F4 camera_right = normalize_F4(cross_F4(world_up, camera_forward));
   F4 camera_up = normalize_F4(cross_F4(camera_forward, camera_right));
 
   F1 film_dist   = 1.0f;
   F1 aspect      = (F1)output.width/(F1)output.height;
-  F1 half_film_h = tan_F1(scene->camera.vertical_fov*0.5f)*film_dist;
+  F1 half_film_h = tan_F1(scene.camera.vertical_fov*0.5f)*film_dist;
   F1 half_film_w = aspect*half_film_h;
   F4 film_center = camera_p + film_dist*camera_forward;
 
@@ -277,9 +277,9 @@ Internal void rt_trace_scene(RT_Scene *scene, Image output, Range pixel_range) {
     };
 
     F4 color = {0};
-    F1 contrib = 1.0f / (F1)scene->rays_per_pixel;
+    F1 contrib = 1.0f / (F1)scene.rays_per_pixel;
 
-    for (L1 ray_index = 0; ray_index < scene->rays_per_pixel; ray_index += 1) {
+    for (L1 ray_index = 0; ray_index < scene.rays_per_pixel; ray_index += 1) {
       Ray ray = {0};
 
       F1 sample_x = (F1)x + random_unilateral(&rng);
@@ -288,12 +288,12 @@ Internal void rt_trace_scene(RT_Scene *scene, Image output, Range pixel_range) {
       F1 film_y = -1.0f + 2.0f*sample_y/(F1)output.height;
       F4 film_p = film_center + film_x*half_film_w*camera_right + film_y*half_film_h*camera_up;
 
-      F1 r = scene->camera.aperture_radius * sqrt_F1(random_unilateral(&rng));
+      F1 r = scene.camera.aperture_radius * sqrt_F1(random_unilateral(&rng));
       F1 theta = 2.0f * PI * random_unilateral(&rng);
       F4 aperture_offset = r * cos_F1(theta) * camera_right + r * sin_F1(theta) * camera_up;
       ray.pos = camera_p + aperture_offset;
 
-      F4 focus_point = camera_p + scene->camera.focal_distance  * normalize_F4(film_p - camera_p);
+      F4 focus_point = camera_p + scene.camera.focal_distance  * normalize_F4(film_p - camera_p);
       ray.dir = normalize_F4(focus_point - ray.pos);
       ray.inv_dir = 1.0f / ray.dir;
 

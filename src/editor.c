@@ -1113,7 +1113,7 @@ Internal void render_lane(void *user_data) {
 
   Image *hdr = 0;
 
-  if (lane_idx() == 0 && atomic_load_I1(&job->cancel_requested) == 0) {
+  if (lane_idx() == 0) {
     //- kti: Allocate final image.
     hdr = push_array(arena, Image, 1);
     hdr[0] = image_alloc(arena, settings.width, settings.height, IMAGE_FORMAT__RGBA32F_LINEAR);
@@ -1152,7 +1152,7 @@ Internal void render_lane(void *user_data) {
     Image postprocessed = image_I1_from_F4_tonemap(arena, bloomed, TONEMAP_KIND__LOTTES); 
 
     //- kti: Write to file.
-    atomic_swap_I1(&job->phase, RENDER_PHASE__POSTPROCESSING);
+    atomic_swap_I1(&job->phase, RENDER_PHASE__WRITING);
     image_write_to_file(postprocessed, settings.output_filename);
   }
 }

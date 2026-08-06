@@ -184,6 +184,7 @@ typedef enum Lister_Entry_Kind {
   LISTER_ENTRY_KIND__COLOR,
   LISTER_ENTRY_KIND__ENUM,
   LISTER_ENTRY_KIND__CMD,
+  LISTER_ENTRY_KIND__PROGRESS,
 } Lister_Entry_Kind;
 
 typedef I1 Lister_Apply;
@@ -235,6 +236,7 @@ struct Lister_Entry {
     Lister_Number_Options number;
     Lister_Enum_Options enum_options;
     Cmd cmd;
+    F1 progress;
   } data;
 };
 
@@ -1020,6 +1022,15 @@ Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
   return entry;
 }
 
+Internal Lister_Entry *lister_progress(String8 str, F1 progress) {
+  Lister_Entry *entry = lister_entry_push(LISTER_ENTRY_KIND__PROGRESS);
+  if (entry) {
+    entry->str = str;
+    entry->data.progress = progress;
+  }
+  return entry;
+}
+
 ////////////////////////////////
 //~ kti: Camera
 
@@ -1141,7 +1152,7 @@ Internal void render_lane(void *user_data) {
     hdr[0] = image_alloc(arena, state->render_settings.width, state->render_settings.height, IMAGE_FORMAT__RGBA32F_LINEAR);
 
     //- kti: Initialize progress.
-    L1 pixels_total = state->render_settings.width * state->render_settings.height;
+    L1 pixels_total = hdr->width * hdr->height;
     atomic_swap_L1(&state->render_progress.next_pixel, 0);
     atomic_swap_L1(&state->render_progress.pixels_completed, 0);
     atomic_swap_L1(&state->render_progress.pixels_total, pixels_total);
@@ -1453,9 +1464,27 @@ Internal void lane(void *user_data) {
             .kind = CMD_KIND__CREATE_CAMERA,
           });
         } else if (state->entity_count >= 2) {
-          lister_cmd(str8("Render"), (Cmd){
-            .kind = CMD_KIND__RENDER,
-          });
+          if (state->render_lanes == 0) {
+            lister_cmd(str8("Render"), (Cmd){
+              .kind = CMD_KIND__RENDER,
+            });
+          } else {
+            L1 completed = atomic_load_L1(&state->render_progress.pixels_completed);
+            L1 total = atomic_load_L1(&state->render_progress.pixels_total);
+            L1 phase = atomic_load_I1(&state->render_progress.phase);
+
+            F1 progress = total > 0 ? (F1)completed / (F1)total : 0.0f;
+
+            String8 text = str8("Idle");
+            switch (phase) {
+            case RENDER_PHASE__TRACING: text = str8("Tracing"); break;
+            case RENDER_PHASE__POSTPROCESSING: text = str8("Postprocessing"); break;
+            case RENDER_PHASE__WRITING: text = str8("Writing"); break;
+            default: break;
+            }
+
+            lister_progress(text, progress); 
+          }
         }
       }
 
@@ -1642,6 +1671,7 @@ Internal void lane(void *user_data) {
                         //- kti: Skip entries without values.
                         if (entry->kind != LISTER_ENTRY_KIND__HEADER &&
                             entry->kind != LISTER_ENTRY_KIND__CMD &&
+                            entry->kind != LISTER_ENTRY_KIND__PROGRESS &&
                             entry->value_count == 0) {
                           continue;
                         }
@@ -1657,17 +1687,13 @@ Internal void lane(void *user_data) {
                             ui_set_next_text_color(oklch(0.507f, 0.208f, 29.2f, 1.0f));
                             ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
                                                      UI_BOX_FLAG__DRAW_BACKGROUND|
-                                                     UI_BOX_FLAG__DRAW_SIDE_LEFT|
-                                                     UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                                      UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                      top_side , entry->str);
                           } break;
                           case LISTER_ENTRY_KIND__TEXTEDIT: {
                             Lister_Value *first_value = entry->first_value;
                             ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
-                            ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
-                                              UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                              UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                            ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                               top_side);
                             ui_set_next_omit_flags(UI_BOX_FLAG__DRAW_BORDER);
                             UI_Text_Padding(10.0f) {
@@ -1694,9 +1720,7 @@ Internal void lane(void *user_data) {
                             UI_Parent(drag_box) {
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                               UI_Text_Padding(10.0f) {
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_LEFT|
-                                                  UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                                  UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                   top_side);
                                 F1 before = lister_value(entry->first_value, F1)[0];
                                 F1 after = before;
@@ -1715,7 +1739,6 @@ Internal void lane(void *user_data) {
                             UI_Parent(drag_box) {
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_LEFT|
                                                        UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                                        UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                        top_side,
@@ -1733,7 +1756,7 @@ Internal void lane(void *user_data) {
                                 signals[1] = ui_drag_F1_label(str8("Y"), drag_label_format,
                                                               &after_components[1], entry->data.number.default_f1, entry->data.number.pixels_per_unit, entry->data.number.min, entry->data.number.max);
                                 focus_on_press(panel, signals[1]);
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 signals[2] = ui_drag_F1_label(str8("Z"), drag_label_format,
                                                               &after_components[2], entry->data.number.default_f1, entry->data.number.pixels_per_unit, entry->data.number.min, entry->data.number.max);
                                 focus_on_press(panel, signals[2]);
@@ -1752,7 +1775,6 @@ Internal void lane(void *user_data) {
                             UI_Parent(drag_box) {
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_LEFT|
                                                        UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                                        UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                        top_side,
@@ -1782,7 +1804,7 @@ Internal void lane(void *user_data) {
                                 signals[1] = ui_drag_F1_label(str8("G"), drag_label_format,
                                                               &after_components[1], 0.0f, pixels_per_unit, 0.0f, 1.0f);
                                 focus_on_press(panel, signals[1]);
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 ui_set_next_background_color(oklch(0.27f, 0.09f, 256.0f, 1.0f));
                                 signals[2] = ui_drag_F1_label(str8("B"), drag_label_format,
                                                               &after_components[2], 0.0f, pixels_per_unit, 0.0f, 1.0f);
@@ -1803,7 +1825,6 @@ Internal void lane(void *user_data) {
                             UI_Parent(enum_box) {
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_LEFT|
                                                        UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                        top_side,
                                                        entry->str);
@@ -1855,8 +1876,6 @@ Internal void lane(void *user_data) {
                                 UI_BOX_FLAG__DRAW_BACKGROUND|
                                 UI_BOX_FLAG__DRAW_HOT_EFFECTS|
                                 UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
-                                UI_BOX_FLAG__DRAW_SIDE_LEFT|
-                                UI_BOX_FLAG__DRAW_SIDE_RIGHT|
                                 UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                 top_side,
                                 "%.*s##lister_cmd_%p",
@@ -1867,6 +1886,20 @@ Internal void lane(void *user_data) {
                               cmd_push(entry->data.cmd);
                             }
                           } break;
+                          case LISTER_ENTRY_KIND__PROGRESS: {
+                            UI_Box *outer = ui_build_box_from_stringf(
+                              UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
+                              "progress_outer_%.*s", (int)entry->str.len, entry->str.str);
+                            UI_Parent(outer) {
+                              F1 progress = entry->data.progress;
+                              ui_set_next_pref_width(ui_pct(progress, 1.0f));
+                              ui_set_next_background_color(oklch(0.637f, 0.2f, 140.0f, 1.0f));
+                              ui_set_next_text_padding(10.0f);
+                              UI_Box *prog = ui_build_box_from_stringf(
+                                UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DISABLE_TEXT_TRUNC,
+                                "%.*s %.2f%%", (int)entry->str.len, entry->str.str, progress*100.0f);
+                            }
+                          } break; 
                         }
                       }
                     }
@@ -2243,13 +2276,6 @@ Internal void lane(void *user_data) {
         }
       }
       state->cmd_count = 0;
-
-      if (state->render_lanes) {
-        L1 completed = atomic_load_L1(&state->render_progress.pixels_completed);
-        L1 total = atomic_load_L1(&state->render_progress.pixels_total);
-        F1 progress = total > 0 ? (F1)completed / (F1)total : 0.0f;
-        printf("%.2f%%\n", progress*100.0f);
-      }
 
       //- kti: If all lanes in the render group completed, stop it.
       if (state->render_lanes && lane_group_completed(state->render_lanes)) {

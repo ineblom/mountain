@@ -225,7 +225,7 @@ struct UI_Box {
   F1 tab_size;
   UI_Text_Align text_align;
   F4 corner_radii;
-  F4 background_color;
+  F4 background_colors[4];
   F4 text_color;
   F4 border_color;
   F1 text_padding;
@@ -750,7 +750,10 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
   box->corner_radii[1] = ui_top_tr_corner_radius();
   box->corner_radii[2] = ui_top_bl_corner_radius();
   box->corner_radii[3] = ui_top_br_corner_radius();
-  box->background_color = ui_top_background_color();
+  F4 background_color = ui_top_background_color();
+  for (L1 corner_idx = 0; corner_idx < ArrayCount(box->background_colors); corner_idx += 1) {
+    box->background_colors[corner_idx] = background_color;
+  }
   box->text_color = ui_top_text_color();
   box->border_color = ui_top_border_color();
 
@@ -770,6 +773,17 @@ Internal String8 ui_box_display_string(UI_Box *box) {
 Internal void ui_box_equip_custom_draw(UI_Box *box, UI_Box_Custom_Draw_Kind kind, void *user_data) {
   box->custom_draw_kind = kind;
   box->custom_draw_user_data = user_data;
+}
+
+Internal void ui_box_equip_background_colors(UI_Box *box, F4 tl, F4 tr, F4 bl, F4 br) {
+  box->background_colors[0] = tl;
+  box->background_colors[1] = tr;
+  box->background_colors[2] = bl;
+  box->background_colors[3] = br;
+}
+
+Internal void ui_box_equip_background_color(UI_Box *box, F4 color) {
+  ui_box_equip_background_colors(box, color, color, color, color);
 }
 
 Internal void ui_box_equip_display_string(UI_Box *box, String8 string) {
@@ -1866,7 +1880,9 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
         value[0] = !value[0];
       }
       if (!ui_box_is_nil(check) && signal.flags & UI_SIGNAL_FLAG__HOVERING) {
-        check->background_color = ui_brighten(check->background_color);
+        for (L1 corner_idx = 0; corner_idx < ArrayCount(check->background_colors); corner_idx += 1) {
+          check->background_colors[corner_idx] = ui_brighten(check->background_colors[corner_idx]);
+        }
       }
     }
 
@@ -2225,7 +2241,10 @@ Internal void ui_draw(void) {
         shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
       }
 
-      GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_color, 0.0f, softness);
+      GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_colors[0], 0.0f, softness);
+      for (L1 corner_idx = 0; corner_idx < ArrayCount(box->background_colors); corner_idx += 1) {
+        inst->colors[corner_idx] = box->background_colors[corner_idx];
+      }
       inst->corner_radii = box->corner_radii;
 
       if (draw_active_effect) {

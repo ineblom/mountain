@@ -75,6 +75,9 @@ struct Lister_State {
   Lister_Entry entries[512];
   Lister_Entry *entry_hash_table[128];
 
+  L1 open_color_key;
+  F1 color_hue;
+
   L1 textedit_buffer_len;
   B1 textedit_buffer[512];
   Txt_Pt textedit_cursor;
@@ -230,6 +233,122 @@ Internal Lister_Drag lister_drag_begin(Lister_Entry *entry, L1 component) {
 }
 
 #define as(value, T) ((T *)(value)->data)
+
+Internal L1 lister_color_key(Lister_Entry *entry) {
+  L1 result = str8_hash(entry->str) ^ (5381*entry->kind);
+  if (result == 0) result = 1;
+  return result;
+}
+
+Internal F4 lister_hsv_from_rgb(F4 color) {
+  F1 r = color[0];
+  F1 g = color[1];
+  F1 b = color[2];
+  F1 max_component = Max(r, Max(g, b));
+  F1 min_component = Min(r, Min(g, b));
+  F1 delta = max_component - min_component;
+
+  F1 hue = 0.0f;
+  if (delta > 0.00001f) {
+    if (max_component == r) {
+      hue = mod_F1((g-b)/delta, 6.0f);
+    } else if (max_component == g) {
+      hue = (b-r)/delta + 2.0f;
+    } else {
+      hue = (r-g)/delta + 4.0f;
+    }
+    hue /= 6.0f;
+    if (hue < 0.0f) hue += 1.0f;
+  }
+
+  F1 saturation = max_component > 0.00001f ? delta/max_component : 0.0f;
+  F4 result = {hue, saturation, max_component, color[3]};
+  return result;
+}
+
+Internal F4 lister_rgb_from_hsv(F4 hsv) {
+  F1 hue = mod_F1(hsv[0], 1.0f);
+  if (hue < 0.0f) hue += 1.0f;
+
+  F1 saturation = clamp01_F1(hsv[1]);
+  F1 value = clamp01_F1(hsv[2]);
+  F1 h = hue*6.0f;
+  L1 sector = (L1)floor_F1(h);
+  F1 fraction = h - floor_F1(h);
+  F1 p = value*(1.0f-saturation);
+  F1 q = value*(1.0f-saturation*fraction);
+  F1 t = value*(1.0f-saturation*(1.0f-fraction));
+
+  F4 result = {0.0f, 0.0f, 0.0f, hsv[3]};
+  switch (sector%6) {
+    case 0: result = (F4){value, t, p, hsv[3]}; break;
+    case 1: result = (F4){q, value, p, hsv[3]}; break;
+    case 2: result = (F4){p, value, t, hsv[3]}; break;
+    case 3: result = (F4){p, q, value, hsv[3]}; break;
+    case 4: result = (F4){t, p, value, hsv[3]}; break;
+    case 5: result = (F4){value, p, q, hsv[3]}; break;
+  }
+  return result;
+}
+
+Internal void lister_color_apply(Lister_Entry *entry, F4 hsv) {
+  F4 rgb = lister_rgb_from_hsv(hsv);
+  for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
+    F1 alpha = as(value, F4)[0][3];
+    as(value, F4)[0] = rgb;
+    as(value, F4)[0][3] = alpha;
+  }
+}
+
+Internal void lister_color_sv_marker(UI_Box *box, F1 saturation, F1 value) {
+  F1 marker_size = 12.0f;
+  saturation = clamp01_F1(saturation);
+  value = clamp01_F1(value);
+  F1 x = saturation*box->rect[2] - marker_size*0.5f;
+  F1 y = (1.0f-value)*box->rect[3] - marker_size*0.5f;
+
+  UI_Parent(box) {
+    ui_set_next_fixed_x(x);
+    ui_set_next_fixed_y(y);
+    ui_set_next_fixed_width(marker_size);
+    ui_set_next_fixed_height(marker_size);
+    ui_set_next_corner_radius(marker_size*0.5f);
+    ui_set_next_border_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
+    ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, str8("sv_marker_outer"));
+
+    ui_set_next_fixed_x(x+1.0f);
+    ui_set_next_fixed_y(y+1.0f);
+    ui_set_next_fixed_width(marker_size-2.0f);
+    ui_set_next_fixed_height(marker_size-2.0f);
+    ui_set_next_corner_radius((marker_size-2.0f)*0.5f);
+    ui_set_next_border_color((F4){1.0f, 1.0f, 1.0f, 1.0f});
+    ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, str8("sv_marker_inner"));
+  }
+}
+
+Internal void lister_color_hue_marker(UI_Box *box, F1 hue) {
+  F1 marker_height = 6.0f;
+  hue = clamp01_F1(hue);
+  F1 y = hue*box->rect[3] - marker_height*0.5f;
+
+  UI_Parent(box) {
+    ui_set_next_fixed_x(-2.0f);
+    ui_set_next_fixed_y(y);
+    ui_set_next_fixed_width(box->rect[2]+4.0f);
+    ui_set_next_fixed_height(marker_height);
+    ui_set_next_corner_radius(2.0f);
+    ui_set_next_border_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
+    ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, str8("hue_marker_outer"));
+
+    ui_set_next_fixed_x(-1.0f);
+    ui_set_next_fixed_y(y+1.0f);
+    ui_set_next_fixed_width(box->rect[2]+2.0f);
+    ui_set_next_fixed_height(marker_height-2.0f);
+    ui_set_next_corner_radius(1.0f);
+    ui_set_next_border_color((F4){1.0f, 1.0f, 1.0f, 1.0f});
+    ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, str8("hue_marker_inner"));
+  }
+}
 
 Internal void lister_drag_L1(Lister_Entry *entry) {
   Lister_L1_Options options = entry->data.l1_options;
@@ -431,33 +550,132 @@ Internal void lister_ui(void) {
 
       // Color
       case LISTER_ENTRY_KIND__COLOR: {
-        UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
-        UI_Parent(drag_box) {
-          ui_set_next_text_padding(10.0f);
-          ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_SIDE_RIGHT|row_sides, entry->str);
+        L1 color_key = lister_color_key(entry);
+        F4 color = as(entry->first_value, F4)[0];
+        F4 hsv = lister_hsv_from_rgb(color);
 
-          // preview
-          F4 color = as(entry->first_value, F4)[0];
-          ui_set_next_background_color(color);
-          ui_set_next_pref_width(ui_px(30.0f, 1.0f));
-          ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_SIDE_RIGHT|row_sides, str8("color_preview"));
+        ui_set_next_child_layout_axis(AXIS__Y);
+        ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
+        ui_set_next_pref_height(ui_children_sum(1.0f));
+        UI_Box *color_column = ui_build_box_from_stringf(row_sides, "color_column_%p", entry);
+        UI_Box *preview_box = 0;
+        UI_Box *sv_box = 0;
 
-          // components
-          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-          UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f)) {
-            String8 component_names[3] = {str8("R"), str8("G"), str8("B")};
-            F4 component_colors[3] = {
-              (F4){0.072896494f, 0.002100070f, 0.002199672f, 1.0f},
-              (F4){0.000072204f, 0.030165538f, 0.000473949f, 1.0f},
-              (F4){0.000337558f, 0.018463532f, 0.082090153f, 1.0f},
-            };
-            for (L1 component = 0; component < 3; component += 1) {
-              I1 not_last = (component < 2);
-              ui_set_next_flags(row_sides|(UI_BOX_FLAG__DRAW_SIDE_RIGHT*not_last));
-              ui_set_next_background_color(component_colors[component]);
-              lister_drag_F1(entry, component, component_names[component]);
+        UI_Parent(color_column) {
+          ui_set_next_child_layout_axis(AXIS__X);
+          ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
+          ui_set_next_pref_height(ui_px(30.0f, 1.0f));
+          UI_Box *header = ui_build_box_from_stringf(0, "color_header_%p", entry);
+          UI_Parent(header) {
+            ui_set_next_pref_width(ui_pct(0.75f, 1.0f));
+            ui_set_next_text_padding(10.0f);
+            ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_SIDE_RIGHT, entry->str);
+
+            ui_set_next_pref_width(ui_pct(0.25f, 1.0f));
+            ui_set_next_background_color(color);
+            preview_box = ui_build_box_from_stringf(
+              UI_BOX_FLAG__MOUSE_CLICKABLE|
+              UI_BOX_FLAG__DRAW_BACKGROUND|
+              UI_BOX_FLAG__DRAW_HOT_EFFECTS|
+              UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
+              "color_preview_%p", entry);
+
+            UI_Signal preview_signal = ui_signal_from_box(preview_box);
+            if (preview_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED) {
+              if (lister_state.open_color_key == color_key) {
+                lister_state.open_color_key = 0;
+              } else {
+                lister_state.open_color_key = color_key;
+                if (hsv[1] > 0.00001f && hsv[2] > 0.00001f) {
+                  lister_state.color_hue = hsv[0];
+                }
+              }
             }
           }
+
+          if (lister_state.open_color_key == color_key) {
+            if (hsv[1] > 0.00001f && hsv[2] > 0.00001f) {
+              lister_state.color_hue = hsv[0];
+            } else {
+              hsv[0] = lister_state.color_hue;
+            }
+
+            ui_set_next_child_layout_axis(AXIS__Y);
+            ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
+            ui_set_next_pref_height(ui_children_sum(1.0f));
+            UI_Box *picker_body = ui_build_box_from_stringf(0, "color_picker_body_%p", entry);
+            UI_Parent(picker_body) {
+              ui_spacer(ui_px(8.0f, 1.0f));
+
+              ui_set_next_child_layout_axis(AXIS__X);
+              ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
+              ui_set_next_pref_height(ui_px(140.0f, 1.0f));
+              UI_Box *picker_row = ui_build_box_from_stringf(0, "color_picker_row_%p", entry);
+              UI_Parent(picker_row)
+              UI_Padding(ui_px(8.0f, 1.0f)) {
+                ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+                ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
+                ui_set_next_corner_radius(3.0f);
+                sv_box = ui_build_box_from_stringf(
+                  UI_BOX_FLAG__MOUSE_CLICKABLE|
+                  UI_BOX_FLAG__DRAW_BACKGROUND,
+                  "color_sv_%p", entry);
+
+                UI_Signal sv_signal = ui_signal_from_box(sv_box);
+                if (sv_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+                  hsv[1] = clamp01_F1((ui_mouse()[0]-sv_box->rect[0])/Max(sv_box->rect[2], 1.0f));
+                  hsv[2] = 1.0f-clamp01_F1((ui_mouse()[1]-sv_box->rect[1])/Max(sv_box->rect[3], 1.0f));
+                  hsv[0] = lister_state.color_hue;
+                  lister_color_apply(entry, hsv);
+                }
+                lister_color_sv_marker(sv_box, hsv[1], hsv[2]);
+
+                ui_spacer(ui_px(8.0f, 1.0f));
+
+                ui_set_next_child_layout_axis(AXIS__Y);
+                ui_set_next_pref_width(ui_px(18.0f, 1.0f));
+                ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
+                UI_Box *hue_box = ui_build_box_from_stringf(
+                  UI_BOX_FLAG__MOUSE_CLICKABLE,
+                  "color_hue_%p", entry);
+
+                UI_Signal hue_signal = ui_signal_from_box(hue_box);
+                if (hue_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+                  lister_state.color_hue = clamp01_F1((ui_mouse()[1]-hue_box->rect[1])/Max(hue_box->rect[3], 1.0f));
+                  hsv[0] = lister_state.color_hue;
+                  lister_color_apply(entry, hsv);
+                }
+
+                UI_Parent(hue_box) {
+                  lister_color_hue_marker(hue_box, lister_state.color_hue);
+                  for (L1 segment_idx = 0; segment_idx < 6; segment_idx += 1) {
+                    F4 segment_top = lister_rgb_from_hsv((F4){(F1)segment_idx/6.0f, 1.0f, 1.0f, 1.0f});
+                    F4 segment_bottom = lister_rgb_from_hsv((F4){(F1)(segment_idx+1)/6.0f, 1.0f, 1.0f, 1.0f});
+                    ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
+                    ui_set_next_pref_height(ui_pct(1.0f/6.0f, 1.0f));
+                    UI_Box *segment = ui_build_box_from_stringf(
+                      UI_BOX_FLAG__DRAW_BACKGROUND,
+                      "color_hue_segment_%p_%llu", entry, segment_idx);
+                    ui_box_equip_background_colors(segment,
+                      segment_top, segment_top,
+                      segment_bottom, segment_bottom);
+                  }
+                }
+              }
+
+              ui_spacer(ui_px(8.0f, 1.0f));
+            }
+          }
+        }
+
+        F4 hue_color = lister_rgb_from_hsv((F4){lister_state.color_hue, 1.0f, 1.0f, 1.0f});
+        if (sv_box != 0) {
+          ui_box_equip_background_colors(sv_box,
+            (F4){1.0f, 1.0f, 1.0f, 1.0f}, hue_color,
+            (F4){0.0f, 0.0f, 0.0f, 1.0f}, (F4){0.0f, 0.0f, 0.0f, 1.0f});
+        }
+        if (preview_box != 0) {
+          ui_box_equip_background_color(preview_box, as(entry->first_value, F4)[0]);
         }
       } break;
 

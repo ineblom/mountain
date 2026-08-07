@@ -1,11 +1,7 @@
 ////////////////////////////////
 //~ kti: TODO
 
-// NEEDS TO BE DONE TODAY.
-//- kti: Proper color picker.
 //- kti: UI Theme.
-
-// FUTURE:
 //- kti: Define scene by code.
 //- kti: Lister groups.
 //- kti: Better rendering in the viewport.

@@ -405,7 +405,7 @@ Internal void lister_ui(void) {
         UI_Parent(drag_box)
         UI_Text_Align(UI_TEXT_ALIGN__CENTER)
         UI_Text_Padding(10.0f)
-        UI_Background_Color(oklch(0.1f, 0.0f, 0.0f, 1.0f))
+        UI_Background_Color(oklch(0.25f, 0.0222f, 228.0f, 1.0f))
         UI_Flags(row_sides) {
           if (entry->kind == LISTER_ENTRY_KIND__L1) lister_drag_L1(entry);
           else lister_drag_F1(entry, 0, entry->str);

@@ -1,14 +1,6 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: Render params in UI.
-
-//- kti: Move lister code to separate source file.
-// All ui widgets related to the lister should be moved there as well.
-// Aside from fundamental building blocks.
-// This allows for simplifying lister code since widgets can be custom
-// made to fit the lister i.e have multiple values.
-
 //- kti: Define scene by code.
 
 #if (HEADER)

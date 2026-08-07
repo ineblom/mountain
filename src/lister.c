@@ -41,16 +41,16 @@ struct Lister_Enum_Options {
   L1 count;
 };
 
+typedef struct Lister_Entry Lister_Entry;
 typedef struct Lister_Value Lister_Value;
 struct Lister_Value {
+  Lister_Entry *entry;
   Lister_Value *next;
-  String8 name;
   void *data;
   L1 *text_len;
   L1 text_capacity;
 };
 
-typedef struct Lister_Entry Lister_Entry;
 struct Lister_Entry {
   Lister_Entry *hash_next;
   Lister_Entry_Kind kind;
@@ -83,19 +83,18 @@ struct Lister_State {
 
 Internal void lister_reset(Arena *);
 Internal void lister_header(String8);
-Internal void lister_textedit(String8, String8, B1 *, L1 *, L1);
-Internal void lister_l1_internal(String8, String8, void *, Lister_L1_Options);
-Internal void lister_f1_internal(Lister_Entry_Kind, String8, String8, void *, Lister_F1_Options);
-Internal void lister_enum(String8, String8, I1 *, String8 *, L1);
+Internal void lister_textedit(String8, B1 *, L1 *, L1);
+Internal void lister_l1_internal(String8, void *, Lister_L1_Options);
+Internal void lister_f1_internal(Lister_Entry_Kind, String8, void *, Lister_F1_Options);
+Internal void lister_enum(String8, I1 *, String8 *, L1);
 Internal Lister_Entry *lister_cmd(String8, Cmd);
 Internal Lister_Entry *lister_progress(String8, F1);
 Internal void lister_ui(void);
 
-#define lister_L1(str, name, data, ...) lister_l1_internal((str), (name), (data), (Lister_L1_Options){__VA_ARGS__})
-#define lister_F1(str, name, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__F1, (str), (name), (data), (Lister_F1_Options){__VA_ARGS__})
-#define lister_xyz(str, name, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__XYZ, (str), (name), (data), (Lister_F1_Options){__VA_ARGS__})
-#define lister_color(str, name, data) lister_f1_internal(LISTER_ENTRY_KIND__COLOR, (str), (name), (data), (Lister_F1_Options){.max = 1.0f})
-#define lister_value(value, T) ((T *)(value)->data)
+#define lister_L1(str, data, ...) lister_l1_internal((str), (data), (Lister_L1_Options){__VA_ARGS__})
+#define lister_F1(str, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__F1, (str), (data), (Lister_F1_Options){__VA_ARGS__})
+#define lister_xyz(str, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__XYZ, (str), (data), (Lister_F1_Options){__VA_ARGS__})
+#define lister_color(str, data) lister_f1_internal(LISTER_ENTRY_KIND__COLOR, (str), (data), (Lister_F1_Options){.max = 1.0f})
 
 #endif
 
@@ -109,7 +108,7 @@ Internal void lister_reset(Arena *arena) {
   MemoryZeroArray(lister_state.entry_hash_table);
 }
 
-Internal Lister_Entry *lister_entry_push(Lister_Entry_Kind kind) {
+Internal Lister_Entry *lister_entry_push(Lister_Entry_Kind kind, String8 str) {
   Lister_Entry *entry = 0;
 
   if (lister_state.entry_count < ArrayCount(lister_state.entries)) {
@@ -117,6 +116,7 @@ Internal Lister_Entry *lister_entry_push(Lister_Entry_Kind kind) {
     lister_state.entry_count += 1;
     MemoryZeroStruct(entry);
     entry->kind = kind;
+    entry->str = str;
   }
 
   return entry;
@@ -136,9 +136,8 @@ Internal Lister_Entry *lister_entry_get_or_push(Lister_Entry_Kind kind, String8 
   }
 
   if (entry == 0) {
-    entry = lister_entry_push(kind);
+    entry = lister_entry_push(kind, str);
     if (entry) {
-      entry->str = str;
       entry->hash_next = slot[0];
       slot[0] = entry;
     }
@@ -150,11 +149,12 @@ Internal void lister_header(String8 str) {
   lister_entry_get_or_push(LISTER_ENTRY_KIND__HEADER, str);
 }
 
-Internal Lister_Value *lister_value_push(Lister_Entry *entry, String8 name, void *data) {
+Internal Lister_Value *lister_value(Lister_Entry_Kind kind, String8 str, void *data) {
   Lister_Value *value = 0;
+  Lister_Entry *entry = lister_entry_get_or_push(kind, str);
   if (entry && data && lister_state.arena) {
     value = push_array(lister_state.arena, Lister_Value, 1);
-    value->name = name;
+    value->entry = entry;
     value->data = data;
     SLLQueuePush(entry->first_value, entry->last_value, value);
     entry->value_count += 1;
@@ -162,30 +162,50 @@ Internal Lister_Value *lister_value_push(Lister_Entry *entry, String8 name, void
   return value;
 }
 
-Internal void lister_textedit(String8 str, String8 name, B1 *data, L1 *len, L1 capacity) {
-  Lister_Entry *entry = lister_entry_get_or_push(LISTER_ENTRY_KIND__TEXTEDIT, str);
-  if (entry) {
-    Lister_Value *value = lister_value_push(entry, name, data);
-    if (value) {
-      value->text_len = len;
-      value->text_capacity = capacity;
-    }
+Internal void lister_textedit(String8 str, B1 *data, L1 *len, L1 capacity) {
+  Lister_Value *value = lister_value(LISTER_ENTRY_KIND__TEXTEDIT, str, data);
+  if (value) {
+    value->text_len = len;
+    value->text_capacity = capacity;
   }
 }
 
-Internal void lister_l1_internal(String8 str, String8 name, void *data, Lister_L1_Options options) {
-  Lister_Entry *entry = lister_entry_get_or_push(LISTER_ENTRY_KIND__L1, str);
-  if (entry) {
-    entry->data.l1_options = options;
-    lister_value_push(entry, name, data);
+Internal void lister_enum(String8 str, I1 *data, String8 *names, L1 enum_count) {
+  Lister_Value *value = lister_value(LISTER_ENTRY_KIND__ENUM, str, data);
+  if (value) {
+    value->entry->data.enum_options.names = names;
+    value->entry->data.enum_options.count = enum_count;
   }
 }
 
-Internal void lister_f1_internal(Lister_Entry_Kind kind, String8 str, String8 name, void *data, Lister_F1_Options options) {
-  Lister_Entry *entry = lister_entry_get_or_push(kind, str);
+Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
+  Lister_Entry *entry = lister_entry_push(LISTER_ENTRY_KIND__CMD, str);
   if (entry) {
-    entry->data.f1_options = options;
-    lister_value_push(entry, name, data);
+    entry->data.cmd = cmd;
+  }
+
+  return entry;
+}
+
+Internal Lister_Entry *lister_progress(String8 str, F1 progress) {
+  Lister_Entry *entry = lister_entry_push(LISTER_ENTRY_KIND__PROGRESS, str);
+  if (entry) {
+    entry->data.progress = progress;
+  }
+  return entry;
+}
+
+Internal void lister_l1_internal(String8 str, void *data, Lister_L1_Options options) {
+  Lister_Value *value = lister_value(LISTER_ENTRY_KIND__L1, str, data);
+  if (value) {
+    value->entry->data.l1_options = options;
+  }
+}
+
+Internal void lister_f1_internal(Lister_Entry_Kind kind, String8 str, void *data, Lister_F1_Options options) {
+  Lister_Value *value = lister_value(kind, str, data);
+  if (value) {
+    value->entry->data.f1_options = options;
   }
 }
 
@@ -195,13 +215,10 @@ struct Lister_Drag {
   UI_Signal signal;
 };
 
-Internal Lister_Drag lister_drag_begin(
-  Lister_Entry *entry,
-  L1 component) {
+Internal Lister_Drag lister_drag_begin(Lister_Entry *entry, L1 component) {
   Lister_Drag result = {0};
 
-  UI_Key key = ui_key_from_string(
-    ui_active_seed_key(),
+  UI_Key key = ui_key_from_string(ui_active_seed_key(),
     str8f(ui_build_arena(), "lister_drag_%p_%llu", entry, component));
   result.box = ui_build_box_from_key(UI_BOX_FLAG__MOUSE_CLICKABLE|
                                       UI_BOX_FLAG__DRAW_BACKGROUND|
@@ -212,9 +229,11 @@ Internal Lister_Drag lister_drag_begin(
   return result;
 }
 
+#define as(value, T) ((T *)(value)->data)
+
 Internal void lister_drag_L1(Lister_Entry *entry) {
   Lister_L1_Options options = entry->data.l1_options;
-  L1 before = lister_value(entry->first_value, L1)[0];
+  L1 before = as(entry->first_value, L1)[0];
   L1 after = before;
 
   L1 true_max = options.max != 0 ? options.max : L1_MAX;
@@ -255,7 +274,7 @@ Internal void lister_drag_L1(Lister_Entry *entry) {
 
   if (before != after) {
     for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
-      lister_value(value, L1)[0] += after - before;
+      as(value, L1)[0] += after - before;
     }
   }
 
@@ -270,8 +289,8 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
   Lister_F1_Options options = entry->data.f1_options;
   I1 is_scalar = entry->kind == LISTER_ENTRY_KIND__F1;
   F1 before = is_scalar ?
-    lister_value(entry->first_value, F1)[0] :
-    lister_value(entry->first_value, F4)[0][component];
+    as(entry->first_value, F1)[0] :
+    as(entry->first_value, F4)[0][component];
   F1 after = before;
 
   Lister_Drag drag = lister_drag_begin(entry, component);
@@ -302,9 +321,8 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
   }
 
   // clamp
-  if (options.min != 0 || options.max != 0) {
-    after = Clamp(options.min, after, options.max);
-  }
+  if (options.min != 0) after = Max(options.min, after);
+  if (options.max != 0) after = Min(options.max, after);
 
   // update entry values
   if (before != after) {
@@ -312,9 +330,9 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
 
     for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
       if (is_scalar) {
-        lister_value(value, F1)[0] += delta;
+        as(value, F1)[0] += delta;
       } else {
-        lister_value(value, F4)[0][component] += delta;
+        as(value, F4)[0][component] += delta;
 
         if (options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
           // TODO: Implement.
@@ -330,34 +348,6 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
   }
 }
 
-Internal void lister_enum(String8 str, String8 name, I1 *data, String8 *names, L1 enum_count) {
-  Lister_Entry *entry = lister_entry_get_or_push(LISTER_ENTRY_KIND__ENUM, str);
-  if (entry) {
-    entry->data.enum_options.names = names;
-    entry->data.enum_options.count = enum_count;
-    lister_value_push(entry, name, data);
-  }
-}
-
-Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
-  Lister_Entry *entry = lister_entry_push(LISTER_ENTRY_KIND__CMD);
-  if (entry) {
-    entry->str = str;
-    entry->data.cmd = cmd;
-  }
-
-  return entry;
-}
-
-Internal Lister_Entry *lister_progress(String8 str, F1 progress) {
-  Lister_Entry *entry = lister_entry_push(LISTER_ENTRY_KIND__PROGRESS);
-  if (entry) {
-    entry->str = str;
-    entry->data.progress = progress;
-  }
-  return entry;
-}
-
 Internal void lister_ui(void) {
   L1 visible_entry_idx = 0;
   for (L1 i = 0; i < lister_state.entry_count; i += 1) {
@@ -371,25 +361,23 @@ Internal void lister_ui(void) {
       continue;
     }
 
-    UI_Box_Flags top_side = (visible_entry_idx == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
+    UI_Box_Flags row_sides = UI_BOX_FLAG__DRAW_SIDE_BOTTOM|(visible_entry_idx == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
+
     visible_entry_idx += 1;
     switch (entry->kind) {
       // Header
       case LISTER_ENTRY_KIND__HEADER: {
         ui_set_next_text_padding(10.0f);
-        ui_set_next_background_color(oklch(0.192f, 0.0f, 0.0f, 1.0f));
+        // ui_set_next_background_color(oklch(0.192f, 0.0f, 0.0f, 1.0f));
         ui_set_next_text_color(oklch(0.507f, 0.208f, 29.2f, 1.0f));
-        ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-         UI_BOX_FLAG__DRAW_BACKGROUND|
-         UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-         top_side , entry->str);
+        ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_BACKGROUND|row_sides , entry->str);
       } break;
 
       // Textedit
       case LISTER_ENTRY_KIND__TEXTEDIT: {
         Lister_Value *first_value = entry->first_value;
         ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
-        ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
+        ui_set_next_flags(row_sides);
         ui_set_next_omit_flags(UI_BOX_FLAG__DRAW_BORDER);
         UI_Text_Padding(10.0f) {
           UI_Signal signal = ui_textedit(
@@ -411,26 +399,16 @@ Internal void lister_ui(void) {
       } break;
 
       // L1
-      case LISTER_ENTRY_KIND__L1: {
-        UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_l1%p", entry);
-        UI_Parent(drag_box) {
-          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-          UI_Text_Padding(10.0f)
-          UI_Flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side) {
-            lister_drag_L1(entry);
-          }
-        }
-      } break;
-
-      // F1
+      case LISTER_ENTRY_KIND__L1:
       case LISTER_ENTRY_KIND__F1: {
-        UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_f1%p", entry);
-        UI_Parent(drag_box) {
-          UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-          UI_Text_Padding(10.0f) {
-            ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-            lister_drag_F1(entry, 0, entry->str);
-          }
+        UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_l1%p", entry);
+        UI_Parent(drag_box)
+        UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+        UI_Text_Padding(10.0f)
+        UI_Background_Color(oklch(0.1f, 0.0f, 0.0f, 1.0f))
+        UI_Flags(row_sides) {
+          if (entry->kind == LISTER_ENTRY_KIND__L1) lister_drag_L1(entry);
+          else lister_drag_F1(entry, 0, entry->str);
         }
       } break;
 
@@ -439,16 +417,12 @@ Internal void lister_ui(void) {
         UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
         UI_Parent(drag_box) {
           ui_set_next_text_padding(10.0f);
-          ui_build_box_from_string(
-            UI_BOX_FLAG__DRAW_TEXT|
-            UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-            UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
-            entry->str);
+          ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_SIDE_RIGHT|row_sides, entry->str);
           UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
             String8 component_names[3] = {str8("X"), str8("Y"), str8("Z")};
             for (L1 component = 0; component < 3; component += 1) {
-              I1 is_last = (component == 2);
-              ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side|(UI_BOX_FLAG__DRAW_SIDE_RIGHT*is_last));
+              I1 not_last = (component < 2);
+              ui_set_next_flags(row_sides|(UI_BOX_FLAG__DRAW_SIDE_RIGHT*not_last));
               lister_drag_F1(entry, component, component_names[component]);
             }
           }
@@ -460,20 +434,13 @@ Internal void lister_ui(void) {
         UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
         UI_Parent(drag_box) {
           ui_set_next_text_padding(10.0f);
-          ui_build_box_from_string(
-            UI_BOX_FLAG__DRAW_TEXT|
-            UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-            UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
-            entry->str);
+          ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_SIDE_RIGHT|row_sides, entry->str);
 
           // preview
-          F4 color = lister_value(entry->first_value, F4)[0];
+          F4 color = as(entry->first_value, F4)[0];
           ui_set_next_background_color(oklch_from_linear_rgb(color));
           ui_set_next_pref_width(ui_px(30.0f, 1.0f));
-          ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND|
-           UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-           UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-           top_side, str8("color_preview"));
+          ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_SIDE_RIGHT|row_sides, str8("color_preview"));
 
           // components
           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
@@ -485,8 +452,8 @@ Internal void lister_ui(void) {
               oklch(0.27f, 0.09f, 256.0f, 1.0f),
             };
             for (L1 component = 0; component < 3; component += 1) {
-              I1 is_last = (component == 2);
-              ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side|(is_last*UI_BOX_FLAG__DRAW_SIDE_RIGHT));
+              I1 not_last = (component < 2);
+              ui_set_next_flags(row_sides|(UI_BOX_FLAG__DRAW_SIDE_RIGHT*not_last));
               ui_set_next_background_color(component_colors[component]);
               lister_drag_F1(entry, component, component_names[component]);
             }
@@ -500,17 +467,14 @@ Internal void lister_ui(void) {
         UI_Box *enum_box = ui_build_box_from_stringf(0, "enum_%p", entry);
         UI_Parent(enum_box) {
           ui_set_next_text_padding(10.0f);
-          ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-           UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-           top_side,
-           entry->str);
+          ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|row_sides,entry->str);
 
           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
           UI_Pref_Width(ui_pct(1.0f/(F1)entry->data.enum_options.count, 1.0f)) {
-            I1 enum_value = lister_value(entry->first_value, I1)[0];
+            I1 enum_value = as(entry->first_value, I1)[0];
             I1 enum_is_mixed = 0;
             for (Lister_Value *value = entry->first_value->next; value != 0; value = value->next) {
-              if (lister_value(value, I1)[0] != enum_value) {
+              if (as(value, I1)[0] != enum_value) {
                 enum_is_mixed = 1;
                 break;
               }
@@ -528,15 +492,14 @@ Internal void lister_ui(void) {
                 UI_BOX_FLAG__DRAW_HOT_EFFECTS|
                 UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
                 UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                top_side,
+                row_sides,
                 "%.*s##enum_%p_%llu",
                 (int)name.len, name.str,
                 entry, option);
               UI_Signal signal = ui_signal_from_box(option_box);
               if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
                 for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
-                  lister_value(value, I1)[0] = option;
+                  as(value, I1)[0] = option;
                 }
               }
             }
@@ -554,8 +517,7 @@ Internal void lister_ui(void) {
           UI_BOX_FLAG__DRAW_BACKGROUND|
           UI_BOX_FLAG__DRAW_HOT_EFFECTS|
           UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
-          UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-          top_side,
+          row_sides,
           "%.*s##lister_cmd_%p",
           (int)entry->str.len, entry->str.str,
           (void *)entry);
@@ -567,15 +529,13 @@ Internal void lister_ui(void) {
 
       // Progress
       case LISTER_ENTRY_KIND__PROGRESS: {
-        UI_Box *outer = ui_build_box_from_stringf(
-          UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
-          "progress_outer_%.*s", (int)entry->str.len, entry->str.str);
+        UI_Box *outer = ui_build_box_from_stringf(row_sides, "progress_outer_%.*s", (int)entry->str.len, entry->str.str);
         UI_Parent(outer) {
           F1 progress = entry->data.progress;
           ui_set_next_pref_width(ui_pct(progress, 1.0f));
           ui_set_next_background_color(oklch(0.637f, 0.2f, 140.0f, 1.0f));
           ui_set_next_text_padding(10.0f);
-          UI_Box *prog = ui_build_box_from_stringf(
+          ui_build_box_from_stringf(
             UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DISABLE_TEXT_TRUNC,
             "%.*s %.2f%%", (int)entry->str.len, entry->str.str, progress*100.0f);
         }
@@ -583,5 +543,7 @@ Internal void lister_ui(void) {
     }
   }
 }
+
+#undef as
 
 #endif

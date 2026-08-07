@@ -994,28 +994,26 @@ Internal void lane(void *user_data) {
 
             //- kti: Common entries.
 
-            lister_textedit(str8("Name"), entity_name, entity->name, &entity->name_len, sizeof(entity->name));
+            lister_textedit(str8("Name"), entity->name, &entity->name_len, sizeof(entity->name));
 
-            lister_xyz(str8("Pos"), entity_name,
-              &entity->pos,
-              .pixels_per_unit = 50.0f);
+            lister_xyz( str8("Pos"), &entity->pos,.pixels_per_unit = 50.0f);
 
-            lister_enum(str8("Shape"), entity_name,
-              is_shape ? &entity->shape_kind : 0,
-              shape_names, SHAPE_KIND_COUNT);
+            lister_enum(str8("Shape"), is_shape ? &entity->shape_kind : 0, shape_names, SHAPE_KIND_COUNT);
 
             //- kti: Shape specific entries.
 
-            lister_xyz(str8("Size"), entity_name,
+            lister_xyz(str8("Size"),
               (is_shape && entity->shape_kind == SHAPE_KIND__BOX) ? &entity->size : 0,
               .default_value = 1.0f,
               .max = F1_MAX);
 
-            lister_F1(str8("Diameter"), entity_name, (is_shape && entity->shape_kind == SHAPE_KIND__SPHERE) ? &entity->sphere_diameter : 0,
+            lister_F1(str8("Diameter"),
+              (is_shape && entity->shape_kind == SHAPE_KIND__SPHERE) ? &entity->sphere_diameter : 0,
               .default_value = 1.0f,
-              .max = F1_MAX);
+              .min = 0.01f);
 
-            lister_xyz(str8("Normal"), entity_name, (is_shape && entity->shape_kind == SHAPE_KIND__PLANE) ? &entity->plane_normal : 0,
+            lister_xyz(str8("Normal"), 
+              (is_shape && entity->shape_kind == SHAPE_KIND__PLANE) ? &entity->plane_normal : 0,
               .pixels_per_unit = 50.0f,
               .min = -1.0f,
               .max = 1.0f,
@@ -1025,35 +1023,35 @@ Internal void lane(void *user_data) {
 
             if (is_shape) {
               lister_header(str8("Material"));
-              lister_color(str8("Base"), entity_name, &entity->material.base_color);
-              lister_F1(str8("Metallic"), entity_name, &entity->material.metallic,
+              lister_color(str8("Base"), &entity->material.base_color);
+              lister_F1(str8("Metallic"), &entity->material.metallic,
                 .default_value = 0.3f,
                 .max = 1.0f);
-              lister_F1(str8("Roughness"), entity_name, &entity->material.roughness,
+              lister_F1(str8("Roughness"), &entity->material.roughness,
                 .default_value = 0.3f,
                 .max = 1.0f);
-              lister_color(str8("Emissive"), entity_name, &entity->material.emissive);
+              lister_color(str8("Emissive"), &entity->material.emissive);
             }
 
             //- kti: Camera entries.
 
             if (is_camera) {
               lister_header(str8("Camera"));
-              lister_xyz(str8("Forward"), entity_name,
+              lister_xyz(str8("Forward"),
                 &entity->camera_forward,
                 .pixels_per_unit = 50.0f,
                 .min = -1.0f,
                 .max = 1.0f,
                 .flags = LISTER_ENTRY_FLAG__NORMALIZE_F4);
-              lister_F1(str8("Vertical FOV"), entity_name,
+              lister_F1(str8("Vertical FOV"),
                 &entity->camera_vertical_fov,
                 .default_value = 70.0f*PI/180.0f,
                 .min = PI/180.0f,
                 .max = 179.0f*PI/180.0f);
-              lister_F1(str8("Aperture Radius"), entity_name,
+              lister_F1(str8("Aperture Radius"),
                 &entity->camera_aperture_radius,
                 .max = F1_MAX);
-              lister_F1(str8("Focal Distance"), entity_name,
+              lister_F1(str8("Focal Distance"),
                 &entity->camera_focal_distance,
                 .default_value = 5.0f,
                 .min = 0.001f,
@@ -1083,29 +1081,29 @@ Internal void lane(void *user_data) {
 
         //- kti: Render Settings
         lister_header(str8("Render Settings"));
-        lister_L1(str8("Width"), str8(""), &state->render_settings.width,
+        lister_L1(str8("Width"), &state->render_settings.width,
           .default_value = 1280,
           .min = 320);
-        lister_L1(str8("Height"), str8(""), &state->render_settings.height,
+        lister_L1(str8("Height"), &state->render_settings.height,
           .default_value = 720,
           .min = 160);
-        lister_L1(str8("Rays Per Pixel"), str8(""), &state->render_settings.rays_per_pixel,
+        lister_L1(str8("Rays Per Pixel"), &state->render_settings.rays_per_pixel,
           .default_value = 64);
-        lister_L1(str8("Max Bounces"), str8(""), &state->render_settings.max_num_bounces,
+        lister_L1(str8("Max Bounces"), &state->render_settings.max_num_bounces,
           .default_value = 8);
 
         lister_header(str8("Bloom"));
 
-        lister_L1(str8("Passes"), str8(""), &state->render_settings.bloom.pass_count,
+        lister_L1(str8("Passes"), &state->render_settings.bloom.pass_count,
           .default_value = 8);
 
-        lister_F1(str8("Threshold"), str8(""), &state->render_settings.bloom.threshold,
+        lister_F1(str8("Threshold"), &state->render_settings.bloom.threshold,
           .default_value = 0.5f);
 
-        lister_F1(str8("Strength"), str8(""), &state->render_settings.bloom.strength,
+        lister_F1(str8("Strength"), &state->render_settings.bloom.strength,
           .default_value = 0.4f);
 
-        lister_F1(str8("Knee"), str8(""), &state->render_settings.bloom.knee,
+        lister_F1(str8("Knee"), &state->render_settings.bloom.knee,
           .default_value = 0.5f);
 
         //- kti: Actions.

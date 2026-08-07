@@ -175,85 +175,6 @@ struct Cmd {
 };
 
 ////////////////////////////////
-//~ kti: Lister.
-
-typedef enum Lister_Entry_Kind {
-  LISTER_ENTRY_KIND__HEADER,
-  LISTER_ENTRY_KIND__TEXTEDIT,
-  LISTER_ENTRY_KIND__F1,
-  LISTER_ENTRY_KIND__L1,
-  LISTER_ENTRY_KIND__XYZ,
-  LISTER_ENTRY_KIND__COLOR,
-  LISTER_ENTRY_KIND__ENUM,
-  LISTER_ENTRY_KIND__CMD,
-  LISTER_ENTRY_KIND__PROGRESS,
-} Lister_Entry_Kind;
-
-typedef I1 Lister_Apply;
-enum {
-  LISTER_APPLY__DELTA,
-  LISTER_APPLY__SET,
-};
-
-typedef L1 Lister_Entry_Flags;
-enum {
-  LISTER_ENTRY_FLAG__NORMALIZE_F4 = 1 << 0,
-};
-
-typedef struct Lister_L1_Options Lister_L1_Options;
-struct Lister_L1_Options {
-  Lister_Apply apply;
-  L1 default_value;
-  L1 pixels_per_unit;
-  L1 min;
-  L1 max;
-  Lister_Entry_Flags flags;
-};
-
-typedef struct Lister_F1_Options Lister_F1_Options;
-struct Lister_F1_Options {
-  Lister_Apply apply;
-  F1 default_value;
-  F1 pixels_per_unit;
-  F1 min;
-  F1 max;
-  Lister_Entry_Flags flags;
-};
-
-typedef struct Lister_Enum_Options Lister_Enum_Options;
-struct Lister_Enum_Options {
-  String8 *names;
-  L1 count;
-};
-
-typedef struct Lister_Value Lister_Value;
-struct Lister_Value {
-  Lister_Value *next;
-  String8 name;
-  void *data;
-  L1 *text_len;
-  L1 text_capacity;
-};
-
-typedef struct Lister_Entry Lister_Entry;
-struct Lister_Entry {
-  Lister_Entry *hash_next;
-  Lister_Entry_Kind kind;
-  String8 str;
-  Lister_Value *first_value;
-  Lister_Value *last_value;
-  L1 value_count;
-
-  union {
-    Lister_F1_Options f1_options;
-    Lister_L1_Options l1_options;
-    Lister_Enum_Options enum_options;
-    Cmd cmd;
-    F1 progress;
-  } data;
-};
-
-////////////////////////////////
 //~ kti: Render
 
 typedef enum Render_Phase {
@@ -307,11 +228,6 @@ struct State {
   Cmd cmds[512];
   L1 cmd_count;
 
-  L1 name_edit_buffer_len;
-  B1 name_edit_buffer[512];
-  Txt_Pt name_cursor;
-  Txt_Pt name_mark;
-
   //- kti: Entities.
   L1 entity_count;
   Entity *first_entity;
@@ -319,11 +235,6 @@ struct State {
   Entity *first_free_entity;
   Entity nil_entity;
 
-  //- kti: Lister.
-  Arena *lister_arena;
-  L1 lister_entry_count;
-  Lister_Entry lister_entries[512];
-  Lister_Entry *lister_entry_hash_table[128];
 
   //- kti: Graphics.
   Mesh meshes[SHAPE_KIND_COUNT];
@@ -654,13 +565,6 @@ Internal void cmd_push(Cmd cmd) {
   }
 }
 
-Internal UI_Signal focus_on_press(Panel *panel, UI_Signal signal) {
-  if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-    cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-  }
-  return signal;
-}
-
 ////////////////////////////////
 //~ kti: Entities
 
@@ -809,265 +713,6 @@ Internal F4 entity_mesh_size(Entity *entity) {
     };
   }
   return result;
-}
-
-////////////////////////////////
-//~ kti: Lister
-
-Internal void lister_begin(Arena *arena) {
-  state->lister_arena = arena;
-  state->lister_entry_count = 0;
-  MemoryZeroArray(state->lister_entry_hash_table);
-}
-
-Internal Lister_Entry *lister_entry_push(Lister_Entry_Kind kind) {
-  Lister_Entry *entry = 0;
-
-  if (state->lister_entry_count < ArrayCount(state->lister_entries)) {
-    entry = &state->lister_entries[state->lister_entry_count];
-    state->lister_entry_count += 1;
-    MemoryZeroStruct(entry);
-    entry->kind = kind;
-  }
-
-  return entry;
-}
-
-Internal Lister_Entry *lister_entry_get_or_push(Lister_Entry_Kind kind, String8 str) {
-  L1 hash = str8_hash(str) ^ (5381*kind);
-  Lister_Entry **slot = &state->lister_entry_hash_table[hash%ArrayCount(state->lister_entry_hash_table)];
-  Lister_Entry *entry = 0;
-
-  for (Lister_Entry *it = slot[0]; it != 0; it = it->hash_next) {
-    if (it->kind == kind && str8_match(it->str, str)) {
-      entry = it;
-      break;
-    }
-  }
-
-  if (entry == 0) {
-    entry = lister_entry_push(kind);
-    if (entry) {
-      entry->str = str;
-      entry->hash_next = slot[0];
-      slot[0] = entry;
-    }
-  }
-  return entry;
-}
-
-Internal void lister_header(String8 str) {
-  lister_entry_get_or_push(LISTER_ENTRY_KIND__HEADER, str);
-}
-
-Internal Lister_Value *lister_value_push(Lister_Entry *entry, String8 name, void *data) {
-  Lister_Value *value = 0;
-  if (entry && data && state->lister_arena) {
-    value = push_array(state->lister_arena, Lister_Value, 1);
-    value->name = name;
-    value->data = data;
-    SLLQueuePush(entry->first_value, entry->last_value, value);
-    entry->value_count += 1;
-  }
-  return value;
-}
-
-Internal void lister_textedit(String8 str, String8 name, B1 *data, L1 *len, L1 capacity) {
-  Lister_Value *value = lister_value_push(lister_entry_get_or_push(LISTER_ENTRY_KIND__TEXTEDIT, str), name, data);
-  if (value) {
-    value->text_len = len;
-    value->text_capacity = capacity;
-  }
-}
-
-Internal void lister_l1(String8 str, String8 name, void *data, Lister_L1_Options options) {
-  Lister_Entry *entry = lister_entry_get_or_push(LISTER_ENTRY_KIND__L1, str);
-  if (entry) {
-    entry->data.l1_options = options;
-    lister_value_push(entry, name, data);
-  }
-}
-
-Internal void lister_f1(Lister_Entry_Kind kind, String8 str, String8 name, void *data, Lister_F1_Options options) {
-  Lister_Entry *entry = lister_entry_get_or_push(kind, str);
-  if (entry) {
-    entry->data.f1_options= options;
-    lister_value_push(entry, name, data);
-  }
-}
-
-#define lister_L1(str, name, data, ...) lister_l1((str), (name), (data), (Lister_L1_Options){__VA_ARGS__})
-#define lister_F1(str, name, data, ...) lister_f1(LISTER_ENTRY_KIND__F1, (str), (name), (data), (Lister_F1_Options){__VA_ARGS__})
-#define lister_xyz(str, name, data, ...) lister_f1(LISTER_ENTRY_KIND__XYZ, (str), (name), (data), (Lister_F1_Options){__VA_ARGS__})
-#define lister_color(str, name, data, apply_mode) lister_f1(LISTER_ENTRY_KIND__COLOR, (str), (name), (data), (Lister_F1_Options){.apply = (apply_mode), .max = 1.0f})
-#define lister_value(value, T) ((T *)(value)->data)
-
-Internal void lister_apply_L1s(Lister_Entry *entry, L1 before, L1 after) {
-  if (before != after) {
-    for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-      if (entry->data.l1_options.apply == LISTER_APPLY__DELTA) {
-        lister_value(it, L1)[0] += after - before;
-      } else {
-        lister_value(it, L1)[0] = after;
-      }
-    }
-  }
-}
-
-Internal void lister_apply_F1s(Lister_Entry *entry, F1 before, F1 after) {
-  if (before != after) {
-    for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-      if (entry->data.f1_options.apply == LISTER_APPLY__DELTA) {
-        lister_value(it, F1)[0] += after - before;
-      } else {
-        lister_value(it, F1)[0] = after;
-      }
-    }
-  }
-}
-
-Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
-  F4 delta = after - before;
-  for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-    F4 old_value = lister_value(it, F4)[0];
-    if (entry->data.f1_options.apply == LISTER_APPLY__DELTA) {
-      lister_value(it, F4)[0] += delta;
-    } else {
-      // Preserve components that were not edited when setting multiple values.
-      for (L1 component = 0; component < 4; component += 1) {
-        if (delta[component] != 0.0f) {
-          lister_value(it, F4)[0][component] = after[component];
-        }
-      }
-    }
-
-    if (entry->data.f1_options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
-      F4 value = F4_with_w(lister_value(it, F4)[0], 0.0f);
-      F1 length_sq = length_sq_F4(value);
-      if (length_sq > Square(0.00001f)) {
-        lister_value(it, F4)[0] = value * (1.0f / sqrt_F1(length_sq));
-      } else {
-        old_value = F4_with_w(old_value, 0.0f);
-        F1 old_length_sq = length_sq_F4(old_value);
-        lister_value(it, F4)[0] = old_length_sq > Square(0.00001f) ? old_value * (1.0f / sqrt_F1(old_length_sq)) : (F4){0.0f, 0.0f, 1.0f, 0.0f};
-      }
-    }
-  }
-}
-
-Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Signal signal, L1 component) {
-  String8 tooltip_id = str8f(ui_build_arena(), "##lister_value_tooltip_%p_%llu", entry, component);
-  UI_Key tooltip_key = ui_key_from_string(overlay->key, tooltip_id);
-  UI_Box *previous_tooltip = ui_box_from_key(tooltip_key);
-  I1 tooltip_hovered = !ui_box_is_nil(previous_tooltip) && rect_contains(previous_tooltip->rect, ui_mouse());
-  I1 tooltip_dragging = 0;
-  if (!ui_box_is_nil(previous_tooltip)) {
-    UI_Box *active_box = ui_box_from_key(ui_active_key(OS_MOUSE_BUTTON__LEFT));
-    for (UI_Box *box = active_box; !ui_box_is_nil(box); box = box->parent) {
-      if (box == previous_tooltip) {
-        tooltip_dragging = 1;
-        break;
-      }
-    }
-  }
-
-  if (entry->value_count > 1 &&
-      (signal.flags & (UI_SIGNAL_FLAG__HOVERING | UI_SIGNAL_FLAG__DRAGGING) ||
-       tooltip_hovered || tooltip_dragging)) {
-    UI_Parent(overlay) {
-      ui_set_next_fixed_x(signal.box->rect[0]);
-      ui_set_next_fixed_y(signal.box->rect[1] + signal.box->rect[3]);
-      ui_set_next_pref_width(ui_children_sum(1.0f));
-      ui_set_next_pref_height(ui_children_sum(1.0f));
-      ui_set_next_child_layout_axis(AXIS__Y);
-      ui_set_next_background_color(oklch(0.15f, 0.0f, 0.0f, 1.0f));
-      ui_set_next_corner_radius(0.0f);
-      UI_Box *tooltip = ui_build_box_from_stringf(
-          UI_BOX_FLAG__MOUSE_CLICKABLE |
-          UI_BOX_FLAG__DRAW_BACKGROUND |
-          UI_BOX_FLAG__DRAW_BORDER |
-          UI_BOX_FLAG__DRAW_DROP_SHADOW,
-          "%.*s", (int)tooltip_id.len, tooltip_id.str);
-
-      UI_Parent(tooltip) {
-        F1 name_width = 0.0f;
-        F1 value_width = 0.0f;
-        F1 row_height = 0.0f;
-        for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-          F1 value = entry->kind == LISTER_ENTRY_KIND__F1
-              ? lister_value(it, F1)[0]
-              : lister_value(it, F4)[0][component];
-          String8 value_string = str8f(ui_build_arena(), "%.2f", value);
-          F2 name_dim = fc_dim_from_tag_size_string(
-              ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), it->name);
-          F2 value_dim = fc_dim_from_tag_size_string(
-              ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), value_string);
-          name_width = Max(name_width, name_dim[0]);
-          value_width = Max(value_width, value_dim[0]);
-          row_height = Max(row_height, Max(name_dim[1], value_dim[1]));
-        }
-        name_width += 12.0f;
-        value_width += 12.0f;
-        row_height += 12.0f;
-
-        for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-          F1 default_value = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->data.f1_options.default_value;
-          F1 pixels_per_unit = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->data.f1_options.pixels_per_unit;
-          F1 *value = 0;
-          if (entry->kind == LISTER_ENTRY_KIND__F1) {
-            value = lister_value(it, F1);
-          } else {
-            value = lister_value(it, F1) + component;
-          }
-
-          ui_set_next_pref_width(ui_children_sum(1.0f));
-          ui_set_next_pref_height(ui_px(row_height, 1.0f));
-          ui_set_next_child_layout_axis(AXIS__X);
-          UI_Signal drag_signal = ui_drag_F1(value, default_value, pixels_per_unit, entry->data.f1_options.min, entry->data.f1_options.max);
-          UI_Parent(drag_signal.box)
-          UI_Text_Padding(6.0f) {
-            ui_set_next_pref_width(ui_px(name_width, 1.0f));
-            ui_set_next_pref_height(ui_px(row_height, 1.0f));
-            ui_label(it->name);
-
-            ui_set_next_pref_width(ui_px(value_width, 1.0f));
-            ui_set_next_pref_height(ui_px(row_height, 1.0f));
-            ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-            ui_label(str8f(ui_build_arena(), "%.2f", value[0]));
-          }
-        }
-      }
-      ui_signal_from_box(tooltip);
-    }
-  }
-}
-
-Internal void lister_enum(String8 str, String8 name, I1 *data, String8 *names, L1 enum_count) {
-  Lister_Entry *entry = lister_entry_get_or_push(LISTER_ENTRY_KIND__ENUM, str);
-  if (entry) {
-    entry->data.enum_options.names = names;
-    entry->data.enum_options.count = enum_count;
-    lister_value_push(entry, name, data);
-  }
-}
-
-Internal Lister_Entry *lister_cmd(String8 str, Cmd cmd) {
-  Lister_Entry *entry = lister_entry_push(LISTER_ENTRY_KIND__CMD);
-  if (entry) {
-    entry->str = str;
-    entry->data.cmd = cmd;
-  }
-
-  return entry;
-}
-
-Internal Lister_Entry *lister_progress(String8 str, F1 progress) {
-  Lister_Entry *entry = lister_entry_push(LISTER_ENTRY_KIND__PROGRESS);
-  if (entry) {
-    entry->str = str;
-    entry->data.progress = progress;
-  }
-  return entry;
 }
 
 ////////////////////////////////
@@ -1336,7 +981,7 @@ Internal void lane(void *user_data) {
 
     if (lane_idx() == 0) {
       //- kti: Build lister.
-      lister_begin(scratch.arena);
+      lister_reset(scratch.arena);
 
       {
         String8 *shape_names = push_array(scratch.arena, String8, SHAPE_KIND_COUNT);
@@ -1345,9 +990,12 @@ Internal void lane(void *user_data) {
         }
 
         I1 has_camera = 0;
+        L1 selected_count = 0;
         for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
           has_camera |= !!(entity->flags & ENTITY_FLAG__CAMERA);
           if (entity->flags & ENTITY_FLAG__SELECTED) {
+            selected_count += 1;
+            
             String8 entity_name = (String8){entity->name, entity->name_len};
             I1 is_shape = !!(entity->flags & ENTITY_FLAG__SHAPE);
             I1 is_camera = !!(entity->flags & ENTITY_FLAG__CAMERA);
@@ -1432,11 +1080,13 @@ Internal void lane(void *user_data) {
           }
         }
 
-        if (state->lister_entry_count != 0) {
+        if (selected_count > 0) {
+          //- kti: Entity specific commands.
           lister_cmd(str8("Delete"), (Cmd){
             .kind = CMD_KIND__DELETE_SELECTED_ENTITIES,
           });
         } else {
+          //- kti: List out entities
           lister_header(str8("Entities"));
           for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
             lister_cmd((String8){
@@ -1707,273 +1357,10 @@ Internal void lane(void *user_data) {
                       UI_BOX_FLAG__VIEW_SCROLL_Y|
                       UI_BOX_FLAG__VIEW_CLAMP_Y,
                       "lister%p", view);
-                    ui_signal_from_box(lister);;
+                    ui_signal_from_box(lister);
+
                     UI_Parent(lister) {
-                      L1 visible_entry_idx = 0;
-                      for (L1 i = 0; i < state->lister_entry_count; i += 1) {
-                        Lister_Entry *entry = &state->lister_entries[i];
-
-                        //- kti: Skip entries without values.
-                        if (entry->kind != LISTER_ENTRY_KIND__HEADER &&
-                            entry->kind != LISTER_ENTRY_KIND__CMD &&
-                            entry->kind != LISTER_ENTRY_KIND__PROGRESS &&
-                            entry->value_count == 0) {
-                          continue;
-                        }
-
-                        UI_Box_Flags top_side = (visible_entry_idx == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
-                        visible_entry_idx += 1;
-                        CString f1_label_format = entry->value_count == 1 ? "%.*s %.2f" : "%.*s";
-                        CString l1_label_format = entry->value_count == 1 ? "%.*s %llu" : "%.*s";
-
-                        switch (entry->kind) {
-                          // Header
-                          case LISTER_ENTRY_KIND__HEADER: {
-                            ui_set_next_text_padding(10.0f);
-                            ui_set_next_background_color(oklch(0.192f, 0.0f, 0.0f, 1.0f));
-                            ui_set_next_text_color(oklch(0.507f, 0.208f, 29.2f, 1.0f));
-                            ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-                                                     UI_BOX_FLAG__DRAW_BACKGROUND|
-                                                     UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                                     top_side , entry->str);
-                          } break;
-
-                          // Textedit
-                          case LISTER_ENTRY_KIND__TEXTEDIT: {
-                            Lister_Value *first_value = entry->first_value;
-                            ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
-                            ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                              top_side);
-                            ui_set_next_omit_flags(UI_BOX_FLAG__DRAW_BORDER);
-                            UI_Text_Padding(10.0f) {
-                              UI_Signal signal = ui_textedit(&state->name_cursor,
-                                                             &state->name_mark,
-                                                             state->name_edit_buffer,
-                                                             sizeof(state->name_edit_buffer),
-                                                             &state->name_edit_buffer_len,
-                                                             (String8){first_value->data, first_value->text_len[0]},
-                                                             str8f(ui_build_arena(), "###entity_name_%p", first_value->data));
-                              if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-                                cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                              }
-                              if (signal.flags & UI_SIGNAL_FLAG__COMMIT) {
-                                for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
-                                  value->text_len[0] = Min(state->name_edit_buffer_len, value->text_capacity);
-                                  memmove(value->data, state->name_edit_buffer, value->text_len[0]);
-                                }
-                              }
-                            }
-                          } break;
-
-                          // L1
-                          case LISTER_ENTRY_KIND__L1: {
-                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_f1%p", entry);
-                            UI_Parent(drag_box) {
-                              UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                              UI_Text_Padding(10.0f)
-                              UI_Flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side) {
-                                L1 before = lister_value(entry->first_value, L1)[0];
-                                L1 after = before;
-                                UI_Signal signal = ui_drag_L1_label(entry->str, l1_label_format,
-                                                                    &after, entry->data.l1_options.default_value, entry->data.l1_options.pixels_per_unit,
-                                                                    entry->data.l1_options.min, entry->data.l1_options.max);
-                                focus_on_press(panel, signal);
-                                lister_apply_L1s(entry, before, after);
-                              }
-                            }
-                          } break;
-
-                          // F1
-                          case LISTER_ENTRY_KIND__F1: {
-                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_f1%p", entry);
-                            UI_Parent(drag_box) {
-                              UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                              UI_Text_Padding(10.0f) {
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                F1 before = lister_value(entry->first_value, F1)[0];
-                                F1 after = before;
-                                UI_Signal signal = ui_drag_F1_label(entry->str,
-                                                                    f1_label_format,
-                                                                    &after, entry->data.f1_options.default_value, entry->data.f1_options.pixels_per_unit,
-                                                                    entry->data.f1_options.min, entry->data.f1_options.max);
-                                focus_on_press(panel, signal);
-                                lister_apply_F1s(entry, before, after);
-                                lister_value_tooltip(overlay, entry, signal, 0);
-                              }
-                            }
-                          } break;
-
-                          // XYZ
-                          case LISTER_ENTRY_KIND__XYZ: {
-                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
-                            UI_Parent(drag_box) {
-                              ui_set_next_text_padding(10.0f);
-                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
-                                                       entry->str);
-                              UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
-                                F4 before = lister_value(entry->first_value, F4)[0];
-                                F4 after = before;
-                                F1 after_components[3] = {after[0], after[1], after[2]};
-                                UI_Signal signals[3] = {0};
-                                String8 component_names[3] = {str8("X"), str8("Y"), str8("Z")};
-                                for (L1 component = 0; component < ArrayCount(component_names); component += 1) {
-                                  UI_Box_Flags flags = UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side;
-                                  if (component + 1 < ArrayCount(component_names)) {
-                                    flags |= UI_BOX_FLAG__DRAW_SIDE_RIGHT;
-                                  }
-                                  ui_set_next_flags(flags);
-                                  signals[component] = ui_drag_F1_label(component_names[component], f1_label_format,
-                                                                        &after_components[component], entry->data.f1_options.default_value,
-                                                                        entry->data.f1_options.pixels_per_unit, entry->data.f1_options.min, entry->data.f1_options.max);
-                                  focus_on_press(panel, signals[component]);
-                                  after[component] = after_components[component];
-                                }
-                                lister_apply_F4s(entry, before, after);
-                                for (L1 component = 0; component < 3; component += 1) {
-                                  lister_value_tooltip(overlay, entry, signals[component], component);
-                                }
-                              }
-                            }
-                          } break;
-
-                          // Color
-                          case LISTER_ENTRY_KIND__COLOR: {
-                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
-                            UI_Parent(drag_box) {
-                              ui_set_next_text_padding(10.0f);
-                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
-                                                       entry->str);
-
-                              F4 before = lister_value(entry->first_value, F4)[0];
-                              F4 after = before;
-                              F1 after_components[3] = {after[0], after[1], after[2]};
-                              ui_set_next_background_color(oklch_from_linear_rgb(after));
-                              ui_set_next_pref_width(ui_px(30.0f, 1.0f));
-                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND|
-                                                       UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                                       top_side, str8("color_preview"));
-
-                              UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                              UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f)) {
-                                F1 pixels_per_unit = 0.0f;
-                                UI_Signal signals[3] = {0};
-                                String8 component_names[3] = {str8("R"), str8("G"), str8("B")};
-                                F4 component_colors[3] = {
-                                  oklch(0.27f, 0.1f, 27.0f, 1.0f),
-                                  oklch(0.27f, 0.09f, 143.0f, 1.0f),
-                                  oklch(0.27f, 0.09f, 256.0f, 1.0f),
-                                };
-                                for (L1 component = 0; component < ArrayCount(component_names); component += 1) {
-                                  UI_Box_Flags flags = UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side;
-                                  if (component + 1 < ArrayCount(component_names)) {
-                                    flags |= UI_BOX_FLAG__DRAW_SIDE_RIGHT;
-                                  }
-                                  ui_set_next_flags(flags);
-                                  ui_set_next_background_color(component_colors[component]);
-                                  signals[component] = ui_drag_F1_label(component_names[component], f1_label_format,
-                                                                        &after_components[component], 0.0f, pixels_per_unit, 0.0f, 1.0f);
-                                  focus_on_press(panel, signals[component]);
-                                  after[component] = after_components[component];
-                                }
-                                lister_apply_F4s(entry, before, after);
-                                for (L1 component = 0; component < 3; component += 1) {
-                                  lister_value_tooltip(overlay, entry, signals[component], component);
-                                }
-                              }
-                            }
-                          } break;
-
-                          // Enum
-                          case LISTER_ENTRY_KIND__ENUM: {
-                            ui_set_next_child_layout_axis(AXIS__X);
-                            UI_Box *enum_box = ui_build_box_from_stringf(0, "enum_%p", entry);
-                            UI_Parent(enum_box) {
-                              ui_set_next_text_padding(10.0f);
-                              ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                                       top_side,
-                                                       entry->str);
-
-                              UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-                              UI_Pref_Width(ui_pct(1.0f/(F1)entry->data.enum_options.count, 1.0f)) {
-                                I1 enum_value = lister_value(entry->first_value, I1)[0];
-                                I1 enum_is_mixed = 0;
-                                for (Lister_Value *value = entry->first_value->next; value != 0; value = value->next) {
-                                  if (lister_value(value, I1)[0] != enum_value) {
-                                    enum_is_mixed = 1;
-                                    break;
-                                  }
-                                }
-                                for (L1 option = 0; option < entry->data.enum_options.count; option += 1) {
-                                  if (!enum_is_mixed && enum_value == option) {
-                                    ui_set_next_background_color(oklch(0.35f, 0.08f, 252.0f, 1.0f));
-                                  }
-
-                                  String8 name = entry->data.enum_options.names[option];
-                                  UI_Box *option_box = ui_build_box_from_stringf(
-                                      UI_BOX_FLAG__CLICKABLE|
-                                      UI_BOX_FLAG__DRAW_TEXT|
-                                      UI_BOX_FLAG__DRAW_BACKGROUND|
-                                      UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-                                      UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
-                                      UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                      UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                      top_side,
-                                      "%.*s##enum_%p_%llu",
-                                      (int)name.len, name.str,
-                                      entry, option);
-                                  UI_Signal signal = ui_signal_from_box(option_box);
-                                  if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
-                                    for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
-                                      lister_value(value, I1)[0] = option;
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          } break;
-
-                          // Cmd
-                          case LISTER_ENTRY_KIND__CMD: {
-                            ui_set_next_background_color(oklch(0.2f, 0.1, 27.0f, 1.0f));
-                            ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
-                            UI_Box *cmd_box = ui_build_box_from_stringf(
-                                UI_BOX_FLAG__CLICKABLE|
-                                UI_BOX_FLAG__DRAW_TEXT|
-                                UI_BOX_FLAG__DRAW_BACKGROUND|
-                                UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-                                UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
-                                UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                top_side,
-                                "%.*s##lister_cmd_%p",
-                                (int)entry->str.len, entry->str.str,
-                                (void *)entry);
-                            UI_Signal signal = ui_signal_from_box(cmd_box);
-                            if (signal.flags & UI_SIGNAL_FLAG__PRESSED) {
-                              cmd_push(entry->data.cmd);
-                            }
-                          } break;
-                          case LISTER_ENTRY_KIND__PROGRESS: {
-                            UI_Box *outer = ui_build_box_from_stringf(
-                              UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
-                              "progress_outer_%.*s", (int)entry->str.len, entry->str.str);
-                            UI_Parent(outer) {
-                              F1 progress = entry->data.progress;
-                              ui_set_next_pref_width(ui_pct(progress, 1.0f));
-                              ui_set_next_background_color(oklch(0.637f, 0.2f, 140.0f, 1.0f));
-                              ui_set_next_text_padding(10.0f);
-                              UI_Box *prog = ui_build_box_from_stringf(
-                                UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DISABLE_TEXT_TRUNC,
-                                "%.*s %.2f%%", (int)entry->str.len, entry->str.str, progress*100.0f);
-                            }
-                          } break; 
-                        }
-                      }
+                      lister_ui();
                     }
                   } break;
 

@@ -1,7 +1,14 @@
 ////////////////////////////////
 //~ kti: TODO
 
+// NEEDS TO BE DONE TODAY.
+//- kti: Proper color picker.
+//- kti: UI Theme.
+
+// FUTURE:
 //- kti: Define scene by code.
+//- kti: Lister groups.
+//- kti: Better rendering in the viewport.
 
 #if (HEADER)
 
@@ -1172,7 +1179,7 @@ Internal void lane(void *user_data) {
 
         ui_push_font(prop_fnt);
         ui_push_background_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
-        ui_push_border_color((F4){0.5f, 0.0f, 0.0f, 1.0f});
+        ui_push_border_color((F4){0.125f, 0.125f, 0.125f, 1.0f});
 
         F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
         ui_set_next_fixed_rect(root_plane_rect);
@@ -1266,7 +1273,7 @@ Internal void lane(void *user_data) {
                 UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
                 UI_Pref_Height(ui_pct(1.0f, 1.0f))
                 UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-                UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f})) {
+                UI_Background_Color(((F4){0.008f, 0.008f, 0.008f, 1.0f})) {
                   if (ui_button(str8("Split X")).flags & UI_SIGNAL_FLAG__CLICKED) {
                     cmd_push((Cmd){
                       .kind = CMD_KIND__OPEN_PANEL,
@@ -1297,11 +1304,11 @@ Internal void lane(void *user_data) {
                 UI_Row()
                 UI_Padding(ui_px(10.0f, 1.0f)) {
                   UI_Column() {
-                    UI_Text_Color(oklch(0.682f, 0.176f, 252, 1.0f))
+                    UI_Text_Color(((F4){0.035227284f, 0.329110300f, 1.016848732f, 1.0f}))
                     ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Choose view kind."));
 
                     UI_Row()
-                    UI_Background_Color(((F4){0.2f, 0.0f, 0.0f, 1.0f}))
+                    UI_Background_Color(((F4){0.008f, 0.008f, 0.008f, 1.0f}))
                     UI_Text_Align((UI_TEXT_ALIGN__CENTER))
                     UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
                     UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
@@ -1350,7 +1357,7 @@ Internal void lane(void *user_data) {
                     
                     ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
                     ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
-                    ui_set_next_background_color((F4){0.025f, 0.025f, 0.035f, 1.0f});
+                    ui_set_next_background_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
                     view->viewport_box = ui_build_box_from_stringf(
                       UI_BOX_FLAG__DRAW_BACKGROUND|
                       UI_BOX_FLAG__CLIP|

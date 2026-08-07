@@ -41,55 +41,10 @@ float bayer4x4(vec2 pos) {
     return bayer[y * 4 + x] / 255.0 - 0.5/255.0;
 }
 
-const float PI = 3.14159265359;
-const float TWO_PI = 6.28318530718;
-
-float interpolate_hue(float h1, float h2, float t) {
-  float diff = h2 - h1;
-  diff = diff - TWO_PI * floor((diff + PI) / TWO_PI);
-  return h1 + diff * t;
-}
-
-vec4 interpolate_oklch(vec4 tl, vec4 tr, vec4 bl, vec4 br, vec2 pos) {
-  vec4 top = vec4(
-    mix(tl.r, tr.r, pos.x),
-    mix(tl.g, tr.g, pos.x),
-    interpolate_hue(tl.b, tr.b, pos.x),
-    mix(tl.a, tr.a, pos.x)
-  );
-
-  vec4 bottom = vec4(
-    mix(bl.r, br.r, pos.x),
-    mix(bl.g, br.g, pos.x),
-    interpolate_hue(bl.b, br.b, pos.x),
-    mix(bl.a, br.a, pos.x)
-  );
-
-  return vec4(
-    mix(top.r, bottom.r, pos.y),
-    mix(top.g, bottom.g, pos.y),
-    interpolate_hue(top.b, bottom.b, pos.y),
-    mix(top.a, bottom.a, pos.y)
-  );
-}
-
-vec4 oklch_to_linear_rgb(vec4 oklch) {
-  vec2 ab = oklch.g * vec2(cos(oklch.b), sin(oklch.b));
-
-  vec3 lms = vec3(
-    oklch.r + 0.3963377774 * ab.x + 0.2158037573 * ab.y,
-    oklch.r - 0.1055613458 * ab.x - 0.0638541728 * ab.y,
-    oklch.r - 0.0894841775 * ab.x - 1.2914855480 * ab.y
-  );
-
-  lms = lms * lms * lms;
-
-  return vec4(
-    dot(lms, vec3(+4.0767416621, -3.3077115913, +0.2309699292)),
-    dot(lms, vec3(-1.2684380046, +2.6097574011, -0.3413193965)),
-    dot(lms, vec3(-0.0041960863, -0.7034186147, +1.7076147010)),
-    oklch.a
-  );
+vec4 interpolate_linear_rgba(vec4 tl, vec4 tr, vec4 bl, vec4 br, vec2 pos) {
+  vec4 top = mix(tl, tr, pos.x);
+  vec4 bottom = mix(bl, br, pos.x);
+  return mix(top, bottom, pos.y);
 }
 
 void main() {
@@ -99,8 +54,7 @@ void main() {
     bool is_solid = all(equal(in_color_tl, in_color_tr)) &&
                     all(equal(in_color_tl, in_color_bl)) &&
                     all(equal(in_color_tl, in_color_br));
-    vec4 fill_color_oklch = is_solid ? in_color_tl : interpolate_oklch(in_color_tl, in_color_tr, in_color_bl, in_color_br, in_rect_pos);
-    vec4 fill_color = oklch_to_linear_rgb(fill_color_oklch);
+    vec4 fill_color = is_solid ? in_color_tl : interpolate_linear_rgba(in_color_tl, in_color_tr, in_color_bl, in_color_br, in_rect_pos);
 
     vec4 texture_sample = vec4(1);
     if (in_omit_texture < 1.0) {
@@ -136,8 +90,7 @@ void main() {
     vec2 pixel_pos = in_rect_pos * in_rect_size;
     float dither_value = bayer4x4(pixel_pos);
 
-    vec4 border_linear = oklch_to_linear_rgb(in_border_color);
-    vec4 base_color = mix(border_linear, fill_color, inner_coverage);
+    vec4 base_color = mix(in_border_color, fill_color, inner_coverage);
     base_color.rgb += vec3(dither_value);
     base_color.a *= outer_coverage;
 

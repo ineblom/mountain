@@ -393,8 +393,16 @@ Internal Arena *ui_build_arena(void) {
 }
 
 Internal F4 ui_brighten(F4 color) {
-  F4 result = color;
-  result[0] = Clamp(0.22f, result[0] + 0.1f, 1.0f);
+  F4 oklch = oklch_from_linear_rgba(color);
+  oklch[0] = Clamp(0.22f, oklch[0] + 0.1f, 1.0f);
+  F4 result = linear_rgba_from_oklch(oklch[0], oklch[1], oklch[2], oklch[3]);
+  return result;
+}
+
+Internal F4 ui_darken(F4 color) {
+  F4 oklch = oklch_from_linear_rgba(color);
+  oklch[0] = Clamp(0.0f, oklch[0] - 0.1f, 1.0f);
+  F4 result = linear_rgba_from_oklch(oklch[0], oklch[1], oklch[2], oklch[3]);
   return result;
 }
 
@@ -1830,8 +1838,8 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
     ui_set_next_fixed_height(size);
     ui_set_next_child_layout_axis(AXIS__Y);
     UI_Corner_Radius(check_inset * 0.5f) {
-      ui_set_next_background_color(oklch(0.195f, 0.1f, 17.0f, 1.0f));
-      ui_set_next_border_color(oklch(0.5f, 0.0f, 0.0f, 1.0f));
+      ui_set_next_background_color((F4){0.036278413f, -0.002480615f, 0.001241720f, 1.0f});
+      ui_set_next_border_color((F4){0.125f, 0.125f, 0.125f, 1.0f});
       UI_Box *outer = ui_build_box_from_stringf(
           UI_BOX_FLAG__CLICKABLE|
           UI_BOX_FLAG__DRAW_HOT_EFFECTS|
@@ -1842,7 +1850,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 
       if (value[0]) {
         UI_Parent(outer)
-        UI_Background_Color(oklch(0.7f, 0.0f, 0.0f, 1.0f))
+        UI_Background_Color(((F4){0.343f, 0.343f, 0.343f, 1.0f}))
         UI_Padding(ui_pct(1.0f, 0.0f)) {
           UI_Pref_Height(ui_px(size-check_inset*2, 1.0f))
           UI_Row()
@@ -2182,10 +2190,12 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 Internal void ui_draw(void) {
   ProfFuncBegin();
 
-  F4 focus_border_color = oklch(0.849f, 0.107f, 252, 1.0f);
+  F4 focus_border_color = {0.321444194f, 0.645543671f, 1.175802262f, 1.0f};
   F4 cursor_color = focus_border_color;
-  cursor_color[0] += 0.2f;
-  F4 select_color = {0.5f, 0.5f, 0.0f, 0.05f};
+  for (L1 component = 0; component < 3; component += 1) {
+    cursor_color[component] = Min(cursor_color[component] + 0.2f, 1.0f);
+  }
+  F4 select_color = {1.113309022f, -0.230441843f, 0.096778714f, 0.05f};
 
   for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
     UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
@@ -2204,14 +2214,14 @@ Internal void ui_draw(void) {
     if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
       F4 shadow = rect_pad(box->rect, 4.0f);
       shadow[1] += 4.0f;
-      GFX_Rect_Instance *shadow_inst = dr_rect(shadow, oklch(0, 0, 0, 0.25f), 0.0f, 8.0f);
+      GFX_Rect_Instance *shadow_inst = dr_rect(shadow, (F4){0.0f, 0.0f, 0.0f, 0.25f}, 0.0f, 8.0f);
       shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
     }
 
     if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
       if (draw_hot_effect && !draw_active_effect) {
         F4 shadow = rect_pad(box->rect, 4.0f);
-        GFX_Rect_Instance *shadow_inst = dr_rect(shadow, oklch(0, 0, 0, 0.2f), 0.0f, 8.0f);
+        GFX_Rect_Instance *shadow_inst = dr_rect(shadow, (F4){0.0f, 0.0f, 0.0f, 0.2f}, 0.0f, 8.0f);
         shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
       }
 
@@ -2219,8 +2229,8 @@ Internal void ui_draw(void) {
       inst->corner_radii = box->corner_radii;
 
       if (draw_active_effect) {
-        inst->colors[0][0] = inst->colors[0][0]*0.9f;
-        inst->colors[1][0] = inst->colors[1][0]*0.9f;
+        inst->colors[0] = ui_darken(inst->colors[0]);
+        inst->colors[1] = ui_darken(inst->colors[1]);
         inst->colors[2] = ui_brighten(inst->colors[2]);
         inst->colors[3] = ui_brighten(inst->colors[3]);
       } else if (draw_hot_effect) {
@@ -2243,7 +2253,7 @@ Internal void ui_draw(void) {
         F2 pos = ui_box_text_pos(box);
         F4 color = box->text_color;
         if (draw_active_effect) {
-          color[0] = Max(color[0]-0.2f, 0.0f);
+          color = ui_darken(color);
         } else if (draw_hot_effect) {
           color = ui_brighten(color);
         }
@@ -2315,7 +2325,7 @@ Internal void ui_draw(void) {
 
       //- kti: Focus Overlay
       if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot) {
-        GFX_Rect_Instance *inst = dr_rect(b->rect, oklch(0.624f, 0.279f, 30, 0.02f), 0.0f, b_softness);
+        GFX_Rect_Instance *inst = dr_rect(b->rect, (F4){1.058446053f, -0.025667136f, -0.017405831f, 0.02f}, 0.0f, b_softness);
         inst->corner_radii = b->corner_radii;
       }
 

@@ -368,8 +368,8 @@ Internal void lister_ui(void) {
       // Header
       case LISTER_ENTRY_KIND__HEADER: {
         ui_set_next_text_padding(10.0f);
-        // ui_set_next_background_color(oklch(0.192f, 0.0f, 0.0f, 1.0f));
-        ui_set_next_text_color(oklch(0.507f, 0.208f, 29.2f, 1.0f));
+        // ui_set_next_background_color((F4){0.007077888f, 0.007077888f, 0.007077888f, 1.0f});
+        ui_set_next_text_color((F4){0.526210363f, 0.000019104f, 0.000108155f, 1.0f});
         ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_BACKGROUND|row_sides , entry->str);
       } break;
 
@@ -405,7 +405,7 @@ Internal void lister_ui(void) {
         UI_Parent(drag_box)
         UI_Text_Align(UI_TEXT_ALIGN__CENTER)
         UI_Text_Padding(10.0f)
-        UI_Background_Color(oklch(0.25f, 0.0222f, 228.0f, 1.0f))
+        UI_Background_Color(((F4){0.008101465f, 0.017500665f, 0.023206312f, 1.0f}))
         UI_Flags(row_sides) {
           if (entry->kind == LISTER_ENTRY_KIND__L1) lister_drag_L1(entry);
           else lister_drag_F1(entry, 0, entry->str);
@@ -438,7 +438,7 @@ Internal void lister_ui(void) {
 
           // preview
           F4 color = as(entry->first_value, F4)[0];
-          ui_set_next_background_color(oklch_from_linear_rgb(color));
+          ui_set_next_background_color(color);
           ui_set_next_pref_width(ui_px(30.0f, 1.0f));
           ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DRAW_SIDE_RIGHT|row_sides, str8("color_preview"));
 
@@ -447,9 +447,9 @@ Internal void lister_ui(void) {
           UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f)) {
             String8 component_names[3] = {str8("R"), str8("G"), str8("B")};
             F4 component_colors[3] = {
-              oklch(0.27f, 0.1f, 27.0f, 1.0f),
-              oklch(0.27f, 0.09f, 143.0f, 1.0f),
-              oklch(0.27f, 0.09f, 256.0f, 1.0f),
+              (F4){0.072896494f, 0.002100070f, 0.002199672f, 1.0f},
+              (F4){0.000072204f, 0.030165538f, 0.000473949f, 1.0f},
+              (F4){0.000337558f, 0.018463532f, 0.082090153f, 1.0f},
             };
             for (L1 component = 0; component < 3; component += 1) {
               I1 not_last = (component < 2);
@@ -481,7 +481,7 @@ Internal void lister_ui(void) {
             }
             for (L1 option = 0; option < entry->data.enum_options.count; option += 1) {
               if (!enum_is_mixed && enum_value == option) {
-                ui_set_next_background_color(oklch(0.35f, 0.08f, 252.0f, 1.0f));
+                ui_set_next_background_color((F4){0.008402845f, 0.044952845f, 0.123825366f, 1.0f});
               }
 
               String8 name = entry->data.enum_options.names[option];
@@ -509,7 +509,7 @@ Internal void lister_ui(void) {
 
       // Cmd
       case LISTER_ENTRY_KIND__CMD: {
-        ui_set_next_background_color(oklch(0.2f, 0.1, 27.0f, 1.0f));
+        ui_set_next_background_color((F4){0.038710978f, -0.002232542f, -0.000659834f, 1.0f});
         ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
         UI_Box *cmd_box = ui_build_box_from_stringf(
           UI_BOX_FLAG__CLICKABLE|
@@ -533,7 +533,7 @@ Internal void lister_ui(void) {
         UI_Parent(outer) {
           F1 progress = entry->data.progress;
           ui_set_next_pref_width(ui_pct(progress, 1.0f));
-          ui_set_next_background_color(oklch(0.637f, 0.2f, 140.0f, 1.0f));
+          ui_set_next_background_color((F4){0.037265774f, 0.381785296f, 0.004780161f, 1.0f});
           ui_set_next_text_padding(10.0f);
           ui_build_box_from_stringf(
             UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DISABLE_TEXT_TRUNC,

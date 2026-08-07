@@ -562,21 +562,10 @@ Inline F2 rect_center(F4 rect) {
 ////////////////////////////////
 //~ kti: Colors
 
-F4 oklch(F1 l, F1 c, F1 h, F1 alpha) {
-  F1 h_rad = h * (PI / 180.0f);
-  F4 result = { l, c, h_rad, alpha };
-  return result;
-}
-
-F4 oklch_from_linear_rgb(F4 rgba) {
-  F1 r = rgba[0];
-  F1 g = rgba[1];
-  F1 b = rgba[2];
-  F1 a = rgba[3];
-
-  F1 l = 0.4122214708f*r + 0.5363325363f*g + 0.0514459929f*b;
-  F1 m = 0.2119034982f*r + 0.6806995451f*g + 0.1073969566f*b;
-  F1 s = 0.0883024619f*r + 0.2817188376f*g + 0.6299787005f*b;
+F4 oklch_from_linear_rgba(F4 rgba) {
+  F1 l = 0.4122214708f*rgba[0] + 0.5363325363f*rgba[1] + 0.0514459929f*rgba[2];
+  F1 m = 0.2119034982f*rgba[0] + 0.6806995451f*rgba[1] + 0.1073969566f*rgba[2];
+  F1 s = 0.0883024619f*rgba[0] + 0.2817188376f*rgba[1] + 0.6299787005f*rgba[2];
 
   F1 l_ = cbrtf(l);
   F1 m_ = cbrtf(m);
@@ -588,9 +577,33 @@ F4 oklch_from_linear_rgb(F4 rgba) {
 
   F1 chroma = sqrt_F1(ok_a*ok_a + ok_b*ok_b);
   F1 hue = atan2f(ok_b, ok_a);
-  if (hue < 0.0f) hue += 2.0f*PI;
+  if (hue < 0.0f) {
+    hue += PI*2;
+  }
 
-  F4 result = { ok_l, chroma, hue, a };
+  F4 result = {ok_l, chroma, hue, rgba[3]};
+  return result;
+}
+
+F4 linear_rgba_from_oklch(F1 l, F1 c, F1 h, F1 alpha) {
+  F1 h_rad = h;
+  F1 a = c*cosf(h_rad);
+  F1 b = c*sinf(h_rad);
+
+  F1 l_ = l + 0.3963377774f*a + 0.2158037573f*b;
+  F1 m_ = l - 0.1055613458f*a - 0.0638541728f*b;
+  F1 s_ = l - 0.0894841775f*a - 1.2914855480f*b;
+
+  F1 lms_l = l_*l_*l_;
+  F1 lms_m = m_*m_*m_;
+  F1 lms_s = s_*s_*s_;
+
+  F4 result = {
+    +4.0767416621f*lms_l - 3.3077115913f*lms_m + 0.2309699292f*lms_s,
+    -1.2684380046f*lms_l + 2.6097574011f*lms_m - 0.3413193965f*lms_s,
+    -0.0041960863f*lms_l - 0.7034186147f*lms_m + 1.7076147010f*lms_s,
+    alpha,
+  };
   return result;
 }
 

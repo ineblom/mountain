@@ -197,56 +197,143 @@ Internal void lister_f1_internal(Lister_Entry_Kind kind, String8 str, String8 na
   }
 }
 
-Internal void lister_apply_L1s(Lister_Entry *entry, L1 before, L1 after) {
-  if (before != after) {
-    for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-      if (entry->data.l1_options.apply == LISTER_APPLY__DELTA) {
-        lister_value(it, L1)[0] += after - before;
-      } else {
-        lister_value(it, L1)[0] = after;
-      }
+Internal void lister_drag_L1(Lister_Entry *entry) {
+  Lister_L1_Options *options = &entry->data.l1_options;
+  L1 before = lister_value(entry->first_value, L1)[0];
+  L1 after = before;
+
+  UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_l1_%p", entry));
+  UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__MOUSE_CLICKABLE|
+                                      UI_BOX_FLAG__DRAW_BACKGROUND|
+                                      UI_BOX_FLAG__DRAW_HOT_EFFECTS,
+                                      key);
+  UI_Signal signal = ui_signal_from_box(box);
+
+  F1 pixels_per_unit = options->pixels_per_unit;
+  if (pixels_per_unit == 0.0f) {
+    pixels_per_unit = 5.0f;
+
+    // Auto-calculate pixels per unit when possible.
+    if ((options->min != 0 || options->max != 0) &&
+        options->max > options->min && options->max < L1_MAX && box->rect[2] > 0.0f) {
+      L1 range = options->max - options->min;
+      pixels_per_unit = (F1)((D1)box->rect[2] / (D1)range);
     }
   }
-}
 
-Internal void lister_apply_F1s(Lister_Entry *entry, F1 before, F1 after) {
-  if (before != after) {
-    for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-      if (entry->data.f1_options.apply == LISTER_APPLY__DELTA) {
-        lister_value(it, F1)[0] += after - before;
-      } else {
-        lister_value(it, F1)[0] = after;
-      }
+  if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+      ui_store_drag_struct(&before);
     }
-  }
-}
-
-Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
-  F4 delta = after - before;
-  for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-    F4 old_value = lister_value(it, F4)[0];
-    if (entry->data.f1_options.apply == LISTER_APPLY__DELTA) {
-      lister_value(it, F4)[0] += delta;
+    L1 initial_value = ui_get_drag_struct(L1)[0];
+    SL1 delta = (SL1)(ui_drag_delta()[0] / pixels_per_unit);
+    L1 drag_max = options->max != 0 ? options->max : L1_MAX;
+    initial_value = Clamp(options->min, initial_value, drag_max);
+    if (delta < 0) {
+      L1 magnitude = (L1)-delta;
+      after = magnitude > initial_value - options->min ? options->min : initial_value - magnitude;
     } else {
-      // Preserve components that were not edited when setting multiple values.
-      for (L1 component = 0; component < 4; component += 1) {
-        if (delta[component] != 0.0f) {
-          lister_value(it, F4)[0][component] = after[component];
+      L1 magnitude = (L1)delta;
+      after = magnitude > drag_max - initial_value ? drag_max : initial_value + magnitude;
+    }
+  }
+
+  if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
+    after = options->default_value;
+  }
+
+  if (before != after) {
+    for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
+      if (options->apply == LISTER_APPLY__DELTA) {
+        lister_value(value, L1)[0] += after - before;
+      } else {
+        lister_value(value, L1)[0] = after;
+      }
+    }
+  }
+
+  UI_Parent(box) {
+    ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+    CString format = entry->value_count == 1 ? "%.*s %llu" : "%.*s";
+    ui_label(str8f(ui_build_arena(), format, (int)entry->str.len, entry->str.str, after));
+  }
+}
+
+Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
+  Lister_F1_Options *options = &entry->data.f1_options;
+  I1 is_scalar = entry->kind == LISTER_ENTRY_KIND__F1;
+  F1 before = is_scalar ?
+    lister_value(entry->first_value, F1)[0] :
+    lister_value(entry->first_value, F4)[0][component];
+  F1 after = before;
+
+  UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_f1_%p_%llu", entry, component));
+  UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__MOUSE_CLICKABLE|
+                                      UI_BOX_FLAG__DRAW_BACKGROUND|
+                                      UI_BOX_FLAG__DRAW_HOT_EFFECTS,
+                                      key);
+  UI_Signal signal = ui_signal_from_box(box);
+
+  F1 pixels_per_unit = options->pixels_per_unit;
+  if (pixels_per_unit == 0) {
+    pixels_per_unit = 50.0f;
+
+    // auto-calculate pixels per unit when possible.
+    if ((options->min != 0.0f || options->max != 0.0f) &&
+        options->max > options->min && options->max < F1_MAX && box->rect[2] > 0.0f) {
+      D1 range = (D1)options->max - (D1)options->min;
+      pixels_per_unit = (F1)((D1)box->rect[2] / range);
+    }
+  }
+
+  // handle dragging
+  if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+      ui_store_drag_struct(&before);
+    }
+    F1 initial_value = ui_get_drag_struct(F1)[0];
+    after = initial_value + ui_drag_delta()[0] / pixels_per_unit;
+  }
+
+  // default value
+  if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
+    after = options->default_value;
+  }
+
+  // clamp
+  if (options->min != 0 || options->max != 0) {
+    after = Clamp(options->min, after, options->max);
+  }
+
+  // update entry values
+  if (before != after) {
+    F1 delta = after - before;
+
+    for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
+      if (is_scalar) {
+        if (options->apply == LISTER_APPLY__DELTA) {
+          lister_value(value, F1)[0] += delta;
+        } else {
+          lister_value(value, F1)[0] = after;
+        }
+      } else {
+        if (options->apply == LISTER_APPLY__DELTA) {
+          lister_value(value, F4)[0][component] += delta;
+        } else {
+          lister_value(value, F4)[0][component] = after;
+        }
+
+        if (options->flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
+          // TODO: Implement.
         }
       }
     }
+  }
 
-    if (entry->data.f1_options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
-      F4 value = F4_with_w(lister_value(it, F4)[0], 0.0f);
-      F1 length_sq = length_sq_F4(value);
-      if (length_sq > Square(0.00001f)) {
-        lister_value(it, F4)[0] = value * (1.0f / sqrt_F1(length_sq));
-      } else {
-        old_value = F4_with_w(old_value, 0.0f);
-        F1 old_length_sq = length_sq_F4(old_value);
-        lister_value(it, F4)[0] = old_length_sq > Square(0.00001f) ? old_value * (1.0f / sqrt_F1(old_length_sq)) : (F4){0.0f, 0.0f, 1.0f, 0.0f};
-      }
-    }
+  UI_Parent(box) {
+    ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+    CString format = entry->value_count == 1 ? "%.*s %.2f" : "%.*s";
+    ui_label(str8f(ui_build_arena(), format, (int)label.len, label.str, after));
   }
 }
 
@@ -293,9 +380,6 @@ Internal void lister_ui(void) {
 
     UI_Box_Flags top_side = (visible_entry_idx == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
     visible_entry_idx += 1;
-    CString f1_label_format = entry->value_count == 1 ? "%.*s %.2f" : "%.*s";
-    CString l1_label_format = entry->value_count == 1 ? "%.*s %llu" : "%.*s";
-
     switch (entry->kind) {
       // Header
       case LISTER_ENTRY_KIND__HEADER: {
@@ -335,17 +419,12 @@ Internal void lister_ui(void) {
 
       // L1
       case LISTER_ENTRY_KIND__L1: {
-        UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_f1%p", entry);
+        UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_l1%p", entry);
         UI_Parent(drag_box) {
           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
           UI_Text_Padding(10.0f)
           UI_Flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side) {
-            L1 before = lister_value(entry->first_value, L1)[0];
-            L1 after = before;
-            UI_Signal signal = ui_drag_L1_label(entry->str, l1_label_format,
-              &after, entry->data.l1_options.default_value, entry->data.l1_options.pixels_per_unit,
-              entry->data.l1_options.min, entry->data.l1_options.max);
-            lister_apply_L1s(entry, before, after);
+            lister_drag_L1(entry);
           }
         }
       } break;
@@ -357,13 +436,7 @@ Internal void lister_ui(void) {
           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
           UI_Text_Padding(10.0f) {
             ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-            F1 before = lister_value(entry->first_value, F1)[0];
-            F1 after = before;
-            UI_Signal signal = ui_drag_F1_label(entry->str,
-              f1_label_format,
-              &after, entry->data.f1_options.default_value, entry->data.f1_options.pixels_per_unit,
-              entry->data.f1_options.min, entry->data.f1_options.max);
-            lister_apply_F1s(entry, before, after);
+            lister_drag_F1(entry, 0, entry->str);
           }
         }
       } break;
@@ -373,27 +446,18 @@ Internal void lister_ui(void) {
         UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
         UI_Parent(drag_box) {
           ui_set_next_text_padding(10.0f);
-          ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-           UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-           UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
-           entry->str);
+          ui_build_box_from_string(
+            UI_BOX_FLAG__DRAW_TEXT|
+            UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+            UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
+            entry->str);
           UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
-            F4 before = lister_value(entry->first_value, F4)[0];
-            F4 after = before;
-            F1 after_components[3] = {after[0], after[1], after[2]};
             String8 component_names[3] = {str8("X"), str8("Y"), str8("Z")};
-            for (L1 component = 0; component < ArrayCount(component_names); component += 1) {
-              UI_Box_Flags flags = UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side;
-              if (component + 1 < ArrayCount(component_names)) {
-                flags |= UI_BOX_FLAG__DRAW_SIDE_RIGHT;
-              }
-              ui_set_next_flags(flags);
-              ui_drag_F1_label(component_names[component], f1_label_format,
-                &after_components[component], entry->data.f1_options.default_value,
-                entry->data.f1_options.pixels_per_unit, entry->data.f1_options.min, entry->data.f1_options.max);
-              after[component] = after_components[component];
+            for (L1 component = 0; component < 3; component += 1) {
+              I1 is_last = (component == 2);
+              ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side|(UI_BOX_FLAG__DRAW_SIDE_RIGHT*is_last));
+              lister_drag_F1(entry, component, component_names[component]);
             }
-            lister_apply_F4s(entry, before, after);
           }
         }
       } break;
@@ -403,42 +467,36 @@ Internal void lister_ui(void) {
         UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
         UI_Parent(drag_box) {
           ui_set_next_text_padding(10.0f);
-          ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
-           UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-           UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
-           entry->str);
+          ui_build_box_from_string(
+            UI_BOX_FLAG__DRAW_TEXT|
+            UI_BOX_FLAG__DRAW_SIDE_RIGHT|
+            UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
+            entry->str);
 
-          F4 before = lister_value(entry->first_value, F4)[0];
-          F4 after = before;
-          F1 after_components[3] = {after[0], after[1], after[2]};
-          ui_set_next_background_color(oklch_from_linear_rgb(after));
+          // preview
+          F4 color = lister_value(entry->first_value, F4)[0];
+          ui_set_next_background_color(oklch_from_linear_rgb(color));
           ui_set_next_pref_width(ui_px(30.0f, 1.0f));
           ui_build_box_from_string(UI_BOX_FLAG__DRAW_BACKGROUND|
            UI_BOX_FLAG__DRAW_SIDE_RIGHT|
            UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
            top_side, str8("color_preview"));
 
+          // components
           UI_Text_Align(UI_TEXT_ALIGN__CENTER)
           UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f)) {
-            F1 pixels_per_unit = 0.0f;
             String8 component_names[3] = {str8("R"), str8("G"), str8("B")};
             F4 component_colors[3] = {
               oklch(0.27f, 0.1f, 27.0f, 1.0f),
               oklch(0.27f, 0.09f, 143.0f, 1.0f),
               oklch(0.27f, 0.09f, 256.0f, 1.0f),
             };
-            for (L1 component = 0; component < ArrayCount(component_names); component += 1) {
-              UI_Box_Flags flags = UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side;
-              if (component + 1 < ArrayCount(component_names)) {
-                flags |= UI_BOX_FLAG__DRAW_SIDE_RIGHT;
-              }
-              ui_set_next_flags(flags);
+            for (L1 component = 0; component < 3; component += 1) {
+              I1 is_last = (component == 2);
+              ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side|(is_last*UI_BOX_FLAG__DRAW_SIDE_RIGHT));
               ui_set_next_background_color(component_colors[component]);
-              ui_drag_F1_label(component_names[component], f1_label_format,
-                &after_components[component], 0.0f, pixels_per_unit, 0.0f, 1.0f);
-              after[component] = after_components[component];
+              lister_drag_F1(entry, component, component_names[component]);
             }
-            lister_apply_F4s(entry, before, after);
           }
         }
       } break;

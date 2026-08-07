@@ -1371,7 +1371,12 @@ Internal void lane(void *user_data) {
                     ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
                     ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
                     ui_set_next_background_color((F4){0.025f, 0.025f, 0.035f, 1.0f});
-                    view->viewport_box = ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__CLIP | UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__SCROLL, "##viewport_%p", panel);
+                    view->viewport_box = ui_build_box_from_stringf(
+                      UI_BOX_FLAG__DRAW_BACKGROUND|
+                      UI_BOX_FLAG__CLIP|
+                      UI_BOX_FLAG__CLICKABLE|
+                      UI_BOX_FLAG__SCROLL,
+                      "##viewport_%p", panel);
 
                     UI_Signal viewport_signal = ui_signal_from_box(view->viewport_box);
                     F2 drag_delta = ui_drag_delta();
@@ -1432,9 +1437,7 @@ Internal void lane(void *user_data) {
                     }
 
                     //- kti: Move along axis when dragging.
-                    if (mouse_captured &&
-                        viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING &&
-                        has_selection) {
+                    if (mouse_captured && viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && has_selection) {
                       F1 axis_len_sq = dot_F2(view->gizmo_drag_axis_screen, view->gizmo_drag_axis_screen);
                       if (axis_len_sq > 1.0f) {
                         F1 world_delta = dot_F2(drag_delta, view->gizmo_drag_axis_screen) / axis_len_sq;

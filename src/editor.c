@@ -1,11 +1,13 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: Avoid having lane_group_stop
-// Lane group could release itself.
-// Also add lane_group_is_nil function.
-
 //- kti: Render params in UI.
+
+//- kti: Move lister code to separate source file.
+// All ui widgets related to the lister should be moved there as well.
+// Aside from fundamental building blocks.
+// This allows for simplifying lister code since widgets can be custom
+// made to fit the lister i.e have multiple values.
 
 //- kti: Define scene by code.
 
@@ -179,6 +181,7 @@ typedef enum Lister_Entry_Kind {
   LISTER_ENTRY_KIND__HEADER,
   LISTER_ENTRY_KIND__TEXTEDIT,
   LISTER_ENTRY_KIND__F1,
+  LISTER_ENTRY_KIND__L1,
   LISTER_ENTRY_KIND__XYZ,
   LISTER_ENTRY_KIND__COLOR,
   LISTER_ENTRY_KIND__ENUM,
@@ -197,10 +200,20 @@ enum {
   LISTER_ENTRY_FLAG__NORMALIZE_F4 = 1 << 0,
 };
 
-typedef struct Lister_Number_Options Lister_Number_Options;
-struct Lister_Number_Options {
+typedef struct Lister_L1_Options Lister_L1_Options;
+struct Lister_L1_Options {
   Lister_Apply apply;
-  F1 default_f1;
+  L1 default_value;
+  L1 pixels_per_unit;
+  L1 min;
+  L1 max;
+  Lister_Entry_Flags flags;
+};
+
+typedef struct Lister_F1_Options Lister_F1_Options;
+struct Lister_F1_Options {
+  Lister_Apply apply;
+  F1 default_value;
   F1 pixels_per_unit;
   F1 min;
   F1 max;
@@ -232,7 +245,8 @@ struct Lister_Entry {
   L1 value_count;
 
   union {
-    Lister_Number_Options number;
+    Lister_F1_Options f1_options;
+    Lister_L1_Options l1_options;
     Lister_Enum_Options enum_options;
     Cmd cmd;
     F1 progress;
@@ -866,27 +880,47 @@ Internal void lister_textedit(String8 str, String8 name, B1 *data, L1 *len, L1 c
   }
 }
 
-Internal void lister_number(Lister_Entry_Kind kind, String8 str, String8 name, void *data, Lister_Number_Options options) {
-  Lister_Entry *entry = lister_entry_get_or_push(kind, str);
+Internal void lister_l1(String8 str, String8 name, void *data, Lister_L1_Options options) {
+  Lister_Entry *entry = lister_entry_get_or_push(LISTER_ENTRY_KIND__L1, str);
   if (entry) {
-    entry->data.number = options;
+    entry->data.l1_options = options;
     lister_value_push(entry, name, data);
   }
 }
 
-#define lister_F1(str, name, data, ...) lister_number(LISTER_ENTRY_KIND__F1, (str), (name), (data), (Lister_Number_Options){__VA_ARGS__})
-#define lister_xyz(str, name, data, ...) lister_number(LISTER_ENTRY_KIND__XYZ, (str), (name), (data), (Lister_Number_Options){__VA_ARGS__})
-#define lister_color(str, name, data, apply_mode) lister_number(LISTER_ENTRY_KIND__COLOR, (str), (name), (data), (Lister_Number_Options){.apply = (apply_mode), .max = 1.0f})
+Internal void lister_f1(Lister_Entry_Kind kind, String8 str, String8 name, void *data, Lister_F1_Options options) {
+  Lister_Entry *entry = lister_entry_get_or_push(kind, str);
+  if (entry) {
+    entry->data.f1_options= options;
+    lister_value_push(entry, name, data);
+  }
+}
+
+#define lister_L1(str, name, data, ...) lister_l1((str), (name), (data), (Lister_L1_Options){__VA_ARGS__})
+#define lister_F1(str, name, data, ...) lister_f1(LISTER_ENTRY_KIND__F1, (str), (name), (data), (Lister_F1_Options){__VA_ARGS__})
+#define lister_xyz(str, name, data, ...) lister_f1(LISTER_ENTRY_KIND__XYZ, (str), (name), (data), (Lister_F1_Options){__VA_ARGS__})
+#define lister_color(str, name, data, apply_mode) lister_f1(LISTER_ENTRY_KIND__COLOR, (str), (name), (data), (Lister_F1_Options){.apply = (apply_mode), .max = 1.0f})
 #define lister_value(value, T) ((T *)(value)->data)
+
+Internal void lister_apply_L1s(Lister_Entry *entry, L1 before, L1 after) {
+  if (before != after) {
+    for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
+      if (entry->data.l1_options.apply == LISTER_APPLY__DELTA) {
+        lister_value(it, L1)[0] += after - before;
+      } else {
+        lister_value(it, L1)[0] = after;
+      }
+    }
+  }
+}
 
 Internal void lister_apply_F1s(Lister_Entry *entry, F1 before, F1 after) {
   if (before != after) {
-    F1 value = entry->data.number.apply == LISTER_APPLY__DELTA ? after - before : after;
     for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-      if (entry->data.number.apply == LISTER_APPLY__DELTA) {
-        lister_value(it, F1)[0] += value;
+      if (entry->data.f1_options.apply == LISTER_APPLY__DELTA) {
+        lister_value(it, F1)[0] += after - before;
       } else {
-        lister_value(it, F1)[0] = value;
+        lister_value(it, F1)[0] = after;
       }
     }
   }
@@ -896,7 +930,7 @@ Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
   F4 delta = after - before;
   for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
     F4 old_value = lister_value(it, F4)[0];
-    if (entry->data.number.apply == LISTER_APPLY__DELTA) {
+    if (entry->data.f1_options.apply == LISTER_APPLY__DELTA) {
       lister_value(it, F4)[0] += delta;
     } else {
       // Preserve components that were not edited when setting multiple values.
@@ -907,7 +941,7 @@ Internal void lister_apply_F4s(Lister_Entry *entry, F4 before, F4 after) {
       }
     }
 
-    if (entry->data.number.flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
+    if (entry->data.f1_options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
       F4 value = F4_with_w(lister_value(it, F4)[0], 0.0f);
       F1 length_sq = length_sq_F4(value);
       if (length_sq > Square(0.00001f)) {
@@ -977,8 +1011,8 @@ Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Sign
         row_height += 12.0f;
 
         for (Lister_Value *it = entry->first_value; it != 0; it = it->next) {
-          F1 default_value = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->data.number.default_f1;
-          F1 pixels_per_unit = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->data.number.pixels_per_unit;
+          F1 default_value = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->data.f1_options.default_value;
+          F1 pixels_per_unit = entry->kind == LISTER_ENTRY_KIND__COLOR ? 0.0f : entry->data.f1_options.pixels_per_unit;
           F1 *value = 0;
           if (entry->kind == LISTER_ENTRY_KIND__F1) {
             value = lister_value(it, F1);
@@ -989,7 +1023,7 @@ Internal void lister_value_tooltip(UI_Box *overlay, Lister_Entry *entry, UI_Sign
           ui_set_next_pref_width(ui_children_sum(1.0f));
           ui_set_next_pref_height(ui_px(row_height, 1.0f));
           ui_set_next_child_layout_axis(AXIS__X);
-          UI_Signal drag_signal = ui_drag_F1(value, default_value, pixels_per_unit, entry->data.number.min, entry->data.number.max);
+          UI_Signal drag_signal = ui_drag_F1(value, default_value, pixels_per_unit, entry->data.f1_options.min, entry->data.f1_options.max);
           UI_Parent(drag_signal.box)
           UI_Text_Padding(6.0f) {
             ui_set_next_pref_width(ui_px(name_width, 1.0f));
@@ -1336,12 +1370,12 @@ Internal void lane(void *user_data) {
             lister_xyz(str8("Size"), entity_name,
               (is_shape && entity->shape_kind == SHAPE_KIND__BOX) ? &entity->size : 0,
               .apply = LISTER_APPLY__DELTA,
-              .default_f1 = 1.0f,
+              .default_value = 1.0f,
               .max = F1_MAX);
 
             lister_F1(str8("Diameter"), entity_name, (is_shape && entity->shape_kind == SHAPE_KIND__SPHERE) ? &entity->sphere_diameter : 0,
               .apply = LISTER_APPLY__DELTA,
-              .default_f1 = 1.0f,
+              .default_value = 1.0f,
               .max = F1_MAX);
 
             lister_xyz(str8("Normal"), entity_name, (is_shape && entity->shape_kind == SHAPE_KIND__PLANE) ? &entity->plane_normal : 0,
@@ -1358,11 +1392,11 @@ Internal void lane(void *user_data) {
               lister_color(str8("Base"), entity_name, &entity->material.base_color, LISTER_APPLY__SET);
               lister_F1(str8("Metallic"), entity_name, &entity->material.metallic,
                 .apply = LISTER_APPLY__DELTA,
-                .default_f1 = 0.3f,
+                .default_value = 0.3f,
                 .max = 1.0f);
               lister_F1(str8("Roughness"), entity_name, &entity->material.roughness,
                 .apply = LISTER_APPLY__DELTA,
-                .default_f1 = 0.3f,
+                .default_value = 0.3f,
                 .max = 1.0f);
               lister_color(str8("Emissive"), entity_name, &entity->material.emissive, LISTER_APPLY__SET);
             }
@@ -1381,7 +1415,7 @@ Internal void lane(void *user_data) {
               lister_F1(str8("Vertical FOV"), entity_name,
                 &entity->camera_vertical_fov,
                 .apply = LISTER_APPLY__SET,
-                .default_f1 = 70.0f*PI/180.0f,
+                .default_value = 70.0f*PI/180.0f,
                 .min = PI/180.0f,
                 .max = 179.0f*PI/180.0f);
               lister_F1(str8("Aperture Radius"), entity_name,
@@ -1391,7 +1425,7 @@ Internal void lane(void *user_data) {
               lister_F1(str8("Focal Distance"), entity_name,
                 &entity->camera_focal_distance,
                 .apply = LISTER_APPLY__SET,
-                .default_f1 = 5.0f,
+                .default_value = 5.0f,
                 .min = 0.001f,
                 .max = F1_MAX);
             }
@@ -1414,6 +1448,41 @@ Internal void lane(void *user_data) {
             });
           }
         }
+
+        //- kti: Render Settings
+        lister_header(str8("Render Settings"));
+        lister_L1(str8("Width"), str8(""), &state->render_settings.width,
+          .apply = LISTER_APPLY__SET,
+          .default_value = 1280,
+          .min = 320);
+        lister_L1(str8("Height"), str8(""), &state->render_settings.height,
+          .apply = LISTER_APPLY__SET,
+          .default_value = 720,
+          .min = 160);
+        lister_L1(str8("Rays Per Pixel"), str8(""), &state->render_settings.rays_per_pixel,
+          .apply = LISTER_APPLY__SET,
+          .default_value = 64);
+        lister_L1(str8("Max Bounces"), str8(""), &state->render_settings.max_num_bounces,
+          .apply = LISTER_APPLY__SET,
+          .default_value = 8);
+
+        lister_header(str8("Bloom"));
+
+        lister_L1(str8("Passes"), str8(""), &state->render_settings.bloom.pass_count,
+          .apply = LISTER_APPLY__SET,
+          .default_value = 8);
+
+        lister_F1(str8("Threshold"), str8(""), &state->render_settings.bloom.threshold,
+          .apply = LISTER_APPLY__SET,
+          .default_value = 0.5f);
+
+        lister_F1(str8("Strength"), str8(""), &state->render_settings.bloom.strength,
+          .apply = LISTER_APPLY__SET,
+          .default_value = 0.4f);
+
+        lister_F1(str8("Knee"), str8(""), &state->render_settings.bloom.knee,
+          .apply = LISTER_APPLY__SET,
+          .default_value = 0.5f);
 
         //- kti: Actions.
         lister_header(str8("Actions"));
@@ -1628,10 +1697,17 @@ Internal void lane(void *user_data) {
 
                 View *view = &panel->views[panel->selected_view_idx];
                 switch (view->kind) {
-                  //- kti: Lister view.
+                  //- kti: Lister
                   case VIEW_KIND__LISTER: {
                     ui_set_next_child_layout_axis(AXIS__Y);
-                    UI_Box *lister = ui_build_box_from_stringf(0, "lister%p", view);
+                    ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
+                    UI_Box *lister = ui_build_box_from_stringf(
+                      UI_BOX_FLAG__CLIP|
+                      UI_BOX_FLAG__ALLOW_OVERFLOW_Y|
+                      UI_BOX_FLAG__VIEW_SCROLL_Y|
+                      UI_BOX_FLAG__VIEW_CLAMP_Y,
+                      "lister%p", view);
+                    ui_signal_from_box(lister);;
                     UI_Parent(lister) {
                       L1 visible_entry_idx = 0;
                       for (L1 i = 0; i < state->lister_entry_count; i += 1) {
@@ -1647,9 +1723,11 @@ Internal void lane(void *user_data) {
 
                         UI_Box_Flags top_side = (visible_entry_idx == 0)*UI_BOX_FLAG__DRAW_SIDE_TOP;
                         visible_entry_idx += 1;
-                        CString drag_label_format = entry->value_count == 1 ? "%.*s %.2f" : "%.*s";
+                        CString f1_label_format = entry->value_count == 1 ? "%.*s %.2f" : "%.*s";
+                        CString l1_label_format = entry->value_count == 1 ? "%.*s %llu" : "%.*s";
 
                         switch (entry->kind) {
+                          // Header
                           case LISTER_ENTRY_KIND__HEADER: {
                             ui_set_next_text_padding(10.0f);
                             ui_set_next_background_color(oklch(0.192f, 0.0f, 0.0f, 1.0f));
@@ -1659,6 +1737,8 @@ Internal void lane(void *user_data) {
                                                      UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
                                                      top_side , entry->str);
                           } break;
+
+                          // Textedit
                           case LISTER_ENTRY_KIND__TEXTEDIT: {
                             Lister_Value *first_value = entry->first_value;
                             ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
@@ -1684,54 +1764,72 @@ Internal void lane(void *user_data) {
                               }
                             }
                           } break;
+
+                          // L1
+                          case LISTER_ENTRY_KIND__L1: {
+                            UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_f1%p", entry);
+                            UI_Parent(drag_box) {
+                              UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                              UI_Text_Padding(10.0f)
+                              UI_Flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side) {
+                                L1 before = lister_value(entry->first_value, L1)[0];
+                                L1 after = before;
+                                UI_Signal signal = ui_drag_L1_label(entry->str, l1_label_format,
+                                                                    &after, entry->data.l1_options.default_value, entry->data.l1_options.pixels_per_unit,
+                                                                    entry->data.l1_options.min, entry->data.l1_options.max);
+                                focus_on_press(panel, signal);
+                                lister_apply_L1s(entry, before, after);
+                              }
+                            }
+                          } break;
+
+                          // F1
                           case LISTER_ENTRY_KIND__F1: {
                             UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_f1%p", entry);
                             UI_Parent(drag_box) {
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER)
                               UI_Text_Padding(10.0f) {
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                                  top_side);
+                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
                                 F1 before = lister_value(entry->first_value, F1)[0];
                                 F1 after = before;
                                 UI_Signal signal = ui_drag_F1_label(entry->str,
-                                                                    drag_label_format,
-                                                                    &after, entry->data.number.default_f1, entry->data.number.pixels_per_unit,
-                                                                    entry->data.number.min, entry->data.number.max);
+                                                                    f1_label_format,
+                                                                    &after, entry->data.f1_options.default_value, entry->data.f1_options.pixels_per_unit,
+                                                                    entry->data.f1_options.min, entry->data.f1_options.max);
                                 focus_on_press(panel, signal);
                                 lister_apply_F1s(entry, before, after);
                                 lister_value_tooltip(overlay, entry, signal, 0);
                               }
                             }
                           } break;
+
+                          // XYZ
                           case LISTER_ENTRY_KIND__XYZ: {
                             UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
                             UI_Parent(drag_box) {
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
                                                        UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                                       top_side,
+                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
                                                        entry->str);
                               UI_Text_Align(UI_TEXT_ALIGN__CENTER) {
                                 F4 before = lister_value(entry->first_value, F4)[0];
                                 F4 after = before;
                                 F1 after_components[3] = {after[0], after[1], after[2]};
                                 UI_Signal signals[3] = {0};
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                signals[0] = ui_drag_F1_label(str8("X"), drag_label_format,
-                                                              &after_components[0], entry->data.number.default_f1, entry->data.number.pixels_per_unit, entry->data.number.min, entry->data.number.max);
-                                focus_on_press(panel, signals[0]);
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                signals[1] = ui_drag_F1_label(str8("Y"), drag_label_format,
-                                                              &after_components[1], entry->data.number.default_f1, entry->data.number.pixels_per_unit, entry->data.number.min, entry->data.number.max);
-                                focus_on_press(panel, signals[1]);
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                signals[2] = ui_drag_F1_label(str8("Z"), drag_label_format,
-                                                              &after_components[2], entry->data.number.default_f1, entry->data.number.pixels_per_unit, entry->data.number.min, entry->data.number.max);
-                                focus_on_press(panel, signals[2]);
-                                after[0] = after_components[0];
-                                after[1] = after_components[1];
-                                after[2] = after_components[2];
+                                String8 component_names[3] = {str8("X"), str8("Y"), str8("Z")};
+                                for (L1 component = 0; component < ArrayCount(component_names); component += 1) {
+                                  UI_Box_Flags flags = UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side;
+                                  if (component + 1 < ArrayCount(component_names)) {
+                                    flags |= UI_BOX_FLAG__DRAW_SIDE_RIGHT;
+                                  }
+                                  ui_set_next_flags(flags);
+                                  signals[component] = ui_drag_F1_label(component_names[component], f1_label_format,
+                                                                        &after_components[component], entry->data.f1_options.default_value,
+                                                                        entry->data.f1_options.pixels_per_unit, entry->data.f1_options.min, entry->data.f1_options.max);
+                                  focus_on_press(panel, signals[component]);
+                                  after[component] = after_components[component];
+                                }
                                 lister_apply_F4s(entry, before, after);
                                 for (L1 component = 0; component < 3; component += 1) {
                                   lister_value_tooltip(overlay, entry, signals[component], component);
@@ -1739,14 +1837,15 @@ Internal void lane(void *user_data) {
                               }
                             }
                           } break;
+
+                          // Color
                           case LISTER_ENTRY_KIND__COLOR: {
                             UI_Box *drag_box = ui_build_box_from_stringf(0, "drag_xyz%p", entry);
                             UI_Parent(drag_box) {
                               ui_set_next_text_padding(10.0f);
                               ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|
                                                        UI_BOX_FLAG__DRAW_SIDE_RIGHT|
-                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|
-                                                       top_side,
+                                                       UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side,
                                                        entry->str);
 
                               F4 before = lister_value(entry->first_value, F4)[0];
@@ -1763,24 +1862,24 @@ Internal void lane(void *user_data) {
                               UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f)) {
                                 F1 pixels_per_unit = 0.0f;
                                 UI_Signal signals[3] = {0};
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_set_next_background_color(oklch(0.27f, 0.1f, 27.0f, 1.0f));
-                                signals[0] = ui_drag_F1_label(str8("R"), drag_label_format,
-                                                              &after_components[0], 0.0f, pixels_per_unit, 0.0f, 1.0f);
-                                focus_on_press(panel, signals[0]);
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_set_next_background_color(oklch(0.27f, 0.09f, 143.0f, 1.0f));
-                                signals[1] = ui_drag_F1_label(str8("G"), drag_label_format,
-                                                              &after_components[1], 0.0f, pixels_per_unit, 0.0f, 1.0f);
-                                focus_on_press(panel, signals[1]);
-                                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side);
-                                ui_set_next_background_color(oklch(0.27f, 0.09f, 256.0f, 1.0f));
-                                signals[2] = ui_drag_F1_label(str8("B"), drag_label_format,
-                                                              &after_components[2], 0.0f, pixels_per_unit, 0.0f, 1.0f);
-                                focus_on_press(panel, signals[2]);
-                                after[0] = after_components[0];
-                                after[1] = after_components[1];
-                                after[2] = after_components[2];
+                                String8 component_names[3] = {str8("R"), str8("G"), str8("B")};
+                                F4 component_colors[3] = {
+                                  oklch(0.27f, 0.1f, 27.0f, 1.0f),
+                                  oklch(0.27f, 0.09f, 143.0f, 1.0f),
+                                  oklch(0.27f, 0.09f, 256.0f, 1.0f),
+                                };
+                                for (L1 component = 0; component < ArrayCount(component_names); component += 1) {
+                                  UI_Box_Flags flags = UI_BOX_FLAG__DRAW_SIDE_BOTTOM|top_side;
+                                  if (component + 1 < ArrayCount(component_names)) {
+                                    flags |= UI_BOX_FLAG__DRAW_SIDE_RIGHT;
+                                  }
+                                  ui_set_next_flags(flags);
+                                  ui_set_next_background_color(component_colors[component]);
+                                  signals[component] = ui_drag_F1_label(component_names[component], f1_label_format,
+                                                                        &after_components[component], 0.0f, pixels_per_unit, 0.0f, 1.0f);
+                                  focus_on_press(panel, signals[component]);
+                                  after[component] = after_components[component];
+                                }
                                 lister_apply_F4s(entry, before, after);
                                 for (L1 component = 0; component < 3; component += 1) {
                                   lister_value_tooltip(overlay, entry, signals[component], component);
@@ -1788,6 +1887,8 @@ Internal void lane(void *user_data) {
                               }
                             }
                           } break;
+
+                          // Enum
                           case LISTER_ENTRY_KIND__ENUM: {
                             ui_set_next_child_layout_axis(AXIS__X);
                             UI_Box *enum_box = ui_build_box_from_stringf(0, "enum_%p", entry);
@@ -1836,6 +1937,8 @@ Internal void lane(void *user_data) {
                               }
                             }
                           } break;
+
+                          // Cmd
                           case LISTER_ENTRY_KIND__CMD: {
                             ui_set_next_background_color(oklch(0.2f, 0.1, 27.0f, 1.0f));
                             ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);

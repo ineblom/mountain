@@ -12,12 +12,6 @@ typedef enum Lister_Entry_Kind {
   LISTER_ENTRY_KIND__PROGRESS,
 } Lister_Entry_Kind;
 
-typedef I1 Lister_Apply;
-enum {
-  LISTER_APPLY__DELTA,
-  LISTER_APPLY__SET,
-};
-
 typedef L1 Lister_Entry_Flags;
 enum {
   LISTER_ENTRY_FLAG__NORMALIZE_F4 = 1 << 0,
@@ -25,7 +19,6 @@ enum {
 
 typedef struct Lister_L1_Options Lister_L1_Options;
 struct Lister_L1_Options {
-  Lister_Apply apply;
   L1 default_value;
   L1 pixels_per_unit;
   L1 min;
@@ -35,7 +28,6 @@ struct Lister_L1_Options {
 
 typedef struct Lister_F1_Options Lister_F1_Options;
 struct Lister_F1_Options {
-  Lister_Apply apply;
   F1 default_value;
   F1 pixels_per_unit;
   F1 min;
@@ -102,7 +94,7 @@ Internal void lister_ui(void);
 #define lister_L1(str, name, data, ...) lister_l1_internal((str), (name), (data), (Lister_L1_Options){__VA_ARGS__})
 #define lister_F1(str, name, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__F1, (str), (name), (data), (Lister_F1_Options){__VA_ARGS__})
 #define lister_xyz(str, name, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__XYZ, (str), (name), (data), (Lister_F1_Options){__VA_ARGS__})
-#define lister_color(str, name, data, apply_mode) lister_f1_internal(LISTER_ENTRY_KIND__COLOR, (str), (name), (data), (Lister_F1_Options){.apply = (apply_mode), .max = 1.0f})
+#define lister_color(str, name, data) lister_f1_internal(LISTER_ENTRY_KIND__COLOR, (str), (name), (data), (Lister_F1_Options){.max = 1.0f})
 #define lister_value(value, T) ((T *)(value)->data)
 
 #endif
@@ -197,62 +189,77 @@ Internal void lister_f1_internal(Lister_Entry_Kind kind, String8 str, String8 na
   }
 }
 
-Internal void lister_drag_L1(Lister_Entry *entry) {
-  Lister_L1_Options *options = &entry->data.l1_options;
-  L1 before = lister_value(entry->first_value, L1)[0];
-  L1 after = before;
+typedef struct Lister_Drag Lister_Drag;
+struct Lister_Drag {
+  UI_Box *box;
+  UI_Signal signal;
+};
 
-  UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_l1_%p", entry));
-  UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__MOUSE_CLICKABLE|
+Internal Lister_Drag lister_drag_begin(
+  Lister_Entry *entry,
+  L1 component) {
+  Lister_Drag result = {0};
+
+  UI_Key key = ui_key_from_string(
+    ui_active_seed_key(),
+    str8f(ui_build_arena(), "lister_drag_%p_%llu", entry, component));
+  result.box = ui_build_box_from_key(UI_BOX_FLAG__MOUSE_CLICKABLE|
                                       UI_BOX_FLAG__DRAW_BACKGROUND|
                                       UI_BOX_FLAG__DRAW_HOT_EFFECTS,
                                       key);
-  UI_Signal signal = ui_signal_from_box(box);
+  result.signal = ui_signal_from_box(result.box);
 
-  F1 pixels_per_unit = options->pixels_per_unit;
+  return result;
+}
+
+Internal void lister_drag_L1(Lister_Entry *entry) {
+  Lister_L1_Options options = entry->data.l1_options;
+  L1 before = lister_value(entry->first_value, L1)[0];
+  L1 after = before;
+
+  L1 true_max = options.max != 0 ? options.max : L1_MAX;
+  Lister_Drag drag = lister_drag_begin(entry, 0);
+
+  F1 pixels_per_unit = options.pixels_per_unit;
   if (pixels_per_unit == 0.0f) {
     pixels_per_unit = 5.0f;
 
     // Auto-calculate pixels per unit when possible.
-    if ((options->min != 0 || options->max != 0) &&
-        options->max > options->min && options->max < L1_MAX && box->rect[2] > 0.0f) {
-      L1 range = options->max - options->min;
-      pixels_per_unit = (F1)((D1)box->rect[2] / (D1)range);
+    if (options.max > options.min && drag.box->rect[2] > 0.0f) {
+      L1 range = options.max - options.min;
+      pixels_per_unit = (F1)((D1)drag.box->rect[2] / (D1)range);
     }
   }
 
-  if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+  if (drag.signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+    if (drag.signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
       ui_store_drag_struct(&before);
     }
     L1 initial_value = ui_get_drag_struct(L1)[0];
+
+    initial_value = Clamp(options.min, initial_value, true_max);
+
     SL1 delta = (SL1)(ui_drag_delta()[0] / pixels_per_unit);
-    L1 drag_max = options->max != 0 ? options->max : L1_MAX;
-    initial_value = Clamp(options->min, initial_value, drag_max);
     if (delta < 0) {
       L1 magnitude = (L1)-delta;
-      after = magnitude > initial_value - options->min ? options->min : initial_value - magnitude;
+      after = magnitude > initial_value - options.min ? options.min : initial_value - magnitude;
     } else {
       L1 magnitude = (L1)delta;
-      after = magnitude > drag_max - initial_value ? drag_max : initial_value + magnitude;
+      after = magnitude > true_max - initial_value ? true_max : initial_value + magnitude;
     }
   }
 
-  if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
-    after = options->default_value;
+  if (drag.signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
+    after = options.default_value;
   }
 
   if (before != after) {
     for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
-      if (options->apply == LISTER_APPLY__DELTA) {
-        lister_value(value, L1)[0] += after - before;
-      } else {
-        lister_value(value, L1)[0] = after;
-      }
+      lister_value(value, L1)[0] += after - before;
     }
   }
 
-  UI_Parent(box) {
+  UI_Parent(drag.box) {
     ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
     CString format = entry->value_count == 1 ? "%.*s %llu" : "%.*s";
     ui_label(str8f(ui_build_arena(), format, (int)entry->str.len, entry->str.str, after));
@@ -260,35 +267,29 @@ Internal void lister_drag_L1(Lister_Entry *entry) {
 }
 
 Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
-  Lister_F1_Options *options = &entry->data.f1_options;
+  Lister_F1_Options options = entry->data.f1_options;
   I1 is_scalar = entry->kind == LISTER_ENTRY_KIND__F1;
   F1 before = is_scalar ?
     lister_value(entry->first_value, F1)[0] :
     lister_value(entry->first_value, F4)[0][component];
   F1 after = before;
 
-  UI_Key key = ui_key_from_string(ui_active_seed_key(), str8f(ui_build_arena(), "drag_f1_%p_%llu", entry, component));
-  UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__MOUSE_CLICKABLE|
-                                      UI_BOX_FLAG__DRAW_BACKGROUND|
-                                      UI_BOX_FLAG__DRAW_HOT_EFFECTS,
-                                      key);
-  UI_Signal signal = ui_signal_from_box(box);
+  Lister_Drag drag = lister_drag_begin(entry, component);
 
-  F1 pixels_per_unit = options->pixels_per_unit;
-  if (pixels_per_unit == 0) {
+  F1 pixels_per_unit = options.pixels_per_unit;
+  if (pixels_per_unit == 0.0f) {
     pixels_per_unit = 50.0f;
 
-    // auto-calculate pixels per unit when possible.
-    if ((options->min != 0.0f || options->max != 0.0f) &&
-        options->max > options->min && options->max < F1_MAX && box->rect[2] > 0.0f) {
-      D1 range = (D1)options->max - (D1)options->min;
-      pixels_per_unit = (F1)((D1)box->rect[2] / range);
+    // Auto-calculate pixels per unit when possible.
+    if (options.max > options.min && drag.box->rect[2] > 0.0f) {
+      D1 range = (D1)options.max - (D1)options.min;
+      pixels_per_unit = (F1)((D1)drag.box->rect[2] / range);
     }
   }
 
   // handle dragging
-  if (signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+  if (drag.signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
+    if (drag.signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
       ui_store_drag_struct(&before);
     }
     F1 initial_value = ui_get_drag_struct(F1)[0];
@@ -296,13 +297,13 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
   }
 
   // default value
-  if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
-    after = options->default_value;
+  if (drag.signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED) {
+    after = options.default_value;
   }
 
   // clamp
-  if (options->min != 0 || options->max != 0) {
-    after = Clamp(options->min, after, options->max);
+  if (options.min != 0 || options.max != 0) {
+    after = Clamp(options.min, after, options.max);
   }
 
   // update entry values
@@ -311,26 +312,18 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
 
     for (Lister_Value *value = entry->first_value; value != 0; value = value->next) {
       if (is_scalar) {
-        if (options->apply == LISTER_APPLY__DELTA) {
-          lister_value(value, F1)[0] += delta;
-        } else {
-          lister_value(value, F1)[0] = after;
-        }
+        lister_value(value, F1)[0] += delta;
       } else {
-        if (options->apply == LISTER_APPLY__DELTA) {
-          lister_value(value, F4)[0][component] += delta;
-        } else {
-          lister_value(value, F4)[0][component] = after;
-        }
+        lister_value(value, F4)[0][component] += delta;
 
-        if (options->flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
+        if (options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
           // TODO: Implement.
         }
       }
     }
   }
 
-  UI_Parent(box) {
+  UI_Parent(drag.box) {
     ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
     CString format = entry->value_count == 1 ? "%.*s %.2f" : "%.*s";
     ui_label(str8f(ui_build_arena(), format, (int)label.len, label.str, after));

@@ -998,7 +998,6 @@ Internal void lane(void *user_data) {
 
             lister_xyz(str8("Pos"), entity_name,
               &entity->pos,
-              .apply = LISTER_APPLY__DELTA,
               .pixels_per_unit = 50.0f);
 
             lister_enum(str8("Shape"), entity_name,
@@ -1009,17 +1008,14 @@ Internal void lane(void *user_data) {
 
             lister_xyz(str8("Size"), entity_name,
               (is_shape && entity->shape_kind == SHAPE_KIND__BOX) ? &entity->size : 0,
-              .apply = LISTER_APPLY__DELTA,
               .default_value = 1.0f,
               .max = F1_MAX);
 
             lister_F1(str8("Diameter"), entity_name, (is_shape && entity->shape_kind == SHAPE_KIND__SPHERE) ? &entity->sphere_diameter : 0,
-              .apply = LISTER_APPLY__DELTA,
               .default_value = 1.0f,
               .max = F1_MAX);
 
             lister_xyz(str8("Normal"), entity_name, (is_shape && entity->shape_kind == SHAPE_KIND__PLANE) ? &entity->plane_normal : 0,
-              .apply = LISTER_APPLY__SET,
               .pixels_per_unit = 50.0f,
               .min = -1.0f,
               .max = 1.0f,
@@ -1029,16 +1025,14 @@ Internal void lane(void *user_data) {
 
             if (is_shape) {
               lister_header(str8("Material"));
-              lister_color(str8("Base"), entity_name, &entity->material.base_color, LISTER_APPLY__SET);
+              lister_color(str8("Base"), entity_name, &entity->material.base_color);
               lister_F1(str8("Metallic"), entity_name, &entity->material.metallic,
-                .apply = LISTER_APPLY__DELTA,
                 .default_value = 0.3f,
                 .max = 1.0f);
               lister_F1(str8("Roughness"), entity_name, &entity->material.roughness,
-                .apply = LISTER_APPLY__DELTA,
                 .default_value = 0.3f,
                 .max = 1.0f);
-              lister_color(str8("Emissive"), entity_name, &entity->material.emissive, LISTER_APPLY__SET);
+              lister_color(str8("Emissive"), entity_name, &entity->material.emissive);
             }
 
             //- kti: Camera entries.
@@ -1047,24 +1041,20 @@ Internal void lane(void *user_data) {
               lister_header(str8("Camera"));
               lister_xyz(str8("Forward"), entity_name,
                 &entity->camera_forward,
-                .apply = LISTER_APPLY__SET,
                 .pixels_per_unit = 50.0f,
                 .min = -1.0f,
                 .max = 1.0f,
                 .flags = LISTER_ENTRY_FLAG__NORMALIZE_F4);
               lister_F1(str8("Vertical FOV"), entity_name,
                 &entity->camera_vertical_fov,
-                .apply = LISTER_APPLY__SET,
                 .default_value = 70.0f*PI/180.0f,
                 .min = PI/180.0f,
                 .max = 179.0f*PI/180.0f);
               lister_F1(str8("Aperture Radius"), entity_name,
                 &entity->camera_aperture_radius,
-                .apply = LISTER_APPLY__SET,
                 .max = F1_MAX);
               lister_F1(str8("Focal Distance"), entity_name,
                 &entity->camera_focal_distance,
-                .apply = LISTER_APPLY__SET,
                 .default_value = 5.0f,
                 .min = 0.001f,
                 .max = F1_MAX);
@@ -1094,36 +1084,28 @@ Internal void lane(void *user_data) {
         //- kti: Render Settings
         lister_header(str8("Render Settings"));
         lister_L1(str8("Width"), str8(""), &state->render_settings.width,
-          .apply = LISTER_APPLY__SET,
           .default_value = 1280,
           .min = 320);
         lister_L1(str8("Height"), str8(""), &state->render_settings.height,
-          .apply = LISTER_APPLY__SET,
           .default_value = 720,
           .min = 160);
         lister_L1(str8("Rays Per Pixel"), str8(""), &state->render_settings.rays_per_pixel,
-          .apply = LISTER_APPLY__SET,
           .default_value = 64);
         lister_L1(str8("Max Bounces"), str8(""), &state->render_settings.max_num_bounces,
-          .apply = LISTER_APPLY__SET,
           .default_value = 8);
 
         lister_header(str8("Bloom"));
 
         lister_L1(str8("Passes"), str8(""), &state->render_settings.bloom.pass_count,
-          .apply = LISTER_APPLY__SET,
           .default_value = 8);
 
         lister_F1(str8("Threshold"), str8(""), &state->render_settings.bloom.threshold,
-          .apply = LISTER_APPLY__SET,
           .default_value = 0.5f);
 
         lister_F1(str8("Strength"), str8(""), &state->render_settings.bloom.strength,
-          .apply = LISTER_APPLY__SET,
           .default_value = 0.4f);
 
         lister_F1(str8("Knee"), str8(""), &state->render_settings.bloom.knee,
-          .apply = LISTER_APPLY__SET,
           .default_value = 0.5f);
 
         //- kti: Actions.

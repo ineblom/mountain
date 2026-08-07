@@ -321,7 +321,7 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
   }
 
   // clamp
-  if (options.min != 0) after = Max(options.min, after);
+  if (options.min != 0 || options.max != 0) after = Max(options.min, after);
   if (options.max != 0) after = Min(options.max, after);
 
   // update entry values
@@ -335,7 +335,7 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
         as(value, F4)[0][component] += delta;
 
         if (options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F4) {
-          // TODO: Implement.
+          as(value, F4)[0] = normalize_F4(as(value, F4)[0]);
         }
       }
     }

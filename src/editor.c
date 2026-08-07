@@ -9,6 +9,9 @@
 //- kti: Define scene by code.
 //- kti: Lister groups.
 //- kti: Better rendering in the viewport.
+//- kti: Panel focus when pressing clickable boxes inside panel.
+//- kti: Clamp panel pct of parent.
+//- kti: Multiple listers with different contents.
 
 #if (HEADER)
 
@@ -233,7 +236,6 @@ struct State {
   Entity *last_entity;
   Entity *first_free_entity;
   Entity nil_entity;
-
 
   //- kti: Graphics.
   Mesh meshes[SHAPE_KIND_COUNT];
@@ -1012,7 +1014,7 @@ Internal void lane(void *user_data) {
             lister_xyz(str8("Size"),
               (is_shape && entity->shape_kind == SHAPE_KIND__BOX) ? &entity->size : 0,
               .default_value = 1.0f,
-              .max = F1_MAX);
+              .min = 0.01f);
 
             lister_F1(str8("Diameter"),
               (is_shape && entity->shape_kind == SHAPE_KIND__SPHERE) ? &entity->sphere_diameter : 0,
@@ -1055,14 +1057,8 @@ Internal void lane(void *user_data) {
                 .default_value = 70.0f*PI/180.0f,
                 .min = PI/180.0f,
                 .max = 179.0f*PI/180.0f);
-              lister_F1(str8("Aperture Radius"),
-                &entity->camera_aperture_radius,
-                .max = F1_MAX);
-              lister_F1(str8("Focal Distance"),
-                &entity->camera_focal_distance,
-                .default_value = 5.0f,
-                .min = 0.001f,
-                .max = F1_MAX);
+              lister_F1(str8("Aperture Radius"), &entity->camera_aperture_radius);
+              lister_F1(str8("Focal Distance"), &entity->camera_focal_distance, .default_value = 5.0f, .min = 0.001f);
             }
           }
         }
@@ -1084,34 +1080,34 @@ Internal void lane(void *user_data) {
               .entity = entity_handle(entity),
             });
           }
+
+          //- kti: Render Settings
+          lister_header(str8("Render Settings"));
+          lister_L1(str8("Width"), &state->render_settings.width,
+            .default_value = 1280,
+            .min = 320);
+          lister_L1(str8("Height"), &state->render_settings.height,
+            .default_value = 720,
+            .min = 160);
+          lister_L1(str8("Rays Per Pixel"), &state->render_settings.rays_per_pixel,
+            .default_value = 64);
+          lister_L1(str8("Max Bounces"), &state->render_settings.max_num_bounces,
+            .default_value = 8);
+
+          lister_header(str8("Bloom"));
+
+          lister_L1(str8("Passes"), &state->render_settings.bloom.pass_count,
+            .default_value = 8);
+
+          lister_F1(str8("Threshold"), &state->render_settings.bloom.threshold,
+            .default_value = 0.5f);
+
+          lister_F1(str8("Strength"), &state->render_settings.bloom.strength,
+            .default_value = 0.4f);
+
+          lister_F1(str8("Knee"), &state->render_settings.bloom.knee,
+            .default_value = 0.5f);
         }
-
-        //- kti: Render Settings
-        lister_header(str8("Render Settings"));
-        lister_L1(str8("Width"), &state->render_settings.width,
-          .default_value = 1280,
-          .min = 320);
-        lister_L1(str8("Height"), &state->render_settings.height,
-          .default_value = 720,
-          .min = 160);
-        lister_L1(str8("Rays Per Pixel"), &state->render_settings.rays_per_pixel,
-          .default_value = 64);
-        lister_L1(str8("Max Bounces"), &state->render_settings.max_num_bounces,
-          .default_value = 8);
-
-        lister_header(str8("Bloom"));
-
-        lister_L1(str8("Passes"), &state->render_settings.bloom.pass_count,
-          .default_value = 8);
-
-        lister_F1(str8("Threshold"), &state->render_settings.bloom.threshold,
-          .default_value = 0.5f);
-
-        lister_F1(str8("Strength"), &state->render_settings.bloom.strength,
-          .default_value = 0.4f);
-
-        lister_F1(str8("Knee"), &state->render_settings.bloom.knee,
-          .default_value = 0.5f);
 
         //- kti: Actions.
         lister_header(str8("Actions"));
@@ -1689,8 +1685,8 @@ Internal void lane(void *user_data) {
           } break;
           case CMD_KIND__CREATE_CAMERA: {
             Entity *new = entity_create(ENTITY_FLAG__CAMERA, str8("Camera"));
-            new->pos = (F4){0.0f, 0.5f, -5.0f};
-            new->camera_forward = normalize_F4((F4){0.0f, -0.5f, 5.0f});
+            new->pos = (F4){0.0f, 0.3f, -3.0f};
+            new->camera_forward = normalize_F4(-new->pos);
             new->camera_vertical_fov = 70.0f*PI/180.0f;
             new->camera_aperture_radius = 0.0f;
             new->camera_focal_distance = 5.0f;
@@ -1765,7 +1761,7 @@ Internal void lane(void *user_data) {
                 .user_data = job,
 
                 .arena_size = GiB(1),
-                .scratch_size = MiB(64),
+                .scratch_size = MiB(512),
               };
               lane_group_launch(lane_params);
 

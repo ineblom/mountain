@@ -371,13 +371,13 @@ Internal void lister_drag_L1(Lister_Entry *entry) {
 
   if (drag.signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
     if (drag.signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-      ui_store_drag_struct(&before);
+      ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &before);
     }
-    L1 initial_value = ui_get_drag_struct(L1)[0];
+    L1 initial_value = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, L1)[0];
 
     initial_value = Clamp(options.min, initial_value, true_max);
 
-    SL1 delta = (SL1)(ui_drag_delta()[0] / pixels_per_unit);
+    SL1 delta = (SL1)(ui_drag_delta(OS_MOUSE_BUTTON__LEFT)[0] / pixels_per_unit);
     if (delta < 0) {
       L1 magnitude = (L1)-delta;
       after = magnitude > initial_value - options.min ? options.min : initial_value - magnitude;
@@ -428,10 +428,10 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
   // handle dragging
   if (drag.signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
     if (drag.signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-      ui_store_drag_struct(&before);
+      ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &before);
     }
-    F1 initial_value = ui_get_drag_struct(F1)[0];
-    after = initial_value + ui_drag_delta()[0] / pixels_per_unit;
+    F1 initial_value = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F1)[0];
+    after = initial_value + ui_drag_delta(OS_MOUSE_BUTTON__LEFT)[0] / pixels_per_unit;
   }
 
   // default value

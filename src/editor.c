@@ -49,7 +49,6 @@ struct View {
   UI_Box *viewport_box;
   Camera camera;
   Camera target_camera;
-  F4 camera_drag_start_pos;
   F1 camera_drag_start_yaw;
   F1 camera_drag_start_pitch;
 
@@ -1205,10 +1204,10 @@ Internal void lane(void *user_data) {
               Panel *max_child = child->next;
               if (sig.flags & UI_SIGNAL_FLAG__PRESSED) {
                 F2 drag_data = {min_child->pct_of_parent, max_child->pct_of_parent};
-                ui_store_drag_struct(&drag_data);
+                ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &drag_data);
               }
-              F2 drag_data = ui_get_drag_struct(F2)[0];
-              F2 drag_delta = ui_drag_delta();
+              F2 drag_data = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F2)[0];
+              F2 drag_delta = ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
               F1 min_child_pct__pre_drag = drag_data[0];
               F1 max_child_pct__pre_drag = drag_data[1];
               F1 min_child_px__pre_drag = min_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
@@ -1359,7 +1358,8 @@ Internal void lane(void *user_data) {
                       "##viewport_%p", panel);
 
                     UI_Signal viewport_signal = ui_signal_from_box(view->viewport_box);
-                    F2 drag_delta = ui_drag_delta();
+                    F2 left_drag_delta = ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
+                    F2 right_drag_delta = ui_drag_delta(OS_MOUSE_BUTTON__RIGHT);
 
                     //- kto: Gizmo
                     F4 gizmo_pos = {0};
@@ -1416,22 +1416,24 @@ Internal void lane(void *user_data) {
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
 
-                    //- kti: Capture middle mouse press on axis.
-                    if (viewport_signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED &&
+                    //- kti: Reset axis to 0 on middle mouse press.
+                    if (!mouse_captured &&
+                      viewport_signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED &&
                       view->gizmo_hot_axis != AXIS__INVALID &&
                       has_selection) {
                       for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
                         if (entity->flags & ENTITY_FLAG__SELECTED) {
-                          entity->pos[view->gizmo_hot_axis] = 0.0f;
+                          entity->pos[view->gizmo_hot_axis] -= gizmo_pos[view->gizmo_hot_axis];
                         }
                       }
+                      cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
 
                     //- kti: Move along axis when dragging.
                     if (mouse_captured && viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && has_selection) {
                       F1 axis_len_sq = dot_F2(view->gizmo_drag_axis_screen, view->gizmo_drag_axis_screen);
                       if (axis_len_sq > 1.0f) {
-                        F1 world_delta = dot_F2(drag_delta, view->gizmo_drag_axis_screen) / axis_len_sq;
+                        F1 world_delta = dot_F2(left_drag_delta, view->gizmo_drag_axis_screen) / axis_len_sq;
                         F1 delta = world_delta - view->gizmo_drag_applied_delta;
                         for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
                           if (entity->flags & ENTITY_FLAG__SELECTED) {
@@ -1450,21 +1452,23 @@ Internal void lane(void *user_data) {
                       view->target_camera.pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
                     }
 
-                    I1 is_click = dot_F2(drag_delta, drag_delta) <= Square(4.0f);
+                    I1 left_is_click = dot_F2(left_drag_delta, left_drag_delta) <= Square(4.0f);
 
                     //- kti: Panning
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED && !mouse_captured) {
-                      view->camera_drag_start_pos = view->camera.pos;
+                      F4 camera_drag_start_pos = view->camera.pos;
+                      ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &camera_drag_start_pos);
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
-                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !is_click && !mouse_captured) {
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !left_is_click && !mouse_captured) {
+                      F4 camera_drag_start_pos = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F4)[0];
                       M4F camera_rotation = mul_M4F(rotate_x_M4F(view->camera.pitch), rotate_y_M4F(view->camera.yaw));
                       F4 camera_right = mul_M4F_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
                       F4 camera_up = mul_M4F_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
                       F1 pan_speed = 0.01f;
-                      view->target_camera.pos = view->camera_drag_start_pos -
-                        drag_delta[0]*pan_speed*camera_right +
-                        drag_delta[1]*pan_speed*camera_up;
+                      view->target_camera.pos = camera_drag_start_pos -
+                        left_drag_delta[0]*pan_speed*camera_right +
+                        left_drag_delta[1]*pan_speed*camera_up;
                     }
 
                     //- kti: Rotating
@@ -1475,14 +1479,14 @@ Internal void lane(void *user_data) {
                     }
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_DRAGGING) {
                       F1 rotate_speed = 0.003f;
-                      view->target_camera.yaw = view->camera_drag_start_yaw + drag_delta[0]*rotate_speed;
+                      view->target_camera.yaw = view->camera_drag_start_yaw + right_drag_delta[0]*rotate_speed;
                       view->target_camera.pitch = Clamp(-0.49f*PI,
-                          view->camera_drag_start_pitch + drag_delta[1]*rotate_speed,
+                          view->camera_drag_start_pitch + right_drag_delta[1]*rotate_speed,
                           0.49f*PI);
                     }
 
                     //- kti: Entity Selecting / Selection
-                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && is_click && !mouse_captured) {
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && left_is_click && !mouse_captured) {
                       F2 mouse = ui_mouse();
                       F4 rect = view->viewport_box->rect;
                       F1 aspect = rect[2] / rect[3];

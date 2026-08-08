@@ -330,8 +330,8 @@ struct UI_State {
   Arena *arena;
   UI_Key external_key;
 
-  Arena *drag_arena;
-  String8 drag_data;
+  Arena *drag_arena[OS_MOUSE_BUTTON_COUNT];
+  String8 drag_data[OS_MOUSE_BUTTON_COUNT];
 
   Arena *build_arenas[2];
   L1 build_index;
@@ -346,7 +346,7 @@ struct UI_State {
   L1 last_build_box_count;
   OS_Window *window;
   F2 mouse;
-  F2 drag_start_mouse;
+  F2 drag_start_mouse[OS_MOUSE_BUTTON_COUNT];
   L1 last_time_mouse_moved;
 
   UI_Key hot_box_key;
@@ -496,7 +496,9 @@ Internal UI_State *ui_state_alloc(void) {
   ui_state->external_key = ui_key_from_string(ui_key_zero(), str8("external_interaction_key"));
   ui_state->build_arenas[0] = arena_alloc(MiB(64));
   ui_state->build_arenas[1] = arena_alloc(MiB(64));
-  ui_state->drag_arena = arena_alloc(MiB(64));
+  for (L1 i = 0; i < OS_MOUSE_BUTTON_COUNT; i += 1) {
+    ui_state->drag_arena[i] = arena_alloc(MiB(64));
+  }
   ui_state->box_table_size = 4096;
   ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
   UIInitStackNils();
@@ -513,7 +515,9 @@ Internal void ui_state_release(UI_State *state) {
 
   arena_release(state->build_arenas[0]);
   arena_release(state->build_arenas[1]);
-  arena_release(state->drag_arena);
+  for (L1 i = 0; i < OS_MOUSE_BUTTON_COUNT; i += 1) {
+    arena_release(state->drag_arena[i]);
+  }
   arena_release(state->arena);
 }
 
@@ -929,7 +933,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
     I1 evt_key_is_mouse = (e->key == OS_MOUSE_BUTTON__LEFT ||
         e->key == OS_MOUSE_BUTTON__MIDDLE ||
         e->key == OS_MOUSE_BUTTON__RIGHT);
-    I1 evt_mouse_idx = evt_key_is_mouse ?  e->key - OS_MOUSE_BUTTON__LEFT : 0;
+    I1 evt_mouse_idx = evt_key_is_mouse ? e->key - OS_MOUSE_BUTTON__LEFT : 0;
 
     //- kti: Mouse down in bounds.
     if (box->flags & UI_BOX_FLAG__CLICKABLE &&
@@ -940,7 +944,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
       ui_state->hot_box_key = box->key;
       ui_state->active_box_key[evt_mouse_idx] = box->key;
       signal.flags |= UI_SIGNAL_FLAG__LEFT_PRESSED << evt_mouse_idx;
-      ui_state->drag_start_mouse = evt_mouse;
+      ui_state->drag_start_mouse[evt_mouse_idx] = evt_mouse;
 
       if (ui_key_match(box->key, ui_state->press_key_history[evt_mouse_idx][0]) &&
           e->timestamp_ns-ui_state->press_timestamp_history[evt_mouse_idx][0] <= double_click_time) {
@@ -1665,36 +1669,53 @@ Internal F2 ui_mouse(void) {
   return ui_state->mouse;
 }
 
-Internal F2 ui_drag_start_mouse(void) {
-  F2 pos = ui_state->drag_start_mouse;
+Internal F2 ui_drag_start_mouse(I1 button) {
+  F2 pos = {0};
+  I1 idx = button - OS_MOUSE_BUTTON__LEFT;
+  if (idx < OS_MOUSE_BUTTON_COUNT) {
+    pos = ui_state->drag_start_mouse[idx];
+  }
   return pos;
 }
 
-Internal F2 ui_drag_delta(void) {
-  F2 delta = ui_mouse() - ui_state->drag_start_mouse;
+Internal F2 ui_drag_delta(I1 button) {
+  F2 delta = {0};
+  I1 idx = button - OS_MOUSE_BUTTON__LEFT;
+  if (idx < OS_MOUSE_BUTTON_COUNT) {
+    delta = ui_mouse() - ui_state->drag_start_mouse[idx];
+  }
   return delta;
 }
 
-Internal void ui_store_drag_data(String8 data) {
-  arena_clear(ui_state->drag_arena);
-  ui_state->drag_data = push_str8_copy(ui_state->drag_arena, data);
-}
-
-Internal String8 ui_get_drag_data(L1 min_required_size) {
-  if (ui_state->drag_data.len < min_required_size) {
-    Temp_Arena scratch = scratch_begin(0, 0);
-    String8 data = {
-      .str = push_array(scratch.arena, B1, min_required_size),
-      .len = min_required_size,
-    };
-    ui_store_drag_data(data);
-    scratch_end(scratch);
+Internal void ui_store_drag_data(I1 button, String8 data) {
+  I1 idx = button - OS_MOUSE_BUTTON__LEFT;
+  if (idx < OS_MOUSE_BUTTON_COUNT) {
+    arena_clear(ui_state->drag_arena[idx]);
+    ui_state->drag_data[idx] = push_str8_copy(ui_state->drag_arena[idx], data);
   }
-  return ui_state->drag_data;
 }
 
-#define ui_store_drag_struct(ptr) ui_store_drag_data((String8){.str = (B1 *)(ptr), .len = sizeof(*(ptr)) })
-#define ui_get_drag_struct(type) ((type *)ui_get_drag_data(sizeof(type)).str)
+Internal String8 ui_get_drag_data(I1 button, L1 min_required_size) {
+  String8 result = {0};
+
+  I1 idx = button - OS_MOUSE_BUTTON__LEFT;
+  if (idx < OS_MOUSE_BUTTON_COUNT) {
+    if (ui_state->drag_data[idx].len < min_required_size) {
+      Temp_Arena scratch = scratch_begin(0, 0);
+      String8 data = {
+        .str = push_array(scratch.arena, B1, min_required_size),
+        .len = min_required_size,
+      };
+      ui_store_drag_data(button, data);
+      scratch_end(scratch);
+    }
+    result = ui_state->drag_data[idx];
+  }
+  return result;
+}
+
+#define ui_store_drag_struct(button, ptr) ui_store_drag_data(button, (String8){.str = (B1 *)(ptr), .len = sizeof(*(ptr)) })
+#define ui_get_drag_struct(button, type) ((type *)ui_get_drag_data(button, sizeof(type)).str)
 
 Internal UI_Box *ui_root(void) {
   UI_Box *root = ui_state->root;
@@ -1706,10 +1727,12 @@ Internal UI_Key ui_hot_key(void) {
   return result;
 }
 
-Internal UI_Key ui_active_key(I1 mouse_button) {
-  // TODO: Maybe add UI mouse buttons enum that goes from 0 to BUTTON COUNT.
-  Assert(mouse_button >= OS_MOUSE_BUTTON__LEFT && mouse_button < OS_MOUSE_BUTTON__LEFT+OS_MOUSE_BUTTON_COUNT);
-  UI_Key result = ui_state->active_box_key[mouse_button-OS_MOUSE_BUTTON__LEFT];
+Internal UI_Key ui_active_key(I1 button) {
+  UI_Key result = ui_key_zero();
+  I1 idx = button-OS_MOUSE_BUTTON__LEFT;
+  if (idx < OS_MOUSE_BUTTON_COUNT) {
+    result = ui_state->active_box_key[idx];
+  }
   return result;
 }
 

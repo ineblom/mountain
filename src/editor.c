@@ -8,6 +8,7 @@
 //- kti: Panel focus when pressing clickable boxes inside panel.
 //- kti: Clamp panel pct of parent.
 //- kti: Multiple listers with different contents.
+//- kti: Reivew color picker code.
 
 #if (HEADER)
 
@@ -1413,6 +1414,17 @@ Internal void lane(void *user_data) {
                       view->gizmo_drag_applied_delta = 0.0f;
                       mouse_captured = 1;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                    }
+
+                    //- kti: Capture middle mouse press on axis.
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED &&
+                      view->gizmo_hot_axis != AXIS__INVALID &&
+                      has_selection) {
+                      for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+                        if (entity->flags & ENTITY_FLAG__SELECTED) {
+                          entity->pos[view->gizmo_hot_axis] = 0.0f;
+                        }
+                      }
                     }
 
                     //- kti: Move along axis when dragging.

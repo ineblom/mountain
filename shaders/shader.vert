@@ -62,9 +62,7 @@ void main() {
   // Calculate texture UV from src_rect
   vec2 src_pos = in_src_rect.xy;
   vec2 src_size = in_src_rect.zw;
-  // Sample texel centers so linear filtering does not blend atlas neighbors
-  // at rectangle boundaries.
-  vec2 pixel_uv = src_pos + vec2(0.5) + vertex_pos * max(src_size - vec2(1.0), vec2(0.0));
+  vec2 pixel_uv = src_pos + vertex_pos * src_size;
   out_texture_uv = pixel_uv / push.texture_size;
   out_omit_texture = in_omit_texture;
 }

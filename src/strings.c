@@ -9,6 +9,13 @@ struct String8 {
   L1 len;
 };
 
+typedef struct String8_Array String8_Array;
+struct String8_Array {
+  String8 *v;
+  L1 count;
+  L1 total_length;
+};
+
 typedef struct String8_Node String8_Node;
 struct String8_Node {
   String8_Node *next;
@@ -20,6 +27,7 @@ typedef struct String8_List String8_List;
 struct String8_List {
   String8_Node *first;
   String8_Node *last;
+  L1 node_count;
   L1 total_length;
 };
 
@@ -329,6 +337,7 @@ Internal String8_Node *str8_list_push(Arena *arena, String8_List *list, String8 
   String8_Node *node = push_array(arena, String8_Node, 1);
   node->value = str;
   DLLPushBack(list->first, list->last, node);
+  list->node_count += 1;
   list->total_length += str.len;
   return node;
 }
@@ -352,6 +361,20 @@ Internal String8 str8_list_join(Arena *arena, String8_List *list) {
     result.len += n->value.len;
   }
 
+  return result;
+}
+
+Internal String8_Array str8_array_from_list(Arena *arena, String8_List *list) {
+  String8_Array result = {0};
+  result.v = push_array_no_zero(arena, String8, list->node_count);
+  result.count = list->node_count;
+  result.total_length = list->total_length;
+
+  L1 idx = 0;
+  for (String8_Node *node = list->first; node != 0; node = node->next) {
+    result.v[idx] = node->value;
+    idx += 1;
+  }
   return result;
 }
 

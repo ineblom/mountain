@@ -153,13 +153,14 @@ Internal void lane(void *user_data) {
   }
 
   for (Line *line = lines.first; line != 0; line = line->next) {
-    if (line->param_count == 4) {
+    if (line->param_count == 4 || line->param_count == 5) {
       String8 node_type = str8f(scratch.arena, "UI_%.*s_Node", (I1)line->params[0].len, line->params[0].str);
       String8 stack_type = str8f(scratch.arena, "UI_%.*s_Stack", (I1)line->params[0].len, line->params[0].str);
       String8 name = push_str8_copy(scratch.arena, line->params[1]);
       String8 type = push_str8_copy(scratch.arena, line->params[2]);
       String8 default_value = push_str8_copy(scratch.arena, line->params[3]);
       String8 pascal_case_name = push_str8_copy(scratch.arena, line->params[0]);
+      I1 has_manual_implementation = (line->param_count == 5 && str8_match(line->params[4], str8("Manual")));
 
       str8_list_pushf(scratch.arena, &header_strings, R"(
 typedef struct %1$s %1$s;
@@ -172,7 +173,8 @@ Internal void ui_set_next_%3$s(%4$s value);
 Internal %4$s ui_top_%3$s(void);
 )", node_type.str, stack_type.str, name.str, type.str);
 
-      str8_list_pushf(scratch.arena, &impl_strings, R"(
+      if (!has_manual_implementation) {
+        str8_list_pushf(scratch.arena, &impl_strings, R"(
 Internal void ui_push_%3$s(%4$s value) {
   %2$s *stack = &ui_state->%3$s_stack;
   %1$s *node = stack->free;
@@ -201,6 +203,7 @@ Internal %4$s ui_top_%3$s(void) {
 }
 #define UI_%5$s(v) DeferLoop(ui_push_%3$s((v)), ui_pop_%3$s())
 )", node_type.str, stack_type.str, name.str, type.str, pascal_case_name.str);
+      }
 
       str8_list_pushf(scratch.arena, &stacks_strings,
           " %2$s %3$s_stack;\\\n"

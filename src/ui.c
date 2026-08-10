@@ -117,6 +117,21 @@ struct UI_Size {
   F1 strictness;
 };
 
+////////////////////////////////
+//~ kti: Themes
+
+typedef struct UI_Theme_Pattern UI_Theme_Pattern;
+struct UI_Theme_Pattern {
+  String8_Array tags;
+  F4 linear;
+};
+
+typedef struct UI_Theme UI_Theme;
+struct UI_Theme {
+  UI_Theme_Pattern *patterns;
+  L1 pattern_count;
+};
+
 typedef I1 UI_Focus_Kind;
 enum {
   UI_FOCUS_KIND__NULL,
@@ -206,6 +221,7 @@ struct UI_Box {
 
   UI_Key key;
   UI_Key group_key;
+  UI_Key tags_key;
   UI_Box_Flags flags;
   String8 string;
   F2 fixed_pos;
@@ -264,6 +280,43 @@ typedef struct UI_Box_HT_Slot UI_Box_HT_Slot;
 struct UI_Box_HT_Slot {
   UI_Box *first;
   UI_Box *last;
+};
+
+typedef struct UI_Tags_Cache_Node UI_Tags_Cache_Node;
+struct UI_Tags_Cache_Node {
+  UI_Tags_Cache_Node *next;
+  UI_Key key;
+  String8_Array tags;
+};
+
+typedef struct UI_Tags_Cache_Slot UI_Tags_Cache_Slot;
+struct UI_Tags_Cache_Slot {
+  UI_Tags_Cache_Node *first;
+  UI_Tags_Cache_Node *last;
+};
+
+typedef struct UI_Tags_Key_Stack_Node UI_Tags_Key_Stack_Node;
+struct UI_Tags_Key_Stack_Node {
+  UI_Tags_Key_Stack_Node *next;
+  UI_Key key;
+};
+
+typedef struct UI_Theme_Pattern_Cache_Node UI_Theme_Pattern_Cache_Node;
+struct UI_Theme_Pattern_Cache_Node {
+  UI_Theme_Pattern_Cache_Node *slot_next;
+  UI_Theme_Pattern_Cache_Node *slot_prev;
+  UI_Theme_Pattern_Cache_Node *lru_next;
+  UI_Theme_Pattern_Cache_Node *lru_prev;
+  L1 last_build_index_accessed;
+  UI_Key key;
+  F4 target_rgba;
+  F4 current_rgba;
+};
+
+typedef struct UI_Theme_Pattern_Cache_Slot UI_Theme_Pattern_Cache_Slot;
+struct UI_Theme_Pattern_Cache_Slot {
+  UI_Theme_Pattern_Cache_Node *first;
+  UI_Theme_Pattern_Cache_Node *last;
 };
 
 typedef L1 UI_Signal_Flags;
@@ -340,6 +393,20 @@ struct UI_State {
   L1 box_table_size;
   UI_Box_HT_Slot *box_table;
 
+  UI_Tags_Key_Stack_Node *tags_key_stack_top;
+  UI_Tags_Key_Stack_Node *tags_key_stack_free;
+  L1 tags_cache_slot_count;
+  UI_Tags_Cache_Slot *tags_cache_slots;
+
+  L1 theme_pattern_cache_slot_count;
+  UI_Theme_Pattern_Cache_Slot *theme_pattern_cache_slots;
+  UI_Theme_Pattern_Cache_Node *theme_pattern_cache_node_free;
+  UI_Theme_Pattern_Cache_Node *lru_theme_pattern_cache_node;
+  UI_Theme_Pattern_Cache_Node *mru_theme_pattern_cache_node;
+  UI_Theme *theme;
+  L1 theme_build_index;
+  F1 animation_dt;
+
   UI_Box *root;
   UI_Key default_nav_root_key;
   L1 build_box_count;
@@ -360,6 +427,9 @@ struct UI_State {
 
   UIStacks;
 };
+
+#define UI_Tag(v) DeferLoop(ui_push_tag((v)), ui_pop_tag())
+#define UI_TagF(...) DeferLoop(ui_push_tagf(__VA_ARGS__), ui_pop_tag())
 
 #endif
 
@@ -459,6 +529,17 @@ Internal I1 ui_box_is_nil(UI_Box *box) {
   return result;
 }
 
+Internal String8 ui_hash_part_from_key_string(String8 string) {
+  String8 result = string;
+  for (L1 idx = 0; idx+2 < string.len; idx += 1) {
+    if (string.str[idx] == '#' && string.str[idx+1] == '#' && string.str[idx+2] == '#') {
+      result = str8_substr(string, idx, string.len);
+      break;
+    }
+  }
+  return result;
+}
+
 Internal String8 ui_display_part_from_key_string(String8 key) {
   L1 end = key.len;
 
@@ -475,9 +556,259 @@ Internal String8 ui_display_part_from_key_string(String8 key) {
 Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string) {
   UI_Key result = {0};
   if (string.len != 0) {
-    Hash128 hash = hash128(string.str, string.len);
-    result.l1[0] = hash.l1[0] ^ seed_key.l1[0];
+    String8 hash_part = ui_hash_part_from_key_string(string);
+    result.l1[0] = hash64_seed(hash_part.str, hash_part.len, seed_key.l1[0]);
   }
+  return result;
+}
+
+Internal UI_Key ui_top_tags_key(void) {
+  UI_Key result = ui_key_zero();
+  if (ui_state->tags_key_stack_top != 0) {
+    result = ui_state->tags_key_stack_top->key;
+  }
+  return result;
+}
+
+Internal void ui__push_tags_key_from_appended_string(String8 string) {
+  I1 is_new_root = str8_match(str8("."), string);
+
+  UI_Key seed_key = {0};
+  if (!is_new_root && ui_state->tags_key_stack_top != 0) {
+    seed_key = ui_state->tags_key_stack_top->key;
+  }
+  UI_Key key = seed_key;
+  if (!is_new_root && string.len > 0) {
+    key = ui_key_from_string(seed_key, string);
+  }
+
+  {
+    UI_Tags_Key_Stack_Node *node = ui_state->tags_key_stack_free;
+    if (node != 0) {
+      SLLStackPop(ui_state->tags_key_stack_free);
+    } else {
+      node = push_array(ui_build_arena(), UI_Tags_Key_Stack_Node, 1);
+    }
+    SLLStackPush(ui_state->tags_key_stack_top, node);
+    node->key = key;
+  }
+
+  if (!is_new_root) {
+    L1 slot_idx = key.l1[0] % ui_state->tags_cache_slot_count;
+    UI_Tags_Cache_Slot *slot = &ui_state->tags_cache_slots[slot_idx];
+    UI_Tags_Cache_Node *node = 0;
+    for (UI_Tags_Cache_Node *n = slot->first; n != 0; n = n->next) {
+      if (ui_key_match(n->key, key)) {
+        node = n;
+        break;
+      }
+    }
+
+    if (node == 0) {
+      Temp_Arena scratch = scratch_begin(0, 0);
+      String8_List tags = {0};
+      if (string.len != 0) {
+        str8_list_push(scratch.arena, &tags, push_str8_copy(ui_build_arena(), string));
+      }
+      for (UI_Tag_Node *n = ui_state->tag_stack.top; n != 0; n = n->next) {
+        if (str8_match(n->value, str8("."))) {
+          break;
+        }
+        if (n->value.len != 0) {
+          str8_list_push(scratch.arena, &tags, push_str8_copy(ui_build_arena(), n->value));
+        }
+      }
+      node = push_array(ui_build_arena(), UI_Tags_Cache_Node, 1);
+      SLLQueuePush(slot->first, slot->last, node);
+      node->key = key;
+      node->tags = str8_array_from_list(ui_build_arena(), &tags);
+      scratch_end(scratch);
+    }
+  }
+}
+
+Internal void ui__pop_tags_key(void) {
+  if (ui_state->tags_key_stack_top != 0) {
+    UI_Tags_Key_Stack_Node *popped = ui_state->tags_key_stack_top;
+    SLLStackPop(ui_state->tags_key_stack_top);
+    SLLStackPush(ui_state->tags_key_stack_free, popped);
+  }
+}
+
+Internal String8 ui_top_tag(void) {
+  String8 result = ui_state->tag_stack.top->value;
+  return result;
+}
+
+Internal void ui_push_tag(String8 value) {
+  ui__push_tags_key_from_appended_string(value);
+
+  UI_Tag_Stack *stack = &ui_state->tag_stack;
+  UI_Tag_Node *node = stack->free;
+  if (node == 0) {
+    node = push_array(ui_build_arena(), UI_Tag_Node, 1);
+  } else {
+    SLLStackPop(stack->free);
+  }
+  node->value = push_str8_copy(ui_build_arena(), value);
+  SLLStackPush(stack->top, node);
+  stack->auto_pop = 0;
+}
+
+Internal String8 ui_pop_tag(void) {
+  ui__pop_tags_key();
+
+  UI_Tag_Stack *stack = &ui_state->tag_stack;
+  UI_Tag_Node *popped_node = stack->top;
+  if (popped_node != &ui_state->nil_tag) {
+    SLLStackPop(stack->top);
+    SLLStackPush(stack->free, popped_node);
+    stack->auto_pop = 0;
+  }
+  String8 result = popped_node->value;
+  return result;
+}
+
+Internal void ui_set_next_tag(String8 value) {
+  ui__push_tags_key_from_appended_string(value);
+
+  UI_Tag_Stack *stack = &ui_state->tag_stack;
+  UI_Tag_Node *node = stack->free;
+  if (node == 0) {
+    node = push_array(ui_build_arena(), UI_Tag_Node, 1);
+  } else {
+    SLLStackPop(stack->free);
+  }
+  node->value = push_str8_copy(ui_build_arena(), value);
+  SLLStackPush(stack->top, node);
+  stack->auto_pop = 1;
+}
+
+Internal void ui_push_tagf(CString format, ...) {
+  Temp_Arena scratch = scratch_begin(0, 0);
+  va_list args;
+  va_start(args, format);
+  String8 string = str8fv(scratch.arena, format, args);
+  ui_push_tag(string);
+  va_end(args);
+  scratch_end(scratch);
+}
+
+Internal F4 ui_color_from_tags_key_extras(UI_Key key, String8_Array extras) {
+  F4 result = {0};
+  if (ui_state->theme_pattern_cache_slot_count && extras.count > 0) {
+    UI_Key final_key = key;
+    for (L1 idx = 0; idx < extras.count; idx += 1) {
+      final_key = ui_key_from_string(final_key, extras.v[idx]);
+    }
+
+    L1 slot_idx = final_key.l1[0] % ui_state->theme_pattern_cache_slot_count;
+    UI_Theme_Pattern_Cache_Slot *slot = &ui_state->theme_pattern_cache_slots[slot_idx];
+    UI_Theme_Pattern_Cache_Node *node = 0;
+    for (UI_Theme_Pattern_Cache_Node *n = slot->first; n != 0; n = n->slot_next) {
+      if (ui_key_match(n->key, final_key)) {
+        node = n;
+      }
+    }
+
+    if (node == 0 || node->last_build_index_accessed < ui_state->theme_build_index) {
+      String8_Array tags = {0};
+      {
+        L1 tags_cache_slot_idx = key.l1[0] % ui_state->tags_cache_slot_count;
+        UI_Tags_Cache_Slot *tags_cache_slot = &ui_state->tags_cache_slots[tags_cache_slot_idx];
+        for (UI_Tags_Cache_Node *n = tags_cache_slot->first; n != 0; n = n->next) {
+          if (ui_key_match(n->key, key)) {
+            tags = n->tags;
+            break;
+          }
+        }
+      }
+
+      UI_Theme_Pattern *pattern = 0;
+      L1 best_match_count = 0;
+      for (L1 idx = 0; idx < ui_state->theme->pattern_count; idx += 1) {
+        UI_Theme_Pattern *p = &ui_state->theme->patterns[idx];
+        L1 match_count = 0;
+        I1 name_matches = 0;
+        I1 all_p_tags_in_key = 1;
+        for (L1 p_tags_idx = 0; p_tags_idx < p->tags.count; p_tags_idx += 1) {
+          I1 p_tag_in_key = 0;
+          for (L1 key_tags_idx = 0; key_tags_idx < tags.count + extras.count; key_tags_idx += 1) {
+            String8 key_string = key_tags_idx < tags.count
+              ? tags.v[key_tags_idx]
+              : extras.v[key_tags_idx - tags.count];
+            if (str8_match(p->tags.v[p_tags_idx], key_string)) {
+              if (key_tags_idx == tags.count + extras.count - 1) {
+                name_matches = 1;
+              }
+              p_tag_in_key = 1;
+              match_count += 1;
+              break;
+            }
+          }
+          if (!p_tag_in_key) {
+            all_p_tags_in_key = 0;
+            break;
+          }
+        }
+        if (name_matches && all_p_tags_in_key && match_count > best_match_count) {
+          pattern = p;
+          best_match_count = match_count;
+        }
+        if (match_count == tags.count + extras.count) {
+          break;
+        }
+      }
+
+      I1 node_is_new = 0;
+      if (node == 0) {
+        node_is_new = 1;
+        node = ui_state->theme_pattern_cache_node_free;
+        if (node != 0) {
+          SLLStackPop_N(ui_state->theme_pattern_cache_node_free, slot_next);
+        } else {
+          node = push_array(ui_state->arena, UI_Theme_Pattern_Cache_Node, 1);
+        }
+        DLLPushBack_NP(slot->first, slot->last, node, slot_next, slot_prev);
+        DLLPushBack_NP(ui_state->lru_theme_pattern_cache_node,
+                       ui_state->mru_theme_pattern_cache_node,
+                       node, lru_next, lru_prev);
+        node->key = final_key;
+      }
+
+      if (pattern != 0) {
+        node->target_rgba = pattern->linear;
+        if (node_is_new) {
+          node->current_rgba = node->target_rgba;
+        }
+      }
+    }
+
+    if (node != 0 && node->last_build_index_accessed < ui_state->theme_build_index) {
+      node->last_build_index_accessed = ui_state->theme_build_index;
+      DLLRemove_NP(ui_state->lru_theme_pattern_cache_node,
+                   ui_state->mru_theme_pattern_cache_node,
+                   node, lru_next, lru_prev);
+      DLLPushBack_NP(ui_state->lru_theme_pattern_cache_node,
+                     ui_state->mru_theme_pattern_cache_node,
+                     node, lru_next, lru_prev);
+    }
+
+    if (node != 0) {
+      result = node->current_rgba;
+    }
+  }
+  return result;
+}
+
+Internal F4 ui_color_from_tags_key_name(UI_Key tags_key, String8 name) {
+  String8_Array extras = {.v = &name, .count = 1};
+  F4 result = ui_color_from_tags_key_extras(tags_key, extras);
+  return result;
+}
+
+Internal F4 ui_color_from_name(String8 name) {
+  F4 result = ui_color_from_tags_key_name(ui_top_tags_key(), name);
   return result;
 }
 
@@ -501,6 +832,9 @@ Internal UI_State *ui_state_alloc(void) {
   }
   ui_state->box_table_size = 4096;
   ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
+  ui_state->theme_pattern_cache_slot_count = 1024;
+  ui_state->theme_pattern_cache_slots = push_array(arena, UI_Theme_Pattern_Cache_Slot,
+                                                    ui_state->theme_pattern_cache_slot_count);
   UIInitStackNils();
 
   UI_State *new_state = ui_state;
@@ -692,6 +1026,7 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
   box->key = key;
   box->flags = (flags|ui_top_flags()) & ~ui_top_omit_flags();
   box->group_key = ui_top_group_key();
+  box->tags_key = ui_top_tags_key();
 
   if (ui_is_focus_active() && (box->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) && ui_key_match(ui_state->default_nav_root_key, ui_key_zero())) {
     ui_state->default_nav_root_key = box->key;
@@ -754,12 +1089,24 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
   box->corner_radii[1] = ui_top_tr_corner_radius();
   box->corner_radii[2] = ui_top_bl_corner_radius();
   box->corner_radii[3] = ui_top_br_corner_radius();
-  F4 background_color = ui_top_background_color();
-  for (L1 corner_idx = 0; corner_idx < ArrayCount(box->background_colors); corner_idx += 1) {
-    box->background_colors[corner_idx] = background_color;
+  if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
+    F4 background_color = ui_state->background_color_stack.top != &ui_state->nil_background_color
+      ? ui_top_background_color()
+      : ui_color_from_name(str8("background"));
+    for (L1 corner_idx = 0; corner_idx < ArrayCount(box->background_colors); corner_idx += 1) {
+      box->background_colors[corner_idx] = background_color;
+    }
   }
-  box->text_color = ui_top_text_color();
-  box->border_color = ui_top_border_color();
+  if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
+    box->text_color = ui_state->text_color_stack.top != &ui_state->nil_text_color
+      ? ui_top_text_color()
+      : ui_color_from_name(str8("text"));
+  }
+  if (box->flags & (UI_BOX_FLAG__DRAW_BORDER|UI_BOX_FLAG__DRAW_SIDES)) {
+    box->border_color = ui_state->border_color_stack.top != &ui_state->nil_border_color
+      ? ui_top_border_color()
+      : ui_color_from_name(str8("border"));
+  }
 
   UIAutoPopStacks();
 
@@ -1126,8 +1473,15 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
   return signal;
 }
 
-Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_List cmds) {
+Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_List cmds,
+                             UI_Theme *theme, F1 animation_dt) {
   UIResetStacks();
+  ui_state->tags_key_stack_top = ui_state->tags_key_stack_free = 0;
+  ui_state->tags_cache_slot_count = 512;
+  ui_state->tags_cache_slots = push_array(ui_build_arena(), UI_Tags_Cache_Slot, ui_state->tags_cache_slot_count);
+  ui_state->theme = theme;
+  ui_state->theme_build_index += 1;
+  ui_state->animation_dt = animation_dt;
   ui_state->root = &ui_nil_box;
   ui_state->last_build_box_count = ui_state->build_box_count;
   ui_state->build_box_count = 0;
@@ -1135,6 +1489,22 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
   ui_state->events = events;
 
   ui_state->cmds = cmds;
+
+  //- kti: Prune unused theme nodes.
+  for (UI_Theme_Pattern_Cache_Node *node = ui_state->lru_theme_pattern_cache_node, *next = 0; node != 0; node = next) {
+    next = node->lru_next;
+    if (node->last_build_index_accessed+2 < ui_state->theme_build_index) {
+      L1 slot_idx = node->key.l1[0] % ui_state->theme_pattern_cache_slot_count;
+      UI_Theme_Pattern_Cache_Slot *slot = &ui_state->theme_pattern_cache_slots[slot_idx];
+      DLLRemove_NP(slot->first, slot->last, node, slot_next, slot_prev);
+      DLLRemove_NP(ui_state->lru_theme_pattern_cache_node,
+                   ui_state->mru_theme_pattern_cache_node,
+                   node, lru_next, lru_prev);
+      SLLStackPush_N(ui_state->theme_pattern_cache_node_free, node, slot_next);
+    } else {
+      break;
+    }
+  }
 
   //- kti: Mouse movement.
   for (OS_Event *e = ui_state->events.last; e != 0; e = e->prev) {
@@ -1623,6 +1993,15 @@ Internal void ui_end_build(void) {
     }
   }
 
+  F1 slow_rate = 1.0f - powf(2.0f, -30.0f*ui_state->animation_dt);
+  for (L1 slot_idx = 0; slot_idx < ui_state->theme_pattern_cache_slot_count; slot_idx += 1) {
+    for (UI_Theme_Pattern_Cache_Node *node = ui_state->theme_pattern_cache_slots[slot_idx].first; node != 0; node = node->slot_next) {
+      for (L1 idx = 0; idx < 4; idx += 1) {
+        node->current_rgba[idx] += (node->target_rgba[idx] - node->current_rgba[idx])*slow_rate;
+      }
+    }
+  }
+
   ui_state->build_index += 1;
   arena_clear(ui_build_arena());
 }
@@ -1874,9 +2253,8 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
     ui_set_next_fixed_width(size);
     ui_set_next_fixed_height(size);
     ui_set_next_child_layout_axis(AXIS__Y);
+    UI_Tag(str8("checkbox"))
     UI_Corner_Radius(check_inset * 0.5f) {
-      ui_set_next_background_color((F4){0.036278413f, -0.002480615f, 0.001241720f, 1.0f});
-      ui_set_next_border_color((F4){0.125f, 0.125f, 0.125f, 1.0f});
       UI_Box *outer = ui_build_box_from_stringf(
           UI_BOX_FLAG__CLICKABLE|
           UI_BOX_FLAG__DRAW_HOT_EFFECTS|
@@ -1887,7 +2265,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
 
       if (value[0]) {
         UI_Parent(outer)
-        UI_Background_Color(((F4){0.343f, 0.343f, 0.343f, 1.0f}))
+        UI_Tag(str8("check"))
         UI_Padding(ui_pct(1.0f, 0.0f)) {
           UI_Pref_Height(ui_px(size-check_inset*2, 1.0f))
           UI_Row()
@@ -2229,13 +2607,6 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
 Internal void ui_draw(void) {
   ProfFuncBegin();
 
-  F4 focus_border_color = {0.321444194f, 0.645543671f, 1.175802262f, 1.0f};
-  F4 cursor_color = focus_border_color;
-  for (L1 component = 0; component < 3; component += 1) {
-    cursor_color[component] = Min(cursor_color[component] + 0.2f, 1.0f);
-  }
-  F4 select_color = {1.113309022f, -0.230441843f, 0.096778714f, 0.05f};
-
   for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
     UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
     UI_Box *hot_box = ui_box_from_key(ui_hot_key());
@@ -2253,14 +2624,17 @@ Internal void ui_draw(void) {
     if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
       F4 shadow = rect_pad(box->rect, 4.0f);
       shadow[1] += 4.0f;
-      GFX_Rect_Instance *shadow_inst = dr_rect(shadow, (F4){0.0f, 0.0f, 0.0f, 0.25f}, 0.0f, 8.0f);
+      F4 shadow_color = ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
+      GFX_Rect_Instance *shadow_inst = dr_rect(shadow, shadow_color, 0.0f, 8.0f);
       shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
     }
 
     if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
       if (draw_hot_effect && !draw_active_effect) {
         F4 shadow = rect_pad(box->rect, 4.0f);
-        GFX_Rect_Instance *shadow_inst = dr_rect(shadow, (F4){0.0f, 0.0f, 0.0f, 0.2f}, 0.0f, 8.0f);
+        F4 shadow_color = ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
+        shadow_color[3] *= 0.8f;
+        GFX_Rect_Instance *shadow_inst = dr_rect(shadow, shadow_color, 0.0f, 8.0f);
         shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
       }
 
@@ -2334,6 +2708,8 @@ Internal void ui_draw(void) {
         F1 cursor_height = edit_box->rect[3] - font_size;
         F1 cursor_x = text_pos[0] + cursor_pixel_off;
         F1 mark_x = text_pos[0] + mark_pixel_off - cursor_thickness;
+        F4 cursor_color = ui_color_from_tags_key_name(box->tags_key, str8("cursor"));
+        F4 select_color = ui_color_from_tags_key_name(box->tags_key, str8("selection"));
         F4 cursor_rect = {
           cursor_x, cursor_top,
           cursor_thickness, cursor_height,
@@ -2367,7 +2743,11 @@ Internal void ui_draw(void) {
 
       //- kti: Focus Overlay
       if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot) {
-        GFX_Rect_Instance *inst = dr_rect(b->rect, (F4){1.058446053f, -0.025667136f, -0.017405831f, 0.02f}, 0.0f, b_softness);
+        String8 focus_overlay_tags[] = {str8("focus"), str8("overlay")};
+        F4 focus_overlay_color = ui_color_from_tags_key_extras(
+          b->tags_key,
+          (String8_Array){.v = focus_overlay_tags, .count = ArrayCount(focus_overlay_tags)});
+        GFX_Rect_Instance *inst = dr_rect(b->rect, focus_overlay_color, 0.0f, b_softness);
         inst->corner_radii = b->corner_radii;
       }
 
@@ -2383,7 +2763,14 @@ Internal void ui_draw(void) {
           }
         }
         inst->border_width = 1.0f;
-        inst->border_color = draw_focus_border ? focus_border_color : b->border_color;
+        if (draw_focus_border) {
+          String8 focus_border_tags[] = {str8("focus"), str8("border")};
+          inst->border_color = ui_color_from_tags_key_extras(
+            b->tags_key,
+            (String8_Array){.v = focus_border_tags, .count = ArrayCount(focus_border_tags)});
+        } else {
+          inst->border_color = b->border_color;
+        }
       }
 
       //- kti: Individual sides for tiled boxes and dividers. DRAW_BORDER

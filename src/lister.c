@@ -487,8 +487,7 @@ Internal void lister_ui(void) {
       // Header
       case LISTER_ENTRY_KIND__HEADER: {
         ui_set_next_text_padding(10.0f);
-        // ui_set_next_background_color((F4){0.007077888f, 0.007077888f, 0.007077888f, 1.0f});
-        ui_set_next_text_color((F4){0.526210363f, 0.000019104f, 0.000108155f, 1.0f});
+        ui_set_next_tag(str8("header"));
         ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_BACKGROUND|row_sides , entry->str);
       } break;
 
@@ -524,7 +523,7 @@ Internal void lister_ui(void) {
         UI_Parent(drag_box)
         UI_Text_Align(UI_TEXT_ALIGN__CENTER)
         UI_Text_Padding(10.0f)
-        UI_Background_Color(((F4){0.008101465f, 0.017500665f, 0.023206312f, 1.0f}))
+        UI_Tag(str8("field"))
         UI_Flags(row_sides) {
           if (entry->kind == LISTER_ENTRY_KIND__L1) lister_drag_L1(entry);
           else lister_drag_F1(entry, 0, entry->str);
@@ -699,7 +698,7 @@ Internal void lister_ui(void) {
             }
             for (L1 option = 0; option < entry->data.enum_options.count; option += 1) {
               if (!enum_is_mixed && enum_value == option) {
-                ui_set_next_background_color((F4){0.008402845f, 0.044952845f, 0.123825366f, 1.0f});
+                ui_set_next_tag(str8("selected"));
               }
 
               String8 name = entry->data.enum_options.names[option];
@@ -727,7 +726,7 @@ Internal void lister_ui(void) {
 
       // Cmd
       case LISTER_ENTRY_KIND__CMD: {
-        ui_set_next_background_color((F4){0.038710978f, -0.002232542f, -0.000659834f, 1.0f});
+        ui_set_next_tag(str8("command"));
         ui_set_next_text_align(UI_TEXT_ALIGN__CENTER);
         UI_Box *cmd_box = ui_build_box_from_stringf(
           UI_BOX_FLAG__CLICKABLE|
@@ -751,7 +750,7 @@ Internal void lister_ui(void) {
         UI_Parent(outer) {
           F1 progress = entry->data.progress;
           ui_set_next_pref_width(ui_pct(progress, 1.0f));
-          ui_set_next_background_color((F4){0.037265774f, 0.381785296f, 0.004780161f, 1.0f});
+          ui_set_next_tag(str8("progress"));
           ui_set_next_text_padding(10.0f);
           ui_build_box_from_stringf(
             UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_BACKGROUND|UI_BOX_FLAG__DISABLE_TEXT_TRUNC,

@@ -25,3 +25,4 @@ Group_Key,         group_key,         UI_Key,        ui_key_zero()
 Text_Padding,      text_padding,      F1,            0.0f
 Focus_Hot,         focus_hot,         UI_Focus_Kind, 0
 Focus_Active,      focus_active,      UI_Focus_Kind, 0
+Tag,               tag,               String8,       (String8){0}, Manual

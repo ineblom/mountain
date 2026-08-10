@@ -1,7 +1,6 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: UI Theme.
 //- kti: View result in editor.
 //- kti: Tweak postprocessing after render.
 //- kti: Define scene by code.
@@ -11,6 +10,8 @@
 //- kti: Clamp panel pct of parent.
 //- kti: Multiple listers with different contents.
 //- kti: Reivew color picker code.
+//- kti: Snapping.
+//- kti: Adjust size with gizmo.
 
 #if (HEADER)
 
@@ -248,6 +249,46 @@ struct State {
 #if (SOURCE)
 
 Global State *state = 0;
+
+#define UI_THEME_COLOR(r, g, b, a, ...) \
+  { \
+    .tags = { \
+      .v = (String8[]){__VA_ARGS__}, \
+      .count = ArrayCount(((String8[]){__VA_ARGS__})), \
+    }, \
+    .linear = (F4){(r), (g), (b), (a)}, \
+  }
+
+Global UI_Theme_Pattern default_theme_patterns[] = {
+  UI_THEME_COLOR(0.0f, 0.0f, 0.0f, 1.0f, str8("background")),
+  UI_THEME_COLOR(0.125f, 0.125f, 0.125f, 1.0f, str8("border")),
+  UI_THEME_COLOR(0.729f, 0.729f, 0.729f, 1.0f, str8("text")),
+  UI_THEME_COLOR(0.0f, 0.0f, 0.0f, 0.25f, str8("drop_shadow")),
+  UI_THEME_COLOR(1.058446053f, -0.025667136f, -0.017405831f, 0.02f, str8("focus"), str8("overlay")),
+  UI_THEME_COLOR(0.321444194f, 0.645543671f, 1.175802262f, 1.0f, str8("focus"), str8("border")),
+  UI_THEME_COLOR(0.521444194f, 0.845543671f, 1.0f, 1.0f, str8("cursor")),
+  UI_THEME_COLOR(1.113309022f, -0.230441843f, 0.096778714f, 0.05f, str8("selection")),
+
+  UI_THEME_COLOR(0.008f, 0.008f, 0.008f, 1.0f, str8("subtle"), str8("background")),
+  UI_THEME_COLOR(0.035227284f, 0.329110300f, 1.016848732f, 1.0f, str8("accent"), str8("text")),
+  UI_THEME_COLOR(0.526210363f, 0.000019104f, 0.000108155f, 1.0f, str8("header"), str8("text")),
+  UI_THEME_COLOR(0.008101465f, 0.017500665f, 0.023206312f, 1.0f, str8("field"), str8("background")),
+  UI_THEME_COLOR(0.008402845f, 0.044952845f, 0.123825366f, 1.0f, str8("selected"), str8("background")),
+  UI_THEME_COLOR(0.038710978f, -0.002232542f, -0.000659834f, 1.0f, str8("command"), str8("background")),
+  UI_THEME_COLOR(0.037265774f, 0.381785296f, 0.004780161f, 1.0f, str8("progress"), str8("background")),
+  UI_THEME_COLOR(0.0f, 0.0f, 0.0f, 1.0f, str8("viewport"), str8("background")),
+
+  UI_THEME_COLOR(0.036278413f, -0.002480615f, 0.001241720f, 1.0f, str8("checkbox"), str8("background")),
+  UI_THEME_COLOR(0.125f, 0.125f, 0.125f, 1.0f, str8("checkbox"), str8("border")),
+  UI_THEME_COLOR(0.343f, 0.343f, 0.343f, 1.0f, str8("checkbox"), str8("check"), str8("background")),
+};
+
+Global UI_Theme default_theme = {
+  .patterns = default_theme_patterns,
+  .pattern_count = ArrayCount(default_theme_patterns),
+};
+
+#undef UI_THEME_COLOR
 
 ////////////////////////////////
 //~ kti: Meshes
@@ -892,6 +933,7 @@ Internal void lane(void *user_data) {
   lane_sync();
 
   L1 running = 1;
+  L1 last_frame_begin_time = 0;
 
   ////////////////////////////////
   //~ kti: Main loop
@@ -901,6 +943,11 @@ Internal void lane(void *user_data) {
 
     L1 frame_begin_time = os_clock();
     F1 time = (F1)(frame_begin_time / 1000000ULL) / 1000.0f;
+    F1 animation_dt = 1.0f/60.0f;
+    if (last_frame_begin_time != 0) {
+      animation_dt = (F1)(frame_begin_time - last_frame_begin_time)/1000000000.0f;
+    }
+    last_frame_begin_time = frame_begin_time;
 
     Temp_Arena scratch = scratch_begin(0, 0);
 
@@ -1169,11 +1216,9 @@ Internal void lane(void *user_data) {
 
       for (Window *w = state->first_window; w != 0; w = w->next) {
         ui_state_equip(w->ui);
-        ui_begin_build(w->os, events, ui_cmds);
+        ui_begin_build(w->os, events, ui_cmds, &default_theme, animation_dt);
 
         ui_push_font(prop_fnt);
-        ui_push_background_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
-        ui_push_border_color((F4){0.125f, 0.125f, 0.125f, 1.0f});
 
         F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
         ui_set_next_fixed_rect(root_plane_rect);
@@ -1267,7 +1312,7 @@ Internal void lane(void *user_data) {
                 UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
                 UI_Pref_Height(ui_pct(1.0f, 1.0f))
                 UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-                UI_Background_Color(((F4){0.008f, 0.008f, 0.008f, 1.0f})) {
+                UI_Tag(str8("subtle")) {
                   if (ui_button(str8("Split X")).flags & UI_SIGNAL_FLAG__CLICKED) {
                     cmd_push((Cmd){
                       .kind = CMD_KIND__OPEN_PANEL,
@@ -1298,11 +1343,11 @@ Internal void lane(void *user_data) {
                 UI_Row()
                 UI_Padding(ui_px(10.0f, 1.0f)) {
                   UI_Column() {
-                    UI_Text_Color(((F4){0.035227284f, 0.329110300f, 1.016848732f, 1.0f}))
+                    UI_Tag(str8("accent"))
                     ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Choose view kind."));
 
                     UI_Row()
-                    UI_Background_Color(((F4){0.008f, 0.008f, 0.008f, 1.0f}))
+                    UI_Tag(str8("subtle"))
                     UI_Text_Align((UI_TEXT_ALIGN__CENTER))
                     UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
                     UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
@@ -1351,7 +1396,7 @@ Internal void lane(void *user_data) {
                     
                     ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
                     ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
-                    ui_set_next_background_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
+                    ui_set_next_tag(str8("viewport"));
                     view->viewport_box = ui_build_box_from_stringf(
                       UI_BOX_FLAG__DRAW_BACKGROUND|
                       UI_BOX_FLAG__CLIP|

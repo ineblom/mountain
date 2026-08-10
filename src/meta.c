@@ -80,7 +80,8 @@ Global L1 final_impl_length = 0;
 Global String8 final_header = {0};
 Global String8 final_impl = {0};
 
-Internal void lane(Arena *arena) {
+Internal void lane(void *user_data) {
+  Arena *arena = lane_arena();
 
   ////////////////////////////////
   //~ kti: Parse
@@ -313,6 +314,21 @@ Internal %4$s ui_top_%3$s(void) {
     os_write_entire_file(str8("./src/ui.meta.c"), final_impl.str, final_impl.len);
   }
 
+}
+
+SI1 main(void) {
+  Lane_Group_Params params = {
+    .count = os_core_count()/2,
+    .proc = lane,
+
+    .arena_size = GiB(1),
+    .scratch_size = MiB(64),
+
+    .lane_zero_on_caller = 1,
+  };
+  lane_group_launch(params);
+
+  return 0;
 }
 
 #endif

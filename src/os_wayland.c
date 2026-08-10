@@ -7,6 +7,21 @@
 #include <xdg-shell-protocol.h>
 #include <poll.h>
 
+typedef struct OS_Wayland_Output OS_Wayland_Output;
+struct OS_Wayland_Output {
+  OS_Wayland_Output *next;
+  I1 registry_name;
+  SI1 scale;
+  struct wl_output *output;
+  struct wl_output_listener listener;
+};
+
+typedef struct OS_Wayland_Window_Output OS_Wayland_Window_Output;
+struct OS_Wayland_Window_Output {
+  OS_Wayland_Window_Output *next;
+  OS_Wayland_Output *output;
+};
+
 struct OS_Window {
   OS_Window *prev;
   OS_Window *next;
@@ -15,11 +30,15 @@ struct OS_Window {
   SI1 height;
   D1 pixel_ratio;
 
+  OS_Wayland_Window_Output *first_output;
+  OS_Wayland_Window_Output *first_free_output;
   struct wl_surface *surface;
   struct xdg_surface *xdg_surface;
   struct xdg_toplevel *xdg_toplevel;
+  struct wl_surface_listener surface_listener;
   struct xdg_surface_listener xdg_surface_listener;
   struct xdg_toplevel_listener xdg_toplevel_listener;
+  I1 has_preferred_buffer_scale;
   I1 configured;
 };
 
@@ -45,6 +64,9 @@ struct OS_GFX_State {
   struct wl_cursor_theme *cursor_theme;
   struct wl_cursor *default_cursor;
   struct wl_surface *cursor_surface;
+  OS_Wayland_Output *first_output;
+  SI1 cursor_scale;
+  I1 cursor_enter_serial;
   struct wl_registry_listener registry_listener;
   struct xdg_wm_base_listener xdg_wm_base_listener;
   struct wl_seat_listener seat_listener;
@@ -246,19 +268,231 @@ Internal void os_key_repeat_clear(void) {
   os_gfx_state->next_repeat_ns = 0;
 }
 
+Internal void os_wayland_cursor_update(OS_Window *window) {
+  if (window == 0 ||
+      os_gfx_state->pointer == 0 ||
+      os_gfx_state->cursor_surface == 0 ||
+      os_gfx_state->cursor_enter_serial == 0) {
+    return;
+  }
+
+  SI1 scale = (SI1)window->pixel_ratio;
+  if (scale < 1) scale = 1;
+
+  if (os_gfx_state->cursor_theme == 0 || os_gfx_state->cursor_scale != scale) {
+    if (os_gfx_state->cursor_theme != 0) {
+      wl_cursor_theme_destroy(os_gfx_state->cursor_theme);
+    }
+    os_gfx_state->cursor_theme = wl_cursor_theme_load(0, 24*scale, os_gfx_state->shm);
+    os_gfx_state->default_cursor = 0;
+    os_gfx_state->cursor_scale = scale;
+    if (os_gfx_state->cursor_theme != 0) {
+      os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "default");
+      if (os_gfx_state->default_cursor == 0) {
+        os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "left_ptr");
+      }
+    }
+  }
+
+  if (os_gfx_state->default_cursor != 0) {
+    struct wl_cursor_image *image = os_gfx_state->default_cursor->images[0];
+    struct wl_buffer *buffer = wl_cursor_image_get_buffer(image);
+    if (wl_surface_get_version(os_gfx_state->cursor_surface) >= WL_SURFACE_SET_BUFFER_SCALE_SINCE_VERSION) {
+      wl_surface_set_buffer_scale(os_gfx_state->cursor_surface, scale);
+    }
+    wl_pointer_set_cursor(os_gfx_state->pointer, os_gfx_state->cursor_enter_serial,
+                          os_gfx_state->cursor_surface,
+                          image->hotspot_x/scale, image->hotspot_y/scale);
+    wl_surface_attach(os_gfx_state->cursor_surface, buffer, 0, 0);
+#if defined(WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION)
+    if (wl_surface_get_version(os_gfx_state->cursor_surface) >= WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION) {
+      wl_surface_damage_buffer(os_gfx_state->cursor_surface, 0, 0, image->width, image->height);
+    } else
+#endif
+    {
+      wl_surface_damage(os_gfx_state->cursor_surface, 0, 0,
+                        (image->width + scale - 1)/scale,
+                        (image->height + scale - 1)/scale);
+    }
+    wl_surface_commit(os_gfx_state->cursor_surface);
+  }
+}
+
+Internal void os_wayland_window_set_scale(OS_Window *window, SI1 scale) {
+  if (scale < 1) scale = 1;
+  if (wl_surface_get_version(window->surface) < WL_SURFACE_SET_BUFFER_SCALE_SINCE_VERSION) {
+    scale = 1;
+  }
+
+  // xdg-shell dimensions stay in logical coordinates. Only the surface buffer
+  // and pixel_ratio use physical pixels, matching the macOS backing-size path.
+  if (window->pixel_ratio != (D1)scale) {
+    window->pixel_ratio = (D1)scale;
+    wl_surface_set_buffer_scale(window->surface, scale);
+    if (os_gfx_state->hovered_window == window) {
+      os_wayland_cursor_update(window);
+    }
+  }
+}
+
+Internal void os_wayland_window_update_scale_from_outputs(OS_Window *window) {
+  // A surface can span outputs; render for the highest-density one so no part
+  // of it is supplied with an undersized buffer.
+  SI1 scale = 1;
+  for (OS_Wayland_Window_Output *it = window->first_output; it != 0; it = it->next) {
+    scale = Max(scale, it->output->scale);
+  }
+  os_wayland_window_set_scale(window, scale);
+}
+
+Internal void surface_enter_handler(void *data, struct wl_surface *surface, struct wl_output *wl_output) {
+  OS_Window *window = (OS_Window *)data;
+  OS_Wayland_Output *output = 0;
+  for (OS_Wayland_Output *it = os_gfx_state->first_output; it != 0; it = it->next) {
+    if (it->output == wl_output) {
+      output = it;
+      break;
+    }
+  }
+
+  if (output != 0) {
+    for (OS_Wayland_Window_Output *it = window->first_output; it != 0; it = it->next) {
+      if (it->output == output) return;
+    }
+    OS_Wayland_Window_Output *window_output = window->first_free_output;
+    if (window_output != 0) {
+      SLLStackPop(window->first_free_output);
+    } else {
+      window_output = push_array(os_gfx_state->arena, OS_Wayland_Window_Output, 1);
+    }
+    window_output->output = output;
+    SLLStackPush(window->first_output, window_output);
+    if (!window->has_preferred_buffer_scale) {
+      os_wayland_window_update_scale_from_outputs(window);
+    }
+  }
+}
+
+Internal void surface_leave_handler(void *data, struct wl_surface *surface, struct wl_output *wl_output) {
+  OS_Window *window = (OS_Window *)data;
+  OS_Wayland_Window_Output **link = &window->first_output;
+  while (link[0] != 0) {
+    if (link[0]->output->output == wl_output) {
+      OS_Wayland_Window_Output *window_output = link[0];
+      link[0] = window_output->next;
+      SLLStackPush(window->first_free_output, window_output);
+      break;
+    }
+    link = &link[0]->next;
+  }
+  if (!window->has_preferred_buffer_scale) {
+    os_wayland_window_update_scale_from_outputs(window);
+  }
+}
+
+#if defined(WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION)
+Internal void surface_preferred_buffer_scale_handler(void *data, struct wl_surface *surface, SI1 scale) {
+  OS_Window *window = (OS_Window *)data;
+  window->has_preferred_buffer_scale = 1;
+  os_wayland_window_set_scale(window, scale);
+}
+
+Internal void surface_preferred_buffer_transform_handler(void *data, struct wl_surface *surface, I1 transform) {}
+#endif
+
+Internal void output_geometry_handler(void *data, struct wl_output *output, SI1 x, SI1 y,
+                                      SI1 physical_width, SI1 physical_height, SI1 subpixel,
+                                      CString make, CString model, SI1 transform) {}
+
+Internal void output_mode_handler(void *data, struct wl_output *output, I1 flags,
+                                  SI1 width, SI1 height, SI1 refresh) {}
+
+Internal void output_done_handler(void *data, struct wl_output *output) {}
+
+Internal void output_scale_handler(void *data, struct wl_output *wl_output, SI1 scale) {
+  OS_Wayland_Output *output = (OS_Wayland_Output *)data;
+  output->scale = Max(1, scale);
+  for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next) {
+    if (!window->has_preferred_buffer_scale) {
+      os_wayland_window_update_scale_from_outputs(window);
+    }
+  }
+}
+
+#if defined(WL_OUTPUT_NAME_SINCE_VERSION)
+Internal void output_name_handler(void *data, struct wl_output *output, CString name) {}
+Internal void output_description_handler(void *data, struct wl_output *output, CString description) {}
+#endif
+
+Internal void os_wayland_output_destroy(OS_Wayland_Output *output) {
+#if defined(WL_OUTPUT_RELEASE_SINCE_VERSION)
+  if (wl_output_get_version(output->output) >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
+    wl_output_release(output->output);
+  } else
+#endif
+  {
+    wl_output_destroy(output->output);
+  }
+  output->output = 0;
+}
+
 Internal void registry_global_handler(void *data, struct wl_registry *registry, I1 name, CString interface, I1 version) {
   if (cstr_compare(interface, wl_compositor_interface.name)) {
-    os_gfx_state->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
+    I1 bind_version = Min(Min(version, (I1)wl_compositor_interface.version), 6);
+    os_gfx_state->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, bind_version);
   } else if (cstr_compare(interface, wl_shm_interface.name)) {
     os_gfx_state->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
   } else if (cstr_compare(interface, xdg_wm_base_interface.name)) {
     os_gfx_state->xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
   } else if (cstr_compare(interface, wl_seat_interface.name)) {
-    os_gfx_state->seat = wl_registry_bind(registry, name, &wl_seat_interface, 5);
+    I1 bind_version = Min(version, 5);
+    os_gfx_state->seat = wl_registry_bind(registry, name, &wl_seat_interface, bind_version);
+  } else if (cstr_compare(interface, wl_output_interface.name)) {
+    OS_Wayland_Output *output = push_array(os_gfx_state->arena, OS_Wayland_Output, 1);
+    output->registry_name = name;
+    output->scale = 1;
+    I1 bind_version = Min(Min(version, (I1)wl_output_interface.version), 4);
+    output->output = wl_registry_bind(registry, name, &wl_output_interface, bind_version);
+    output->listener.geometry = output_geometry_handler;
+    output->listener.mode = output_mode_handler;
+    output->listener.done = output_done_handler;
+    output->listener.scale = output_scale_handler;
+#if defined(WL_OUTPUT_NAME_SINCE_VERSION)
+    output->listener.name = output_name_handler;
+    output->listener.description = output_description_handler;
+#endif
+    wl_output_add_listener(output->output, &output->listener, output);
+    SLLStackPush(os_gfx_state->first_output, output);
   }
 }
 
-Internal void registry_global_remove_handler(void *data, struct wl_registry *registry, I1 name) {}
+Internal void registry_global_remove_handler(void *data, struct wl_registry *registry, I1 name) {
+  OS_Wayland_Output **link = &os_gfx_state->first_output;
+  while (link[0] != 0) {
+    OS_Wayland_Output *output = link[0];
+    if (output->registry_name == name) {
+      for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next) {
+        OS_Wayland_Window_Output **window_link = &window->first_output;
+        while (window_link[0] != 0) {
+          if (window_link[0]->output == output) {
+            OS_Wayland_Window_Output *window_output = window_link[0];
+            window_link[0] = window_output->next;
+            SLLStackPush(window->first_free_output, window_output);
+            break;
+          }
+          window_link = &window_link[0]->next;
+        }
+        if (!window->has_preferred_buffer_scale) {
+          os_wayland_window_update_scale_from_outputs(window);
+        }
+      }
+      link[0] = output->next;
+      os_wayland_output_destroy(output);
+      break;
+    }
+    link = &link[0]->next;
+  }
+}
 
 Internal void xdg_wm_base_ping_handler(void *data, struct xdg_wm_base *xdg_wm_base, I1 serial) {
   xdg_wm_base_pong(xdg_wm_base, serial);
@@ -324,19 +558,13 @@ Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer, I1 s
     }
   }
 
-  // Set the cursor to default pointer
-  if (os_gfx_state->default_cursor && os_gfx_state->cursor_surface) {
-    struct wl_cursor_image *image = os_gfx_state->default_cursor->images[0];
-    struct wl_buffer *buffer = wl_cursor_image_get_buffer(image);
-    wl_pointer_set_cursor(pointer, serial, os_gfx_state->cursor_surface, image->hotspot_x, image->hotspot_y);
-    wl_surface_attach(os_gfx_state->cursor_surface, buffer, 0, 0);
-    wl_surface_damage(os_gfx_state->cursor_surface, 0, 0, image->width, image->height);
-    wl_surface_commit(os_gfx_state->cursor_surface);
-  }
+  os_gfx_state->cursor_enter_serial = serial;
+  os_wayland_cursor_update(os_gfx_state->hovered_window);
 }
 
 Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface) {
   os_gfx_state->hovered_window = 0;
+  os_gfx_state->cursor_enter_serial = 0;
 }
 
 Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
@@ -562,21 +790,35 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
 
     wl_display_roundtrip(os_gfx_state->display);
 
-    // Initialize cursor theme and default cursor
+    // Initialize cursor theme and default cursor.
     os_gfx_state->cursor_theme = wl_cursor_theme_load(0, 24, os_gfx_state->shm);
+    os_gfx_state->cursor_scale = 1;
     if (os_gfx_state->cursor_theme) {
       os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "default");
       if (!os_gfx_state->default_cursor) {
         os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "left_ptr");
       }
-      os_gfx_state->cursor_surface = wl_compositor_create_surface(os_gfx_state->compositor);
     }
+    os_gfx_state->cursor_surface = wl_compositor_create_surface(os_gfx_state->compositor);
   }
 
   OS_Window *result = push_array(os_gfx_state->arena, OS_Window, 1);
+  result->width = width;
+  result->height = height;
+  result->pixel_ratio = 1.0;
 
   result->surface = wl_compositor_create_surface(os_gfx_state->compositor);
   Assert(result->surface != 0);
+
+  result->surface_listener.enter = surface_enter_handler;
+  result->surface_listener.leave = surface_leave_handler;
+#if defined(WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION)
+  if (wl_surface_get_version(result->surface) >= WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION) {
+    result->surface_listener.preferred_buffer_scale = surface_preferred_buffer_scale_handler;
+    result->surface_listener.preferred_buffer_transform = surface_preferred_buffer_transform_handler;
+  }
+#endif
+  wl_surface_add_listener(result->surface, &result->surface_listener, result);
 
   result->xdg_surface = xdg_wm_base_get_xdg_surface(os_gfx_state->xdg_wm_base, result->surface);
   Assert(result->xdg_surface);
@@ -596,21 +838,17 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   xdg_toplevel_set_title(result->xdg_toplevel, (CString)cstr_title.str);
   scratch_end(scratch);
 
+  result->next = os_gfx_state->first_window;
+  if (result->next != 0) {
+    result->next->prev = result;
+  }
+  os_gfx_state->first_window = result;
+
   wl_surface_commit(result->surface);
 
   while (!result->configured) {
     wl_display_dispatch(os_gfx_state->display);
   }
-
-  result->width = width;
-  result->height = height;
-  result->pixel_ratio = 1.0;
-
-  result->next = os_gfx_state->first_window;
-  if (os_gfx_state->first_window != 0) {
-    os_gfx_state->first_window->prev = result;
-  }
-  os_gfx_state->first_window = result;
 
   return result;
 }
@@ -680,6 +918,16 @@ Internal OS_Event_List os_poll_events(Arena *arena) {
 }
 
 Internal void os_window_close(OS_Window *window) {
+  if (os_gfx_state->hovered_window == window) {
+    os_gfx_state->hovered_window = 0;
+    os_gfx_state->cursor_enter_serial = 0;
+  }
+  if (os_gfx_state->focused_window == window) {
+    os_gfx_state->focused_window = 0;
+    MemoryZeroArray(os_gfx_state->key_states);
+    os_key_repeat_clear();
+  }
+
   xdg_toplevel_destroy(window->xdg_toplevel);
   xdg_surface_destroy(window->xdg_surface);
   wl_surface_destroy(window->surface);

@@ -2,6 +2,8 @@
 //~ kti: TODO
 
 //- kti: UI Theme.
+//- kti: View result in editor.
+//- kti: Tweak postprocessing after render.
 //- kti: Define scene by code.
 //- kti: Lister groups.
 //- kti: Better rendering in the viewport.

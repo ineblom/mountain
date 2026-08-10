@@ -370,13 +370,13 @@ Internal DR_FStr_List dr_fstrs_copy(Arena *arena, DR_FStr_List *src) {
   return dst;
 }
 
-Internal DR_FRun_List dr_fruns_from_fstrs(Arena *arena, F1 tab_size, DR_FStr_List *src) {
+Internal DR_FRun_List dr_fruns_from_fstrs(Arena *arena, F1 tab_size, F1 raster_scale, DR_FStr_List *src) {
   DR_FRun_List dst = {0};
 
   F1 base_align_px = 0;
   for (DR_FStr_Node *n = src->first; n != 0; n = n->next) {
     DR_FRun_Node *dst_n = push_array(arena, DR_FRun_Node, 1);
-    dst_n->value.run = fc_run_from_string(n->value.params.font, n->value.params.size, base_align_px, tab_size, n->value.string);
+    dst_n->value.run = fc_run_from_string(n->value.params.font, n->value.params.size, raster_scale, base_align_px, tab_size, n->value.string);
     dst_n->value.color = n->value.params.color;
     dst_n->value.underline_thickness = n->value.params.underline_thickness;
     dst_n->value.strikethrough_thickness = n->value.params.strikethrough_thickness;

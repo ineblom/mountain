@@ -140,7 +140,7 @@ Internal FP_Metrics fp_metrics_from_font(FP_Handle font, F1 size) {
   return result;
 }
 
-Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, String8 string) {
+Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 raster_scale, String8 string) {
   ProfFuncBegin();
 
   FP_Raster_Result result = {0};
@@ -150,10 +150,6 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, Strin
 
     //- kti: Unpack font
     FT_Face face = font.face;
-    F1 raster_scale = 1.0f;
-    if (os_gfx_state != 0 && os_gfx_state->first_window != 0) {
-      raster_scale = (F1)os_gfx_state->first_window->pixel_ratio;
-    }
     raster_scale = Max(1.0f, raster_scale);
     FT_UInt pixel_size = fp_pixel_size_from_font_size(size * raster_scale);
     fp_select_size(face, pixel_size);

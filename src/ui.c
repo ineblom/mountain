@@ -799,7 +799,7 @@ Internal void ui_box_equip_display_string(UI_Box *box, String8 string) {
     DR_FStr_Node fstr_n = {0, {display_string, {box->font, text_color, box->font_size, 0, 0}}};
     DR_FStr_List fstrs = {&fstr_n, &fstr_n, 1};
     box->display_fstrs = dr_fstrs_copy(ui_build_arena(), &fstrs);
-    box->display_fruns = dr_fruns_from_fstrs(ui_build_arena(), box->tab_size, &box->display_fstrs);
+    box->display_fruns = dr_fruns_from_fstrs(ui_build_arena(), box->tab_size, (F1)ui_state->window->pixel_ratio, &box->display_fstrs);
   }
 }
 
@@ -1655,7 +1655,7 @@ Internal F2 ui_box_text_pos(UI_Box *box) {
 
 Internal L1 ui_box_char_pos_from_xy(UI_Box *box, F2 pos) {
   String8 line = ui_box_display_string(box);
-  L1 result = fc_char_pos_from_tag_size_string_p(box->font, box->font_size, 0, box->tab_size, line, pos[0] - ui_box_text_pos(box)[0]);
+  L1 result = fc_char_pos_from_tag_size_string_p(box->font, box->font_size, (F1)ui_state->window->pixel_ratio, 0, box->tab_size, line, pos[0] - ui_box_text_pos(box)[0]);
   return result;
 }
 
@@ -2163,7 +2163,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
       ui_set_next_pref_width(ui_text_dim(0.0f, 0.0f));
       ui_label(pre_edit_value);
     } else {
-      F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), edit_string)[0];
+      F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), (F1)ui_state->window->pixel_ratio, 0, ui_top_tab_size(), edit_string)[0];
       ui_set_next_pref_width(ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
       UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, str8("###editstr"));
     
@@ -2175,7 +2175,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
       ui_box_equip_custom_draw(editstr_box, UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT, draw_data);
 
       mouse_pt = (Txt_Pt){0, ui_box_char_pos_from_xy(editstr_box, ui_mouse())};
-      cursor_off = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), 0, ui_top_tab_size(), str8_prefix(edit_string, cursor->column))[0];
+      cursor_off = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), (F1)ui_state->window->pixel_ratio, 0, ui_top_tab_size(), str8_prefix(edit_string, cursor->column))[0];
     }
   }
 
@@ -2326,8 +2326,8 @@ Internal void ui_draw(void) {
         String8 edited_string = draw_data->edited_string;
         Txt_Pt cursor = draw_data->cursor;
         Txt_Pt mark = draw_data->mark;
-        F1 cursor_pixel_off = fc_dim_from_tag_size_string(font, font_size, 0, tab_size, str8_prefix(edited_string, cursor.column))[0];
-        F1 mark_pixel_off = fc_dim_from_tag_size_string(font, font_size, 0, tab_size, str8_prefix(edited_string, mark.column))[0];
+        F1 cursor_pixel_off = fc_dim_from_tag_size_string(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, str8_prefix(edited_string, cursor.column))[0];
+        F1 mark_pixel_off = fc_dim_from_tag_size_string(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, str8_prefix(edited_string, mark.column))[0];
         F1 cursor_thickness = Max(1.0f, floor_F1(font_size/10.0f));
         UI_Box *edit_box = box->parent;
         F1 cursor_top = edit_box->rect[1] + font_size*0.5f;

@@ -112,6 +112,7 @@ struct FC_Style_Raster_HT_Node {
 
   L1 style_hash;
 
+  F1 raster_scale;
   F1 ascent;
   F1 descent;
   F1 column_width;
@@ -298,14 +299,21 @@ Internal FP_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size) {
   return result;
 }
 
-Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 size) {
+Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 size, F1 raster_scale) {
   ProfFuncBegin();
 
+  raster_scale = Max(1.0f, raster_scale);
   D1 size_d1 = (D1)size;
+  D1 raster_scale_d1 = (D1)raster_scale;
+  L1 size_bits = 0;
+  L1 raster_scale_bits = 0;
+  memcpy(&size_bits, &size_d1, sizeof(size_bits));
+  memcpy(&raster_scale_bits, &raster_scale_d1, sizeof(raster_scale_bits));
   L1 buffer[] = {
     tag.l1[0],
     tag.l1[1],
-    *(L1 *)&size_d1,
+    size_bits,
+    raster_scale_bits,
   };
   Hash128 hash = hash128(buffer, sizeof(buffer));
   L1 style_hash = hash.l1[0];
@@ -326,6 +334,7 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
     FP_Metrics metrics = fc_metrics_from_tag_size(tag, size);
     style_raster_node = push_array(fc_state->raster_arena, FC_Style_Raster_HT_Node, 1);
     style_raster_node->style_hash = style_hash;
+    style_raster_node->raster_scale = raster_scale;
     style_raster_node->ascent = metrics.ascent;
     style_raster_node->descent = metrics.descent;
     style_raster_node->utf8_length1_direct_map = push_array(fc_state->raster_arena, FC_Raster_Info, 256);
@@ -441,10 +450,10 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
   return result;
 }
 
-Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string) {
+Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base_align_px, F1 tab_size_px, String8 string) {
   ProfFuncBegin();
 
-  FC_Style_Raster_HT_Node *style_raster_node = fc_style_raster_from_tag_size(tag, size);
+  FC_Style_Raster_HT_Node *style_raster_node = fc_style_raster_from_tag_size(tag, size, raster_scale);
 
   //- kti: Create run cache if on new frame.
   if (style_raster_node->run_cache_frame_index != fc_state->frame_index) {
@@ -562,7 +571,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
         // kti: Rasterize
         FP_Raster_Result raster = {0};
         if (size > 0) {
-          raster = fp_raster(scratch.arena, font_handle, size, piece_substring);
+          raster = fp_raster(scratch.arena, font_handle, size, style_raster_node->raster_scale, piece_substring);
         }
 
         // kti: Allocate portion of atlas.
@@ -710,22 +719,22 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab
   return run;
 }
 
-Internal F2 fc_dim_from_tag_size_string(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string) {
+Internal F2 fc_dim_from_tag_size_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base_align_px, F1 tab_size_px, String8 string) {
   Temp_Arena scratch = scratch_begin(0, 0);
   F2 result = {0};
-  FC_Run run = fc_run_from_string(tag, size, base_align_px, tab_size_px, string);
+  FC_Run run = fc_run_from_string(tag, size, raster_scale, base_align_px, tab_size_px, string);
   result = run.dim;
   scratch_end(scratch);
   return result;
 }
 
-Internal L1 fc_char_pos_from_tag_size_string_p(FC_Tag tag, F1 size, F1 base_align_px, F1 tab_size_px, String8 string, F1 p) {
+Internal L1 fc_char_pos_from_tag_size_string_p(FC_Tag tag, F1 size, F1 raster_scale, F1 base_align_px, F1 tab_size_px, String8 string, F1 p) {
   Temp_Arena scratch = scratch_begin(0, 0);
   L1 best_offset_bytes = 0;
   F1 best_offset_px = F1_MAX;
   L1 offset_bytes = 0;
   F1 offset_px = 0.f;
-  FC_Run run = fc_run_from_string(tag, size, base_align_px, tab_size_px, string);
+  FC_Run run = fc_run_from_string(tag, size, raster_scale, base_align_px, tab_size_px, string);
   for (L1 idx = 0; idx <= run.pieces.count; idx += 1) {
     F1 this_piece_offset_px = abs_F1(offset_px - p);
     if (this_piece_offset_px < best_offset_px) {

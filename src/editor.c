@@ -1,8 +1,6 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: View result in editor.
-//- kti: Tweak postprocessing after render.
 //- kti: Define scene by code.
 //- kti: Lister groups.
 //- kti: Better rendering in the viewport.
@@ -183,22 +181,17 @@ struct Cmd {
 ////////////////////////////////
 //~ kti: Render
 
-typedef enum Render_Phase {
-  RENDER_PHASE__IDLE,
-  RENDER_PHASE__TRACING,
-  RENDER_PHASE__POSTPROCESSING,
-  RENDER_PHASE__WRITING,
-} Render_Phase;
-
 typedef struct Render_Settings Render_Settings;
 struct Render_Settings {
   L1 width;
   L1 height;
   L1 rays_per_pixel;
   L1 max_num_bounces;
+};
 
+typedef struct Postprocessing_Settings Postprocessing_Settings;
+struct Postprocessing_Settings {
   Image_Bloom_Params bloom;
-  String8 output_filename;
 };
 
 typedef struct Render_Job Render_Job;
@@ -208,9 +201,7 @@ struct Render_Job {
   Render_Settings settings;
   RT_Scene scene;
   Image hdr;
-  Image display;
 
-  Render_Phase phase;
   L1 pixels_completed;
   L1 pixels_total;
   L1 next_pixel;
@@ -248,8 +239,11 @@ struct State {
 
   //- kti: Render.
   Render_Settings render_settings;
+  Postprocessing_Settings postprocessing_settings;
   Render_Job *active_render;
   Render_Job *last_render;
+  Arena *display_arena;
+  Image display_image;
   GFX_Texture *render_result_texture;
 };
 
@@ -828,7 +822,6 @@ Internal M4F plane_transform_M4F(Entity *entity, Camera camera) {
 //~ kti: Render
 
 Internal void render_lane(void *user_data) {
-  Arena *arena = lane_arena();
   Render_Job *job = (Render_Job *)user_data;
   Render_Settings settings = job->settings;
   RT_Scene scene = job->scene;
@@ -843,7 +836,6 @@ Internal void render_lane(void *user_data) {
     atomic_swap_L1(&job->next_pixel, 0);
     atomic_swap_L1(&job->pixels_completed, 0);
     atomic_swap_L1(&job->pixels_total, pixels_total);
-    atomic_swap_I1(&job->phase, RENDER_PHASE__TRACING);
   }
 
   lane_sync();
@@ -863,18 +855,38 @@ Internal void render_lane(void *user_data) {
   }
 
   lane_sync();
+}
 
-  //- kti: Finalize image.
-  if (lane_idx() == 0 && atomic_load_I1(&job->cancel_requested) == 0) {
-    //- kti: Postprocess.
-    atomic_swap_I1(&job->phase, RENDER_PHASE__POSTPROCESSING);
-    Image bloomed = image_apply_bloom(arena, job->hdr, settings.bloom);
-    job->display = image_I1_from_F4_tonemap(job->arena, bloomed, TONEMAP_KIND__LOTTES);
+Internal void editor_apply_postprocessing(void) {
+  if (state->last_render != 0 && !image_is_nil(state->last_render->hdr)) {
+    arena_clear(state->display_arena);
+    state->display_image = (Image){0};
 
-    //- kti: Write to file.
-    atomic_swap_I1(&job->phase, RENDER_PHASE__WRITING);
-    image_write_to_file(job->display, settings.output_filename);
+    Image bloomed = image_apply_bloom( state->display_arena, state->last_render->hdr, state->postprocessing_settings.bloom);
+    state->display_image = image_I1_from_F4_tonemap(state->display_arena, bloomed, TONEMAP_KIND__LOTTES);
+
+    if (!image_is_nil(state->display_image)) {
+      GFX_Texture *new_texture = gfx_tex2d_alloc(
+        GFX_TEXTURE_USAGE__STATIC,
+        state->display_image.width,
+        state->display_image.height,
+        state->display_image.pixels);
+
+      if (state->render_result_texture != 0) {
+        gfx_tex2d_free(state->render_result_texture);
+      }
+      state->render_result_texture = new_texture;
+    }
   }
+}
+
+Internal I1 postprocessing_settings_match(Postprocessing_Settings a, Postprocessing_Settings b) {
+  I1 result =
+    a.bloom.pass_count == b.bloom.pass_count &&
+    a.bloom.threshold == b.bloom.threshold &&
+    a.bloom.strength == b.bloom.strength &&
+    a.bloom.knee == b.bloom.knee;
+  return result;
 }
 
 ////////////////////////////////
@@ -929,12 +941,12 @@ Internal void lane(void *user_data) {
     state->render_settings.rays_per_pixel = 64;
     state->render_settings.max_num_bounces = 8;
 
-    state->render_settings.bloom.pass_count = 8;
-    state->render_settings.bloom.threshold = 0.5f;
-    state->render_settings.bloom.strength = 0.4f;
-    state->render_settings.bloom.knee = 0.5f;
+    state->postprocessing_settings.bloom.pass_count = 8;
+    state->postprocessing_settings.bloom.threshold = 0.5f;
+    state->postprocessing_settings.bloom.strength = 0.4f;
+    state->postprocessing_settings.bloom.knee = 0.5f;
 
-    state->render_settings.output_filename = str8("output.bmp");
+    state->display_arena = arena_alloc(GiB(1));
   }
 
   lane_sync();
@@ -1033,6 +1045,9 @@ Internal void lane(void *user_data) {
     lane_sync();
 
     if (lane_idx() == 0) {
+      Postprocessing_Settings postprocessing_settings_before_ui = state->postprocessing_settings;
+      I1 postprocessing_dirty = 0;
+
       //- kti: Build lister.
       lister_reset(scratch.arena);
 
@@ -1147,19 +1162,25 @@ Internal void lane(void *user_data) {
           lister_L1(str8("Max Bounces"), &state->render_settings.max_num_bounces,
             .default_value = 8);
 
-          lister_header(str8("Bloom"));
+          lister_header(str8("Postprocessing"));
 
-          lister_L1(str8("Passes"), &state->render_settings.bloom.pass_count,
+          lister_L1(str8("Passes"), &state->postprocessing_settings.bloom.pass_count,
             .default_value = 8);
 
-          lister_F1(str8("Threshold"), &state->render_settings.bloom.threshold,
-            .default_value = 0.5f);
+          lister_F1(str8("Threshold"), &state->postprocessing_settings.bloom.threshold,
+            .default_value = 0.5f,
+            .pixels_per_unit = 50.0f,
+            .max = F1_MAX);
 
-          lister_F1(str8("Strength"), &state->render_settings.bloom.strength,
-            .default_value = 0.4f);
+          lister_F1(str8("Strength"), &state->postprocessing_settings.bloom.strength,
+            .default_value = 0.4f,
+            .min = 0.0f,
+            .max = 1.0f);
 
-          lister_F1(str8("Knee"), &state->render_settings.bloom.knee,
-            .default_value = 0.5f);
+          lister_F1(str8("Knee"), &state->postprocessing_settings.bloom.knee,
+            .default_value = 0.5f,
+            .pixels_per_unit = 50.0f,
+            .max = F1_MAX);
         }
 
         //- kti: Actions.
@@ -1183,19 +1204,9 @@ Internal void lane(void *user_data) {
             // grab progress values
             L1 completed = atomic_load_L1(&state->active_render->pixels_completed);
             L1 total = atomic_load_L1(&state->active_render->pixels_total);
-            L1 phase = atomic_load_I1(&state->active_render->phase);
-
             F1 pct = (total > 0) ? (F1)completed/(F1)total : 0.0f;
 
-            String8 display_text = str8("Idle");
-            switch (phase) {
-              case RENDER_PHASE__TRACING: display_text = str8("Tracing"); break;
-              case RENDER_PHASE__POSTPROCESSING: display_text = str8("Postprocessing"); break;
-              case RENDER_PHASE__WRITING: display_text = str8("Writing"); break;
-              default: break;
-            }
-
-            lister_progress(display_text, pct); 
+            lister_progress(str8("Tracing"), pct);
 
             lister_cmd(str8("Cancel"), (Cmd){
               .kind = CMD_KIND__CANCEL_RENDER,
@@ -1771,6 +1782,8 @@ Internal void lane(void *user_data) {
         ProfEnd();
       }
 
+      postprocessing_dirty = !postprocessing_settings_match(postprocessing_settings_before_ui, state->postprocessing_settings);
+
       ////////////////////////////////
       //~ kti: Execute Cmds
 
@@ -1817,7 +1830,6 @@ Internal void lane(void *user_data) {
 
               job->arena = job_arena;
               job->settings = state->render_settings;
-              job->settings.output_filename = push_str8_copy(job_arena, state->render_settings.output_filename);
 
               // build scene
               Entity *camera_entity = &state->nil_entity; 
@@ -1895,27 +1907,20 @@ Internal void lane(void *user_data) {
         Render_Job *job = state->active_render;
         state->active_render = 0;
 
-        if (atomic_load_I1(&job->cancel_requested) || image_is_nil(job->display)) {
+        if (atomic_load_I1(&job->cancel_requested) || image_is_nil(job->hdr)) {
           arena_release(job->arena);
         } else {
-          // Uploads are owned by the editor thread. Allocating the new texture
-          // also waits for prior graphics work before the old texture is freed.
-          GFX_Texture *new_texture = gfx_tex2d_alloc(
-            GFX_TEXTURE_USAGE__STATIC,
-            job->display.width,
-            job->display.height,
-            job->display.pixels);
-
-          if (state->render_result_texture != 0) {
-            gfx_tex2d_free(state->render_result_texture);
-          }
           if (state->last_render != 0) {
             arena_release(state->last_render->arena);
           }
 
-          state->render_result_texture = new_texture;
           state->last_render = job;
+          postprocessing_dirty = 1;
         }
+      }
+
+      if (postprocessing_dirty) {
+        editor_apply_postprocessing();
       }
     }
 

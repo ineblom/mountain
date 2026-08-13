@@ -1084,7 +1084,8 @@ Internal void lane(void *user_data) {
 
             if (is_shape) {
               lister_header(str8("Material"));
-              lister_color(str8("Base"), &entity->material.base_color);
+              lister_color(str8("Base"), &entity->material.base_color,
+                .max = 1.0f);
               lister_F1(str8("Metallic"), &entity->material.metallic,
                 .default_value = 0.3f,
                 .max = 1.0f);

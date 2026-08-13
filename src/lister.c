@@ -97,7 +97,7 @@ Internal void lister_ui(void);
 #define lister_L1(str, data, ...) lister_l1_internal((str), (data), (Lister_L1_Options){__VA_ARGS__})
 #define lister_F1(str, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__F1, (str), (data), (Lister_F1_Options){__VA_ARGS__})
 #define lister_xyz(str, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__XYZ, (str), (data), (Lister_F1_Options){__VA_ARGS__})
-#define lister_color(str, data) lister_f1_internal(LISTER_ENTRY_KIND__COLOR, (str), (data), (Lister_F1_Options){.max = 1.0f})
+#define lister_color(str, data, ...) lister_f1_internal(LISTER_ENTRY_KIND__COLOR, (str), (data), (Lister_F1_Options){__VA_ARGS__})
 
 #endif
 
@@ -271,7 +271,7 @@ Internal F4 lister_rgb_from_hsv(F4 hsv) {
   if (hue < 0.0f) hue += 1.0f;
 
   F1 saturation = clamp01_F1(hsv[1]);
-  F1 value = clamp01_F1(hsv[2]);
+  F1 value = Max(0.0f, hsv[2]);
   F1 h = hue*6.0f;
   L1 sector = (L1)floor_F1(h);
   F1 fraction = h - floor_F1(h);
@@ -440,7 +440,8 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label) {
   }
 
   // clamp
-  if (options.min != 0 || options.max != 0) after = Max(options.min, after);
+  if (entry->kind == LISTER_ENTRY_KIND__COLOR) after = Max(0.0f, after);
+  else if (options.min != 0 || options.max != 0) after = Max(options.min, after);
   if (options.max != 0) after = Min(options.max, after);
 
   // update entry values
@@ -566,17 +567,17 @@ Internal void lister_ui(void) {
           ui_set_next_pref_height(ui_px(30.0f, 1.0f));
           UI_Box *header = ui_build_box_from_stringf(0, "color_header_%p", entry);
           UI_Parent(header) {
-            ui_set_next_pref_width(ui_pct(0.75f, 1.0f));
             ui_set_next_text_padding(10.0f);
             ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_SIDE_RIGHT, entry->str);
 
-            ui_set_next_pref_width(ui_pct(0.25f, 1.0f));
+            ui_set_next_pref_width(ui_px(30.0f, 1.0f));
             ui_set_next_background_color(color);
             preview_box = ui_build_box_from_stringf(
               UI_BOX_FLAG__MOUSE_CLICKABLE|
               UI_BOX_FLAG__DRAW_BACKGROUND|
               UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-              UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
+              UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS|
+              UI_BOX_FLAG__DRAW_SIDE_RIGHT,
               "color_preview_%p", entry);
 
             UI_Signal preview_signal = ui_signal_from_box(preview_box);
@@ -588,6 +589,17 @@ Internal void lister_ui(void) {
                 if (hsv[1] > 0.00001f && hsv[2] > 0.00001f) {
                   lister_state.color_hue = hsv[0];
                 }
+              }
+            }
+
+            UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+            UI_Pref_Width(ui_pct(0.75f/3.0f, 1.0f))
+            UI_Tag(str8("field")) {
+              String8 channel_names[3] = {str8("R"), str8("G"), str8("B")};
+              for (L1 component = 0; component < 3; component += 1) {
+                I1 not_last = component < 2;
+                ui_set_next_flags(UI_BOX_FLAG__DRAW_SIDE_RIGHT*not_last);
+                lister_drag_F1(entry, component, channel_names[component]);
               }
             }
           }

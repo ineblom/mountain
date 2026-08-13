@@ -242,9 +242,10 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray) {
       ray.inv_dir = 1.0f / ray.dir;
       ray.pos = next_origin + next_normal * min_hit_distance;
     } else {
-      F1 height = (ray.dir[1] + 1) * 0.5;
-      F4 sky_color = lerp_F4((F4){1.0f, 1.0f, 1.0f}, height, (F4){0.2f, 0.4f, 1.0f});
-      result += attenuation * sky_color;
+      //- kti: Sky
+      // F1 height = (ray.dir[1] + 1) * 0.5;
+      // F4 sky_color = lerp_F4((F4){1.0f, 1.0f, 1.0f}, height, (F4){0.2f, 0.4f, 1.0f});
+      // result += attenuation * sky_color;
       break;
     }
   }

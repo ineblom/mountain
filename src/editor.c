@@ -32,6 +32,7 @@ typedef I1 View_Kind;
 enum {
   VIEW_KIND__LISTER = 0,
   VIEW_KIND__VIEWPORT,
+  VIEW_KIND__RENDER_RESULT,
 
   VIEW_KIND_COUNT,
 };
@@ -39,6 +40,7 @@ enum {
 Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__LISTER] = str8("Lister"),
   [VIEW_KIND__VIEWPORT] = str8("Viewport"),
+  [VIEW_KIND__RENDER_RESULT] = str8("Render Result"),
 };
 
 typedef struct View View;
@@ -60,6 +62,9 @@ struct View {
   Axis gizmo_active_axis;
   F1 gizmo_drag_applied_delta;
   F2 gizmo_drag_axis_screen;
+
+  //- kti: Render result
+  UI_Box *render_result_box;
 };
 
 typedef struct Panel Panel;
@@ -202,6 +207,8 @@ struct Render_Job {
 
   Render_Settings settings;
   RT_Scene scene;
+  Image hdr;
+  Image display;
 
   Render_Phase phase;
   L1 pixels_completed;
@@ -242,6 +249,8 @@ struct State {
   //- kti: Render.
   Render_Settings render_settings;
   Render_Job *active_render;
+  Render_Job *last_render;
+  GFX_Texture *render_result_texture;
 };
 
 #endif
@@ -824,25 +833,23 @@ Internal void render_lane(void *user_data) {
   Render_Settings settings = job->settings;
   RT_Scene scene = job->scene;
 
-  Image *hdr = 0;
-
   if (lane_idx() == 0) {
-    //- kti: Allocate final image.
-    hdr = push_array(arena, Image, 1);
-    hdr[0] = image_alloc(arena, settings.width, settings.height, IMAGE_FORMAT__RGBA32F_LINEAR);
+    //- kti: Allocate the HDR image in the job arena so it remains available
+    // after the worker lanes have exited.
+    job->hdr = image_alloc(job->arena, settings.width, settings.height, IMAGE_FORMAT__RGBA32F_LINEAR);
 
     //- kti: Initialize progress.
-    L1 pixels_total = hdr->width * hdr->height;
+    L1 pixels_total = job->hdr.width * job->hdr.height;
     atomic_swap_L1(&job->next_pixel, 0);
     atomic_swap_L1(&job->pixels_completed, 0);
     atomic_swap_L1(&job->pixels_total, pixels_total);
     atomic_swap_I1(&job->phase, RENDER_PHASE__TRACING);
   }
 
-  lane_sync_L1((L1 *)&hdr, 0);
+  lane_sync();
 
   //- kti: Trace
-  L1 pixels_total = hdr->width * hdr->height;
+  L1 pixels_total = job->hdr.width * job->hdr.height;
   L1 pixels_per_chunk = 256;
 
   while (atomic_load_I1(&job->cancel_requested) == 0) {
@@ -850,7 +857,7 @@ Internal void render_lane(void *user_data) {
     if (first_pixel >= pixels_total) break;
 
     Range range = { first_pixel, Min(first_pixel+pixels_per_chunk, pixels_total) };
-    rt_trace_scene(scene, hdr[0], range);
+    rt_trace_scene(scene, job->hdr, range);
 
     atomic_add_L1(&job->pixels_completed, range.max-range.min);
   }
@@ -861,12 +868,12 @@ Internal void render_lane(void *user_data) {
   if (lane_idx() == 0 && atomic_load_I1(&job->cancel_requested) == 0) {
     //- kti: Postprocess.
     atomic_swap_I1(&job->phase, RENDER_PHASE__POSTPROCESSING);
-    Image bloomed = image_apply_bloom(arena, hdr[0], settings.bloom);
-    Image postprocessed = image_I1_from_F4_tonemap(arena, bloomed, TONEMAP_KIND__LOTTES); 
+    Image bloomed = image_apply_bloom(arena, job->hdr, settings.bloom);
+    job->display = image_I1_from_F4_tonemap(job->arena, bloomed, TONEMAP_KIND__LOTTES);
 
     //- kti: Write to file.
     atomic_swap_I1(&job->phase, RENDER_PHASE__WRITING);
-    image_write_to_file(postprocessed, settings.output_filename);
+    image_write_to_file(job->display, settings.output_filename);
   }
 }
 
@@ -1382,6 +1389,23 @@ Internal void lane(void *user_data) {
                     }
                   } break;
 
+                  //- kti: Ray-traced render result.
+                  case VIEW_KIND__RENDER_RESULT: {
+                    ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+                    ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
+                    ui_set_next_tag(str8("viewport"));
+                    view->render_result_box = ui_build_box_from_stringf(
+                      UI_BOX_FLAG__DRAW_BACKGROUND|
+                      UI_BOX_FLAG__CLIP|
+                      UI_BOX_FLAG__CLICKABLE,
+                      "##render_result_%p", panel);
+
+                    UI_Signal signal = ui_signal_from_box(view->render_result_box);
+                    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+                      cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                    }
+                  } break;
+
                   //- kti: 3D viewport.
                   case VIEW_KIND__VIEWPORT: {
                     //- kti: Animate camera.
@@ -1617,13 +1641,42 @@ Internal void lane(void *user_data) {
 
         ui_draw();
 
-        ////////////////////////////////
-        //~ 3D Draw
-
         ProfBegin("3D draw");
         for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
           if (panel->first == 0 && panel->view_count != 0) {
             View *view = &panel->views[panel->selected_view_idx];
+
+            ////////////////////////////////
+            //~ Render Result Draw
+
+            if (view->kind == VIEW_KIND__RENDER_RESULT && view->render_result_box != 0 && state->render_result_texture != 0) {
+              F4 bounds = view->render_result_box->rect;
+              GFX_Texture *texture = state->render_result_texture;
+              if (bounds[2] > 0.0f && bounds[3] > 0.0f && texture->width > 0 && texture->height > 0) {
+                F1 scale = Min(bounds[2]/(F1)texture->width, bounds[3]/(F1)texture->height);
+                F2 fitted_size = {
+                  scale*(F1)texture->width,
+                  scale*(F1)texture->height,
+                };
+                F4 dst = {
+                  bounds[0] + 0.5f*(bounds[2] - fitted_size[0]),
+                  bounds[1] + 0.5f*(bounds[3] - fitted_size[1]),
+                  fitted_size[0],
+                  fitted_size[1],
+                };
+
+                F4 src = { 0.0f, (F1)texture->height, (F1)texture->width, -(F1)texture->height, };
+                dr_push_clip(bounds);
+                dr_img(dst, src, texture, (F4){1.0f, 1.0f, 1.0f, 1.0f}, 0.0f, 0.0f);
+                dr_pop_clip();
+              }
+            }
+
+
+            ////////////////////////////////
+            //~ 3D Draw
+
+
             if (view->kind == VIEW_KIND__VIEWPORT && view->viewport_box != 0) {
               F4 viewport_rect = view->viewport_box->rect;
               if (viewport_rect[2] > 0.0f && viewport_rect[3] > 0.0f) {
@@ -1838,8 +1891,30 @@ Internal void lane(void *user_data) {
 
       //- kti: End render job
       if (state->active_render && atomic_load_I1(&state->active_render->completed)) {
-        arena_release(state->active_render->arena);
+        Render_Job *job = state->active_render;
         state->active_render = 0;
+
+        if (atomic_load_I1(&job->cancel_requested) || image_is_nil(job->display)) {
+          arena_release(job->arena);
+        } else {
+          // Uploads are owned by the editor thread. Allocating the new texture
+          // also waits for prior graphics work before the old texture is freed.
+          GFX_Texture *new_texture = gfx_tex2d_alloc(
+            GFX_TEXTURE_USAGE__STATIC,
+            job->display.width,
+            job->display.height,
+            job->display.pixels);
+
+          if (state->render_result_texture != 0) {
+            gfx_tex2d_free(state->render_result_texture);
+          }
+          if (state->last_render != 0) {
+            arena_release(state->last_render->arena);
+          }
+
+          state->render_result_texture = new_texture;
+          state->last_render = job;
+        }
       }
     }
 

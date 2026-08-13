@@ -112,14 +112,6 @@ Inline F4 *image_row_F4(Image image, L1 y) {
   return result;
 }
 
-Inline F4 F4_from_I1(I1 pixel) {
-  F1 r = (F1)((pixel >> 16) & 0xFF);
-  F1 g = (F1)((pixel >> 8) & 0xFF);
-  F1 b = (F1)(pixel & 0xFF);
-  F4 result = {r/255.0f,g/255.0f,b/255.0f};
-  return result;
-}
-
 Internal Image image_read_from_file(Arena *arena, String8 filename) {
   Image result = {0};
 
@@ -162,19 +154,15 @@ Internal Image image_read_from_file(Arena *arena, String8 filename) {
         }
 
         B1 *src_row = pixel_base + src_row_pitch*src_y;
-        I1 *dst_row = (I1 *)(result.pixels + y * result.row_pitch);
+        B1 *dst_row = result.pixels + y*result.row_pitch;
 
-        if (header->bits_per_pixel == 32) {
-          memcpy(dst_row, src_row, result.width * sizeof(I1));
-        } else {
-          for (L1 x = 0; x < result.width; x += 1) {
-            B1 *src = src_row + x*3;
-            B1 b = src[0];
-            B1 g = src[1];
-            B1 r = src[2];
-
-            dst_row[x] = 0xFF000000 | (r << 16) | (g << 8) | b;
-          }
+        for (L1 x = 0; x < result.width; x += 1) {
+          B1 *src = src_row + x*src_pixel_size;
+          B1 *dst = dst_row + x*4;
+          dst[0] = src[2];
+          dst[1] = src[1];
+          dst[2] = src[0];
+          dst[3] = (src_pixel_size == 4) ? src[3] : 0xFF;
         }
       }
     }
@@ -202,12 +190,26 @@ Internal void image_write_to_file(Image image, String8 filename) {
 
   Temp_Arena scratch = scratch_begin(0, 0);
   String8 cstr_filename = push_str8_copy(scratch.arena, filename);
+  B1 *bitmap_pixels = push_array_no_zero(scratch.arena, B1, pixels_size);
+
+  for (L1 y = 0; y < image.height; y += 1) {
+    B1 *src_row = image.pixels + y*image.row_pitch;
+    B1 *dst_row = bitmap_pixels + y*image.row_pitch;
+    for (L1 x = 0; x < image.width; x += 1) {
+      B1 *src = src_row + x*4;
+      B1 *dst = dst_row + x*4;
+      dst[0] = src[2];
+      dst[1] = src[1];
+      dst[2] = src[0];
+      dst[3] = src[3];
+    }
+  }
 
   // TODO: Create os_ functions for this
   L1 file = open((CString)cstr_filename.str, O_CREAT|O_WRONLY|O_TRUNC, 0666);
   if (GtSI1(file, 0)) {
     write(file, &header, sizeof(Bitmap_Header));
-    write(file, image.pixels, pixels_size);
+    write(file, bitmap_pixels, pixels_size);
     close(file);
     printf("Image written to %s\n", cstr_filename.str);
   } else {
@@ -492,13 +494,11 @@ Internal Image image_I1_from_F4_tonemap(Arena *arena, Image input, Tonemap_Kind 
           255.0f*srgb_from_linear(tonemapped[2]),
           255.0f,
         };
-        I1 out_px =
-          0xFF000000             |
-          (I1)out_color[0] << 16 |
-          (I1)out_color[1] << 8  |
-          (I1)out_color[2] << 0;
-        I1 *out_row = (I1 *)(result.pixels + y*result.row_pitch);
-        out_row[x] = out_px;
+        B1 *out_px = result.pixels + y*result.row_pitch + x*4;
+        out_px[0] = (B1)out_color[0];
+        out_px[1] = (B1)out_color[1];
+        out_px[2] = (B1)out_color[2];
+        out_px[3] = (B1)out_color[3];
       }
     }
   }

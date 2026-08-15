@@ -1,7 +1,13 @@
 ////////////////////////////////
 //~ kti: TODO
 
+//- kti: Adjust size with gizmo.
+//- kti: Gizmo rotation for directions. 
+//- kti: Camera icon and picking.
 //- kti: Define scene by code.
+//- kti: Light rays.
+//- kti: Remote Rendering on GPU.
+//- kti: BVH.
 //- kti: Lister groups.
 //- kti: Better rendering in the viewport.
 //- kti: Panel focus when pressing clickable boxes inside panel.
@@ -9,7 +15,6 @@
 //- kti: Multiple listers with different contents.
 //- kti: Reivew color picker code.
 //- kti: Snapping.
-//- kti: Adjust size with gizmo.
 
 #if (HEADER)
 

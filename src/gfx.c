@@ -1965,6 +1965,16 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->pipeline);
         vkCmdBindVertexBuffers(cmd, 0, 1, &frame->instance_buffer.buffer, &offset);
 
+        VkViewport viewport = {
+          .width = vkw->swapchain_extent.width,
+          .height = vkw->swapchain_extent.height,
+          .minDepth = 0.0f,
+          .maxDepth = 1.0f,
+        };
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
+        vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
+
         GFX_Rect_Pass rect_pass = pass->rect;
         for (GFX_Rect_Batch *batch = rect_pass.first_batch; batch != 0; batch = batch->next) {
           // TODO(kti): For now we skip batches that would exceed the max count and continue, in case the next one doesn't. We could also clip the batch and break.

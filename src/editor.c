@@ -1,7 +1,6 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: Adjust size with gizmo.
 //- kti: Gizmo rotation for directions. 
 //- kti: Camera icon and picking.
 //- kti: Define scene by code.
@@ -46,6 +45,12 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__RENDER_RESULT] = str8("Render Result"),
 };
 
+enum {
+  GIZMO_AXIS_LENGTH_PX = 82,
+  GIZMO_SHAFT_THICKNESS_PX = 4,
+  GIZMO_SIZE_HANDLE_SIZE_PX = 11,
+};
+
 typedef struct View View;
 struct View {
   View_Kind kind;
@@ -60,11 +65,18 @@ struct View {
   F1 camera_drag_start_yaw;
   F1 camera_drag_start_pitch;
 
-  //- kti: Translation gizmo.
+  //- kti: Transform gizmo.
   Axis gizmo_hot_axis;
   Axis gizmo_active_axis;
-  F1 gizmo_drag_applied_delta;
+  I1 gizmo_hot_is_size;
+  I1 gizmo_active_is_size;
+  F1 gizmo_drag_applied;
   F2 gizmo_drag_axis_screen;
+  F4 gizmo_pos;
+  F2 gizmo_screen_pos;
+  F2 gizmo_axes_screen[AXIS3_COUNT];
+  F1 gizmo_world_per_pixel;
+  I1 gizmo_visible;
 
   //- kti: Render result
   UI_Box *render_result_box;
@@ -670,21 +682,6 @@ Internal void entity_select(Entity_Handle handle, I1 additive) {
   }
 }
 
-Internal I1 entity_selection_average_pos(F4 *average_out) {
-  F4 sum = {0};
-  L1 count = 0;
-  for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-    if (entity->flags & ENTITY_FLAG__SELECTED) {
-      sum += entity->pos;
-      count += 1;
-    }
-  }
-  if (count != 0) {
-    *average_out = sum / (F1)count;
-  }
-  return count != 0;
-}
-
 Internal Entity *entity_create(L1 flags, String8 name) {
   Entity *entity = state->first_free_entity;
   if (entity == 0) {
@@ -776,13 +773,29 @@ Internal M4F camera_view_projection(Camera camera, F1 width, F1 height) {
   return view_projection;
 }
 
+Internal I1 entity_selection_average_pos(F4 *average_out) {
+  F4 sum = {0};
+  L1 count = 0;
+  for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+    if (entity->flags & ENTITY_FLAG__SELECTED) {
+      sum += entity->pos;
+      count += 1;
+    }
+  }
+  if (count != 0) {
+    average_out[0] = sum/(F1)count;
+  }
+  return count != 0;
+}
+
 Internal M4F line_transform_M4F(F4 begin, F4 direction, F1 thickness) {
   F4 line_axis = F4_with_w(direction, 0.0f);
-  F4 reference_axis = abs_F1(line_axis[1]) < 0.99f
+  F4 line_direction = normalize_F4(line_axis);
+  F4 reference_axis = abs_F1(line_direction[1]) < 0.99f
     ? (F4){0.0f, 1.0f, 0.0f, 0.0f}
     : (F4){1.0f, 0.0f, 0.0f, 0.0f};
-  F4 side_axis = normalize_F4(cross_F4(line_axis, reference_axis));
-  F4 up_axis = normalize_F4(cross_F4(side_axis, line_axis));
+  F4 side_axis = normalize_F4(cross_F4(line_direction, reference_axis));
+  F4 up_axis = normalize_F4(cross_F4(side_axis, line_direction));
 
   M4F result = identity_M4F();
   result.r[0] = line_axis;
@@ -1449,86 +1462,114 @@ Internal void lane(void *user_data) {
                     F2 left_drag_delta = ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
                     F2 right_drag_delta = ui_drag_delta(OS_MOUSE_BUTTON__RIGHT);
 
-                    //- kto: Gizmo
-                    F4 gizmo_pos = {0};
-                    I1 has_selection = entity_selection_average_pos(&gizmo_pos);
-                    if (view->gizmo_active_axis == AXIS__INVALID) {
-                      // - kti: Find axis closest to mouse.
-                      view->gizmo_hot_axis = AXIS__INVALID;
-                      F1 closest_dist = 8.0f;
-                      F4 rect = view->viewport_box->rect;
-                      F2 mouse_local = ui_mouse() - (F2){rect[0], rect[1]};
-
-                      if (has_selection && rect[2] > 0.0f && rect[3] > 0.0f) {
-                        M4F view_projection = camera_view_projection(view->camera, rect[2], rect[3]);
-
-                        for (L1 axis = 0; axis < AXIS3_COUNT; axis += 1) {
-                          F4 begin_world = F4_with_w(gizmo_pos, 1.0f);
-                          F4 end_world = begin_world;
-                          end_world[axis] += 1.0f;
-                          F4 begin_clip = mul_M4F_F4(view_projection, begin_world);
-                          F4 end_clip = mul_M4F_F4(view_projection, end_world);
-
-                          if (begin_clip[3] > 0.0f && end_clip[3] > 0.0f) {
-                            F2 begin_ndc = F2_from_F4(begin_clip / begin_clip[3]);
-                            F2 end_ndc = F2_from_F4(end_clip / end_clip[3]);
-                            F2 begin_local = {
-                              (begin_ndc[0]*0.5f + 0.5f)*rect[2],
-                              (0.5f - begin_ndc[1]*0.5f)*rect[3],
-                            };
-                            F2 end_local = {
-                              (end_ndc[0]*0.5f + 0.5f)*rect[2],
-                              (0.5f - end_ndc[1]*0.5f)*rect[3],
-                            };
-                            F1 dist = distance_to_segment_F2(mouse_local, begin_local, end_local);
-                            if (dist < closest_dist) {
-                              closest_dist = dist;
-                              view->gizmo_hot_axis = axis;
-                              view->gizmo_drag_axis_screen = end_local - begin_local;
-                            }
+                    //- kti: Hit test last frame's gizmo.
+                    view->gizmo_hot_axis = AXIS__INVALID;
+                    if (view->gizmo_visible && view->gizmo_active_axis == AXIS__INVALID) {
+                      Axis hot_knob = AXIS__INVALID;
+                      Axis hot_shaft = AXIS__INVALID;
+                      F1 knob_dist = 9.0f;
+                      F1 shaft_dist = 7.0f;
+                      for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
+                        F2 screen_axis = view->gizmo_axes_screen[axis];
+                        F1 screen_length = length_F2(screen_axis);
+                        if (screen_length > 1.0f) {
+                          F2 end = view->gizmo_screen_pos + screen_axis;
+                          F1 dist = length_F2(ui_mouse() - end);
+                          if (dist < knob_dist) {
+                            knob_dist = dist;
+                            hot_knob = axis;
+                          }
+                          F2 dir = screen_axis/screen_length;
+                          dist = distance_to_segment_F2(ui_mouse(),
+                            view->gizmo_screen_pos + 2.0f*dir, end - 8.0f*dir);
+                          if (dist < shaft_dist) {
+                            shaft_dist = dist;
+                            hot_shaft = axis;
                           }
                         }
                       }
-                    } else {
+                      view->gizmo_hot_axis = hot_knob != AXIS__INVALID ? hot_knob : hot_shaft;
+                      view->gizmo_hot_is_size = hot_knob != AXIS__INVALID;
+                    } else if (view->gizmo_active_axis != AXIS__INVALID) {
                       view->gizmo_hot_axis = view->gizmo_active_axis;
+                      view->gizmo_hot_is_size = view->gizmo_active_is_size;
                     }
 
-                    //- kti: Capture press on axis.
                     I1 mouse_captured = view->gizmo_active_axis != AXIS__INVALID;
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED &&
-                        view->gizmo_hot_axis != AXIS__INVALID &&
-                        has_selection) {
-                      view->gizmo_active_axis = view->gizmo_hot_axis;
-                      view->gizmo_drag_applied_delta = 0.0f;
+                        view->gizmo_hot_axis != AXIS__INVALID) {
+                      Axis axis = view->gizmo_hot_axis;
+                      view->gizmo_active_axis = axis;
+                      view->gizmo_active_is_size = view->gizmo_hot_is_size;
+                      view->gizmo_drag_axis_screen = view->gizmo_axes_screen[axis]/
+                        (GIZMO_AXIS_LENGTH_PX*view->gizmo_world_per_pixel);
+                      view->gizmo_drag_applied = 0.0f;
                       mouse_captured = 1;
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
 
                     //- kti: Reset axis to 0 on middle mouse press.
                     if (!mouse_captured &&
-                      viewport_signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED &&
-                      view->gizmo_hot_axis != AXIS__INVALID &&
-                      has_selection) {
+                        viewport_signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED &&
+                        view->gizmo_hot_axis != AXIS__INVALID && !view->gizmo_hot_is_size) {
+                      Axis axis = view->gizmo_hot_axis;
                       for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
                         if (entity->flags & ENTITY_FLAG__SELECTED) {
-                          entity->pos[view->gizmo_hot_axis] -= gizmo_pos[view->gizmo_hot_axis];
+                          entity->pos[axis] -= view->gizmo_pos[axis];
                         }
                       }
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
 
-                    //- kti: Move along axis when dragging.
-                    if (mouse_captured && viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && has_selection) {
+                    if (mouse_captured && viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
                       F1 axis_len_sq = dot_F2(view->gizmo_drag_axis_screen, view->gizmo_drag_axis_screen);
-                      if (axis_len_sq > 1.0f) {
-                        F1 world_delta = dot_F2(left_drag_delta, view->gizmo_drag_axis_screen) / axis_len_sq;
-                        F1 delta = world_delta - view->gizmo_drag_applied_delta;
+                      if (axis_len_sq > 0.0001f) {
+                        F1 amount = dot_F2(left_drag_delta, view->gizmo_drag_axis_screen)/axis_len_sq;
+                        F1 change = amount - view->gizmo_drag_applied;
                         for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
                           if (entity->flags & ENTITY_FLAG__SELECTED) {
-                            entity->pos[view->gizmo_active_axis] += delta;
+                            Axis axis = view->gizmo_active_axis;
+                            if (!view->gizmo_active_is_size) {
+                              entity->pos[axis] += change;
+                            } else if (entity->shape_kind == SHAPE_KIND__BOX) {
+                              entity->size[axis] = Max(0.01f, entity->size[axis] + change);
+                            } else if (entity->shape_kind == SHAPE_KIND__SPHERE) {
+                              entity->sphere_diameter = Max(0.01f, entity->sphere_diameter + change);
+                            }
                           }
                         }
-                        view->gizmo_drag_applied_delta = world_delta;
+                        view->gizmo_drag_applied = amount;
+                      }
+                    }
+
+                    //- kti: Update the gizmo after applying the transform.
+                    F4 rect = view->viewport_box->rect;
+                    view->gizmo_visible = entity_selection_average_pos(&view->gizmo_pos) && rect[2] > 0.0f && rect[3] > 0.0f;
+                    if (view->gizmo_visible) {
+                      M4F view_projection = camera_view_projection(view->camera, rect[2], rect[3]);
+                      F4 pivot_clip = mul_M4F_F4(view_projection, F4_with_w(view->gizmo_pos, 1.0f));
+                      view->gizmo_visible = pivot_clip[3] > view->camera.near_z;
+                      if (view->gizmo_visible) {
+                        F2 pivot_ndc = F2_from_F4(pivot_clip/pivot_clip[3]);
+                        view->gizmo_screen_pos = (F2){
+                          rect[0] + (pivot_ndc[0]*0.5f + 0.5f)*rect[2],
+                          rect[1] + (0.5f - pivot_ndc[1]*0.5f)*rect[3],
+                        };
+                        view->gizmo_world_per_pixel = 2.0f*pivot_clip[3]*tan_F1(0.5f*view->camera.fov)/rect[3];
+                        for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
+                          F4 end = view->gizmo_pos;
+                          end[axis] += GIZMO_AXIS_LENGTH_PX*view->gizmo_world_per_pixel;
+                          F4 end_clip = mul_M4F_F4(view_projection, F4_with_w(end, 1.0f));
+                          view->gizmo_axes_screen[axis] = (F2){0};
+                          if (end_clip[3] > view->camera.near_z) {
+                            F2 end_ndc = F2_from_F4(end_clip/end_clip[3]);
+                            F2 end_screen = {
+                              rect[0] + (end_ndc[0]*0.5f + 0.5f)*rect[2],
+                              rect[1] + (0.5f - end_ndc[1]*0.5f)*rect[3],
+                            };
+                            view->gizmo_axes_screen[axis] = end_screen - view->gizmo_screen_pos;
+                          }
+                        }
                       }
                     }
 
@@ -1619,7 +1660,7 @@ Internal void lane(void *user_data) {
                       }
                     }
 
-                    //- kti: Reset active axis on mouse release.
+                    //- kti: Reset active gizmo part on mouse release.
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_RELEASED) {
                       view->gizmo_active_axis = AXIS__INVALID;
                     }
@@ -1744,33 +1785,40 @@ Internal void lane(void *user_data) {
                 }
 
                 //- kti: Gizmo.
-                F4 gizmo_pos = {0};
-                if (entity_selection_average_pos(&gizmo_pos)) {
+                if (view->gizmo_visible) {
                   dr_clear_depth();
                   Mesh *mesh = &state->meshes[SHAPE_KIND__BOX];
-                  F1 thickness = 0.025f; 
 
-                  for (L1 axis = 0; axis < AXIS3_COUNT; axis += 1) {
-                    I1 is_hot = view->gizmo_hot_axis == axis;
-                    I1 is_active = view->gizmo_active_axis == axis;
-                    F1 axis_thickness = thickness * (is_hot ? 1.45f : 1.0f);
-                    F1 offset = (axis == 0) ? -axis_thickness*0.5f : axis_thickness*0.5f;
-                    F4 world = gizmo_pos;
-                    world[axis] += 0.5f+offset;
+                  for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
+                    if (length_F2(view->gizmo_axes_screen[axis]) <= 1.0f) {
+                      continue;
+                    }
 
-                    F4 scale = (F4){axis_thickness, axis_thickness, axis_thickness, 1.0f};
-                    scale[axis] = 1.0f;
+                    I1 hot = view->gizmo_hot_axis == axis && !view->gizmo_hot_is_size;
+                    I1 active = view->gizmo_active_axis == axis && !view->gizmo_active_is_size;
+                    F1 base = active ? 0.35f : hot ? 0.15f : 0.0f;
+                    F4 color = (F4){base, base, base, 1.0f};
+                    color[axis] = active || hot ? 1.0f : 0.8f;
 
-                    M4F transform = mul_M4F(scale_M4F(scale), translate_M4F(world));
+                    //- kti: Axis
+                    F4 direction = {0};
+                    direction[axis] = (GIZMO_AXIS_LENGTH_PX - 0.5f*GIZMO_SIZE_HANDLE_SIZE_PX) * view->gizmo_world_per_pixel;
+                    F1 thickness = GIZMO_SHAFT_THICKNESS_PX*view->gizmo_world_per_pixel * (hot ? 1.45f : 1.0f);
+                    M4F transform = line_transform_M4F(view->gizmo_pos, direction, thickness);
+                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__UNLIT);
 
-                    F1 base_brightness = is_active ? 0.35f : 0.0f;
-                    F4 color = (F4){base_brightness, base_brightness, base_brightness, 1.0f};
-                    color[axis] = is_active ? 1.0f : 0.8f;
-
-                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count,
-                            mesh->index_buffer, 0, mesh->index_count,
-                            transform, color, GFX_MESH_FEATURE__UNLIT);
-
+                    //- kti: knob
+                    hot = view->gizmo_hot_axis == axis && view->gizmo_hot_is_size;
+                    active = view->gizmo_active_axis == axis && view->gizmo_active_is_size;
+                    base = active ? 0.35f : hot ? 0.15f : 0.0f;
+                    color = (F4){base, base, base, 1.0f};
+                    color[axis] = active || hot ? 1.0f : 0.8f;
+                    F1 size = GIZMO_SIZE_HANDLE_SIZE_PX*view->gizmo_world_per_pixel * (hot ? 1.25f : 1.0f);
+                    F4 scale = (F4){size, size, size, 1.0f};
+                    F4 pos = view->gizmo_pos;
+                    pos[axis] += GIZMO_AXIS_LENGTH_PX*view->gizmo_world_per_pixel;
+                    transform = mul_M4F(scale_M4F(scale), translate_M4F(pos));
+                    dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__UNLIT);
                   }
                 }
               }

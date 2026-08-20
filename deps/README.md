@@ -3,7 +3,8 @@
 Third-party source and headers used by Mountain live in this directory.
 
 - `freetype/`: FreeType 2.14.3 source, built locally by `freetype/build.sh`.
-- `vulkan/`: Vulkan API headers used to compile the renderer.
+- `vulkan/`: complete Khronos Vulkan-Headers 1.4.335 include tree used to
+  compile the renderer.
 - `wayland/`: generated XDG shell protocol source and header.
 
 Platform frameworks supplied as part of the operating system are not copied

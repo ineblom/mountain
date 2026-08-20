@@ -51,7 +51,7 @@ if [ "$1" = "META" ]; then
 
   if [ $BUILD_STATUS -eq 0 ]; then
     echo "META build successful."
-    ./meta
+    ./meta || exit $?
   else
     echo "META build failed."
     exit $BUILD_STATUS

@@ -1241,16 +1241,16 @@ Internal void lane(void *user_data) {
 
       fc_frame();
 
-#if defined(__APPLE__)
       CString user_home = getenv("HOME");
+#if defined(__APPLE__)
       String8 prop_fnt_path = str8f(scratch.arena, "%s/Library/Fonts/Bloomberg-PropU_N.ttf", user_home);
       String8 fixed_fnt_path = str8f(scratch.arena, "%s/Library/Fonts/Bloomberg-FixedU_N.ttf", user_home);
+#else
+      String8 prop_fnt_path = str8f(scratch.arena, "%s/.local/share/fonts/Bloomberg-PropU_N.ttf", user_home);
+      String8 fixed_fnt_path = str8f(scratch.arena, "%s/.local/share/fonts/Bloomberg-FixedU_N.ttf", user_home);
+#endif
       FC_Tag prop_fnt = fc_tag_from_path(prop_fnt_path);
       FC_Tag fixed_fnt = fc_tag_from_path(fixed_fnt_path);
-#else
-      FC_Tag prop_fnt = fc_tag_from_path(str8("/usr/share/fonts/bloomberg/" "Bloomberg-PropU_N.ttf"));
-      FC_Tag fixed_fnt = fc_tag_from_path(str8("/usr/share/fonts/bloomberg/" "Bloomberg-FixedU_N.ttf"));
-#endif
 
       for (Window *w = state->first_window; w != 0; w = w->next) {
         ui_state_equip(w->ui);

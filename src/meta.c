@@ -211,16 +211,16 @@ Internal %4$s ui_top_%3$s(void) {
           node_type.str, stack_type.str, name.str, type.str);
 
       str8_list_pushf(scratch.arena, &reset_stacks_strings,
-          " ui_state->%3$s_stack.top = &ui_state->nil_%3$s; ui_state->%3$s_stack.free = 0; ui_state->%3$s_stack.auto_pop = 0;\\\n",
-          node_type.str, stack_type.str, name.str, type.str);
+          " ui_state->%1$s_stack.top = &ui_state->nil_%1$s; ui_state->%1$s_stack.free = 0; ui_state->%1$s_stack.auto_pop = 0;\\\n",
+          name.str);
 
       str8_list_pushf(scratch.arena, &init_nil_stacks_strings,
-          " ui_state->nil_%3$s.value = %5$s;\\\n",
-          node_type.str, stack_type.str, name.str, type.str, default_value.str);
+          " ui_state->nil_%1$s.value = %2$s;\\\n",
+          name.str, default_value.str);
 
       str8_list_pushf(scratch.arena, &auto_pop_stacks_strings,
-          " if (ui_state->%3$s_stack.auto_pop) { ui_pop_%3$s(); ui_state->%3$s_stack.auto_pop = 0; }\\\n",
-          node_type.str, stack_type.str, name.str, type.str);
+          " if (ui_state->%1$s_stack.auto_pop) { ui_pop_%1$s(); ui_state->%1$s_stack.auto_pop = 0; }\\\n",
+          name.str);
     }
   }
 

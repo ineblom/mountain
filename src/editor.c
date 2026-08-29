@@ -1,9 +1,12 @@
 ////////////////////////////////
 //~ kti: TODO
 
-//- kti: Gizmo rotation for directions. 
+//- kti: CODE DRIVEN EDITOR
+// user defines render() function.
+// Contains the core rendering logic (for loop over output pixels)
+// Uses helper functions to make rendering easier.
+
 //- kti: Camera icon and picking.
-//- kti: Define scene by code.
 //- kti: Light rays.
 //- kti: Remote Rendering on GPU.
 //- kti: BVH.
@@ -14,6 +17,8 @@
 //- kti: Multiple listers with different contents.
 //- kti: Reivew color picker code.
 //- kti: Snapping.
+//- kti: Create entity on press in scene. (right click?)
+//- kti: See gizmo value in tooltip while dragging.
 
 #if (HEADER)
 
@@ -199,6 +204,8 @@ enum {
   CMD_KIND__RENDER,
   CMD_KIND__CANCEL_RENDER,
 
+  CMD_KIND__USER_CODE_RELOAD,
+
   CMD_KIND_COUNT,
 };
 
@@ -247,6 +254,11 @@ struct Render_Job {
 };
 
 ////////////////////////////////
+//~ kti: User Code
+
+typedef void (*User_Render_Func)(void);
+
+////////////////////////////////
 //~ kti: State
 
 typedef struct State State;
@@ -280,6 +292,9 @@ struct State {
   Arena *display_arena;
   Image display_image;
   GFX_Texture *render_result_texture;
+
+  //- kti: User Code
+  User_Render_Func user_render_func;
 };
 
 #endif
@@ -909,6 +924,19 @@ Internal I1 postprocessing_settings_match(Postprocessing_Settings a, Postprocess
 }
 
 ////////////////////////////////
+//~ kti: User Code
+
+Internal void user_code_reload(void) {
+  //- kti: Compile code.
+  CString command = "gcc -I./src/ -fPIC -shared -o user.so ./user/user.c";
+  system(command);
+
+  //- kti: Load Proc.
+  void *lib = os_library_open(str8("./user.so"));
+  state->user_render_func = os_library_load_proc(lib, str8("render"));
+}
+
+////////////////////////////////
 //~ kti: Main
 
 Internal void lane(void *user_data) {
@@ -1207,6 +1235,10 @@ Internal void lane(void *user_data) {
 
         lister_cmd(str8("Create Entity"), (Cmd){
           .kind = CMD_KIND__CREATE_ENTITY,
+        });
+        
+        lister_cmd(str8("Reload User Code"), (Cmd){
+          .kind = CMD_KIND__USER_CODE_RELOAD,
         });
 
         if (!has_camera) {
@@ -2132,6 +2164,9 @@ Internal void lane(void *user_data) {
             if (state->active_render) {
               atomic_swap_I1(&state->active_render->cancel_requested, 1);
             }
+          } break;
+          case CMD_KIND__USER_CODE_RELOAD: {
+            user_code_reload();
           } break;
         }
       }

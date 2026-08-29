@@ -348,7 +348,7 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
 }
 
 Internal SI2 fc_vertex_from_corner(I1 corner) {
-  LocalPersist SI2 vertices[4] = {
+  Local_Persist SI2 vertices[4] = {
     {0, 0},
     {1, 0},
     {1, 1},

@@ -4,7 +4,7 @@
 #define NoInline     static __attribute__((noinline))
 #define Internal     static
 #define Global       static
-#define LocalPersist static
+#define Local_Persist static
 #define Restrict     __restrict
 #define Volatile     volatile
 #define ThreadLocal  _Thread_local

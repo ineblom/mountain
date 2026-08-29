@@ -357,7 +357,7 @@ Internal void os_sleep(L1 time) {
 Internal void *os_library_open(String8 filename) {
   Temp_Arena scratch = scratch_begin(0, 0);
   String8 cstr_filename = push_str8_copy(scratch.arena, filename);
-  void *handle = dlopen((CString)cstr_filename.str, RTLD_LAZY | RTLD_LOCAL);
+  void *handle = dlopen((CString)cstr_filename.str, RTLD_LAZY|RTLD_LOCAL);
   scratch_end(scratch);
   return handle;
 }

@@ -284,7 +284,7 @@ Internal I1 try_F1_from_str8(String8 string, F1 *out) {
   is_valid = is_valid && (ptr == opl);
 
   if (is_valid && mantissa != 0.0) {
-    LocalPersist D1 pow10[9] = { 1e1, 1e2, 1e4, 1e8, 1e16, 1e32, 1e64, 1e128, 1e256 };
+    Local_Persist D1 pow10[9] = { 1e1, 1e2, 1e4, 1e8, 1e16, 1e32, 1e64, 1e128, 1e256 };
     SL1 e = Clamp(-511, exponent, 511);
     D1 scale = 1.0;
     for (L1 bit = 0, n = (e < 0) ? -e : e; n > 0; n >>= 1, bit += 1) {
@@ -398,7 +398,7 @@ Internal L1 utf8_boundary_left_from_column(String8 string, L1 column) {
 }
 
 Internal Unicode_Decode utf8_decode(B1 *str, L1 cap) {
-  LocalPersist B1 length[] =
+  Local_Persist B1 length[] =
   {
     1,1,1,1,
     1,1,1,1,
@@ -411,8 +411,8 @@ Internal Unicode_Decode utf8_decode(B1 *str, L1 cap) {
     4,
     0,
   };
-  LocalPersist B1 first_byte_mask[] = { 0, 0x7F, 0x1F, 0x0F, 0x07 };
-  LocalPersist B1 final_shift[] = { 0, 18, 12, 6, 0 };
+  Local_Persist B1 first_byte_mask[] = { 0, 0x7F, 0x1F, 0x0F, 0x07 };
+  Local_Persist B1 final_shift[] = { 0, 18, 12, 6, 0 };
 
   Unicode_Decode result = { 1, I1_MAX };
   if (cap > 0) {

@@ -47,7 +47,7 @@ Inline L1 hash_xx_merge_round(L1 accumulator, L1 value) {
 }
 
 Internal L1 hash64_seed(void *data, L1 size, L1 seed) {
-  LocalPersist B1 empty;
+  Local_Persist B1 empty;
   B1 const *at = data != 0 ? (B1 const *)data : &empty;
   B1 const *end = at + size;
   L1 result;

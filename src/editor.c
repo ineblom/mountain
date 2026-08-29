@@ -6,6 +6,7 @@
 // Contains the core rendering logic (for loop over output pixels)
 // Uses helper functions to make rendering easier.
 
+//- kti: Clean up UI.
 //- kti: Camera icon and picking.
 //- kti: Light rays.
 //- kti: Remote Rendering on GPU.
@@ -346,14 +347,10 @@ Global UI_Theme default_theme = {
 ////////////////////////////////
 //~ kti: Meshes
 
-Internal Mesh mesh_alloc_from_vertices_indices(GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count) {
+Internal Mesh mesh_alloc(GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count) {
   Mesh result = {0};
-  result.vertex_buffer = gfx_buffer_alloc(
-      GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__VERTEX,
-      vertex_count*sizeof(vertices[0]), vertices);
-  result.index_buffer = gfx_buffer_alloc(
-      GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__INDEX,
-      index_count*sizeof(indices[0]), indices);
+  result.vertex_buffer = gfx_buffer_alloc(GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__VERTEX, vertex_count*sizeof(vertices[0]), vertices);
+  result.index_buffer = gfx_buffer_alloc( GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__INDEX, index_count*sizeof(indices[0]), indices);
   result.vertex_count = vertex_count;
   result.index_count = index_count;
   return result;
@@ -403,7 +400,7 @@ Internal Mesh mesh_alloc_sphere(I1 latitude_segments, I1 longitude_segments) {
     }
   }
 
-  Mesh mesh = mesh_alloc_from_vertices_indices(vertices, vertex_count, indices, index_count);
+  Mesh mesh = mesh_alloc(vertices, vertex_count, indices, index_count);
   scratch_end(scratch);
 
   return mesh;
@@ -426,7 +423,7 @@ Internal Mesh mesh_alloc_box(void) {
     8, 9,10,  8,10,11, 12,13,14, 12,14,15,
     16,17,18, 16,18,19, 20,21,22, 20,22,23,
   };
-  return mesh_alloc_from_vertices_indices(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
+  return mesh_alloc(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
 }
 
 Internal Mesh mesh_alloc_plane(void) {
@@ -440,7 +437,7 @@ Internal Mesh mesh_alloc_plane(void) {
     0, 2, 1,
     0, 3, 2,
   };
-  return mesh_alloc_from_vertices_indices(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
+  return mesh_alloc(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
 }
 
 ////////////////////////////////
@@ -891,29 +888,6 @@ Internal void render_lane(void *user_data) {
   lane_sync();
 }
 
-Internal void editor_apply_postprocessing(void) {
-  if (state->last_render != 0 && !image_is_nil(state->last_render->hdr)) {
-    arena_clear(state->display_arena);
-    state->display_image = (Image){0};
-
-    Image bloomed = image_apply_bloom( state->display_arena, state->last_render->hdr, state->postprocessing_settings.bloom);
-    state->display_image = image_I1_from_F4_tonemap(state->display_arena, bloomed, TONEMAP_KIND__LOTTES);
-
-    if (!image_is_nil(state->display_image)) {
-      GFX_Texture *new_texture = gfx_tex2d_alloc(
-        GFX_TEXTURE_USAGE__STATIC,
-        state->display_image.width,
-        state->display_image.height,
-        state->display_image.pixels);
-
-      if (state->render_result_texture != 0) {
-        gfx_tex2d_free(state->render_result_texture);
-      }
-      state->render_result_texture = new_texture;
-    }
-  }
-}
-
 Internal I1 postprocessing_settings_match(Postprocessing_Settings a, Postprocessing_Settings b) {
   I1 result =
     a.bloom.pass_count == b.bloom.pass_count &&
@@ -932,7 +906,9 @@ Internal void user_code_reload(void) {
   system(command);
 
   //- kti: Load Proc.
-  void *lib = os_library_open(str8("./user.so"));
+  Local_Persist void *lib = 0;
+  if (lib) os_library_close(lib);
+  lib = os_library_open(str8("./user.so"));
   state->user_render_func = os_library_load_proc(lib, str8("render"));
 }
 
@@ -994,6 +970,8 @@ Internal void lane(void *user_data) {
     state->postprocessing_settings.bloom.knee = 0.5f;
 
     state->display_arena = arena_alloc(GiB(1));
+
+    user_code_reload();
   }
 
   lane_sync();
@@ -2172,6 +2150,11 @@ Internal void lane(void *user_data) {
       }
       state->cmd_count = 0;
 
+      //- kti: Call User Code
+      if (state->user_render_func) {
+        state->user_render_func();
+      }
+
       //- kti: End render job
       if (state->active_render && atomic_load_I1(&state->active_render->completed)) {
         Render_Job *job = state->active_render;
@@ -2189,8 +2172,26 @@ Internal void lane(void *user_data) {
         }
       }
 
-      if (postprocessing_dirty) {
-        editor_apply_postprocessing();
+      //- kti: Apply Postprocessing
+      if (postprocessing_dirty && state->last_render != 0 && !image_is_nil(state->last_render->hdr)) {
+        arena_clear(state->display_arena);
+        state->display_image = (Image){0};
+
+        Image bloomed = image_apply_bloom(state->display_arena, state->last_render->hdr, state->postprocessing_settings.bloom);
+        state->display_image = image_I1_from_F4_tonemap(state->display_arena, bloomed, TONEMAP_KIND__LOTTES);
+
+        if (!image_is_nil(state->display_image)) {
+          GFX_Texture *new_texture = gfx_tex2d_alloc(
+              GFX_TEXTURE_USAGE__STATIC,
+              state->display_image.width,
+              state->display_image.height,
+              state->display_image.pixels);
+
+          if (state->render_result_texture != 0) {
+            gfx_tex2d_free(state->render_result_texture);
+          }
+          state->render_result_texture = new_texture;
+        }
       }
     }
 

@@ -89,8 +89,8 @@ struct OS_GFX_State {
 
 Internal I1 os_key_from_wl_key(I1 wl_key) {
   I1 result = OS_KEY__NULL;
-  LocalPersist I1 initialized = 0;
-  LocalPersist I1 key_table[256] = {0};
+  Local_Persist I1 initialized = 0;
+  Local_Persist I1 key_table[256] = {0};
   if (initialized == 0) {
     initialized = 1;
     key_table[1] = OS_KEY__ESC;

@@ -1,6 +1,6 @@
-#include "base.c"
-#include <stdio.h>
+#include "base.h"
+#include "user_api.h"
 
-void render(void) {
-  printf("Hello!\n");
+void render(User_API api) {
+  api.entity("Test");
 }

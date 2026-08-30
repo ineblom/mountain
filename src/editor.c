@@ -2,9 +2,6 @@
 //~ kti: TODO
 
 //- kti: CODE DRIVEN EDITOR
-// user defines render() function.
-// Contains the core rendering logic (for loop over output pixels)
-// Uses helper functions to make rendering easier.
 
 //- kti: Clean up UI.
 //- kti: Camera icon and picking.
@@ -20,7 +17,6 @@
 //- kti: Snapping.
 //- kti: Create entity on press in scene. (right click?)
 //- kti: See gizmo value in tooltip while dragging.
-
 
 #if (SOURCE)
 
@@ -384,7 +380,7 @@ Internal void cmd_push(Cmd cmd) {
 }
 
 ////////////////////////////////
-//~ kti: Entities
+//~ kti: Entity
 
 Internal Entity_Handle entity_handle_zero() {
   Entity_Handle result = {0};
@@ -518,6 +514,11 @@ Internal F4 entity_mesh_size(Entity *entity) {
   return result;
 }
 
+Internal Entity *user_code_entity(CString name) {
+  Entity *result = 0;
+  return result;
+}
+
 ////////////////////////////////
 //~ kti: Camera
 
@@ -637,7 +638,7 @@ Internal void user_code_reload(void) {
   Local_Persist void *lib = 0;
   if (lib) os_library_close(lib);
   lib = os_library_open(str8("./user.so"));
-  state->user_render_func = os_library_load_proc(lib, str8("render"));
+  state->user_render_func = (User_Render_Func)os_library_load_proc(lib, str8("render"));
 }
 
 ////////////////////////////////
@@ -1880,7 +1881,10 @@ Internal void lane(void *user_data) {
 
       //- kti: Call User Code
       if (state->user_render_func) {
-        state->user_render_func();
+        User_API api = {
+          .entity = user_code_entity,
+        };
+        state->user_render_func(api);
       }
 
       //- kti: End render job

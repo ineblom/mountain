@@ -1,34 +1,8 @@
-#if (!defined(PRE_))
-#define PRE_
-
 #ifndef DEV_
 # define DEV_ 0
 #endif
 
-#define HEADER 0
-#define SOURCE 0
-
-# include "base.c"
-#endif
-
-#ifndef BOT_
-# define BOT_
-
-# undef HEADER
-# define HEADER 1
-# include __FILE__
-# undef HEADER
-# define HEADER 0
-
-# undef SOURCE
-# define SOURCE 1
-NoInline void WrmBas(void) { Crash(0); }
-# include __FILE__
-NoInline void WrmEnd(void) { Crash(1); }
-# undef SOURCE
-# define SOURCE 0
-
-#endif
+# include "base.h"
 
 ////////////////////////////////
 // kti: Modules
@@ -36,7 +10,36 @@ NoInline void WrmEnd(void) { Crash(1); }
 //- kti: Config
 #define PROF_ENABLED 0
 
-//- kti: Core
+//- kti: Headers
+#include "arena.h"
+#include "strings.h"
+#include "hash.h"
+#include "os.h"
+#include "lane.h"
+#include "profile.h"
+#include "math.h"
+#include "image.h"
+#include "gfx.h"
+#include "font_provider.h"
+#include "font_cache.h"
+#include "draw.h"
+
+#if META_APP
+#include "meta.h"
+#else
+
+#include "ui.h"
+#include "rt.h"
+#include "editor.h"
+#include "lister.h"
+
+#endif
+
+//- kti: Sources
+#define SOURCE 1
+
+NoInline void WrmBas(void) { Crash(0); }
+
 #include "arena.c"
 #include "strings.c"
 #include "hash.c"
@@ -60,3 +63,7 @@ NoInline void WrmEnd(void) { Crash(1); }
 #include "lister.c"
 
 #endif
+
+NoInline void WrmEnd(void) { Crash(1); }
+
+#undef SOURCE

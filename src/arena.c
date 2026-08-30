@@ -1,17 +1,3 @@
-#if (HEADER)
-typedef struct Arena Arena;
-struct Arena {
-  L1 pos;
-  L1 reserved;
-};
-
-typedef struct Temp_Arena Temp_Arena;
-struct Temp_Arena {
-  L1 pos;
-  Arena *arena;
-};
-#endif
-
 #if (SOURCE)
 Internal Arena *arena_alloc(L1 max_size) {
   Assert(max_size > sizeof(Arena));

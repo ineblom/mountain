@@ -138,9 +138,6 @@ enum {
   CMD_KIND__FOCUS_PANEL,
 
   CMD_KIND__SELECT_ENTITY,
-  CMD_KIND__CREATE_ENTITY,
-  CMD_KIND__CREATE_CAMERA,
-  CMD_KIND__DELETE_SELECTED_ENTITIES,
 
   CMD_KIND__RENDER,
   CMD_KIND__CANCEL_RENDER,
@@ -212,6 +209,7 @@ struct State {
 
   //- kti: Entities.
   L1 entity_count;
+  L1 scene_frame_index;
   Entity *first_entity;
   Entity *last_entity;
   Entity *first_free_entity;

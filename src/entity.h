@@ -19,6 +19,8 @@ struct Entity {
   Entity *prev;
   L1 gen;
 
+  L1 last_touch_frame;
+
   L1 flags;
   B1 name[128];
   L1 name_len;

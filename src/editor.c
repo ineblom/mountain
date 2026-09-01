@@ -416,16 +416,13 @@ Internal Entity_Handle entity_handle(Entity *entity) {
   return result;
 }
 
-Internal void entity_selection_clear(void) {
-  for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-    entity->flags &= ~ENTITY_FLAG__SELECTED;
-  }
-}
-
 Internal void entity_select(Entity_Handle handle, I1 additive) {
   Entity *entity = entity_from_handle(handle);
+  //- kti: Clear selection if not additiv.
   if (!additive) {
-    entity_selection_clear();
+    for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+      entity->flags &= ~ENTITY_FLAG__SELECTED;
+    }
   }
   if (!entity_is_nil(entity)) {
     if (additive) {
@@ -464,17 +461,13 @@ Internal Entity *entity_create(L1 flags, String8 name) {
   return entity;
 }
 
-Internal void entity_delete_selected(void) {
-  for (Entity *entity = state->first_entity, *next = 0;
-       !entity_is_nil(entity);
-       entity = next) {
-    next = entity->next;
-    if (entity->flags & ENTITY_FLAG__SELECTED) {
-      entity->gen += 1;
-      DLLRemove(state->first_entity, state->last_entity, entity);
-      SLLStackPush(state->first_free_entity, entity);
-      state->entity_count -= 1;
-    }
+Internal void entity_delete(Entity_Handle handle) {
+  Entity *entity = entity_from_handle(handle);
+  if (!entity_is_nil(entity)) {
+    entity->gen += 1;
+    DLLRemove(state->first_entity, state->last_entity, entity);
+    SLLStackPush(state->first_free_entity, entity);
+    state->entity_count -= 1;
   }
 }
 
@@ -515,8 +508,32 @@ Internal F4 entity_mesh_size(Entity *entity) {
 }
 
 Internal Entity *user_code_entity(CString name) {
+  String8 key = {(B1 *)name, cstr_len(name)};
+  Assert(key.len <= sizeof(((Entity *)0)->name));
+
   Entity *result = 0;
+
+  // A non-empty name is the stable identity of an entity. Empty names always
+  // produce distinct entities whose lifetime is limited to this frame.
+  if (key.len != 0) {
+    for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+      String8 entity_key = {entity->name, entity->name_len};
+      if (str8_match(entity_key, key)) {
+        result = entity;
+        break;
+      }
+    }
+  }
+
+  if (result == 0) {
+    result = entity_create(0, key);
+  }
+
+  result->last_touch_frame = state->scene_frame_index;
   return result;
+}
+
+Internal void user_code_entities_end_frame(void) {
 }
 
 ////////////////////////////////
@@ -685,9 +702,6 @@ Internal void lane(void *user_data) {
     lister_panel->pct_of_parent = 0.3f;
     viewport_panel->pct_of_parent = 0.7f;
 
-    Entity *starting_entity = entity_create(ENTITY_FLAG__SHAPE, str8("Starting Entity"));
-    entity_select(entity_handle(starting_entity), 0);
-
     state->render_settings.width = 1280;
     state->render_settings.height = 720;
     state->render_settings.rays_per_pixel = 64;
@@ -799,6 +813,15 @@ Internal void lane(void *user_data) {
     lane_sync();
 
     if (lane_idx() == 0) {
+      //- kti: Build the code-defined scene before any frame consumers use it.
+      state->scene_frame_index += 1;
+      if (state->user_render_func) {
+        User_API api = {
+          .entity = user_code_entity,
+        };
+        state->user_render_func(api);
+      }
+
       Postprocessing_Settings postprocessing_settings_before_ui = state->postprocessing_settings;
       I1 postprocessing_dirty = 0;
 
@@ -824,7 +847,7 @@ Internal void lane(void *user_data) {
 
             //- kti: Common entries.
 
-            lister_textedit(str8("Name"), entity->name, &entity->name_len, sizeof(entity->name));
+            lister_header(entity_name.len != 0 ? entity_name : str8("Anonymous Entity"));
 
             lister_xyz( str8("Pos"), &entity->pos,.pixels_per_unit = 50.0f);
 
@@ -885,19 +908,15 @@ Internal void lane(void *user_data) {
           }
         }
 
-        if (selected_count > 0) {
-          //- kti: Entity specific commands.
-          lister_cmd(str8("Delete"), (Cmd){
-            .kind = CMD_KIND__DELETE_SELECTED_ENTITIES,
-          });
-        } else {
+        if (selected_count == 0) {
           //- kti: List out entities
           lister_header(str8("Entities"));
           for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-            lister_cmd((String8){
+            String8 entity_name = {
               .str = entity->name,
               .len = entity->name_len,
-            }, (Cmd){
+            };
+            lister_cmd(entity_name.len != 0 ? entity_name : str8("Anonymous Entity"), (Cmd){
               .kind = CMD_KIND__SELECT_ENTITY,
               .entity = entity_handle(entity),
             });
@@ -940,19 +959,11 @@ Internal void lane(void *user_data) {
         //- kti: Actions.
         lister_header(str8("Actions"));
 
-        lister_cmd(str8("Create Entity"), (Cmd){
-          .kind = CMD_KIND__CREATE_ENTITY,
-        });
-        
         lister_cmd(str8("Reload User Code"), (Cmd){
           .kind = CMD_KIND__USER_CODE_RELOAD,
         });
 
-        if (!has_camera) {
-          lister_cmd(str8("Create Camera"), (Cmd){
-            .kind = CMD_KIND__CREATE_CAMERA,
-          });
-        } else if (state->entity_count >= 2) {
+        if (has_camera && state->entity_count >= 2) {
           // only allow 1 render at a time
           if (state->active_render == 0) {
             lister_cmd(str8("Render"), (Cmd){
@@ -1779,22 +1790,6 @@ Internal void lane(void *user_data) {
               entity_select(cmd.entity, 0);
             }
           } break;
-          case CMD_KIND__CREATE_ENTITY: {
-            Entity *new = entity_create(ENTITY_FLAG__SHAPE, str8("New Entity"));
-            entity_select(entity_handle(new), 0);
-          } break;
-          case CMD_KIND__CREATE_CAMERA: {
-            Entity *new = entity_create(ENTITY_FLAG__CAMERA, str8("Camera"));
-            new->pos = (F4){0.0f, 0.3f, -3.0f};
-            new->direction = normalize_F4(-new->pos);
-            new->camera_vertical_fov = 70.0f*PI/180.0f;
-            new->camera_aperture_radius = 0.0f;
-            new->camera_focal_distance = 5.0f;
-            entity_select(entity_handle(new), 0);
-          } break;
-          case CMD_KIND__DELETE_SELECTED_ENTITIES: {
-            entity_delete_selected();
-          } break;
           case CMD_KIND__RENDER: {
             // start a new render job
             if (state->active_render == 0) {
@@ -1879,14 +1874,6 @@ Internal void lane(void *user_data) {
       }
       state->cmd_count = 0;
 
-      //- kti: Call User Code
-      if (state->user_render_func) {
-        User_API api = {
-          .entity = user_code_entity,
-        };
-        state->user_render_func(api);
-      }
-
       //- kti: End render job
       if (state->active_render && atomic_load_I1(&state->active_render->completed)) {
         Render_Job *job = state->active_render;
@@ -1923,6 +1910,14 @@ Internal void lane(void *user_data) {
             gfx_tex2d_free(state->render_result_texture);
           }
           state->render_result_texture = new_texture;
+        }
+      }
+
+      //- kti: Remove transient entities.
+      for (Entity *entity = state->first_entity, *next = 0; !entity_is_nil(entity); entity = next) {
+        next = entity->next;
+        if (entity->name_len == 0 || entity->last_touch_frame != state->scene_frame_index) {
+          entity_delete(entity_handle(entity));
         }
       }
     }

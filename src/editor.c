@@ -454,6 +454,9 @@ Internal Entity *entity_create(L1 flags, String8 name) {
   entity->name_len = Min(name.len, sizeof(entity->name));
   entity->material.base_color = (F4){0.9f, 0.9f, 0.9f, 1.0f};
   entity->material.emissive = (F4){0.0f, 0.0f, 0.0f, 1.0f};
+  entity->camera_vertical_fov = 1.22f;
+  entity->camera_focal_distance = 2.0f;
+
   memmove(entity->name, name.str, entity->name_len);
 
   state->entity_count += 1;

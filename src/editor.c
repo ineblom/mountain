@@ -49,7 +49,7 @@ Global UI_Theme_Pattern default_theme_patterns[] = {
 
   UI_THEME_COLOR(0.008f, 0.008f, 0.008f, 1.0f, str8("subtle"), str8("background")),
   UI_THEME_COLOR(0.035227284f, 0.329110300f, 1.016848732f, 1.0f, str8("accent"), str8("text")),
-  UI_THEME_COLOR(0.526210363f, 0.000019104f, 0.000108155f, 1.0f, str8("header"), str8("text")),
+  UI_THEME_COLOR(1.0f, 1.0f, 1.0f, 1.0f, str8("header"), str8("text")),
   UI_THEME_COLOR(0.008101465f, 0.017500665f, 0.023206312f, 1.0f, str8("field"), str8("background")),
   UI_THEME_COLOR(0.008402845f, 0.044952845f, 0.123825366f, 1.0f, str8("selected"), str8("background")),
   UI_THEME_COLOR(0.038710978f, -0.002232542f, -0.000659834f, 1.0f, str8("command"), str8("background")),

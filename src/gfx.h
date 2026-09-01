@@ -227,7 +227,7 @@ typedef struct GFX_Mesh_Push_Constants GFX_Mesh_Push_Constants;
 struct GFX_Mesh_Push_Constants {
   M4F view_projection;
   F2 viewport_size;
-  F1 outline_width;
+  F2 outline_offset;
 };
 
 typedef struct GFX_Rect_Batch GFX_Rect_Batch;

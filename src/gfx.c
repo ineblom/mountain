@@ -1774,7 +1774,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
         };
 
         VkPipeline mesh_pipeline = is_outline_pass ? gfx_state->mesh_outline_pipeline : gfx_state->mesh_pipeline;
-        VkCullModeFlags cull_mode = is_outline_pass ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_NONE;
+        VkCullModeFlags cull_mode = VK_CULL_MODE_NONE;
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline);
         vkCmdSetCullMode(cmd, cull_mode);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -1819,20 +1819,34 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           vkCmdBindIndexBuffer(cmd, batch->index_buffer->main.buffer, batch->index_offset, VK_INDEX_TYPE_UINT32);
 
           if (is_outline_pass) {
-            mesh_push.outline_width = 0;
+            mesh_push.outline_offset = (F2){0};
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_outline_mask_pipeline);
             vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
             vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
             vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
 
-            mesh_push.outline_width = batch->outline_width;
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->mesh_outline_pipeline);
-            vkCmdSetCullMode(cmd, VK_CULL_MODE_FRONT_BIT);
+            vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
+            F2 outline_directions[] = {
+              { 1.0000000f,  0.0000000f}, { 0.9238795f,  0.3826834f},
+              { 0.7071068f,  0.7071068f}, { 0.3826834f,  0.9238795f},
+              { 0.0000000f,  1.0000000f}, {-0.3826834f,  0.9238795f},
+              {-0.7071068f,  0.7071068f}, {-0.9238795f,  0.3826834f},
+              {-1.0000000f,  0.0000000f}, {-0.9238795f, -0.3826834f},
+              {-0.7071068f, -0.7071068f}, {-0.3826834f, -0.9238795f},
+              { 0.0000000f, -1.0000000f}, { 0.3826834f, -0.9238795f},
+              { 0.7071068f, -0.7071068f}, { 0.9238795f, -0.3826834f},
+            };
+            for (L1 direction_idx = 0; direction_idx < ArrayCount(outline_directions); direction_idx += 1) {
+              mesh_push.outline_offset = batch->outline_width * outline_directions[direction_idx];
+              vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
+              vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
+            }
           } else {
-            mesh_push.outline_width = batch->outline_width;
+            mesh_push.outline_offset = (F2){0};
+            vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
+            vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
           }
-          vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
-          vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);
 
           mesh_instance_count += batch->instance_count;
         }

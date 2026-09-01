@@ -3,7 +3,7 @@
 layout(push_constant) uniform PushConstants {
   mat4 view_projection;
   vec2 viewport_size;
-  float outline_width;
+  vec2 outline_offset;
 } push;
 
 layout(location = 0) in vec4 in_pos;

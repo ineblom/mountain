@@ -843,10 +843,6 @@ Internal void lane(void *user_data) {
           } else {
             gfx_fill_tex2d_region(texture, (SI4){0, 0, upload_image.width, upload_image.height}, upload_image.pixels);
           }
-
-        } else if (texture != 0) {
-          gfx_tex2d_free(texture);
-          texture = 0;
         }
         state->user_render_texture = texture;
       }

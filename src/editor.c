@@ -2,6 +2,7 @@
 //~ kti: TODO
 
 //- kti: CODE DRIVEN EDITOR
+// Tweak_F1(); func for editing, it's set to this by default.
 
 //- kti: Clean up UI.
 //- kti: Camera icon and picking.
@@ -510,18 +511,13 @@ Internal F4 entity_mesh_size(Entity *entity) {
   return result;
 }
 
-Internal Entity *user_code_entity(CString name) {
-  String8 key = {(B1 *)name, cstr_len(name)};
-  Assert(key.len <= sizeof(((Entity *)0)->name));
-
+Internal Entity *user_code_entity(String8 name) {
   Entity *result = 0;
 
-  // A non-empty name is the stable identity of an entity. Empty names always
-  // produce distinct entities whose lifetime is limited to this frame.
-  if (key.len != 0) {
+  if (name.len != 0) {
     for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
       String8 entity_key = {entity->name, entity->name_len};
-      if (str8_match(entity_key, key)) {
+      if (str8_match(entity_key, name)) {
         result = entity;
         break;
       }
@@ -529,14 +525,11 @@ Internal Entity *user_code_entity(CString name) {
   }
 
   if (result == 0) {
-    result = entity_create(0, key);
+    result = entity_create(0, name);
   }
 
   result->last_touch_frame = state->scene_frame_index;
   return result;
-}
-
-Internal void user_code_entities_end_frame(void) {
 }
 
 ////////////////////////////////
@@ -822,7 +815,7 @@ Internal void lane(void *user_data) {
         User_API api = {
           .entity = user_code_entity,
         };
-        state->user_render_func(api);
+        state->user_render_func(api, scratch.arena);
       }
 
       Postprocessing_Settings postprocessing_settings_before_ui = state->postprocessing_settings;

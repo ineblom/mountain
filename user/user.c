@@ -1,14 +1,14 @@
 #include "base.h"
 #include "user_api.h"
 
-void render(User_API api) {
+void render(User_API api, Arena *arena) {
   //- kti: Scene
-  Entity *e = api.entity("Sphere");
+  Entity *e = api.entity(str8("Sphere"));
   e->flags |= ENTITY_FLAG__SHAPE;
   e->material.base_color = (F4){1.0f, 0.0f, 0.0f, 1.0f};
 
   //- kti: Floor
-  Entity *floor = api.entity("Floor");
+  Entity *floor = api.entity(str8("Floor"));
   floor->flags |= ENTITY_FLAG__SHAPE;
   floor->shape_kind = SHAPE_KIND__PLANE;
   floor->direction = (F4){0.0f, 1.0f, 0.0f, 0.0f};
@@ -17,7 +17,7 @@ void render(User_API api) {
   floor->pos[1] = -0.5f;
 
   //- kti: Light
-  Entity *light = api.entity("Light");
+  Entity *light = api.entity(str8("Light"));
   light->flags |= ENTITY_FLAG__SHAPE;
   light->shape_kind = SHAPE_KIND__BOX;
   light->pos[1] = 3.0f;
@@ -25,7 +25,7 @@ void render(User_API api) {
   light->material.emissive = (F4){3.0f, 3.0f, 3.0f, 1.0f};
 
   //- kti: Camera
-  Entity *c = api.entity("Camera");
+  Entity *c = api.entity(str8("Camera"));
   c->flags |= ENTITY_FLAG__CAMERA;
   c->pos[2] = -2.0f;
   c->direction = (F4){0.0f, 0.0f, 1.0f, 0.0f};

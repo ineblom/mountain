@@ -24,7 +24,8 @@
 Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__LISTER] = str8("Lister"),
   [VIEW_KIND__VIEWPORT] = str8("Viewport"),
-  [VIEW_KIND__RENDER_RESULT] = str8("Render Result"),
+  [VIEW_KIND__RT_RENDER] = str8("RT Render"),
+  [VIEW_KIND__USER_RENDER] = str8("User Render"),
 };
 
 Global State *state = 0;
@@ -814,8 +815,40 @@ Internal void lane(void *user_data) {
       if (state->user_render_func) {
         User_API api = {
           .entity = user_code_entity,
+          .image_alloc = image_alloc,
         };
-        state->user_render_func(api, scratch.arena);
+        Image user_image = state->user_render_func(api, scratch.arena);
+
+        //- kti: Ensure correct image format.
+        Image upload_image = user_image;
+        if (user_image.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
+          upload_image = image_I1_from_F4_tonemap(scratch.arena, user_image, TONEMAP_KIND__LOTTES);
+        }
+
+        GFX_Texture *texture = state->user_render_texture;
+        if (!image_is_nil(upload_image) && upload_image.format == IMAGE_FORMAT__RGBA8_SRGB) {
+          //- kti: Delete previous texture if necessary.
+          if (texture != 0 && (texture->width != upload_image.width || texture->height != upload_image.height)) {
+            gfx_tex2d_free(texture);
+            texture = 0;
+          }
+
+          //- kti: Create or fill texture.
+          if (texture == 0) {
+            texture = gfx_tex2d_alloc(
+              GFX_TEXTURE_USAGE__DYNAMIC,
+              upload_image.width,
+              upload_image.height,
+              upload_image.pixels);
+          } else {
+            gfx_fill_tex2d_region(texture, (SI4){0, 0, upload_image.width, upload_image.height}, upload_image.pixels);
+          }
+
+        } else if (texture != 0) {
+          gfx_tex2d_free(texture);
+          texture = 0;
+        }
+        state->user_render_texture = texture;
       }
 
       Postprocessing_Settings postprocessing_settings_before_ui = state->postprocessing_settings;
@@ -1166,8 +1199,9 @@ Internal void lane(void *user_data) {
                     }
                   } break;
 
-                  //- kti: Ray-traced render result.
-                  case VIEW_KIND__RENDER_RESULT: {
+                  //- kti: Rendered image result.
+                  case VIEW_KIND__RT_RENDER:
+                  case VIEW_KIND__USER_RENDER: {
                     ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
                     ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
                     ui_set_next_tag(str8("viewport"));
@@ -1175,7 +1209,7 @@ Internal void lane(void *user_data) {
                       UI_BOX_FLAG__DRAW_BACKGROUND|
                       UI_BOX_FLAG__CLIP|
                       UI_BOX_FLAG__CLICKABLE,
-                      "##render_result_%p", panel);
+                      "##render_result_%p_%d", panel, view->kind);
 
                     UI_Signal signal = ui_signal_from_box(view->render_result_box);
                     if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
@@ -1602,9 +1636,16 @@ Internal void lane(void *user_data) {
             ////////////////////////////////
             //~ Render Result Draw
 
-            if (view->kind == VIEW_KIND__RENDER_RESULT && view->render_result_box != 0 && state->render_result_texture != 0) {
+            GFX_Texture *rendered_texture = 0;
+            if (view->kind == VIEW_KIND__RT_RENDER) {
+              rendered_texture = state->render_result_texture;
+            } else if (view->kind == VIEW_KIND__USER_RENDER) {
+              rendered_texture = state->user_render_texture;
+            }
+
+            if (view->render_result_box != 0 && rendered_texture != 0) {
               F4 bounds = view->render_result_box->rect;
-              GFX_Texture *texture = state->render_result_texture;
+              GFX_Texture *texture = rendered_texture;
               if (bounds[2] > 0.0f && bounds[3] > 0.0f && texture->width > 0 && texture->height > 0) {
                 F1 scale = Min(bounds[2]/(F1)texture->width, bounds[3]/(F1)texture->height);
                 F2 fitted_size = {

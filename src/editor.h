@@ -21,7 +21,8 @@ typedef I1 View_Kind;
 enum {
   VIEW_KIND__LISTER = 0,
   VIEW_KIND__VIEWPORT,
-  VIEW_KIND__RENDER_RESULT,
+  VIEW_KIND__RT_RENDER,
+  VIEW_KIND__USER_RENDER,
 
   VIEW_KIND_COUNT,
 };
@@ -78,7 +79,7 @@ struct View {
   F1 gizmo_world_per_pixel;
   I1 gizmo_visible;
 
-  //- kti: Render result
+  //- kti: Image result
   UI_Box *render_result_box;
 };
 
@@ -226,6 +227,7 @@ struct State {
   Arena *display_arena;
   Image display_image;
   GFX_Texture *render_result_texture;
+  GFX_Texture *user_render_texture;
 
   //- kti: User Code
   User_Render_Func user_render_func;

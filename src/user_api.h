@@ -4,12 +4,14 @@
 #include "entity.h"
 #include "arena.h"
 #include "strings.h"
+#include "image.h"
 
 typedef struct User_API User_API;
 struct User_API {
   Entity *(*entity)(String8 name);
+  Image (*image_alloc)(Arena *arena, I1 width, I1 height, Image_Format format);
 };
 
-typedef void (*User_Render_Func)(User_API, Arena *);
+typedef Image (*User_Render_Func)(User_API, Arena *);
 
 #endif

@@ -2,7 +2,10 @@
 //~ kti: TODO
 
 //- kti: CODE DRIVEN EDITOR
-// Tweak_F1(); func for lister, some values have this by default.
+// 1. Get RT working in there.
+// 2. Multithread
+// 3. SIMD
+// 4. Lister Integration
 
 //- kti: Clean up UI.
 //- kti: Camera icon and picking.
@@ -840,6 +843,7 @@ Internal void lane(void *user_data) {
           } else {
             gfx_fill_tex2d_region(texture, (SI4){0, 0, upload_image.width, upload_image.height}, upload_image.pixels);
           }
+          texture->filter = GFX_TEXTURE_FILTER__NEAREST;
         }
         state->user_render_texture = texture;
       }
@@ -2009,7 +2013,7 @@ Internal void lane(void *user_data) {
 
 SI1 main(void) {
   Lane_Group_Params params = {
-    .count = os_core_count()/2,
+    .count = 1,
     .proc = lane,
 
     .arena_size = GiB(1),

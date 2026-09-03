@@ -162,6 +162,12 @@ typedef enum GFX_Texture_Usage {
   GFX_TEXTURE_USAGE__STATIC,
 } GFX_Texture_Usage;
 
+typedef enum GFX_Texture_Filter {
+  GFX_TEXTURE_FILTER__LINEAR,
+  GFX_TEXTURE_FILTER__NEAREST,
+  GFX_TEXTURE_FILTER__COUNT,
+} GFX_Texture_Filter;
+
 typedef enum GFX_Buffer_Usage {
   GFX_BUFFER_USAGE__DYNAMIC,
   GFX_BUFFER_USAGE__STATIC,
@@ -179,6 +185,7 @@ struct GFX_Texture {
   GFX_VK_Image image;
   I1 width;
   I1 height;
+  GFX_Texture_Filter filter;
 
   GFX_VK_Buffer staging;
 };
@@ -331,7 +338,7 @@ struct GFX_State {
   GFX_Texture *first_free_texture;
   GFX_Buffer *first_free_buffer;
 
-  VkSampler texture_sampler;
+  VkSampler texture_samplers[GFX_TEXTURE_FILTER__COUNT];
   VkDescriptorSetLayout descriptor_set_layout;
   VkCommandPool upload_command_pool;
   GFX_Texture *white_texture;

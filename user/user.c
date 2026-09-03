@@ -41,8 +41,8 @@ Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time) {
   for (L1 y = 0; y < image.height; y += 1) {
     F4 *row = (F4 *)(image.pixels + y*image.row_pitch);
     for (L1 x = 0; x < image.width; x += 1) {
-      F1 r = sin_F1(x);
-      row[x] = (F4){r, (F1)(x/10)/(F1)image.width, 0.0f, 1.0f};
+      F1 r = sin_F1(time+x/4)*0.5f+0.5f;
+      row[x] = (F4){r, 0.0f, 0.0f, 1.0f};
     }
   }
 

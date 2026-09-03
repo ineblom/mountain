@@ -383,6 +383,7 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
     SLLStackPop(gfx_state->first_free_texture);
   }
   MemoryZeroStruct(texture);
+  texture->filter = GFX_TEXTURE_FILTER__LINEAR;
 
   L1 image_size = (L1)width * height * 4; // RGBA8
 
@@ -1145,22 +1146,29 @@ Internal void gfx_init() {
   ////////////////////////////////
   //~ kti: Sampler
 
-  VkSamplerCreateInfo sampler_ci = {
-    .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-    .magFilter = VK_FILTER_LINEAR,
-    .minFilter = VK_FILTER_LINEAR,
-    .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    .anisotropyEnable = VK_FALSE,
-    .maxAnisotropy = 1.0f,
-    .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-    .unnormalizedCoordinates = VK_FALSE,
-    .compareEnable = VK_FALSE,
-    .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+  VkFilter vk_filters[GFX_TEXTURE_FILTER__COUNT] = {
+    [GFX_TEXTURE_FILTER__LINEAR] = VK_FILTER_LINEAR,
+    [GFX_TEXTURE_FILTER__NEAREST] = VK_FILTER_NEAREST,
   };
-  result = vkCreateSampler(gfx_state->device, &sampler_ci, 0, &gfx_state->texture_sampler);
-  Assert(result == VK_SUCCESS);
+  for (I1 filter = 0; filter < GFX_TEXTURE_FILTER__COUNT; filter += 1) {
+    VkSamplerCreateInfo sampler_ci = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = vk_filters[filter],
+      .minFilter = vk_filters[filter],
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .anisotropyEnable = VK_FALSE,
+      .maxAnisotropy = 1.0f,
+      .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+      .unnormalizedCoordinates = VK_FALSE,
+      .compareEnable = VK_FALSE,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+    };
+    result = vkCreateSampler(gfx_state->device, &sampler_ci, 0,
+      &gfx_state->texture_samplers[filter]);
+    Assert(result == VK_SUCCESS);
+  }
 
   ////////////////////////////////
   //~ kti: Upload Command Pool
@@ -1679,7 +1687,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
             continue;
           }
           VkDescriptorImageInfo image_info = {
-            .sampler = gfx_state->texture_sampler,
+            .sampler = gfx_state->texture_samplers[texture->filter],
             .imageView = texture->image.view,
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
           };

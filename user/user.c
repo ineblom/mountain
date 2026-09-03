@@ -1,7 +1,8 @@
 #include "base.h"
 #include "user_api.h"
+#include "math.c"
 
-Image render(User_API api, Arena *frame_arena) {
+Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time) {
   //- kti: Scene
   Entity *e = api.entity(str8("Sphere"));
   e->flags |= ENTITY_FLAG__SHAPE;
@@ -35,12 +36,13 @@ Image render(User_API api, Arena *frame_arena) {
   c->pos[2] = -2.0f;
   c->direction = (F4){0.0f, 0.0f, 1.0f, 0.0f};
 
-  Image image = api.image_alloc(frame_arena, 640, 480, IMAGE_FORMAT__RGBA32F_LINEAR);
+  Image image = api.image_alloc(frame_arena, 160, 80, IMAGE_FORMAT__RGBA32F_LINEAR);
 
   for (L1 y = 0; y < image.height; y += 1) {
     F4 *row = (F4 *)(image.pixels + y*image.row_pitch);
     for (L1 x = 0; x < image.width; x += 1) {
-      row[x] = (F4){1.0f, 0.0f, 0.0f, 1.0f};
+      F1 r = sin_F1(x);
+      row[x] = (F4){r, (F1)(x/10)/(F1)image.width, 0.0f, 1.0f};
     }
   }
 

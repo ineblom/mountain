@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Internal OS_Modifier_Flags os_get_modifiers(void) {
   return os_gfx_state != 0 ? os_gfx_state->modifiers : 0;
 }
@@ -415,5 +413,3 @@ Internal I1 os_key_is_down(L1 key) {
 Internal D1 os_mouse_x(void) { return os_gfx_state != 0 ? os_gfx_state->mouse_x : 0; }
 Internal D1 os_mouse_y(void) { return os_gfx_state != 0 ? os_gfx_state->mouse_y : 0; }
 Internal F2 os_mouse_pos(void) { return (F2){os_mouse_x(), os_mouse_y()}; }
-
-#endif

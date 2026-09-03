@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 #define X(name) Global PFN_##name name = 0;
 VK_CORE_FUNCTIONS
 VK_EXTENSION_FUNCTIONS
@@ -1924,5 +1922,3 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
 
   ProfEnd();
 }
-
-#endif

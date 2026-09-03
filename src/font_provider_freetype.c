@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Global FP_State *fp_state = 0;
 
 Inline FP_Handle fp_handle_zero(void) {
@@ -195,5 +193,3 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
   ProfEnd();
   return result;
 }
-
-#endif

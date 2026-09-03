@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 #define HASH_XX_P1 11400714785074694791ULL
 #define HASH_XX_P2 14029467366897019727ULL
 #define HASH_XX_P3  1609587929392839161ULL
@@ -99,5 +97,3 @@ Internal Hash128 hash128(void *data, L1 size) {
 #undef HASH_XX_P3
 #undef HASH_XX_P4
 #undef HASH_XX_P5
-
-#endif

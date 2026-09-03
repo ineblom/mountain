@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Global OS_GFX_State *os_gfx_state = 0;
 
 Internal String8 os_read_entire_file(Arena *arena, String8 filename) {
@@ -142,6 +140,4 @@ Internal void os_library_close(void *handle) {
 #include "os_mac.c"
 #else
 #include "os_wayland.c"
-#endif
-
 #endif

@@ -4,6 +4,8 @@
 #define PI 3.141592653598979f
 #define GOLDEN_RATIO 1.61803398875f
 
+#include <math.h>
+
 typedef struct Random_State Random_State;
 struct Random_State {
   L1 state;
@@ -88,5 +90,19 @@ struct Ray {
   F4 dir;
   F4 inv_dir;
 };
+
+#define Square(x) ((x)*(x))
+
+#define sqrt_F1(x) sqrtf(x)
+#define abs_F1(x) fabsf(x)
+#define abs_SI1(x) abs(x)
+#define abs_SL1(x) llabs(x)
+#define mod_F1(x, y) fmodf(x, y)
+#define floor_F1(x) floorf(x)
+#define round_F1(x) roundf(x)
+#define ceil_F1(x) ceilf(x)
+#define sin_F1(x) sinf(x)
+#define cos_F1(x) cosf(x)
+#define tan_F1(x) tanf(x)
 
 #endif

@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 ////////////////////////////////
 //~ kti: String <-> Integer Tables
 
@@ -415,5 +413,3 @@ Internal String32 str32_from_str8(Arena *arena, String8 in) {
   }
   return result;
 }
-
-#endif

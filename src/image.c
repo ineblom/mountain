@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Internal I1 image_is_nil(Image image) {
   I1 result = image.width == 0 || image.height == 0 || image.pixels == 0;
   return result;
@@ -448,5 +446,3 @@ Internal Image image_I1_from_F4_tonemap(Arena *arena, Image input, Tonemap_Kind 
 
   return result;
 }
-
-#endif

@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Internal Line *parse_line(Arena *arena, String8 str) {
   Line *line = push_array(arena, Line, 1);
   line->str = str;
@@ -310,5 +308,3 @@ SI1 main(void) {
 
   return 0;
 }
-
-#endif

@@ -2,7 +2,7 @@
 //~ kti: TODO
 
 //- kti: CODE DRIVEN EDITOR
-// Tweak_F1(); func for editing, it's set to this by default.
+// Tweak_F1(); func for lister, some values have this by default.
 
 //- kti: Clean up UI.
 //- kti: Camera icon and picking.
@@ -18,8 +18,6 @@
 //- kti: Snapping.
 //- kti: Create entity on press in scene. (right click?)
 //- kti: See gizmo value in tooltip while dragging.
-
-#if (SOURCE)
 
 Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__LISTER] = str8("Lister"),
@@ -645,7 +643,7 @@ Internal I1 postprocessing_settings_match(Postprocessing_Settings a, Postprocess
 
 Internal void user_code_reload(void) {
   //- kti: Compile code.
-  CString command = "gcc -I./src/ -fPIC -shared -o user.so ./user/user.c";
+  CString command = "gcc -iquote ./src/ -fPIC -shared -o user.so ./user/user.c -lm";
   system(command);
 
   //- kti: Load Proc.
@@ -810,14 +808,13 @@ Internal void lane(void *user_data) {
     lane_sync();
 
     if (lane_idx() == 0) {
-      //- kti: Build the code-defined scene before any frame consumers use it.
-      state->scene_frame_index += 1;
+      //- kti: Build the code-defined scene.
       if (state->user_render_func) {
         User_API api = {
           .entity = user_code_entity,
           .image_alloc = image_alloc,
         };
-        Image user_image = state->user_render_func(api, scratch.arena);
+        Image user_image = state->user_render_func(api, scratch.arena, state->scene_frame_index, time);
 
         //- kti: Ensure correct image format.
         Image upload_image = user_image;
@@ -846,6 +843,7 @@ Internal void lane(void *user_data) {
         }
         state->user_render_texture = texture;
       }
+      state->scene_frame_index += 1;
 
       Postprocessing_Settings postprocessing_settings_before_ui = state->postprocessing_settings;
       I1 postprocessing_dirty = 0;
@@ -2023,5 +2021,3 @@ SI1 main(void) {
 
   return 0;
 }
-
-#endif

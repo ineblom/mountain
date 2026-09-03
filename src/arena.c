@@ -1,4 +1,3 @@
-#if (SOURCE)
 Internal Arena *arena_alloc(L1 max_size) {
   Assert(max_size > sizeof(Arena));
 
@@ -71,5 +70,3 @@ Internal void temp_arena_end(Temp_Arena temp) {
 #define push_array_aligned(a, T, c, align) (T *)arena_push((a), sizeof(T)*(c), (align), (1))
 #define push_array_no_zero(a, T, c) push_array_no_zero_aligned(a, T, c, Max(8, AlignOf(T)))
 #define push_array(a, T, c) push_array_aligned(a, T, c, Max(8, AlignOf(T)))
-
-#endif

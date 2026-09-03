@@ -36,8 +36,6 @@
 #endif
 
 //- kti: Sources
-#define SOURCE 1
-
 NoInline void WrmBas(void) { Crash(0); }
 
 #include "arena.c"
@@ -65,5 +63,3 @@ NoInline void WrmBas(void) { Crash(0); }
 #endif
 
 NoInline void WrmEnd(void) { Crash(1); }
-
-#undef SOURCE

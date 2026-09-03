@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 #include <xdg-shell-protocol.c>
 
 Internal I1 os_key_from_wl_key(I1 wl_key) {
@@ -914,5 +912,3 @@ Internal F2 os_mouse_pos(void) {
   F2 result = {os_gfx_state->mouse_x, os_gfx_state->mouse_y};
   return result;
 }
-
-#endif

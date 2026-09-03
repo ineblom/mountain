@@ -4,8 +4,6 @@
 // +x right, +y up, +z forwards
 
 
-#if (SOURCE)
-
 Inline F4 sample_cosine_hemisphere(Random_State *rng, F4 n) {
   F1 x, y;
   do {
@@ -272,4 +270,3 @@ Internal void rt_trace_scene(RT_Scene scene, Image output, Range pixel_range) {
     pixels[i] = color;
   }
 }
-#endif

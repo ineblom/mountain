@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Global ThreadLocal Lane_Ctx *lane_ctx = 0;
 
 #define lane_idx() (lane_ctx->lane_idx)
@@ -151,5 +149,3 @@ Internal void lane_group_launch(Lane_Group_Params params) {
     }
   }
 }
-
-#endif

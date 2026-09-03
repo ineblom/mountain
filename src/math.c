@@ -1,23 +1,11 @@
-#if (SOURCE)
+#include "math.h"
 
 ////////////////////////////////
 //~ General
-#define Square(x) ((x)*(x))
 
 ////////////////////////////////
 //~ F1
 
-#define sqrt_F1(x) sqrtf(x)
-#define abs_F1(x) fabsf(x)
-#define abs_SI1(x) abs(x)
-#define abs_SL1(x) llabs(x)
-#define mod_F1(x, y) fmodf(x, y)
-#define floor_F1(x) floorf(x)
-#define round_F1(x) roundf(x)
-#define ceil_F1(x) ceilf(x)
-#define sin_F1(x) sinf(x)
-#define cos_F1(x) cosf(x)
-#define tan_F1(x) tanf(x)
 
 Inline F1 clamp01_F1(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
 Inline F1 saturate_F1(F1 x) { return clamp01_F1(x); }
@@ -145,7 +133,7 @@ Inline F4 lerp_snap_F4(F4 a, F1 t, F4 b, F1 min_dist) {
 }
 
 Inline F4 abs_F4(F4 v) {
-  F4 result = { fabsf(v[0]), fabsf(v[1]), fabsf(v[2]), fabsf(v[3]) };
+  F4 result = { abs_F1(v[0]), abs_F1(v[1]), abs_F1(v[2]), abs_F1(v[3]) };
   return result;
 }
 
@@ -255,11 +243,6 @@ Inline M4F rotate_z_M4F(F1 angle_rad) {
 }
 
 Inline M4F perspective_fov_M4F(F1 fov_angle_y, F1 aspect_ratio, F1 near_distance, F1 far_distance) {
-  Assert(fov_angle_y > 2.0E-8f);
-  Assert(aspect_ratio > 1.0E-8f);
-  Assert(near_distance > 0.0f && far_distance > 0.0f);
-  Assert((far_distance - near_distance) > 1.0E-8f);
-
   F1 sin_fov = sin_F1(fov_angle_y * 0.5f);
   F1 cos_fov = cos_F1(fov_angle_y * 0.5f);
   F1 scaled_view_height = cos_fov / sin_fov;
@@ -514,6 +497,3 @@ F4 linear_rgba_from_oklch(F1 l, F1 c, F1 h, F1 alpha) {
   };
   return result;
 }
-
-
-#endif

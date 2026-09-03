@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Global UI_Box ui_nil_box = {
   &ui_nil_box,
   &ui_nil_box,
@@ -2367,5 +2365,3 @@ Internal void ui_draw(void) {
 
   ProfEnd();
 }
-
-#endif

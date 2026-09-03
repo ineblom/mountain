@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Global FC_State *fc_state = 0;
 
 Internal void fc_reset(void) {
@@ -568,4 +566,3 @@ Internal L1 fc_char_pos_from_tag_size_string_p(FC_Tag tag, F1 size, F1 raster_sc
   scratch_end(scratch);
   return best_offset_bytes;
 }
-#endif

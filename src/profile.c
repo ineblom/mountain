@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Global SpallProfile spall_ctx;
 Global ThreadLocal SpallBuffer spall_buffer;
 
@@ -15,5 +13,3 @@ Internal void prof_begin(const char *str, L1 length) {
 
   spall_buffer_begin(&spall_ctx, &spall_buffer, str, length, os_clock());
 }
-
-#endif

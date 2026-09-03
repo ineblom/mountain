@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Global DR_Clip_Node dr_nil_clip_node = {0, (F4){0}};
 Global DR_State *dr_state = 0;
 
@@ -310,5 +308,3 @@ Internal DR_FRun_List dr_fruns_from_fstrs(Arena *arena, F1 tab_size, F1 raster_s
 
   return dst;
 }
-
-#endif

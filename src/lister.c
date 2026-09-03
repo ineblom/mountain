@@ -1,5 +1,3 @@
-#if (SOURCE)
-
 Global Lister_State lister_state = {0};
 
 Internal void lister_reset(Arena *arena) {
@@ -671,5 +669,3 @@ Internal void lister_ui(void) {
 }
 
 #undef as
-
-#endif

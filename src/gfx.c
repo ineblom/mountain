@@ -215,7 +215,7 @@ Internal void gfx_collect_resources(I1 wait) {
   I1 submitted;
   do {
     submitted = 0;
-    if (gfx_state->resource_free_fence != VK_NULL_HANDLE) {
+    if (gfx_state->first_retired_buffer != 0 || gfx_state->first_retired_texture != 0) {
       VkResult result = vkWaitForFences(gfx_state->device, 1, &gfx_state->resource_free_fence, VK_TRUE, wait ? L1_MAX : 0);
       Assert(result == VK_SUCCESS || result == VK_TIMEOUT);
       if (result == VK_SUCCESS) {
@@ -235,25 +235,18 @@ Internal void gfx_collect_resources(I1 wait) {
           MemoryZeroStruct(texture);
           SLLStackPush(gfx_state->first_free_texture, texture);
         }
-        vkDestroyFence(gfx_state->device, gfx_state->resource_free_fence, 0);
-        gfx_state->resource_free_fence = VK_NULL_HANDLE;
+        result = vkResetFences(gfx_state->device, 1, &gfx_state->resource_free_fence);
+        Assert(result == VK_SUCCESS);
       }
     }
 
-    //- kti: Create fence
-    if (gfx_state->resource_free_fence == VK_NULL_HANDLE &&
+    //- kti: Submit the next cleanup batch.
+    if (gfx_state->first_retired_buffer == 0 && gfx_state->first_retired_texture == 0 &&
         gfx_state->recording_frame_count == 0 &&
         (gfx_state->first_pending_buffer != 0 || gfx_state->first_pending_texture != 0)) {
-      VkFenceCreateInfo fence_ci = {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      };
-      VkFence fence = VK_NULL_HANDLE;
-      VkResult result = vkCreateFence(gfx_state->device, &fence_ci, 0, &fence);
-      Assert(result == VK_SUCCESS);
       //- kti: This fence covers every earlier submission on our shared queue.
-      result = vkQueueSubmit(gfx_state->queue, 0, 0, fence);
+      VkResult result = vkQueueSubmit(gfx_state->queue, 0, 0, gfx_state->resource_free_fence);
       Assert(result == VK_SUCCESS);
-      gfx_state->resource_free_fence = fence;
       gfx_state->first_retired_buffer = gfx_state->first_pending_buffer;
       gfx_state->first_retired_texture = gfx_state->first_pending_texture;
       gfx_state->first_pending_buffer = 0;
@@ -844,6 +837,13 @@ Internal void gfx_init() {
   Assert(result == VK_SUCCESS);
 
   vkGetDeviceQueue(gfx_state->device, gfx_state->present_queue_index, 0, &gfx_state->queue);
+
+  //- kti: Reuse one fence for all deferred resource cleanup batches.
+  VkFenceCreateInfo resource_free_fence_ci = {
+    .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+  };
+  result = vkCreateFence(gfx_state->device, &resource_free_fence_ci, 0, &gfx_state->resource_free_fence);
+  Assert(result == VK_SUCCESS);
 
   ////////////////////////////////
   //~ kti: Load Push Descriptor Function

@@ -215,42 +215,47 @@ Internal void gfx_collect_resources(I1 wait) {
   I1 submitted;
   do {
     submitted = 0;
+
+    //- kti: Check GPU completion, optionally wait.
+    VkResult result = VK_TIMEOUT;
     if (gfx_state->first_retired_buffer != 0 || gfx_state->first_retired_texture != 0) {
-      VkResult result = vkWaitForFences(gfx_state->device, 1, &gfx_state->resource_free_fence, VK_TRUE, wait ? L1_MAX : 0);
-      Assert(result == VK_SUCCESS || result == VK_TIMEOUT);
-      if (result == VK_SUCCESS) {
-        while (gfx_state->first_retired_buffer != 0) {
-          GFX_Buffer *buffer = gfx_state->first_retired_buffer;
-          SLLStackPop(gfx_state->first_retired_buffer);
-          gfx_vk_destroy_buffer(buffer->main);
-          gfx_vk_destroy_buffer(buffer->staging);
-          MemoryZeroStruct(buffer);
-          SLLStackPush(gfx_state->first_free_buffer, buffer);
-        }
-        while (gfx_state->first_retired_texture != 0) {
-          GFX_Texture *texture = gfx_state->first_retired_texture;
-          SLLStackPop(gfx_state->first_retired_texture);
-          gfx_vk_destroy_image(texture->image);
-          gfx_vk_destroy_buffer(texture->staging);
-          MemoryZeroStruct(texture);
-          SLLStackPush(gfx_state->first_free_texture, texture);
-        }
-        result = vkResetFences(gfx_state->device, 1, &gfx_state->resource_free_fence);
-        Assert(result == VK_SUCCESS);
-      }
+      result = vkWaitForFences(gfx_state->device, 1, &gfx_state->resource_free_fence, VK_TRUE, wait ? L1_MAX : 0);
     }
 
-    //- kti: Submit the next cleanup batch.
+    //- kti: If wait succeeded, free retired resources.
+    if (result == VK_SUCCESS) {
+      //- kti: Buffers.
+      while (gfx_state->first_retired_buffer != 0) {
+        GFX_Buffer *buffer = gfx_state->first_retired_buffer;
+        SLLStackPop(gfx_state->first_retired_buffer);
+        gfx_vk_destroy_buffer(buffer->main);
+        gfx_vk_destroy_buffer(buffer->staging);
+        MemoryZeroStruct(buffer);
+        SLLStackPush(gfx_state->first_free_buffer, buffer);
+      }
+      //- kti: Textures.
+      while (gfx_state->first_retired_texture != 0) {
+        GFX_Texture *texture = gfx_state->first_retired_texture;
+        SLLStackPop(gfx_state->first_retired_texture);
+        gfx_vk_destroy_image(texture->image);
+        gfx_vk_destroy_buffer(texture->staging);
+        MemoryZeroStruct(texture);
+        SLLStackPush(gfx_state->first_free_texture, texture);
+      }
+
+      //- kti: Reset fence.
+      vkResetFences(gfx_state->device, 1, &gfx_state->resource_free_fence);
+    }
+
+    //- kti: Submit a fence covering pending resources last use.
     if (gfx_state->first_retired_buffer == 0 && gfx_state->first_retired_texture == 0 &&
         gfx_state->recording_frame_count == 0 &&
-        (gfx_state->first_pending_buffer != 0 || gfx_state->first_pending_texture != 0)) {
-      //- kti: This fence covers every earlier submission on our shared queue.
-      VkResult result = vkQueueSubmit(gfx_state->queue, 0, 0, gfx_state->resource_free_fence);
-      Assert(result == VK_SUCCESS);
-      gfx_state->first_retired_buffer = gfx_state->first_pending_buffer;
-      gfx_state->first_retired_texture = gfx_state->first_pending_texture;
-      gfx_state->first_pending_buffer = 0;
-      gfx_state->first_pending_texture = 0;
+        (gfx_state->first_buffer_pending_free != 0 || gfx_state->first_texture_pending_free != 0)) {
+      vkQueueSubmit(gfx_state->queue, 0, 0, gfx_state->resource_free_fence);
+      gfx_state->first_retired_buffer = gfx_state->first_buffer_pending_free;
+      gfx_state->first_retired_texture = gfx_state->first_texture_pending_free;
+      gfx_state->first_buffer_pending_free = 0;
+      gfx_state->first_texture_pending_free = 0;
       submitted = 1;
     }
   } while (submitted);
@@ -337,7 +342,7 @@ Internal GFX_Buffer *gfx_buffer_alloc(GFX_Buffer_Usage usage, GFX_Buffer_Kind ki
 
 Internal void gfx_buffer_free(GFX_Buffer *buffer) {
   if (buffer != 0) {
-    SLLStackPush(gfx_state->first_pending_buffer, buffer);
+    SLLStackPush(gfx_state->first_buffer_pending_free, buffer);
   }
 }
 
@@ -590,7 +595,7 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {
   if (tex != 0) {
-    SLLStackPush(gfx_state->first_pending_texture, tex);
+    SLLStackPush(gfx_state->first_texture_pending_free, tex);
   }
 }
 

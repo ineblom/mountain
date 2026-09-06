@@ -339,8 +339,8 @@ struct GFX_State {
   GFX_Buffer *first_free_buffer;
 
   L1 recording_frame_count;
-  GFX_Texture *first_pending_texture;
-  GFX_Buffer *first_pending_buffer;
+  GFX_Texture *first_texture_pending_free;
+  GFX_Buffer *first_buffer_pending_free;
   GFX_Texture *first_retired_texture;
   GFX_Buffer *first_retired_buffer;
   VkFence resource_free_fence;

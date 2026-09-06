@@ -211,6 +211,58 @@ Internal void gfx_vk_destroy_image(GFX_VK_Image image) {
   }
 }
 
+Internal void gfx_collect_resources(I1 wait) {
+  I1 submitted;
+  do {
+    submitted = 0;
+    if (gfx_state->resource_free_fence != VK_NULL_HANDLE) {
+      VkResult result = vkWaitForFences(gfx_state->device, 1, &gfx_state->resource_free_fence, VK_TRUE, wait ? L1_MAX : 0);
+      Assert(result == VK_SUCCESS || result == VK_TIMEOUT);
+      if (result == VK_SUCCESS) {
+        while (gfx_state->first_retired_buffer != 0) {
+          GFX_Buffer *buffer = gfx_state->first_retired_buffer;
+          SLLStackPop(gfx_state->first_retired_buffer);
+          gfx_vk_destroy_buffer(buffer->main);
+          gfx_vk_destroy_buffer(buffer->staging);
+          MemoryZeroStruct(buffer);
+          SLLStackPush(gfx_state->first_free_buffer, buffer);
+        }
+        while (gfx_state->first_retired_texture != 0) {
+          GFX_Texture *texture = gfx_state->first_retired_texture;
+          SLLStackPop(gfx_state->first_retired_texture);
+          gfx_vk_destroy_image(texture->image);
+          gfx_vk_destroy_buffer(texture->staging);
+          MemoryZeroStruct(texture);
+          SLLStackPush(gfx_state->first_free_texture, texture);
+        }
+        vkDestroyFence(gfx_state->device, gfx_state->resource_free_fence, 0);
+        gfx_state->resource_free_fence = VK_NULL_HANDLE;
+      }
+    }
+
+    //- kti: Create fence
+    if (gfx_state->resource_free_fence == VK_NULL_HANDLE &&
+        gfx_state->recording_frame_count == 0 &&
+        (gfx_state->first_pending_buffer != 0 || gfx_state->first_pending_texture != 0)) {
+      VkFenceCreateInfo fence_ci = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      };
+      VkFence fence = VK_NULL_HANDLE;
+      VkResult result = vkCreateFence(gfx_state->device, &fence_ci, 0, &fence);
+      Assert(result == VK_SUCCESS);
+      //- kti: This fence covers every earlier submission on our shared queue.
+      result = vkQueueSubmit(gfx_state->queue, 0, 0, fence);
+      Assert(result == VK_SUCCESS);
+      gfx_state->resource_free_fence = fence;
+      gfx_state->first_retired_buffer = gfx_state->first_pending_buffer;
+      gfx_state->first_retired_texture = gfx_state->first_pending_texture;
+      gfx_state->first_pending_buffer = 0;
+      gfx_state->first_pending_texture = 0;
+      submitted = 1;
+    }
+  } while (submitted);
+}
+
 Internal void gfx_buffer_fill(GFX_Buffer *buffer, L1 offset, L1 size, void *data) {
   if (buffer != 0 && buffer->main.buffer != VK_NULL_HANDLE && buffer->main.memory != VK_NULL_HANDLE &&
     data != 0 && size > 0 && offset <= buffer->main.size && offset+size > offset && offset+size <= buffer->main.size) {
@@ -292,12 +344,7 @@ Internal GFX_Buffer *gfx_buffer_alloc(GFX_Buffer_Usage usage, GFX_Buffer_Kind ki
 
 Internal void gfx_buffer_free(GFX_Buffer *buffer) {
   if (buffer != 0) {
-    gfx_vk_destroy_buffer(buffer->main);
-    gfx_vk_destroy_buffer(buffer->staging);
-
-    //- kti: Add to freelist.
-    MemoryZeroStruct(buffer);
-    SLLStackPush(gfx_state->first_free_buffer, buffer);
+    SLLStackPush(gfx_state->first_pending_buffer, buffer);
   }
 }
 
@@ -550,11 +597,7 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels) 
 
 Internal void gfx_tex2d_free(GFX_Texture *tex) {
   if (tex != 0) {
-    gfx_vk_destroy_image(tex->image);
-    gfx_vk_destroy_buffer(tex->staging);
-
-    MemoryZeroStruct(tex);
-    SLLStackPush(gfx_state->first_free_texture, tex);
+    SLLStackPush(gfx_state->first_pending_texture, tex);
   }
 }
 
@@ -1444,11 +1487,19 @@ Internal void gfx_window_unequip(GFX_Window *vkw) {
   vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
   vkDestroySurfaceKHR(gfx_state->instance, vkw->surface, 0);
 
+  if (vkw->image_idx < vkw->image_count) {
+    Assert(gfx_state->recording_frame_count > 0);
+    gfx_state->recording_frame_count -= 1;
+    vkw->image_idx = I1_MAX;
+  }
+  gfx_collect_resources(gfx_state->recording_frame_count == 0);
   SLLStackPush(gfx_state->first_free_window, vkw);
 }
 
 Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
   ProfFuncBegin();
+  Assert(vkw->image_idx == I1_MAX);
+  gfx_collect_resources(0);
 
   ////////////////////////////////
   //~ kti: Acquire image
@@ -1604,6 +1655,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw) {
     vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
     vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
 
+    gfx_state->recording_frame_count += 1;
     vkw->per_frame[image_idx].rect_instances_count = 0;
     vkw->per_frame[image_idx].mesh_instance_count = 0;
   }
@@ -1907,6 +1959,9 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     };
     VkResult result = vkQueueSubmit(gfx_state->queue, 1, &submit_info, vkw->per_frame[image_idx].queue_submit_fence);
     Assert(result == VK_SUCCESS);
+    Assert(gfx_state->recording_frame_count > 0);
+    gfx_state->recording_frame_count -= 1;
+    vkw->image_idx = I1_MAX;
 
     ////////////////////////////////
     //~ kti: Present
@@ -1928,5 +1983,6 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw) {
     }
   }
 
+  gfx_collect_resources(0);
   ProfEnd();
 }

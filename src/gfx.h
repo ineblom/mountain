@@ -338,6 +338,13 @@ struct GFX_State {
   GFX_Texture *first_free_texture;
   GFX_Buffer *first_free_buffer;
 
+  L1 recording_frame_count;
+  GFX_Texture *first_pending_texture;
+  GFX_Buffer *first_pending_buffer;
+  GFX_Texture *first_retired_texture;
+  GFX_Buffer *first_retired_buffer;
+  VkFence resource_free_fence;
+
   VkSampler texture_samplers[GFX_TEXTURE_FILTER__COUNT];
   VkDescriptorSetLayout descriptor_set_layout;
   VkCommandPool upload_command_pool;

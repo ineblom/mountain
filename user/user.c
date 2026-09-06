@@ -36,13 +36,18 @@ Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time) {
   c->pos[2] = -2.0f;
   c->direction = (F4){0.0f, 0.0f, 1.0f, 0.0f};
 
-  Image image = api.image_alloc(frame_arena, 160, 80, IMAGE_FORMAT__RGBA32F_LINEAR);
+  Image image = api.image_alloc(frame_arena, 320, 240, IMAGE_FORMAT__RGBA32F_LINEAR);
 
   for (L1 y = 0; y < image.height; y += 1) {
     F4 *row = (F4 *)(image.pixels + y*image.row_pitch);
     for (L1 x = 0; x < image.width; x += 1) {
-      F1 r = sin_F1(time+x/4)*0.5f+0.5f;
-      row[x] = (F4){r, 0.0f, 0.0f, 1.0f};
+      F1 a = (F1)x/20.0f;
+      F1 b = (F1)x/20.0f;
+      F1 r = sin_F1(PI*a);
+      F1 g = sin_F1(PI*b);
+      r *= r;
+      g = g*g*g*g;
+      row[x] = (F4){r, g, 0.0f, 1.0f};
     }
   }
 

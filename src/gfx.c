@@ -1287,14 +1287,9 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
     pre_transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
   }
 
-  //- kti: FIFO is always supported.
+  // FIFO is guaranteed, synchronized to the compositor, and avoids rendering
+  // frames which will only be replaced in the mailbox.
   VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-  for (L1 i = 0; i < vkw->present_mode_count; i += 1) {
-    if (vkw->present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-      present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
-      break;
-    }
-  }
 
   VkSwapchainCreateInfoKHR swpachain_ci = {
     .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,

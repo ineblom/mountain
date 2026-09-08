@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <time.h>
+#include <errno.h>
 #include <memory.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -228,6 +229,7 @@ Internal void *os_reserve(L1);
 Internal void os_commit(void *, L1);
 Internal void os_memory_release(void *, L1);
 Internal L1 os_clock(void);
+Internal void os_sleep_until(L1 deadline);
 
 #if defined(__APPLE__)
 #include "os_mac.h"

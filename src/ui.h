@@ -407,6 +407,7 @@ struct UI_State {
   UI_Theme *theme;
   L1 theme_build_index;
   F1 animation_dt;
+  I1 animation_active;
 
   UI_Box *root;
   UI_Key default_nav_root_key;

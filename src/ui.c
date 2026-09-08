@@ -1045,6 +1045,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
   ui_state->theme = theme;
   ui_state->theme_build_index += 1;
   ui_state->animation_dt = animation_dt;
+  ui_state->animation_active = 0;
   ui_state->root = &ui_nil_box;
   ui_state->last_build_box_count = ui_state->build_box_count;
   ui_state->build_box_count = 0;
@@ -1553,6 +1554,10 @@ Internal void ui_end_build(void) {
       if (abs_F1(b->view_off_target[1] - b->view_off[1]) < 2.0f) {
         b->view_off[1] = b->view_off_target[1];
       }
+      if (b->view_off[0] != b->view_off_target[0] ||
+          b->view_off[1] != b->view_off_target[1]) {
+        ui_state->animation_active = 1;
+      }
     }
   }
 
@@ -1561,6 +1566,11 @@ Internal void ui_end_build(void) {
     for (UI_Theme_Pattern_Cache_Node *node = ui_state->theme_pattern_cache_slots[slot_idx].first; node != 0; node = node->slot_next) {
       for (L1 idx = 0; idx < 4; idx += 1) {
         node->current_rgba[idx] += (node->target_rgba[idx] - node->current_rgba[idx])*slow_rate;
+        if (abs_F1(node->target_rgba[idx] - node->current_rgba[idx]) < 0.001f) {
+          node->current_rgba[idx] = node->target_rgba[idx];
+        } else {
+          ui_state->animation_active = 1;
+        }
       }
     }
   }

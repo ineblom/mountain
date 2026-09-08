@@ -646,7 +646,7 @@ Internal I1 postprocessing_settings_match(Postprocessing_Settings a, Postprocess
 
 Internal void user_code_reload(void) {
   //- kti: Compile code.
-  CString command = "gcc -iquote ./src/ -fPIC -shared -o user.so ./user/user.c -lm";
+  CString command = "gcc -O2 -iquote ./src/ -fPIC -shared -o user.so ./user/user.c -lm";
   system(command);
 
   //- kti: Load Proc.
@@ -654,6 +654,7 @@ Internal void user_code_reload(void) {
   if (lib) os_library_close(lib);
   lib = os_library_open(str8("./user.so"));
   state->user_render_func = (User_Render_Func)os_library_load_proc(lib, str8("render"));
+  state->user_code_dirty = state->user_render_func != 0;
 }
 
 ////////////////////////////////
@@ -719,6 +720,7 @@ Internal void lane(void *user_data) {
 
   L1 running = 1;
   L1 last_frame_begin_time = 0;
+  I1 wait_for_events = 0;
 
   ////////////////////////////////
   //~ kti: Main loop
@@ -741,7 +743,7 @@ Internal void lane(void *user_data) {
     if (lane_idx() == 0) {
       ////////////////////////////////
       //~ kti: Events
-      events = os_poll_events(scratch.arena);
+      events = os_poll_events(scratch.arena, wait_for_events ? -1 : 0);
       for (OS_Event *e = events.first; e != 0; e = e->next) {
         if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE) {
           Window *window = window_from_os_window(e->window);
@@ -811,8 +813,15 @@ Internal void lane(void *user_data) {
     lane_sync();
 
     if (lane_idx() == 0) {
+      state->animation_active = 0;
+
       //- kti: Build the code-defined scene.
-      if (state->user_render_func) {
+      I1 user_code_ran = 0;
+      if (state->user_render_func && state->user_code_dirty) {
+        state->user_code_dirty = 0;
+        state->scene_frame_index += 1;
+        user_code_ran = 1;
+
         User_API api = {
           .entity = user_code_entity,
           .image_alloc = image_alloc,
@@ -847,7 +856,6 @@ Internal void lane(void *user_data) {
         }
         state->user_render_texture = texture;
       }
-      state->scene_frame_index += 1;
 
       Postprocessing_Settings postprocessing_settings_before_ui = state->postprocessing_settings;
       I1 postprocessing_dirty = 0;
@@ -1224,6 +1232,14 @@ Internal void lane(void *user_data) {
                     view->camera.fov = lerp_snap_F1(view->camera.fov, 0.15f, view->target_camera.fov, 0.001f);
                     view->camera.near_z = lerp_snap_F1(view->camera.near_z, 0.15f, view->target_camera.near_z, 0.001f);
                     view->camera.far_z = lerp_snap_F1(view->camera.far_z, 0.15f, view->target_camera.far_z, 0.001f);
+                    if (length_sq_F4(view->camera.pos - view->target_camera.pos) != 0.0f ||
+                        view->camera.pitch != view->target_camera.pitch ||
+                        view->camera.yaw != view->target_camera.yaw ||
+                        view->camera.fov != view->target_camera.fov ||
+                        view->camera.near_z != view->target_camera.near_z ||
+                        view->camera.far_z != view->target_camera.far_z) {
+                      state->animation_active = 1;
+                    }
 
                     //- kti: Build box.
                     
@@ -1614,6 +1630,7 @@ Internal void lane(void *user_data) {
         }
 
         ui_end_build();
+        state->animation_active |= w->ui->animation_active;
 
         ProfEnd();
 
@@ -1948,11 +1965,13 @@ Internal void lane(void *user_data) {
         }
       }
 
-      //- kti: Remove transient entities.
-      for (Entity *entity = state->first_entity, *next = 0; !entity_is_nil(entity); entity = next) {
-        next = entity->next;
-        if (entity->name_len == 0 || entity->last_touch_frame != state->scene_frame_index) {
-          entity_delete(entity_handle(entity));
+      // Reconcile code-defined entities only when user code actually ran.
+      if (user_code_ran) {
+        for (Entity *entity = state->first_entity, *next = 0; !entity_is_nil(entity); entity = next) {
+          next = entity->next;
+          if (entity->name_len == 0 || entity->last_touch_frame != state->scene_frame_index) {
+            entity_delete(entity_handle(entity));
+          }
         }
       }
     }
@@ -1985,13 +2004,17 @@ Internal void lane(void *user_data) {
       }
     }
 
-    //- kti: 0 lane sleeps if we haven't hit the target frame time. Others wait on the barrier.
-    if (lane_idx() == 0 && frame_time < target_frame_time) {
-      L1 remainder = target_frame_time - frame_time;
-      if (remainder > 50000ULL) {
-        os_sleep(remainder - 50000ULL);
+    if (lane_idx() == 0) {
+      I1 needs_next_frame = state->animation_active ||
+                            state->user_code_dirty ||
+                            state->active_render != 0;
+      wait_for_events = !needs_next_frame;
+
+      // Keep continuous animation capped without a precision busy-spin. Idle
+      // frames skip this and immediately enter the blocking OS event wait.
+      if (needs_next_frame && frame_time < target_frame_time) {
+        os_sleep_until(frame_begin_time + target_frame_time);
       }
-      while (os_clock() - frame_begin_time < target_frame_time) {}
     }
 
     lane_sync();

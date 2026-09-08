@@ -114,6 +114,22 @@ Internal void os_sleep(L1 time) {
   nanosleep(&ts, 0);
 }
 
+Internal void os_sleep_until(L1 deadline) {
+#if defined(__APPLE__)
+  // macOS does not provide clock_nanosleep. Re-checking the monotonic clock
+  // after interruptions preserves absolute-deadline semantics without spinning.
+  for (L1 now = os_clock(); now < deadline; now = os_clock()) {
+    os_sleep(deadline - now);
+  }
+#else
+  struct timespec ts = {
+    .tv_sec = deadline / 1000000000LLU,
+    .tv_nsec = deadline % 1000000000LLU,
+  };
+  while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, 0) == EINTR) {}
+#endif
+}
+
 Internal void *os_library_open(String8 filename) {
   Temp_Arena scratch = scratch_begin(0, 0);
   String8 cstr_filename = push_str8_copy(scratch.arena, filename);

@@ -360,18 +360,24 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   return result;
 }
 
-Internal OS_Event_List os_poll_events(Arena *arena) {
+Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
   Assert(os_gfx_state != 0 && os_gfx_state->first_window != 0);
   os_gfx_state->event_arena = arena;
   os_gfx_state->events = (OS_Event_List){0};
 
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-  for (;;) {
-    NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast]
-      inMode:NSDefaultRunLoopMode dequeue:YES];
-    if (event == nil) break;
+  NSDate *until_date = timeout_ms < 0
+    ? [NSDate distantFuture]
+    : timeout_ms == 0
+      ? [NSDate distantPast]
+      : [NSDate dateWithTimeIntervalSinceNow:(D1)timeout_ms/1000.0];
+  NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:until_date
+    inMode:NSDefaultRunLoopMode dequeue:YES];
+  while (event != nil) {
     os_gfx_state->modifiers = os_modifiers_from_mac_flags(event.modifierFlags);
     [NSApp sendEvent:event];
+    event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast]
+      inMode:NSDefaultRunLoopMode dequeue:YES];
   }
   [NSApp updateWindows];
   [pool drain];

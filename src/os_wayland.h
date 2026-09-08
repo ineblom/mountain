@@ -50,6 +50,7 @@ struct OS_GFX_State {
   OS_Window *first_window;
   Arena *event_arena;
   OS_Event_List events;
+  I1 redraw_requested;
   B1 key_states[OS_KEY_COUNT];
   D1 mouse_x;
   D1 mouse_y;

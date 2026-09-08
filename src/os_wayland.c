@@ -241,6 +241,7 @@ Internal void os_wayland_window_set_scale(OS_Window *window, SI1 scale) {
   // and pixel_ratio use physical pixels, matching the macOS backing-size path.
   if (window->pixel_ratio != (D1)scale) {
     window->pixel_ratio = (D1)scale;
+    os_gfx_state->redraw_requested = 1;
     wl_surface_set_buffer_scale(window->surface, scale);
     if (os_gfx_state->hovered_window == window) {
       os_wayland_cursor_update(window);
@@ -420,8 +421,11 @@ Internal void xdg_surface_configure_handler(void *data, struct xdg_surface *xdg_
 Internal void xdg_toplevel_configure_handler(void *data, struct xdg_toplevel *xdg_toplevel, SI1 width, SI1 height, struct wl_array *states) {
   if (width > 0 && height > 0) {
     OS_Window *window = (OS_Window *)data;
-    window->width = width;
-    window->height = height;
+    if (window->width != width || window->height != height) {
+      window->width = width;
+      window->height = height;
+      os_gfx_state->redraw_requested = 1;
+    }
   }
 }
 
@@ -473,11 +477,13 @@ Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer, I1 s
 
   os_gfx_state->cursor_enter_serial = serial;
   os_wayland_cursor_update(os_gfx_state->hovered_window);
+  os_gfx_state->redraw_requested = 1;
 }
 
 Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface) {
   os_gfx_state->hovered_window = 0;
   os_gfx_state->cursor_enter_serial = 0;
+  os_gfx_state->redraw_requested = 1;
 }
 
 Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
@@ -601,12 +607,14 @@ Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I
       break;
     }
   }
+  os_gfx_state->redraw_requested = 1;
 }
 
 Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface) {
   os_gfx_state->focused_window = 0;
   MemoryZeroArray(os_gfx_state->key_states);
   os_key_repeat_clear();
+  os_gfx_state->redraw_requested = 1;
 }
 
 Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 time, I1 key, I1 state) {
@@ -766,19 +774,29 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   return result;
 }
 
-Internal OS_Event_List os_poll_events(Arena *arena) {
+Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
   Assert(os_gfx_state->first_window != 0);
 
   os_gfx_state->event_arena = arena;
   os_gfx_state->events.first = 0;
   os_gfx_state->events.last = 0;
   os_gfx_state->events.count = 0;
+  os_gfx_state->redraw_requested = 0;
 
   I1 display_ok = 1;
-  while (display_ok && wl_display_prepare_read(os_gfx_state->display) != 0) {
-    display_ok = (wl_display_dispatch_pending(os_gfx_state->display) >= 0);
-  }
-  if (display_ok) {
+  for (;;) {
+    while (display_ok && wl_display_prepare_read(os_gfx_state->display) != 0) {
+      display_ok = (wl_display_dispatch_pending(os_gfx_state->display) >= 0);
+    }
+    if (!display_ok) break;
+
+    // prepare_read succeeded, so cancel it before returning queued input or a
+    // configure/scale redraw discovered while dispatching pending callbacks.
+    if (os_gfx_state->events.count != 0 || os_gfx_state->redraw_requested) {
+      wl_display_cancel_read(os_gfx_state->display);
+      break;
+    }
+
     wl_display_flush(os_gfx_state->display);
 
     struct pollfd pfd = {
@@ -786,17 +804,43 @@ Internal OS_Event_List os_poll_events(Arena *arena) {
       .events = POLLIN,
     };
 
-    I1 poll_result = poll(&pfd, 1, 0);
+    SI1 poll_timeout_ms = timeout_ms;
+    I1 waiting_for_repeat = 0;
+    if (os_gfx_state->repeat_key != OS_KEY__NULL &&
+        os_gfx_state->key_repeat_rate > 0 &&
+        os_gfx_state->key_states[os_gfx_state->repeat_key]) {
+      L1 now = os_clock();
+      L1 until_repeat_ns = os_gfx_state->next_repeat_ns > now ? os_gfx_state->next_repeat_ns-now : 0;
+      SI1 repeat_timeout_ms = (SI1)((until_repeat_ns + 999999LLU)/1000000LLU);
+      if (poll_timeout_ms < 0 || repeat_timeout_ms < poll_timeout_ms) {
+        poll_timeout_ms = repeat_timeout_ms;
+        waiting_for_repeat = 1;
+      }
+    }
+
+    I1 poll_result = 0;
+    do {
+      poll_result = poll(&pfd, 1, poll_timeout_ms);
+    } while (poll_result < 0 && errno == EINTR);
+
     if (poll_result > 0 && (pfd.revents & POLLIN)) {
       display_ok = (wl_display_read_events(os_gfx_state->display) >= 0);
     } else {
       wl_display_cancel_read(os_gfx_state->display);
       display_ok = (poll_result >= 0 && !(pfd.revents & (POLLERR | POLLHUP | POLLNVAL)));
     }
-  }
+    if (!display_ok) break;
 
-  if (display_ok) {
     display_ok = (wl_display_dispatch_pending(os_gfx_state->display) >= 0);
+    if (!display_ok) break;
+
+    // In idle mode, ignore compositor bookkeeping such as Vulkan buffer
+    // releases and continue sleeping. Input, configuration, and key-repeat
+    // deadlines return control to the editor for a redraw.
+    if (timeout_ms >= 0 || waiting_for_repeat ||
+        os_gfx_state->events.count != 0 || os_gfx_state->redraw_requested) {
+      break;
+    }
   }
 
   if (!display_ok) {

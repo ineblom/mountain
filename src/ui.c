@@ -1548,14 +1548,14 @@ Internal void ui_end_build(void) {
       F1 scroll_animation_rate = 0.2f;
 
       b->view_off += scroll_animation_rate * (b->view_off_target - b->view_off);
+
       if (abs_F1(b->view_off_target[0] - b->view_off[0]) < 2.0f) {
         b->view_off[0] = b->view_off_target[0];
       }
       if (abs_F1(b->view_off_target[1] - b->view_off[1]) < 2.0f) {
         b->view_off[1] = b->view_off_target[1];
       }
-      if (b->view_off[0] != b->view_off_target[0] ||
-          b->view_off[1] != b->view_off_target[1]) {
+      if (b->view_off[0] != b->view_off_target[0] || b->view_off[1] != b->view_off_target[1]) {
         ui_state->animation_active = 1;
       }
     }

@@ -2005,13 +2005,9 @@ Internal void lane(void *user_data) {
     }
 
     if (lane_idx() == 0) {
-      I1 needs_next_frame = state->animation_active ||
-                            state->user_code_dirty ||
-                            state->active_render != 0;
+      I1 needs_next_frame = state->animation_active || state->user_code_dirty || state->active_render != 0;
       wait_for_events = !needs_next_frame;
 
-      // Keep continuous animation capped without a precision busy-spin. Idle
-      // frames skip this and immediately enter the blocking OS event wait.
       if (needs_next_frame && frame_time < target_frame_time) {
         os_sleep_until(frame_begin_time + target_frame_time);
       }

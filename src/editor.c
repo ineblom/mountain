@@ -2005,7 +2005,10 @@ Internal void lane(void *user_data) {
     }
 
     if (lane_idx() == 0) {
-      I1 needs_next_frame = state->animation_active || state->user_code_dirty || state->active_render != 0;
+      I1 needs_next_frame = events.count != 0 ||
+                            state->animation_active ||
+                            state->user_code_dirty ||
+                            state->active_render != 0;
       wait_for_events = !needs_next_frame;
 
       if (needs_next_frame && frame_time < target_frame_time) {

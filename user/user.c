@@ -41,7 +41,7 @@ Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time) {
   for (L1 y = 0; y < image.height; y += 1) {
     F4 *row = (F4 *)(image.pixels + y*image.row_pitch);
     for (L1 x = 0; x < image.width; x += 1) {
-      F1 a = (F1)x/20.0f;
+      F1 a = (F1)x/20.0f+time;
       F1 b = (F1)x/20.0f;
       F1 r = sin_F1(PI*a);
       F1 g = sin_F1(PI*b);

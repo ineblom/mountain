@@ -233,6 +233,7 @@ struct State {
   User_Render_Func user_render_func;
   I1 user_code_dirty;
   I1 animation_active;
+  L1 frames_requested;
 };
 
 #endif

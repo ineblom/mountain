@@ -405,6 +405,23 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
   return os_gfx_state->events;
 }
 
+Internal void os_send_wakeup_event(void) {
+  if (os_gfx_state != 0 && os_gfx_state->initialized) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    NSEvent *event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                                        location:NSZeroPoint
+                                   modifierFlags:0
+                                       timestamp:0
+                                    windowNumber:0
+                                         context:nil
+                                         subtype:0
+                                           data1:0
+                                           data2:0];
+    [NSApp postEvent:event atStart:NO];
+    [pool drain];
+  }
+}
+
 Internal void os_window_close(OS_Window *window) {
   if (window == 0) return;
   if (window->prev != 0) window->prev->next = window->next;

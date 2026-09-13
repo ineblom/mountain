@@ -36,6 +36,10 @@ Global OS_Cond_Var async_cond_var = {0};
 Global I1 async_loop_again = 0;
 Global I1 async_exit = 0;
 
+Internal void editor_request_frame(void) {
+  state->frames_requested = 4;
+}
+
 #define UI_THEME_COLOR(r, g, b, a, ...) \
   { \
     .tags = { \
@@ -733,6 +737,7 @@ Internal void lane(void *user_data) {
 
     state = push_array(arena, State, 1);
     state->arena = arena;
+    state->frames_requested = 2;
 
     state->meshes[SHAPE_KIND__SPHERE] = mesh_alloc_sphere(16, 32);
     state->meshes[SHAPE_KIND__BOX] = mesh_alloc_box();
@@ -772,8 +777,6 @@ Internal void lane(void *user_data) {
 
   L1 running = 1;
   L1 last_frame_begin_time = 0;
-  I1 wait_for_events = 0;
-
   ////////////////////////////////
   //~ kti: Main loop
 
@@ -795,7 +798,7 @@ Internal void lane(void *user_data) {
     if (lane_idx() == 0) {
       ////////////////////////////////
       //~ kti: Events
-      events = os_poll_events(scratch.arena, wait_for_events ? -1 : 0);
+      events = os_poll_events(scratch.arena, state->frames_requested == 0 ? -1 : 0);
       for (OS_Event *e = events.first; e != 0; e = e->next) {
         if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE) {
           Window *window = window_from_os_window(e->window);
@@ -2057,13 +2060,18 @@ Internal void lane(void *user_data) {
     }
 
     if (lane_idx() == 0) {
-      I1 needs_next_frame = events.count != 0 ||
-                            state->animation_active ||
-                            state->user_code_dirty ||
-                            state->active_render != 0;
-      wait_for_events = !needs_next_frame;
+      if (events.count != 0 ||
+          state->animation_active ||
+          state->user_code_dirty ||
+          state->active_render != 0) {
+        editor_request_frame();
+      }
 
-      if (needs_next_frame && frame_time < target_frame_time) {
+      if (state->frames_requested > 0) {
+        state->frames_requested -= 1;
+      }
+
+      if (state->frames_requested > 0 && frame_time < target_frame_time) {
         os_sleep_until(frame_begin_time + target_frame_time);
       }
     }

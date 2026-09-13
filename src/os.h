@@ -242,6 +242,7 @@ Internal void os_commit(void *, L1);
 Internal void os_memory_release(void *, L1);
 Internal L1 os_clock(void);
 Internal void os_sleep_until(L1 deadline);
+Internal void os_send_wakeup_event(void);
 
 Internal OS_Mutex os_mutex_alloc(void);
 Internal void os_mutex_release(OS_Mutex mutex);

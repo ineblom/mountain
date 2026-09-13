@@ -697,6 +697,9 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
     os_gfx_state = push_array(arena, OS_GFX_State, 1);
     os_gfx_state->arena = arena;
 
+    os_gfx_state->wakeup_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
+    Assert(os_gfx_state->wakeup_fd >= 0);
+
     os_gfx_state->display = wl_display_connect(0);
     Assert(os_gfx_state->display != 0);
 
@@ -800,6 +803,12 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
   return result;
 }
 
+Internal void os_send_wakeup_event(void) {
+  if (os_gfx_state != 0 && os_gfx_state->wakeup_fd >= 0) {
+    eventfd_write(os_gfx_state->wakeup_fd, 1);
+  }
+}
+
 Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
   Assert(os_gfx_state->first_window != 0);
 
@@ -825,9 +834,15 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
 
     wl_display_flush(os_gfx_state->display);
 
-    struct pollfd pfd = {
-      .fd = wl_display_get_fd(os_gfx_state->display),
-      .events = POLLIN,
+    struct pollfd poll_fds[] = {
+      {
+        .fd = wl_display_get_fd(os_gfx_state->display),
+        .events = POLLIN,
+      },
+      {
+        .fd = os_gfx_state->wakeup_fd,
+        .events = POLLIN,
+      },
     };
 
     SI1 poll_timeout_ms = timeout_ms;
@@ -846,14 +861,20 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
 
     I1 poll_result = 0;
     do {
-      poll_result = poll(&pfd, 1, poll_timeout_ms);
+      poll_result = poll(poll_fds, ArrayCount(poll_fds), poll_timeout_ms);
     } while (poll_result < 0 && errno == EINTR);
 
-    if (poll_result > 0 && (pfd.revents & POLLIN)) {
+    I1 wakeup_received = poll_result > 0 && (poll_fds[1].revents & POLLIN);
+    if (wakeup_received) {
+      eventfd_t value;
+      eventfd_read(os_gfx_state->wakeup_fd, &value);
+    }
+
+    if (poll_result > 0 && (poll_fds[0].revents & POLLIN)) {
       display_ok = (wl_display_read_events(os_gfx_state->display) >= 0);
     } else {
       wl_display_cancel_read(os_gfx_state->display);
-      display_ok = (poll_result >= 0 && !(pfd.revents & (POLLERR | POLLHUP | POLLNVAL)));
+      display_ok = (poll_result >= 0 && !(poll_fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)));
     }
     if (!display_ok) break;
 
@@ -863,7 +884,7 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
     // In idle mode, ignore compositor bookkeeping such as Vulkan buffer
     // releases and continue sleeping. Input, configuration, and key-repeat
     // deadlines return control to the editor for a redraw.
-    if (timeout_ms >= 0 || waiting_for_repeat ||
+    if (timeout_ms >= 0 || waiting_for_repeat || wakeup_received ||
         os_gfx_state->events.count != 0 || os_gfx_state->redraw_requested) {
       break;
     }

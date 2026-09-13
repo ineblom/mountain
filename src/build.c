@@ -15,6 +15,11 @@
 #include "strings.h"
 #include "hash.h"
 #include "os.h"
+#if defined(__APPLE__)
+#include "os_mac.h"
+#else
+#include "os_wayland.h"
+#endif
 #include "lane.h"
 #include "profile.h"
 #include "math.h"
@@ -42,6 +47,11 @@ NoInline void WrmBas(void) { Crash(0); }
 #include "strings.c"
 #include "hash.c"
 #include "os.c"
+#if defined(__APPLE__)
+#include "os_mac.c"
+#else
+#include "os_wayland.c"
+#endif
 #include "lane.c"
 #include "profile.c"
 #include "math.c"

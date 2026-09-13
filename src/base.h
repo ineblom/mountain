@@ -148,9 +148,35 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v) {
 
 ////////////////////////////////
 //~ kti: Memory
+Internal I1 memory_is_zero(void *ptr, L1 size) {
+  I1 result = 1;
+  L1 extra = size & 0x7;
+  L1 count8 = size >> 3;
+
+  L1 *p64 = (L1 *)ptr;
+  for (L1 i = 0; i < count8; i += 1, p64 += 1) {
+    if (*p64 != 0) {
+      result = 0;
+      goto done;
+    }
+  }
+
+  B1 *p8 = (B1 *)p64;
+  for (L1 i = 0; i < extra; i += 1, p8 += 1) {
+    if (*p8 != 0) {
+      result = 0;
+      goto done;
+    }
+  }
+
+done:
+  return result;
+}
+
 #define MemoryZero(p, s) memset((p), 0, (s))
 #define MemoryZeroStruct(p) MemoryZero((p), sizeof(*(p)))
 #define MemoryZeroArray(a) MemoryZero((a), sizeof(*(a))*ArrayCount(a))
+#define MemoryIsZeroStruct(p) memory_is_zero((p), sizeof(*(p)))
 
 ////////////////////////////////
 //~ kti: Linked List Building Macros

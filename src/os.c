@@ -58,6 +58,8 @@ Internal I1 os_core_count(void) {
   return count > 0 ? (I1)count : 1;
 }
 
+//~ kti: Thread
+
 Internal OS_Thread os_thread_launch(ThreadFunc *func, void *ptr) {
   OS_Thread result = {0};
   pthread_create(&result.handle, 0, func, ptr);
@@ -70,6 +72,117 @@ Internal void os_thread_detach(OS_Thread thread) {
 
 Internal void os_thread_join(OS_Thread thread) {
   pthread_join(thread.handle, 0);
+}
+
+//~ kti: Sync
+
+typedef struct OS_Sync_State OS_Sync_State;
+struct OS_Sync_State {
+  Arena *arena;
+  pthread_mutex_t entity_mutex;
+  Mutex first_free_mutex;
+  Cond_Var first_free_cond_var;
+};
+
+Global OS_Sync_State os_sync_state;
+Global pthread_once_t os_sync_once = PTHREAD_ONCE_INIT;
+
+Internal I1 os_cond_var_init_platform(Cond_Var cond_var);
+Internal I1 os_cond_var_wait_platform(Cond_Var cond_var, Mutex mutex, L1 endt);
+
+Internal void os_sync_init(void) {
+  os_sync_state.arena = arena_alloc(MiB(4));
+  pthread_mutex_init(&os_sync_state.entity_mutex, 0);
+}
+
+Internal void mutex_entity_release(Mutex mutex) {
+  pthread_mutex_lock(&os_sync_state.entity_mutex);
+  SLLStackPush(os_sync_state.first_free_mutex, mutex);
+  pthread_mutex_unlock(&os_sync_state.entity_mutex);
+}
+
+Internal Mutex mutex_alloc(void) {
+  pthread_once(&os_sync_once, os_sync_init);
+  pthread_mutex_lock(&os_sync_state.entity_mutex);
+  Mutex mutex = os_sync_state.first_free_mutex;
+  if (mutex != 0) {
+    SLLStackPop(os_sync_state.first_free_mutex);
+  } else {
+    mutex = push_array(os_sync_state.arena, struct Mutex, 1);
+  }
+  pthread_mutex_unlock(&os_sync_state.entity_mutex);
+
+  mutex->next = 0;
+  I1 init_result = pthread_mutex_init(&mutex->handle, 0);
+  if (init_result != 0) {
+    mutex_entity_release(mutex);
+    mutex = 0;
+  }
+  return mutex;
+}
+
+Internal void mutex_release(Mutex mutex) {
+  if (MemoryIsZeroStruct(&mutex)) return;
+  pthread_mutex_destroy(&mutex->handle);
+  mutex_entity_release(mutex);
+}
+
+Internal void mutex_take(Mutex mutex) {
+  if (MemoryIsZeroStruct(&mutex)) return;
+  pthread_mutex_lock(&mutex->handle);
+}
+
+Internal void mutex_drop(Mutex mutex) {
+  if (MemoryIsZeroStruct(&mutex)) return;
+  pthread_mutex_unlock(&mutex->handle);
+}
+
+Internal void cond_var_entity_release(Cond_Var cond_var) {
+  pthread_mutex_lock(&os_sync_state.entity_mutex);
+  SLLStackPush(os_sync_state.first_free_cond_var, cond_var);
+  pthread_mutex_unlock(&os_sync_state.entity_mutex);
+}
+
+Internal Cond_Var cond_var_alloc(void) {
+  pthread_once(&os_sync_once, os_sync_init);
+  pthread_mutex_lock(&os_sync_state.entity_mutex);
+  Cond_Var cond_var = os_sync_state.first_free_cond_var;
+  if (cond_var != 0) {
+    SLLStackPop(os_sync_state.first_free_cond_var);
+  } else {
+    cond_var = push_array(os_sync_state.arena, struct Cond_Var, 1);
+  }
+  pthread_mutex_unlock(&os_sync_state.entity_mutex);
+
+  cond_var->next = 0;
+  I1 init_result = os_cond_var_init_platform(cond_var);
+  if (init_result != 0) {
+    cond_var_entity_release(cond_var);
+    cond_var = 0;
+  }
+  return cond_var;
+}
+
+Internal void cond_var_release(Cond_Var cond_var) {
+  if (MemoryIsZeroStruct(&cond_var)) return;
+  pthread_cond_destroy(&cond_var->handle);
+  cond_var_entity_release(cond_var);
+}
+
+Internal I1 cond_var_wait(Cond_Var cond_var, Mutex mutex, L1 endt) {
+  if (MemoryIsZeroStruct(&cond_var)) return 0;
+  if (MemoryIsZeroStruct(&mutex)) return 0;
+  return os_cond_var_wait_platform(cond_var, mutex, endt);
+}
+
+Internal void cond_var_signal(Cond_Var cond_var) {
+  if (MemoryIsZeroStruct(&cond_var)) return;
+  pthread_cond_signal(&cond_var->handle);
+}
+
+Internal void cond_var_broadcast(Cond_Var cond_var) {
+  if (MemoryIsZeroStruct(&cond_var)) return;
+  pthread_cond_broadcast(&cond_var->handle);
 }
 
 Internal OS_Barrier os_barrier_alloc(I1 count) {
@@ -114,22 +227,6 @@ Internal void os_sleep(L1 time) {
   nanosleep(&ts, 0);
 }
 
-Internal void os_sleep_until(L1 deadline) {
-#if defined(__APPLE__)
-  // macOS does not provide clock_nanosleep. Re-checking the monotonic clock
-  // after interruptions preserves absolute-deadline semantics without spinning.
-  for (L1 now = os_clock(); now < deadline; now = os_clock()) {
-    os_sleep(deadline - now);
-  }
-#else
-  struct timespec ts = {
-    .tv_sec = deadline / 1000000000LLU,
-    .tv_nsec = deadline % 1000000000LLU,
-  };
-  while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, 0) == EINTR) {}
-#endif
-}
-
 Internal void *os_library_open(String8 filename) {
   Temp_Arena scratch = scratch_begin(0, 0);
   String8 cstr_filename = push_str8_copy(scratch.arena, filename);
@@ -151,9 +248,3 @@ Internal void os_library_close(void *handle) {
     dlclose(handle);
   }
 }
-
-#if defined(__APPLE__)
-#include "os_mac.c"
-#else
-#include "os_wayland.c"
-#endif

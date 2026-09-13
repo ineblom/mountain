@@ -1,3 +1,24 @@
+Internal I1 os_cond_var_init_platform(Cond_Var cond_var) {
+  return pthread_cond_init(&cond_var->handle, 0);
+}
+
+Internal I1 os_cond_var_wait_platform(Cond_Var cond_var, Mutex mutex, L1 endt) {
+  L1 now = os_clock();
+  L1 wait_time = endt > now ? endt - now : 0;
+  struct timespec wait_timespec = {
+    .tv_sec = wait_time / 1000000000LLU,
+    .tv_nsec = wait_time % 1000000000LLU,
+  };
+  I1 wait_result = pthread_cond_timedwait_relative_np(&cond_var->handle, &mutex->handle, &wait_timespec);
+  return wait_result != ETIMEDOUT;
+}
+
+Internal void os_sleep_until(L1 deadline) {
+  for (L1 now = os_clock(); now < deadline; now = os_clock()) {
+    os_sleep(deadline - now);
+  }
+}
+
 Internal OS_Modifier_Flags os_get_modifiers(void) {
   return os_gfx_state != 0 ? os_gfx_state->modifiers : 0;
 }

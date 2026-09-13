@@ -1,5 +1,31 @@
 #include <xdg-shell-protocol.c>
 
+Internal I1 os_cond_var_init_platform(Cond_Var cond_var) {
+  pthread_condattr_t attr;
+  pthread_condattr_init(&attr);
+  pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+  I1 init_result = pthread_cond_init(&cond_var->handle, &attr);
+  pthread_condattr_destroy(&attr);
+  return init_result;
+}
+
+Internal I1 os_cond_var_wait_platform(Cond_Var cond_var, Mutex mutex, L1 endt) {
+  struct timespec endt_timespec = {
+    .tv_sec = endt / 1000000000LLU,
+    .tv_nsec = endt % 1000000000LLU,
+  };
+  I1 wait_result = pthread_cond_timedwait(&cond_var->handle, &mutex->handle, &endt_timespec);
+  return wait_result != ETIMEDOUT;
+}
+
+Internal void os_sleep_until(L1 deadline) {
+  struct timespec ts = {
+    .tv_sec = deadline / 1000000000LLU,
+    .tv_nsec = deadline % 1000000000LLU,
+  };
+  while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, 0) == EINTR) {}
+}
+
 Internal I1 os_key_from_wl_key(I1 wl_key) {
   I1 result = OS_KEY__NULL;
   Local_Persist I1 initialized = 0;

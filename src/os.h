@@ -19,6 +19,18 @@ struct OS_Thread {
   pthread_t handle;
 };
 
+typedef struct Mutex *Mutex;
+struct Mutex {
+  Mutex next;
+  pthread_mutex_t handle;
+};
+
+typedef struct Cond_Var *Cond_Var;
+struct Cond_Var {
+  Cond_Var next;
+  pthread_cond_t handle;
+};
+
 typedef struct OS_Barrier OS_Barrier;
 struct OS_Barrier {
   pthread_mutex_t mutex;
@@ -231,10 +243,15 @@ Internal void os_memory_release(void *, L1);
 Internal L1 os_clock(void);
 Internal void os_sleep_until(L1 deadline);
 
-#if defined(__APPLE__)
-#include "os_mac.h"
-#else
-#include "os_wayland.h"
-#endif
+Internal Mutex mutex_alloc(void);
+Internal void mutex_release(Mutex mutex);
+Internal void mutex_take(Mutex mutex);
+Internal void mutex_drop(Mutex mutex);
+
+Internal Cond_Var cond_var_alloc(void);
+Internal void cond_var_release(Cond_Var cond_var);
+Internal I1 cond_var_wait(Cond_Var cond_var, Mutex mutex, L1 endt);
+Internal void cond_var_signal(Cond_Var cond_var);
+Internal void cond_var_broadcast(Cond_Var cond_var);
 
 #endif

@@ -31,6 +31,11 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
 
 Global State *state = 0;
 
+Global OS_Mutex async_mutex = {0};
+Global OS_Cond_Var async_cond_var = {0};
+Global I1 async_loop_again = 0;
+Global I1 async_exit = 0;
+
 #define UI_THEME_COLOR(r, g, b, a, ...) \
   { \
     .tags = { \
@@ -70,6 +75,53 @@ Global UI_Theme default_theme = {
 };
 
 #undef UI_THEME_COLOR
+
+////////////////////////////////
+//~ kti: Async
+
+Internal void async_signal(void) {
+  MutexScope(async_mutex) {
+    async_loop_again = 1;
+  }
+
+  os_cond_var_broadcast(async_cond_var);
+}
+
+Internal void async_lane(void *) {
+  //- kti: Init
+  if (lane_idx() == 0) {
+    async_mutex = os_mutex_alloc();
+    async_cond_var = os_cond_var_alloc();
+  }
+
+  lane_sync();
+
+  //- kti: Loop
+  for (;;) {
+    //- kti: Wait for message.
+    if (lane_idx() == 0) {
+      os_mutex_take(async_mutex);
+
+      while (!async_loop_again && !async_exit) {
+        os_cond_var_wait(async_cond_var, async_mutex, L1_MAX);
+      }
+      async_loop_again = 0;
+      
+      os_mutex_drop(async_mutex);
+    }
+    
+    lane_sync();
+
+    if (atomic_load_I1(&async_exit) == 1) {
+      break;
+    }
+    
+    //- kti: Do async ticks.
+
+    lane_sync();
+  }
+}
+
 
 ////////////////////////////////
 //~ kti: Meshes
@@ -2029,25 +2081,10 @@ Internal void lane(void *user_data) {
       window_close(state->first_window);
     }
 
+    atomic_swap_I1(&async_exit, 1);
+    async_signal();
+
     ProfShutdown();
-  }
-}
-
-Global OS_Mutex async_mutex = {0};
-
-Internal void async_lane(void *) {
-  if (lane_idx() == 0) {
-    async_mutex = os_mutex_alloc();
-  }
-
-  lane_sync();
-
-  for (;;) {
-    if (lane_idx() == 0) {
-      os_mutex_take(async_mutex);
-      
-      os_mutex_drop(async_mutex);
-    }
   }
 }
 
@@ -2059,6 +2096,7 @@ SI1 main(void) {
     .arena_size = MiB(64),
     .scratch_size = MiB(64),
   };
+  lane_group_launch(async_group_params);
 
   Lane_Group_Params main_group_params = {
     .count = 1,

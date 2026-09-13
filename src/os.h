@@ -248,6 +248,8 @@ Internal void os_mutex_release(OS_Mutex mutex);
 Internal void os_mutex_take(OS_Mutex mutex);
 Internal void os_mutex_drop(OS_Mutex mutex);
 
+#define MutexScope(m) DeferLoop(os_mutex_take(m), os_mutex_drop(m))
+
 Internal OS_Cond_Var os_cond_var_alloc(void);
 Internal void os_cond_var_release(OS_Cond_Var cond_var);
 Internal I1 os_cond_var_wait(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt);

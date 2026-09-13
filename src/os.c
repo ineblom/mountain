@@ -175,12 +175,12 @@ Internal I1 os_cond_var_wait(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt) {
   return os_cond_var_wait_platform(cond_var, mutex, endt);
 }
 
-Internal void cond_var_signal(OS_Cond_Var cond_var) {
+Internal void os_cond_var_signal(OS_Cond_Var cond_var) {
   if (MemoryIsZeroStruct(&cond_var)) return;
   pthread_cond_signal(&cond_var->handle);
 }
 
-Internal void cond_var_broadcast(OS_Cond_Var cond_var) {
+Internal void os_cond_var_broadcast(OS_Cond_Var cond_var) {
   if (MemoryIsZeroStruct(&cond_var)) return;
   pthread_cond_broadcast(&cond_var->handle);
 }

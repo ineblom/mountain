@@ -80,107 +80,107 @@ typedef struct OS_Sync_State OS_Sync_State;
 struct OS_Sync_State {
   Arena *arena;
   pthread_mutex_t entity_mutex;
-  Mutex first_free_mutex;
-  Cond_Var first_free_cond_var;
+  OS_Mutex first_free_mutex;
+  OS_Cond_Var first_free_cond_var;
 };
 
 Global OS_Sync_State os_sync_state;
 Global pthread_once_t os_sync_once = PTHREAD_ONCE_INIT;
 
-Internal I1 os_cond_var_init_platform(Cond_Var cond_var);
-Internal I1 os_cond_var_wait_platform(Cond_Var cond_var, Mutex mutex, L1 endt);
+Internal I1 os_cond_var_init_platform(OS_Cond_Var cond_var);
+Internal I1 os_cond_var_wait_platform(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt);
 
 Internal void os_sync_init(void) {
   os_sync_state.arena = arena_alloc(MiB(4));
   pthread_mutex_init(&os_sync_state.entity_mutex, 0);
 }
 
-Internal void mutex_entity_release(Mutex mutex) {
+Internal void os_mutex_entity_release(OS_Mutex mutex) {
   pthread_mutex_lock(&os_sync_state.entity_mutex);
   SLLStackPush(os_sync_state.first_free_mutex, mutex);
   pthread_mutex_unlock(&os_sync_state.entity_mutex);
 }
 
-Internal Mutex mutex_alloc(void) {
+Internal OS_Mutex os_mutex_alloc(void) {
   pthread_once(&os_sync_once, os_sync_init);
   pthread_mutex_lock(&os_sync_state.entity_mutex);
-  Mutex mutex = os_sync_state.first_free_mutex;
+  OS_Mutex mutex = os_sync_state.first_free_mutex;
   if (mutex != 0) {
     SLLStackPop(os_sync_state.first_free_mutex);
   } else {
-    mutex = push_array(os_sync_state.arena, struct Mutex, 1);
+    mutex = push_array(os_sync_state.arena, struct OS_Mutex, 1);
   }
   pthread_mutex_unlock(&os_sync_state.entity_mutex);
 
   mutex->next = 0;
   I1 init_result = pthread_mutex_init(&mutex->handle, 0);
   if (init_result != 0) {
-    mutex_entity_release(mutex);
+    os_mutex_entity_release(mutex);
     mutex = 0;
   }
   return mutex;
 }
 
-Internal void mutex_release(Mutex mutex) {
+Internal void os_mutex_release(OS_Mutex mutex) {
   if (MemoryIsZeroStruct(&mutex)) return;
   pthread_mutex_destroy(&mutex->handle);
-  mutex_entity_release(mutex);
+  os_mutex_entity_release(mutex);
 }
 
-Internal void mutex_take(Mutex mutex) {
+Internal void os_mutex_take(OS_Mutex mutex) {
   if (MemoryIsZeroStruct(&mutex)) return;
   pthread_mutex_lock(&mutex->handle);
 }
 
-Internal void mutex_drop(Mutex mutex) {
+Internal void os_mutex_drop(OS_Mutex mutex) {
   if (MemoryIsZeroStruct(&mutex)) return;
   pthread_mutex_unlock(&mutex->handle);
 }
 
-Internal void cond_var_entity_release(Cond_Var cond_var) {
+Internal void os_cond_var_entity_release(OS_Cond_Var cond_var) {
   pthread_mutex_lock(&os_sync_state.entity_mutex);
   SLLStackPush(os_sync_state.first_free_cond_var, cond_var);
   pthread_mutex_unlock(&os_sync_state.entity_mutex);
 }
 
-Internal Cond_Var cond_var_alloc(void) {
+Internal OS_Cond_Var os_cond_var_alloc(void) {
   pthread_once(&os_sync_once, os_sync_init);
   pthread_mutex_lock(&os_sync_state.entity_mutex);
-  Cond_Var cond_var = os_sync_state.first_free_cond_var;
+  OS_Cond_Var cond_var = os_sync_state.first_free_cond_var;
   if (cond_var != 0) {
     SLLStackPop(os_sync_state.first_free_cond_var);
   } else {
-    cond_var = push_array(os_sync_state.arena, struct Cond_Var, 1);
+    cond_var = push_array(os_sync_state.arena, struct OS_Cond_Var, 1);
   }
   pthread_mutex_unlock(&os_sync_state.entity_mutex);
 
   cond_var->next = 0;
   I1 init_result = os_cond_var_init_platform(cond_var);
   if (init_result != 0) {
-    cond_var_entity_release(cond_var);
+    os_cond_var_entity_release(cond_var);
     cond_var = 0;
   }
   return cond_var;
 }
 
-Internal void cond_var_release(Cond_Var cond_var) {
+Internal void os_cond_var_release(OS_Cond_Var cond_var) {
   if (MemoryIsZeroStruct(&cond_var)) return;
   pthread_cond_destroy(&cond_var->handle);
-  cond_var_entity_release(cond_var);
+  os_cond_var_entity_release(cond_var);
 }
 
-Internal I1 cond_var_wait(Cond_Var cond_var, Mutex mutex, L1 endt) {
+Internal I1 os_cond_var_wait(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt) {
   if (MemoryIsZeroStruct(&cond_var)) return 0;
   if (MemoryIsZeroStruct(&mutex)) return 0;
   return os_cond_var_wait_platform(cond_var, mutex, endt);
 }
 
-Internal void cond_var_signal(Cond_Var cond_var) {
+Internal void cond_var_signal(OS_Cond_Var cond_var) {
   if (MemoryIsZeroStruct(&cond_var)) return;
   pthread_cond_signal(&cond_var->handle);
 }
 
-Internal void cond_var_broadcast(Cond_Var cond_var) {
+Internal void cond_var_broadcast(OS_Cond_Var cond_var) {
   if (MemoryIsZeroStruct(&cond_var)) return;
   pthread_cond_broadcast(&cond_var->handle);
 }

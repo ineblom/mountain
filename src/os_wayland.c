@@ -1,6 +1,6 @@
 #include <xdg-shell-protocol.c>
 
-Internal I1 os_cond_var_init_platform(Cond_Var cond_var) {
+Internal I1 os_cond_var_init_platform(OS_Cond_Var cond_var) {
   pthread_condattr_t attr;
   pthread_condattr_init(&attr);
   pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
@@ -9,7 +9,7 @@ Internal I1 os_cond_var_init_platform(Cond_Var cond_var) {
   return init_result;
 }
 
-Internal I1 os_cond_var_wait_platform(Cond_Var cond_var, Mutex mutex, L1 endt) {
+Internal I1 os_cond_var_wait_platform(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt) {
   struct timespec endt_timespec = {
     .tv_sec = endt / 1000000000LLU,
     .tv_nsec = endt % 1000000000LLU,

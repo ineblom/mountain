@@ -2033,8 +2033,34 @@ Internal void lane(void *user_data) {
   }
 }
 
+Global OS_Mutex async_mutex = {0};
+
+Internal void async_lane(void *) {
+  if (lane_idx() == 0) {
+    async_mutex = os_mutex_alloc();
+  }
+
+  lane_sync();
+
+  for (;;) {
+    if (lane_idx() == 0) {
+      os_mutex_take(async_mutex);
+      
+      os_mutex_drop(async_mutex);
+    }
+  }
+}
+
 SI1 main(void) {
-  Lane_Group_Params params = {
+  Lane_Group_Params async_group_params = {
+    .count = Max(1, os_core_count() - 1),
+    .proc = async_lane,
+
+    .arena_size = MiB(64),
+    .scratch_size = MiB(64),
+  };
+
+  Lane_Group_Params main_group_params = {
     .count = 1,
     .proc = lane,
 
@@ -2043,7 +2069,7 @@ SI1 main(void) {
 
     .lane_zero_on_caller = 1,
   };
-  lane_group_launch(params);
+  lane_group_launch(main_group_params);
 
   return 0;
 }

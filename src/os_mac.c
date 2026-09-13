@@ -1,8 +1,8 @@
-Internal I1 os_cond_var_init_platform(Cond_Var cond_var) {
+Internal I1 os_cond_var_init_platform(OS_Cond_Var cond_var) {
   return pthread_cond_init(&cond_var->handle, 0);
 }
 
-Internal I1 os_cond_var_wait_platform(Cond_Var cond_var, Mutex mutex, L1 endt) {
+Internal I1 os_cond_var_wait_platform(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt) {
   L1 now = os_clock();
   L1 wait_time = endt > now ? endt - now : 0;
   struct timespec wait_timespec = {

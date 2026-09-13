@@ -19,15 +19,15 @@ struct OS_Thread {
   pthread_t handle;
 };
 
-typedef struct Mutex *Mutex;
-struct Mutex {
-  Mutex next;
+typedef struct OS_Mutex *OS_Mutex;
+struct OS_Mutex {
+  OS_Mutex next;
   pthread_mutex_t handle;
 };
 
-typedef struct Cond_Var *Cond_Var;
-struct Cond_Var {
-  Cond_Var next;
+typedef struct OS_Cond_Var *OS_Cond_Var;
+struct OS_Cond_Var {
+  OS_Cond_Var next;
   pthread_cond_t handle;
 };
 
@@ -243,15 +243,15 @@ Internal void os_memory_release(void *, L1);
 Internal L1 os_clock(void);
 Internal void os_sleep_until(L1 deadline);
 
-Internal Mutex mutex_alloc(void);
-Internal void mutex_release(Mutex mutex);
-Internal void mutex_take(Mutex mutex);
-Internal void mutex_drop(Mutex mutex);
+Internal OS_Mutex os_mutex_alloc(void);
+Internal void os_mutex_release(OS_Mutex mutex);
+Internal void os_mutex_take(OS_Mutex mutex);
+Internal void os_mutex_drop(OS_Mutex mutex);
 
-Internal Cond_Var cond_var_alloc(void);
-Internal void cond_var_release(Cond_Var cond_var);
-Internal I1 cond_var_wait(Cond_Var cond_var, Mutex mutex, L1 endt);
-Internal void cond_var_signal(Cond_Var cond_var);
-Internal void cond_var_broadcast(Cond_Var cond_var);
+Internal OS_Cond_Var os_cond_var_alloc(void);
+Internal void os_cond_var_release(OS_Cond_Var cond_var);
+Internal I1 os_cond_var_wait(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt);
+Internal void os_cond_var_signal(OS_Cond_Var cond_var);
+Internal void os_cond_var_broadcast(OS_Cond_Var cond_var);
 
 #endif

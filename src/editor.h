@@ -170,6 +170,14 @@ struct Render_Settings {
   L1 max_num_bounces;
 };
 
+typedef struct Render_Progress Render_Progress;
+struct Render_Progress {
+  L1 pixels_completed;
+  L1 pixels_total;
+  L1 next_pixel;
+  I1 cancel_requested;
+};
+
 typedef struct Postprocess_Settings Postprocess_Settings;
 struct Postprocess_Settings {
   Image_Bloom_Params bloom;
@@ -193,10 +201,7 @@ struct Async_Request {
   Render_Settings render_settings;
   RT_Scene scene;
   Image hdr;
-  L1 *pixels_completed;
-  L1 *pixels_total;
-  L1 *next_pixel;
-  I1 *cancel_requested;
+  Render_Progress *render_progress;
   Postprocess_Settings postprocess_settings;
 };
 
@@ -280,10 +285,7 @@ struct State {
   Render_Settings render_settings;
   Postprocess_Settings postprocess_settings;
   L1 render_request_id;
-  L1 render_pixels_completed;
-  L1 render_pixels_total;
-  L1 render_next_pixel;
-  I1 render_cancel_requested;
+  Render_Progress render_progress;
   Arena *hdr_arena;
   Image hdr;
   L1 postprocess_displayed_hash;

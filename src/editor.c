@@ -202,9 +202,9 @@ Internal void async_lane(void *) {
               IMAGE_FORMAT__RGBA32F_LINEAR);
 
             L1 pixels_total = async.active_request.hdr.width * async.active_request.hdr.height;
-            atomic_swap_L1(req.next_pixel, 0);
-            atomic_swap_L1(req.pixels_completed, 0);
-            atomic_swap_L1(req.pixels_total, pixels_total);
+            atomic_swap_L1(&req.render_progress->next_pixel, 0);
+            atomic_swap_L1(&req.render_progress->pixels_completed, 0);
+            atomic_swap_L1(&req.render_progress->pixels_total, pixels_total);
           }
 
           lane_sync();
@@ -212,13 +212,13 @@ Internal void async_lane(void *) {
           Image hdr = async.active_request.hdr;
           L1 pixels_total = hdr.width * hdr.height;
           L1 pixels_per_chunk = 256;
-          while (atomic_load_I1(req.cancel_requested) == 0) {
-            L1 first_pixel = atomic_add_L1(req.next_pixel, pixels_per_chunk);
+          while (atomic_load_I1(&req.render_progress->cancel_requested) == 0) {
+            L1 first_pixel = atomic_add_L1(&req.render_progress->next_pixel, pixels_per_chunk);
             if (first_pixel >= pixels_total) break;
 
             Range range = {first_pixel, Min(first_pixel + pixels_per_chunk, pixels_total)};
             rt_trace_scene(req.scene, hdr, range);
-            atomic_add_L1(req.pixels_completed, range.max - range.min);
+            atomic_add_L1(&req.render_progress->pixels_completed, range.max - range.min);
           }
 
           lane_sync();
@@ -954,7 +954,7 @@ Internal void lane(void *user_data) {
           if (e.request_id == state->render_request_id) {
             state->render_request_id = 0;
 
-            if (atomic_load_I1(&state->render_cancel_requested) || image_is_nil(e.image)) {
+            if (atomic_load_I1(&state->render_progress.cancel_requested) || image_is_nil(e.image)) {
               arena_release(e.arena);
             } else {
               //- kti: Release previous hdr arena.
@@ -1170,8 +1170,8 @@ Internal void lane(void *user_data) {
           });
         } else {
           // grab progress values
-          L1 completed = atomic_load_L1(&state->render_pixels_completed);
-          L1 total = atomic_load_L1(&state->render_pixels_total);
+          L1 completed = atomic_load_L1(&state->render_progress.pixels_completed);
+          L1 total = atomic_load_L1(&state->render_progress.pixels_total);
           F1 pct = (total > 0) ? (F1)completed/(F1)total : 0.0f;
 
           lister_progress(str8("Tracing"), pct);
@@ -2048,10 +2048,10 @@ Internal void lane(void *user_data) {
               .materials = materials,
             };
 
-            atomic_swap_L1(&state->render_next_pixel, 0);
-            atomic_swap_L1(&state->render_pixels_completed, 0);
-            atomic_swap_L1(&state->render_pixels_total, 0);
-            atomic_swap_I1(&state->render_cancel_requested, 0);
+            atomic_swap_L1(&state->render_progress.next_pixel, 0);
+            atomic_swap_L1(&state->render_progress.pixels_completed, 0);
+            atomic_swap_L1(&state->render_progress.pixels_total, 0);
+            atomic_swap_I1(&state->render_progress.cancel_requested, 0);
 
             Async_Request request = {
               .kind = ASYNC_REQUEST_KIND__RENDER,
@@ -2059,10 +2059,7 @@ Internal void lane(void *user_data) {
               .arena = render_arena,
               .render_settings = state->render_settings,
               .scene = scene,
-              .next_pixel = &state->render_next_pixel,
-              .pixels_completed = &state->render_pixels_completed,
-              .pixels_total = &state->render_pixels_total,
-              .cancel_requested = &state->render_cancel_requested,
+              .render_progress = &state->render_progress,
             };
 
             if (async_request_push(request)) {
@@ -2075,7 +2072,7 @@ Internal void lane(void *user_data) {
         } break;
         case CMD_KIND__CANCEL_RENDER: {
           if (state->render_request_id != 0) {
-            atomic_swap_I1(&state->render_cancel_requested, 1);
+            atomic_swap_I1(&state->render_progress.cancel_requested, 1);
           }
         } break;
         case CMD_KIND__USER_CODE_RELOAD: {

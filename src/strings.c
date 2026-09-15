@@ -298,7 +298,7 @@ Internal String8_Node *str8_list_pushf(Arena *arena, String8_List *list, CString
 Internal String8 str8_list_join(Arena *arena, String8_List *list) {
   String8 result = {0};
 
-  result.str = push_array(arena, B1, list->total_length);
+  result.str = push_array_no_zero(arena, B1, list->total_length);
   for (String8_Node *n = list->first; n != 0; n = n->next) {
     memmove(result.str+result.len, n->value.str, n->value.len);
     result.len += n->value.len;
@@ -321,6 +321,44 @@ Internal String8_Array str8_array_from_list(Arena *arena, String8_List *list) {
   return result;
 }
 
+//- kti: Serialize Helpers
+
+Internal void str8_serial_begin(Arena *arena, String8_List *srl) {
+  String8_Node *node = push_array(arena, String8_Node, 1);
+  node->value.str = push_array_no_zero(arena, B1, 0);
+  srl->first = srl->last = node;
+  srl->node_count = 0;
+  srl->total_length = 0;
+}
+
+Internal String8 str8_serial_end(Arena *arena, String8_List *srl) {
+  return str8_list_join(arena, srl);
+}
+
+Internal void *str8_serial_push_size(Arena *arena, String8_List *srl, L1 size) {
+  void *result = 0;
+  if (size != 0) {
+    B1 *buf = push_array(arena, B1, size);
+    String8 *str = &srl->last->value;
+    if (str->str + str->len == buf) {
+      str->len += size;
+      srl->total_length += size;
+    } else {
+      str8_list_push(arena, srl, (String8){buf, size});
+    }
+    result = buf;
+  }
+  return result;
+}
+
+Internal void *str8_serial_push_data(Arena *arena, String8_List *srl, void *data, L1 size) {
+  void *result = str8_serial_push_size(arena, srl, size);
+  if (result != 0) {
+    memmove(result, data, size);
+  }
+
+  return result;
+}
 
 ////////////////////////////////
 //~ kti: UTF-8 Decode

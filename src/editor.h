@@ -170,8 +170,8 @@ struct Render_Settings {
   L1 max_num_bounces;
 };
 
-typedef struct Postprocessing_Settings Postprocessing_Settings;
-struct Postprocessing_Settings {
+typedef struct Postprocess_Settings Postprocess_Settings;
+struct Postprocess_Settings {
   Image_Bloom_Params bloom;
 };
 
@@ -190,6 +190,60 @@ struct Render_Job {
   I1 cancel_requested;
 
   I1 completed;
+};
+
+////////////////////////////////
+//~ kti: Async
+
+typedef enum Async_Request_Kind {
+  ASYNC_REQUEST_KIND__NONE,
+  ASYNC_REQUEST_KIND__POSTPROCESS,
+} Async_Request_Kind;
+
+typedef struct Async_Request Async_Request;
+struct Async_Request {
+  Async_Request_Kind kind;
+
+  Image hdr;
+  Postprocess_Settings postprocess_settings;
+};
+
+typedef struct Async_Request_Queue Async_Request_Queue;
+struct Async_Request_Queue {
+  Async_Request requests[256];
+
+  L1 write_pos;
+  L1 read_pos;
+
+  OS_Mutex mutex;
+};
+
+typedef enum Async_Event_Kind {
+  ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
+} Async_Event_Kind;
+
+typedef struct Async_Event Async_Event;
+struct Async_Event {
+  Async_Event_Kind kind;
+  L1 generation;
+
+  union {
+    struct {
+      Arena *arena;
+      Image image;
+    } postprocess;
+  };
+};
+
+typedef struct Async_State Async_State;
+struct Async_State {
+  OS_Mutex mutex;
+  OS_Cond_Var cond_var;
+  I1 loop_again;
+  I1 exit;
+
+  Async_Request active_request;
+  I1 request_valid;
 };
 
 ////////////////////////////////
@@ -221,7 +275,7 @@ struct State {
 
   //- kti: Render.
   Render_Settings render_settings;
-  Postprocessing_Settings postprocessing_settings;
+  Postprocess_Settings postprocess_settings;
   Render_Job *active_render;
   Render_Job *last_render;
   Arena *display_arena;
@@ -234,6 +288,9 @@ struct State {
   I1 user_code_dirty;
   I1 animation_active;
   L1 frames_requested;
+
+  //- kti: Async
+  Async_Request_Queue async_request_queue;
 };
 
 #endif

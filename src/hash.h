@@ -10,6 +10,4 @@ union Hash128 {
   B1 bytes[16];
 };
 
-Internal Hash128 hash128(void *data, L1 size);
-
 #endif

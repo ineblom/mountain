@@ -51,4 +51,7 @@ struct Unicode_Decode {
 
 #define str8(x) (String8){ .str = (B1 *)x, .len = sizeof(x) - 1 }
 
+#define str8_serial_push_array(arena, srl, ptr, count) str8_serial_push_data(arena, srl, ptr, sizeof(*(ptr)) * (count))
+#define str8_serial_push_struct(arena, srl, ptr) str8_serial_push_array(arena, srl, ptr, 1)
+
 #endif

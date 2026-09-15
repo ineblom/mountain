@@ -30,15 +30,7 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
 };
 
 Global State *state = 0;
-
-Global OS_Mutex async_mutex = {0};
-Global OS_Cond_Var async_cond_var = {0};
-Global I1 async_loop_again = 0;
-Global I1 async_exit = 0;
-
-Internal void editor_request_frame(void) {
-  state->frames_requested = 4;
-}
+Global Async_State async = {0};
 
 #define UI_THEME_COLOR(r, g, b, a, ...) \
   { \
@@ -80,22 +72,58 @@ Global UI_Theme default_theme = {
 
 #undef UI_THEME_COLOR
 
+Internal void editor_request_frame(void) {
+  state->frames_requested = 4;
+}
+
 ////////////////////////////////
 //~ kti: Async
 
 Internal void async_signal(void) {
-  MutexScope(async_mutex) {
-    async_loop_again = 1;
+  MutexScope(async.mutex) {
+    async.loop_again = 1;
   }
 
-  os_cond_var_broadcast(async_cond_var);
+  os_cond_var_broadcast(async.cond_var);
+}
+
+Internal void async_request_push(Async_Request request) {
+  Async_Request_Queue *queue = &state->async_request_queue;
+
+  MutexScope(queue->mutex) {
+    L1 used = queue->write_pos - queue->read_pos;
+    if (used < ArrayCount(queue->requests)) {
+      L1 idx = queue->write_pos % ArrayCount(queue->requests);
+      queue->requests[idx] = request;
+      queue->write_pos += 1;
+    }
+  }
+
+  async_signal();
+}
+
+Internal I1 async_request_pop(Async_Request *out) {
+  I1 result = 0;
+
+  Async_Request_Queue *queue = &state->async_request_queue;
+  MutexScope(queue->mutex) {
+    if (queue->read_pos != queue->write_pos) {
+      L1 idx = queue->read_pos % ArrayCount(queue->requests);
+
+      out[0] = queue->requests[idx];
+      queue->read_pos += 1;
+      result = 1;
+    }
+  }
+
+  return result;
 }
 
 Internal void async_lane(void *) {
   //- kti: Init
   if (lane_idx() == 0) {
-    async_mutex = os_mutex_alloc();
-    async_cond_var = os_cond_var_alloc();
+    async.mutex = os_mutex_alloc();
+    async.cond_var = os_cond_var_alloc();
   }
 
   lane_sync();
@@ -104,23 +132,58 @@ Internal void async_lane(void *) {
   for (;;) {
     //- kti: Wait for message.
     if (lane_idx() == 0) {
-      os_mutex_take(async_mutex);
+      os_mutex_take(async.mutex);
 
-      while (!async_loop_again && !async_exit) {
-        os_cond_var_wait(async_cond_var, async_mutex, L1_MAX);
+      while (!async.loop_again && !async.exit) {
+        os_cond_var_wait(async.cond_var, async.mutex, L1_MAX);
       }
-      async_loop_again = 0;
+      async.loop_again = 0;
       
-      os_mutex_drop(async_mutex);
+      os_mutex_drop(async.mutex);
     }
     
     lane_sync();
 
-    if (atomic_load_I1(&async_exit) == 1) {
+    if (atomic_load_I1(&async.exit) == 1) {
       break;
     }
     
     //- kti: Do async ticks.
+
+    if (lane_idx() == 0) {
+      async.request_valid = async_request_pop(&async.active_request);
+    }
+
+    lane_sync();
+    
+    if (async.request_valid) {
+      Async_Request req = async.active_request;
+
+      switch (req.kind) {
+        //- kti: Postprocessing
+        case ASYNC_REQUEST_KIND__POSTPROCESS: {
+          if (lane_idx() == 0 && !image_is_nil(req.hdr)) {
+            arena_clear(state->display_arena);
+            state->display_image = (Image){0};
+
+            Image bloomed = image_apply_bloom(state->display_arena, req.hdr, req.postprocess_settings.bloom);
+            state->display_image = image_I1_from_F4_tonemap(state->display_arena, bloomed, TONEMAP_KIND__LOTTES);
+
+            if (state->render_result_texture != 0) {
+              gfx_tex2d_free(state->render_result_texture);
+            }
+
+            state->render_result_texture = gfx_tex2d_alloc(
+                GFX_TEXTURE_USAGE__STATIC,
+                state->display_image.width,
+                state->display_image.height,
+                state->display_image.pixels);
+
+            os_send_wakeup_event();
+          }
+        } break;
+      }
+    }
 
     lane_sync();
   }
@@ -432,7 +495,7 @@ Internal Window *window_from_os_window(OS_Window *os) {
 //~ kti: Cmd
 
 Internal void cmd_push(Cmd cmd) {
-  L1 idx = atomic_add_L1(&state->cmd_count, 1);
+  L1 idx = state->cmd_count++;
   if (idx < ArrayCount(state->cmds)) {
     state->cmds[idx] = cmd;
   }
@@ -686,15 +749,14 @@ Internal void render_lane(void *user_data) {
   }
 
   lane_sync();
-}
 
-Internal I1 postprocessing_settings_match(Postprocessing_Settings a, Postprocessing_Settings b) {
-  I1 result =
-    a.bloom.pass_count == b.bloom.pass_count &&
-    a.bloom.threshold == b.bloom.threshold &&
-    a.bloom.strength == b.bloom.strength &&
-    a.bloom.knee == b.bloom.knee;
-  return result;
+  if (lane_idx() == 0) {
+    async_request_push((Async_Request){
+      .kind = ASYNC_REQUEST_KIND__POSTPROCESS,
+      .hdr = job->hdr,
+      .postprocess_settings = state->postprocess_settings,
+    });
+  }
 }
 
 ////////////////////////////////
@@ -761,12 +823,14 @@ Internal void lane(void *user_data) {
   state->render_settings.rays_per_pixel = 64;
   state->render_settings.max_num_bounces = 8;
 
-  state->postprocessing_settings.bloom.pass_count = 8;
-  state->postprocessing_settings.bloom.threshold = 0.5f;
-  state->postprocessing_settings.bloom.strength = 0.4f;
-  state->postprocessing_settings.bloom.knee = 0.5f;
+  state->postprocess_settings.bloom.pass_count = 8;
+  state->postprocess_settings.bloom.threshold = 0.5f;
+  state->postprocess_settings.bloom.strength = 0.4f;
+  state->postprocess_settings.bloom.knee = 0.5f;
 
   state->display_arena = arena_alloc(GiB(1));
+
+  state->async_request_queue.mutex = os_mutex_alloc();
 
   user_code_reload();
 
@@ -901,9 +965,6 @@ Internal void lane(void *user_data) {
       state->user_render_texture = texture;
     }
 
-    Postprocessing_Settings postprocessing_settings_before_ui = state->postprocessing_settings;
-    I1 postprocessing_dirty = 0;
-
     //- kti: Build lister.
     lister_reset(scratch.arena);
 
@@ -1016,20 +1077,20 @@ Internal void lane(void *user_data) {
 
         lister_header(str8("Postprocessing"));
 
-        lister_L1(str8("Passes"), &state->postprocessing_settings.bloom.pass_count,
+        lister_L1(str8("Passes"), &state->postprocess_settings.bloom.pass_count,
           .default_value = 8);
 
-        lister_F1(str8("Threshold"), &state->postprocessing_settings.bloom.threshold,
+        lister_F1(str8("Threshold"), &state->postprocess_settings.bloom.threshold,
           .default_value = 0.5f,
           .pixels_per_unit = 50.0f,
           .max = F1_MAX);
 
-        lister_F1(str8("Strength"), &state->postprocessing_settings.bloom.strength,
+        lister_F1(str8("Strength"), &state->postprocess_settings.bloom.strength,
           .default_value = 0.4f,
           .min = 0.0f,
           .max = 1.0f);
 
-        lister_F1(str8("Knee"), &state->postprocessing_settings.bloom.knee,
+        lister_F1(str8("Knee"), &state->postprocess_settings.bloom.knee,
           .default_value = 0.5f,
           .pixels_per_unit = 50.0f,
           .max = F1_MAX);
@@ -1863,8 +1924,6 @@ Internal void lane(void *user_data) {
       ProfEnd();
     }
 
-    postprocessing_dirty = !postprocessing_settings_match(postprocessing_settings_before_ui, state->postprocessing_settings);
-
     ////////////////////////////////
     //~ kti: Execute Cmds
 
@@ -1983,29 +2042,6 @@ Internal void lane(void *user_data) {
         }
 
         state->last_render = job;
-        postprocessing_dirty = 1;
-      }
-    }
-
-    //- kti: Apply Postprocessing
-    if (postprocessing_dirty && state->last_render != 0 && !image_is_nil(state->last_render->hdr)) {
-      arena_clear(state->display_arena);
-      state->display_image = (Image){0};
-
-      Image bloomed = image_apply_bloom(state->display_arena, state->last_render->hdr, state->postprocessing_settings.bloom);
-      state->display_image = image_I1_from_F4_tonemap(state->display_arena, bloomed, TONEMAP_KIND__LOTTES);
-
-      if (!image_is_nil(state->display_image)) {
-        GFX_Texture *new_texture = gfx_tex2d_alloc(
-            GFX_TEXTURE_USAGE__STATIC,
-            state->display_image.width,
-            state->display_image.height,
-            state->display_image.pixels);
-
-        if (state->render_result_texture != 0) {
-          gfx_tex2d_free(state->render_result_texture);
-        }
-        state->render_result_texture = new_texture;
       }
     }
 
@@ -2065,7 +2101,7 @@ Internal void lane(void *user_data) {
     window_close(state->first_window);
   }
 
-  atomic_swap_I1(&async_exit, 1);
+  atomic_swap_I1(&async.exit, 1);
   async_signal();
 
   ProfShutdown();

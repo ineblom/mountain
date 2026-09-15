@@ -175,36 +175,28 @@ struct Postprocess_Settings {
   Image_Bloom_Params bloom;
 };
 
-typedef struct Render_Job Render_Job;
-struct Render_Job {
-  Arena *arena;
-
-  Render_Settings settings;
-  RT_Scene scene;
-  Image hdr;
-
-  L1 pixels_completed;
-  L1 pixels_total;
-  L1 next_pixel;
-
-  I1 cancel_requested;
-
-  I1 completed;
-};
-
 ////////////////////////////////
 //~ kti: Async
 
 typedef enum Async_Request_Kind {
   ASYNC_REQUEST_KIND__NONE,
+  ASYNC_REQUEST_KIND__RENDER,
   ASYNC_REQUEST_KIND__POSTPROCESS,
 } Async_Request_Kind;
 
 typedef struct Async_Request Async_Request;
 struct Async_Request {
   Async_Request_Kind kind;
+  L1 id;
 
+  Arena *arena;
+  Render_Settings render_settings;
+  RT_Scene scene;
   Image hdr;
+  L1 *pixels_completed;
+  L1 *pixels_total;
+  L1 *next_pixel;
+  I1 *cancel_requested;
   Postprocess_Settings postprocess_settings;
 };
 
@@ -219,13 +211,16 @@ struct Async_Request_Queue {
 
 typedef enum Async_Event_Kind {
   ASYNC_EVENT_KIND__NONE,
+  ASYNC_EVENT_KIND__RENDER_COMPLETE,
   ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
 } Async_Event_Kind;
 
 typedef struct Async_Event Async_Event;
 struct Async_Event {
   Async_Event_Kind kind;
+  L1 request_id;
 
+  Arena *arena;
   Image image;
 };
 
@@ -244,6 +239,8 @@ struct Async_State {
   OS_Cond_Var cond_var;
   I1 loop_again;
   I1 exit;
+
+  L1 next_request_id;
 
   Async_Request_Queue request_queue;
   Async_Event_Queue event_queue;
@@ -282,8 +279,15 @@ struct State {
   //- kti: Render.
   Render_Settings render_settings;
   Postprocess_Settings postprocess_settings;
-  Render_Job *active_render;
-  Render_Job *last_render;
+  L1 render_request_id;
+  L1 render_pixels_completed;
+  L1 render_pixels_total;
+  L1 render_next_pixel;
+  I1 render_cancel_requested;
+  Arena *hdr_arena;
+  Image hdr;
+  L1 postprocess_displayed_hash;
+  I1 postprocess_in_flight;
   Arena *display_arena;
   GFX_Texture *render_result_texture;
   GFX_Texture *user_render_texture;

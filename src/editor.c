@@ -79,6 +79,10 @@ Internal void editor_request_frame(void) {
 ////////////////////////////////
 //~ kti: Async
 
+Internal L1 async_request_id_alloc(void) {
+  return atomic_add_L1(&async.next_request_id, 1) + 1;
+}
+
 Internal void async_signal(void) {
   MutexScope(async.mutex) {
     async.loop_again = 1;
@@ -87,7 +91,8 @@ Internal void async_signal(void) {
   os_cond_var_broadcast(async.cond_var);
 }
 
-Internal void async_request_push(Async_Request request) {
+Internal I1 async_request_push(Async_Request request) {
+  I1 result = 0;
   Async_Request_Queue *queue = &async.request_queue;
 
   MutexScope(queue->mutex) {
@@ -96,10 +101,14 @@ Internal void async_request_push(Async_Request request) {
       L1 idx = queue->write_pos % ArrayCount(queue->requests);
       queue->requests[idx] = request;
       queue->write_pos += 1;
+      result = 1;
     }
   }
 
-  async_signal();
+  if (result) {
+    async_signal();
+  }
+  return result;
 }
 
 Internal I1 async_request_pop(Async_Request *out) {
@@ -152,14 +161,6 @@ Internal I1 async_event_pop(Async_Event *out) {
 }
 
 Internal void async_lane(void *) {
-  //- kti: Init
-  if (lane_idx() == 0) {
-    async.mutex = os_mutex_alloc();
-    async.cond_var = os_cond_var_alloc();
-  }
-
-  lane_sync();
-
   //- kti: Loop
   for (;;) {
     //- kti: Wait for message.
@@ -193,13 +194,54 @@ Internal void async_lane(void *) {
 
       switch (req.kind) {
         case ASYNC_REQUEST_KIND__NONE: {} break;
+        case ASYNC_REQUEST_KIND__RENDER: {
+          if (lane_idx() == 0) {
+            async.active_request.hdr = image_alloc(req.arena,
+              req.render_settings.width,
+              req.render_settings.height,
+              IMAGE_FORMAT__RGBA32F_LINEAR);
+
+            L1 pixels_total = async.active_request.hdr.width * async.active_request.hdr.height;
+            atomic_swap_L1(req.next_pixel, 0);
+            atomic_swap_L1(req.pixels_completed, 0);
+            atomic_swap_L1(req.pixels_total, pixels_total);
+          }
+
+          lane_sync();
+
+          Image hdr = async.active_request.hdr;
+          L1 pixels_total = hdr.width * hdr.height;
+          L1 pixels_per_chunk = 256;
+          while (atomic_load_I1(req.cancel_requested) == 0) {
+            L1 first_pixel = atomic_add_L1(req.next_pixel, pixels_per_chunk);
+            if (first_pixel >= pixels_total) break;
+
+            Range range = {first_pixel, Min(first_pixel + pixels_per_chunk, pixels_total)};
+            rt_trace_scene(req.scene, hdr, range);
+            atomic_add_L1(req.pixels_completed, range.max - range.min);
+          }
+
+          lane_sync();
+
+          if (lane_idx() == 0) {
+            async_event_push((Async_Event){
+              .kind = ASYNC_EVENT_KIND__RENDER_COMPLETE,
+              .request_id = req.id,
+              .arena = req.arena,
+              .image = hdr,
+            });
+          }
+        } break;
         //- kti: Postprocessing
         case ASYNC_REQUEST_KIND__POSTPROCESS: {
-          if (lane_idx() == 0 && !image_is_nil(req.hdr)) {
-            arena_clear(state->display_arena);
+          if (lane_idx() == 0) {
+            arena_clear(req.arena);
 
-            Image bloomed = image_apply_bloom(state->display_arena, req.hdr, req.postprocess_settings.bloom);
-            Image result = image_I1_from_F4_tonemap(state->display_arena, bloomed, TONEMAP_KIND__LOTTES);
+            Image result = {0};
+            if (!image_is_nil(req.hdr)) {
+              Image bloomed = image_apply_bloom(req.arena, req.hdr, req.postprocess_settings.bloom);
+              result = image_I1_from_F4_tonemap(req.arena, bloomed, TONEMAP_KIND__LOTTES);
+            }
 
             async_event_push((Async_Event){
               .kind = ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
@@ -738,53 +780,6 @@ Internal M4F plane_transform_M4F(Entity *entity, Camera camera) {
 }
 
 ////////////////////////////////
-//~ kti: Render
-
-Internal void render_lane(void *user_data) {
-  Render_Job *job = (Render_Job *)user_data;
-  Render_Settings settings = job->settings;
-  RT_Scene scene = job->scene;
-
-  if (lane_idx() == 0) {
-    //- kti: Allocate the HDR image in the job arena so it remains available
-    // after the worker lanes have exited.
-    job->hdr = image_alloc(job->arena, settings.width, settings.height, IMAGE_FORMAT__RGBA32F_LINEAR);
-
-    //- kti: Initialize progress.
-    L1 pixels_total = job->hdr.width * job->hdr.height;
-    atomic_swap_L1(&job->next_pixel, 0);
-    atomic_swap_L1(&job->pixels_completed, 0);
-    atomic_swap_L1(&job->pixels_total, pixels_total);
-  }
-
-  lane_sync();
-
-  //- kti: Trace
-  L1 pixels_total = job->hdr.width * job->hdr.height;
-  L1 pixels_per_chunk = 256;
-
-  while (atomic_load_I1(&job->cancel_requested) == 0) {
-    L1 first_pixel = atomic_add_L1(&job->next_pixel, pixels_per_chunk);
-    if (first_pixel >= pixels_total) break;
-
-    Range range = { first_pixel, Min(first_pixel+pixels_per_chunk, pixels_total) };
-    rt_trace_scene(scene, job->hdr, range);
-
-    atomic_add_L1(&job->pixels_completed, range.max-range.min);
-  }
-
-  lane_sync();
-
-  if (lane_idx() == 0) {
-    async_request_push((Async_Request){
-      .kind = ASYNC_REQUEST_KIND__POSTPROCESS,
-      .hdr = job->hdr,
-      .postprocess_settings = state->postprocess_settings,
-    });
-  }
-}
-
-////////////////////////////////
 //~ kti: User Code
 
 Internal void user_code_reload(void) {
@@ -852,10 +847,6 @@ Internal void lane(void *user_data) {
   state->postprocess_settings.bloom.threshold = 0.5f;
   state->postprocess_settings.bloom.strength = 0.4f;
   state->postprocess_settings.bloom.knee = 0.5f;
-
-  state->display_arena = arena_alloc(GiB(1));
-
-  async.request_queue.mutex = os_mutex_alloc();
 
   user_code_reload();
 
@@ -959,10 +950,29 @@ Internal void lane(void *user_data) {
     for (Async_Event e = {0}; async_event_pop(&e);) {
       switch (e.kind) {
         case ASYNC_EVENT_KIND__NONE: {} break;
-        case ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE: {
-          if (state->render_result_texture != 0) {
-            gfx_tex2d_free(state->render_result_texture);
+        case ASYNC_EVENT_KIND__RENDER_COMPLETE: {
+          if (e.request_id == state->render_request_id) {
+            state->render_request_id = 0;
+
+            if (atomic_load_I1(&state->render_cancel_requested) || image_is_nil(e.image)) {
+              arena_release(e.arena);
+            } else {
+              //- kti: Release previous hdr arena.
+              arena_release(state->hdr_arena);
+
+              //- kti: Take ownership of arena containing HDR image.
+              state->hdr_arena = e.arena;
+              state->hdr = e.image;
+
+              //- kti: Trigger postprocess. 
+              state->postprocess_displayed_hash = 0;
+            }
           }
+        } break;
+        case ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE: {
+          state->postprocess_in_flight = 0;
+
+          gfx_tex2d_free(state->render_result_texture);
 
           Image image = e.image;
           state->render_result_texture = gfx_tex2d_alloc(GFX_TEXTURE_USAGE__STATIC, image.width, image.height, image.pixels);
@@ -1154,14 +1164,14 @@ Internal void lane(void *user_data) {
 
       if (has_camera && state->entity_count >= 2) {
         // only allow 1 render at a time
-        if (state->active_render == 0) {
+        if (state->render_request_id == 0) {
           lister_cmd(str8("Render"), (Cmd){
             .kind = CMD_KIND__RENDER,
           });
         } else {
           // grab progress values
-          L1 completed = atomic_load_L1(&state->active_render->pixels_completed);
-          L1 total = atomic_load_L1(&state->active_render->pixels_total);
+          L1 completed = atomic_load_L1(&state->render_pixels_completed);
+          L1 total = atomic_load_L1(&state->render_pixels_total);
           F1 pct = (total > 0) ? (F1)completed/(F1)total : 0.0f;
 
           lister_progress(str8("Tracing"), pct);
@@ -1995,19 +2005,10 @@ Internal void lane(void *user_data) {
           }
         } break;
         case CMD_KIND__RENDER: {
-          // start a new render job
-          if (state->active_render == 0) {
-            // alloc and initialize job
-            Arena *job_arena = arena_alloc(GiB(1));
-            Render_Job *job = push_array(job_arena, Render_Job, 1);
-
-            job->arena = job_arena;
-            job->settings = state->render_settings;
-
-            // build scene
+          if (state->render_request_id == 0) {
+            Arena *render_arena = arena_alloc(GiB(1));
             Entity *camera_entity = &state->nil_entity; 
 
-            // find camera and count number of shapes
             L1 shape_count = 0;
             for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
               if (it->flags & ENTITY_FLAG__CAMERA) {
@@ -2018,10 +2019,9 @@ Internal void lane(void *user_data) {
               }
             }
 
-            // build shapes and materials arrays
             L1 shape_idx = 0;
-            Shape *shapes = push_array(job_arena, Shape, shape_count);
-            RT_Material *materials = push_array(job_arena, RT_Material, shape_count);
+            Shape *shapes = push_array(render_arena, Shape, shape_count);
+            RT_Material *materials = push_array(render_arena, RT_Material, shape_count);
 
             for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
               if (it->flags & ENTITY_FLAG__SHAPE) {
@@ -2031,10 +2031,9 @@ Internal void lane(void *user_data) {
               }
             }
 
-            // fill out scene
-            job->scene = (RT_Scene){
-              .rays_per_pixel = job->settings.rays_per_pixel,
-              .max_num_bounces = job->settings.max_num_bounces,
+            RT_Scene scene = {
+              .rays_per_pixel = state->render_settings.rays_per_pixel,
+              .max_num_bounces = state->render_settings.max_num_bounces,
 
               .camera = {
                 .pos = camera_entity->pos,  
@@ -2049,26 +2048,34 @@ Internal void lane(void *user_data) {
               .materials = materials,
             };
 
-            // start lanes
-            Lane_Group_Params lane_params = {
-              .count = Max(1, os_core_count()/2),
+            atomic_swap_L1(&state->render_next_pixel, 0);
+            atomic_swap_L1(&state->render_pixels_completed, 0);
+            atomic_swap_L1(&state->render_pixels_total, 0);
+            atomic_swap_I1(&state->render_cancel_requested, 0);
 
-              .completed = &job->completed,
-
-              .proc = render_lane,
-              .user_data = job,
-
-              .arena_size = GiB(1),
-              .scratch_size = MiB(512),
+            Async_Request request = {
+              .kind = ASYNC_REQUEST_KIND__RENDER,
+              .id = async_request_id_alloc(),
+              .arena = render_arena,
+              .render_settings = state->render_settings,
+              .scene = scene,
+              .next_pixel = &state->render_next_pixel,
+              .pixels_completed = &state->render_pixels_completed,
+              .pixels_total = &state->render_pixels_total,
+              .cancel_requested = &state->render_cancel_requested,
             };
-            lane_group_launch(lane_params);
 
-            state->active_render = job;
+            if (async_request_push(request)) {
+              state->render_request_id = request.id;
+            } else {
+              arena_release(render_arena);
+              editor_request_frame();
+            }
           }
         } break;
         case CMD_KIND__CANCEL_RENDER: {
-          if (state->active_render) {
-            atomic_swap_I1(&state->active_render->cancel_requested, 1);
+          if (state->render_request_id != 0) {
+            atomic_swap_I1(&state->render_cancel_requested, 1);
           }
         } break;
         case CMD_KIND__USER_CODE_RELOAD: {
@@ -2078,19 +2085,27 @@ Internal void lane(void *user_data) {
     }
     state->cmd_count = 0;
 
-    //- kti: End render job
-    if (state->active_render && atomic_load_I1(&state->active_render->completed)) {
-      Render_Job *job = state->active_render;
-      state->active_render = 0;
+    L1 postprocess_settings_hash = hash64_seed(&state->postprocess_settings, sizeof(state->postprocess_settings), 0);
+    if (!state->postprocess_in_flight &&
+        state->postprocess_displayed_hash != postprocess_settings_hash &&
+        state->render_request_id == 0 &&
+        !image_is_nil(state->hdr)) {
+      if (state->display_arena == 0) {
+        state->display_arena = arena_alloc(GiB(1));
+      }
 
-      if (atomic_load_I1(&job->cancel_requested) || image_is_nil(job->hdr)) {
-        arena_release(job->arena);
+      Async_Request request = {
+        .kind = ASYNC_REQUEST_KIND__POSTPROCESS,
+        .arena = state->display_arena,
+        .hdr = state->hdr,
+        .postprocess_settings = state->postprocess_settings,
+      };
+
+      if (async_request_push(request)) {
+        state->postprocess_displayed_hash = postprocess_settings_hash;
+        state->postprocess_in_flight = 1;
       } else {
-        if (state->last_render != 0) {
-          arena_release(state->last_render->arena);
-        }
-
-        state->last_render = job;
+        editor_request_frame();
       }
     }
 
@@ -2130,7 +2145,7 @@ Internal void lane(void *user_data) {
       max_frame_time = 0;
     }
 
-    if (events.count != 0 || state->animation_active || state->user_code_dirty || state->active_render != 0) {
+    if (events.count != 0 || state->animation_active || state->user_code_dirty || state->render_request_id != 0) {
       editor_request_frame();
     }
 
@@ -2157,6 +2172,11 @@ Internal void lane(void *user_data) {
 }
 
 SI1 main(void) {
+  async.mutex = os_mutex_alloc();
+  async.cond_var = os_cond_var_alloc();
+  async.request_queue.mutex = os_mutex_alloc();
+  async.event_queue.mutex = os_mutex_alloc();
+
   Lane_Group_Params async_group_params = {
     .count = Max(1, os_core_count() - 1),
     .proc = async_lane,

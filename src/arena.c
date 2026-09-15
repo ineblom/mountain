@@ -12,11 +12,16 @@ Internal Arena *arena_alloc(L1 max_size) {
 }
 
 Internal void arena_release(Arena *arena) {
-  os_memory_release(arena, arena->reserved);
+  if (arena) {
+    os_memory_release(arena, arena->reserved);
+  }
 }
 
 Inline L1 arena_pos(Arena *arena) {
-  L1 result = arena->pos;
+  L1 result = 0;
+  if (arena) {
+    result = arena->pos;
+  }
   return result;
 }
 

@@ -88,7 +88,7 @@ Internal void async_signal(void) {
 }
 
 Internal void async_request_push(Async_Request request) {
-  Async_Request_Queue *queue = &state->async_request_queue;
+  Async_Request_Queue *queue = &async.request_queue;
 
   MutexScope(queue->mutex) {
     L1 used = queue->write_pos - queue->read_pos;
@@ -105,12 +105,44 @@ Internal void async_request_push(Async_Request request) {
 Internal I1 async_request_pop(Async_Request *out) {
   I1 result = 0;
 
-  Async_Request_Queue *queue = &state->async_request_queue;
+  Async_Request_Queue *queue = &async.request_queue;
   MutexScope(queue->mutex) {
     if (queue->read_pos != queue->write_pos) {
       L1 idx = queue->read_pos % ArrayCount(queue->requests);
 
       out[0] = queue->requests[idx];
+      queue->read_pos += 1;
+      result = 1;
+    }
+  }
+
+  return result;
+}
+
+Internal void async_event_push(Async_Event event) {
+  Async_Event_Queue *queue = &async.event_queue;
+
+  MutexScope(queue->mutex) {
+    L1 used = queue->write_pos - queue->read_pos;
+    if (used < ArrayCount(queue->events)) {
+      L1 idx = queue->write_pos % ArrayCount(queue->events);
+      queue->events[idx] = event;
+      queue->write_pos += 1;
+    }
+  }
+
+  os_send_wakeup_event();
+}
+
+Internal I1 async_event_pop(Async_Event *out) {
+  I1 result = 0;
+
+  Async_Event_Queue *queue = &async.event_queue;
+  MutexScope(queue->mutex) {
+    if (queue->read_pos != queue->write_pos) {
+      L1 idx = queue->read_pos % ArrayCount(queue->events);
+
+      out[0] = queue->events[idx];
       queue->read_pos += 1;
       result = 1;
     }
@@ -160,26 +192,19 @@ Internal void async_lane(void *) {
       Async_Request req = async.active_request;
 
       switch (req.kind) {
+        case ASYNC_REQUEST_KIND__NONE: {} break;
         //- kti: Postprocessing
         case ASYNC_REQUEST_KIND__POSTPROCESS: {
           if (lane_idx() == 0 && !image_is_nil(req.hdr)) {
             arena_clear(state->display_arena);
-            state->display_image = (Image){0};
 
             Image bloomed = image_apply_bloom(state->display_arena, req.hdr, req.postprocess_settings.bloom);
-            state->display_image = image_I1_from_F4_tonemap(state->display_arena, bloomed, TONEMAP_KIND__LOTTES);
+            Image result = image_I1_from_F4_tonemap(state->display_arena, bloomed, TONEMAP_KIND__LOTTES);
 
-            if (state->render_result_texture != 0) {
-              gfx_tex2d_free(state->render_result_texture);
-            }
-
-            state->render_result_texture = gfx_tex2d_alloc(
-                GFX_TEXTURE_USAGE__STATIC,
-                state->display_image.width,
-                state->display_image.height,
-                state->display_image.pixels);
-
-            os_send_wakeup_event();
+            async_event_push((Async_Event){
+              .kind = ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
+              .image = result,
+            });
           }
         } break;
       }
@@ -830,7 +855,7 @@ Internal void lane(void *user_data) {
 
   state->display_arena = arena_alloc(GiB(1));
 
-  state->async_request_queue.mutex = os_mutex_alloc();
+  async.request_queue.mutex = os_mutex_alloc();
 
   user_code_reload();
 
@@ -853,22 +878,25 @@ Internal void lane(void *user_data) {
     Temp_Arena scratch = scratch_begin(0, 0);
 
     ////////////////////////////////
-    //~ kti: Events
+    //~ kti: OS Events
 
     UI_Cmd_List ui_cmds = {0};
     OS_Event_List events = {0};
     events = os_poll_events(scratch.arena, state->frames_requested == 0 ? -1 : 0);
     for (OS_Event *e = events.first; e != 0; e = e->next) {
+      //- kti: Window Close
       if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE) {
         Window *window = window_from_os_window(e->window);
         window_close(window);
       }
+      //- kti: Escape
       if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ESC) {
         ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
           .kind = UI_CMD_KIND__CANCEL,
           .timestamp_ns = e->timestamp_ns
         });
       }
+      //- kti: Text
       if (e->kind == OS_EVENT_KIND__TEXT) {
         ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
           .kind = UI_CMD_KIND__TEXT,
@@ -876,6 +904,7 @@ Internal void lane(void *user_data) {
           .timestamp_ns = e->timestamp_ns
         });
       }
+      //- kti: Left & Right
       if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__LEFT || e->key == OS_KEY__RIGHT)) {
         UI_Cmd_Delta_Unit delta_unit = (e->modifiers&OS_MODIFIER_FLAG__CTRL) ? UI_CMD_DELTA_UNIT__WORD : UI_CMD_DELTA_UNIT__CHAR;
         UI_Cmd_Flags flags = UI_CMD_FLAG__CAP_AT_LINE;
@@ -892,6 +921,7 @@ Internal void lane(void *user_data) {
             .timestamp_ns = e->timestamp_ns,
           });
       }
+      //- kti: Home & End
       if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__HOME || e->key == OS_KEY__END)) {
         UI_Cmd_Flags flags = UI_CMD_FLAG__CAP_AT_LINE;
         if (e->modifiers&OS_MODIFIER_FLAG__SHIFT) {
@@ -905,6 +935,7 @@ Internal void lane(void *user_data) {
           .timestamp_ns = e->timestamp_ns,
         });
       }
+      //- kti: Backspace & Delete
       if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__BACKSPACE || e->key == OS_KEY__DELETE)) {
         UI_Cmd_Delta_Unit delta_unit = (e->modifiers&OS_MODIFIER_FLAG__CTRL) ? UI_CMD_DELTA_UNIT__WORD : UI_CMD_DELTA_UNIT__CHAR;
         ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
@@ -917,8 +948,26 @@ Internal void lane(void *user_data) {
       }
     }
 
+    //- kti: Check if last window is closed.
     if (state->first_window == 0) {
       running = 0;
+    }
+
+    //////////////////////////////// 
+    //~ kti: Async Events
+
+    for (Async_Event e = {0}; async_event_pop(&e);) {
+      switch (e.kind) {
+        case ASYNC_EVENT_KIND__NONE: {} break;
+        case ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE: {
+          if (state->render_result_texture != 0) {
+            gfx_tex2d_free(state->render_result_texture);
+          }
+
+          Image image = e.image;
+          state->render_result_texture = gfx_tex2d_alloc(GFX_TEXTURE_USAGE__STATIC, image.width, image.height, image.pixels);
+        } break;
+      }
     }
 
     state->animation_active = 0;

@@ -210,29 +210,32 @@ struct Async_Request {
 
 typedef struct Async_Request_Queue Async_Request_Queue;
 struct Async_Request_Queue {
-  Async_Request requests[256];
+  OS_Mutex mutex;
 
   L1 write_pos;
   L1 read_pos;
-
-  OS_Mutex mutex;
+  Async_Request requests[256];
 };
 
 typedef enum Async_Event_Kind {
+  ASYNC_EVENT_KIND__NONE,
   ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
 } Async_Event_Kind;
 
 typedef struct Async_Event Async_Event;
 struct Async_Event {
   Async_Event_Kind kind;
-  L1 generation;
 
-  union {
-    struct {
-      Arena *arena;
-      Image image;
-    } postprocess;
-  };
+  Image image;
+};
+
+typedef struct Async_Event_Queue Async_Event_Queue;
+struct Async_Event_Queue {
+  OS_Mutex mutex;
+
+  L1 write_pos;
+  L1 read_pos;
+  Async_Event events[256];
 };
 
 typedef struct Async_State Async_State;
@@ -241,6 +244,9 @@ struct Async_State {
   OS_Cond_Var cond_var;
   I1 loop_again;
   I1 exit;
+
+  Async_Request_Queue request_queue;
+  Async_Event_Queue event_queue;
 
   Async_Request active_request;
   I1 request_valid;
@@ -279,7 +285,6 @@ struct State {
   Render_Job *active_render;
   Render_Job *last_render;
   Arena *display_arena;
-  Image display_image;
   GFX_Texture *render_result_texture;
   GFX_Texture *user_render_texture;
 
@@ -288,9 +293,6 @@ struct State {
   I1 user_code_dirty;
   I1 animation_active;
   L1 frames_requested;
-
-  //- kti: Async
-  Async_Request_Queue async_request_queue;
 };
 
 #endif

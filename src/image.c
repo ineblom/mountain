@@ -193,20 +193,16 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
   return result;
 }
 
-Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params params) {
-  Image result = hdr;
+Internal void image_bloom_threshold(Image dst, Image src, Image_Bloom_Params params, Range rows) {
+  if (src.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
+      dst.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
+      src.width == dst.width && src.height == dst.height) {
 
-  if (!image_is_nil(hdr) && params.pass_count > 0 && hdr.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
-    Temp_Arena scratch = scratch_begin(&arena, 1);
-    Image *bloom_passes = push_array(scratch.arena, Image, 1+params.pass_count);
-
-    bloom_passes[0] = image_alloc(scratch.arena, hdr.width, hdr.height, IMAGE_FORMAT__RGBA32F_LINEAR);
-
-    //- kti: Copy bright pixels to pass 0.
-
-    for (L1 y = 0; y < bloom_passes[0].height; y += 1) {
-      for (L1 x = 0; x < bloom_passes[0].width; x += 1) {
-        F4 color = image_row_F4(hdr, y)[x];
+    for (L1 y = rows.min; y < rows.max; y += 1) {
+      F4 *src_row = image_row_F4(src, y);
+      F4 *dst_row = image_row_F4(dst, y);
+      for (L1 x = 0; x < src.width; x += 1) {
+        F4 color = src_row[x];
 
         F1 luminance = luminance_F4(color);
 
@@ -229,9 +225,27 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
           color = (F4){0};
         }
 
-        image_row_F4(bloom_passes[0], y)[x] = color;
+        dst_row[x] = color;
       }
     }
+  }
+}
+
+Internal void image_downsample(Image dst, Image src, Range rows) {
+
+}
+
+Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params params) {
+  Image result = hdr;
+
+  if (!image_is_nil(hdr) && params.pass_count > 0 && hdr.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
+    Temp_Arena scratch = scratch_begin(&arena, 1);
+    Image *bloom_passes = push_array(scratch.arena, Image, 1+params.pass_count);
+
+    bloom_passes[0] = image_alloc(scratch.arena, hdr.width, hdr.height, IMAGE_FORMAT__RGBA32F_LINEAR);
+
+    //- kti: Copy bright pixels to pass 0.
+    image_bloom_threshold(bloom_passes[0], hdr, params, (Range){0, hdr.height});
 
     //- kti: Downsample multiple times.
     L1 last_pass_index = 0;

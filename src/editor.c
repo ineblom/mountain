@@ -237,11 +237,8 @@ Internal void async_lane(void *) {
           if (lane_idx() == 0) {
             arena_clear(req.arena);
 
-            Image result = {0};
-            if (!image_is_nil(req.hdr)) {
-              Image bloomed = image_apply_bloom(req.arena, req.hdr, req.postprocess_settings.bloom);
-              result = image_I1_from_F4_tonemap(req.arena, bloomed, TONEMAP_KIND__LOTTES);
-            }
+            Image bloomed = image_apply_bloom(req.arena, req.hdr, req.postprocess_settings.bloom);
+            Image result = image_I1_from_F4_tonemap(req.arena, bloomed, TONEMAP_KIND__LOTTES);
 
             async_event_push((Async_Event){
               .kind = ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,

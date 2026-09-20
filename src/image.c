@@ -347,17 +347,6 @@ Internal void image_resample_y(Image dst, Image src, Range rows) {
   }
 }
 
-Internal void image_resample(Image dst, Image src) {
-  Temp_Arena scratch = scratch_begin(0, 0);
-
-  Image horizontal = image_alloc(scratch.arena, dst.width, src.height, IMAGE_FORMAT__RGBA32F_LINEAR);
-
-  image_resample_x(horizontal, src, (Range){0, horizontal.height});
-  image_resample_y(dst, horizontal, (Range){0, dst.height});
-
-  scratch_end(scratch);
-}
-
 Internal void image_apply_karis(Image image, Range rows) {
   if (image.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
     for (L1 y = rows.min; y < rows.max; y += 1) {
@@ -382,11 +371,10 @@ Internal void image_add(Image dst, Image src, Range rows) {
   }
 }
 
-Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params params) {
-  Image result = hdr;
-
-  if (!image_is_nil(hdr) && params.pass_count > 0 && hdr.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
-    Temp_Arena scratch = scratch_begin(&arena, 1);
+Internal void image_bloom(Image out, Image hdr, Image_Bloom_Params params) {
+  if (!image_is_nil(hdr) && params.pass_count > 0 && hdr.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
+    out.width == hdr.width && out.height == hdr.height) {
+    Temp_Arena scratch = scratch_begin(0, 0);
     Image *bloom_passes = push_array(scratch.arena, Image, 1+params.pass_count);
 
     bloom_passes[0] = image_alloc(scratch.arena, hdr.width, hdr.height, IMAGE_FORMAT__RGBA32F_LINEAR);
@@ -403,7 +391,12 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
       }
       Image out = image_alloc(scratch.arena, in.width/2, in.height/2, IMAGE_FORMAT__RGBA32F_LINEAR);
 
-      image_resample(out, in);
+      //- kti: Downsample
+      Temp_Arena scratch2 = temp_arena_begin(scratch.arena);
+      Image horizontal = image_alloc(scratch2.arena, out.width, in.height, IMAGE_FORMAT__RGBA32F_LINEAR);
+      image_resample_x(horizontal, in, (Range){0, horizontal.height});
+      image_resample_y(out, horizontal, (Range){0, out.height});
+      temp_arena_end(scratch2);
 
       if (pass_index == 0) {
         image_apply_karis(out, (Range){0, out.height});
@@ -422,19 +415,22 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
 
       Image upsampled = image_alloc(scratch2.arena, out.width, out.height, IMAGE_FORMAT__RGBA32F_LINEAR);
 
-      image_resample(upsampled, in);
+      //- kti: Upsample
+      Image horizontal = image_alloc(scratch2.arena, upsampled.width, in.height, IMAGE_FORMAT__RGBA32F_LINEAR);
+      image_resample_x(horizontal, in, (Range){0, horizontal.height});
+      image_resample_y(upsampled, horizontal, (Range){0, upsampled.height});
+
+      //- kti: Combine upwards
       image_add(out, upsampled, (Range){0, out.height});
 
       temp_arena_end(scratch2);
     }
 
     //- kti: Combine input image and bloom result, optionally use overlay image.
-    result = image_alloc(arena, hdr.width, hdr.height, IMAGE_FORMAT__RGBA32F_LINEAR);
-
-    for (L1 y = 0; y < result.height; y += 1) {
-      for (L1 x = 0; x < result.width; x += 1) {
-        F1 u = (result.width > 1) ? (F1)x / (F1)(result.width-1) : 0;
-        F1 v = (result.height > 1) ? (F1)y / (F1)(result.height-1) : 0;
+    for (L1 y = 0; y < out.height; y += 1) {
+      for (L1 x = 0; x < out.width; x += 1) {
+        F1 u = (out.width > 1) ? (F1)x / (F1)(out.width-1) : 0;
+        F1 v = (out.height > 1) ? (F1)y / (F1)(out.height-1) : 0;
 
         F4 bloom_overlay = image_sample_bilinear_F4(params.overlay, u, v);
         F4 hdr_px = image_row_F4(hdr, y)[x];
@@ -443,14 +439,12 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
         bloom_px *= 1.0f + luminance_F4(bloom_overlay)*params.overlay_strength;
 
         F4 color = hdr_px * (1.0f - 0.5f*params.strength) + params.strength*bloom_px;
-        image_row_F4(result, y)[x] = color;
+        image_row_F4(out, y)[x] = color;
       }
     }
 
     scratch_end(scratch);
   }
-
-  return result;
 }
 
 Inline F4 tonemap_aces(F4 v) {

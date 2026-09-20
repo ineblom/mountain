@@ -247,22 +247,24 @@ Internal void image_bloom_threshold(Image dst, Image src, Image_Bloom_Params par
   }
 }
 
-Internal void image_resample_axis(Image dst, Image src, Axis axis, Range range) {
+Internal void image_resample_x(Image dst, Image src, Range rows) {
   if (src.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
       dst.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
-      axis < AXIS2_COUNT &&
-      (axis == AXIS__X ? src.height == dst.height : src.width == dst.width)) {
-    L1 src_dim = axis == AXIS__X ? src.width : src.height;
-    L1 dst_dim = axis == AXIS__X ? dst.width : dst.height;
+      src.height == dst.height) {
+    L1 src_dim = src.width;
+    L1 dst_dim = dst.width;
 
     F1 scale = (F1)src_dim / (F1)dst_dim;
     F1 filter_scale = Max(1, scale);
     F1 filter_radius = 1.0f;
     F1 support = filter_radius*filter_scale;
 
-    for (L1 orthogonal_pos = range.min; orthogonal_pos < range.max; orthogonal_pos += 1) {
-      for (L1 dst_pos = 0; dst_pos < dst_dim; dst_pos += 1) {
-        F1 center = ((F1)dst_pos + 0.5f)*scale - 0.5f;
+    for (L1 y = rows.min; y < rows.max; y += 1) {
+      F4 *src_row = image_row_F4(src, y);
+      F4 *dst_row = image_row_F4(dst, y);
+
+      for (L1 dst_x = 0; dst_x < dst_dim; dst_x += 1) {
+        F1 center = ((F1)dst_x + 0.5f)*scale - 0.5f;
 
         F1 first_src_pos = ceil_F1(center - support);
         F1 last_src_pos = floor_F1(center + support);
@@ -276,24 +278,69 @@ Internal void image_resample_axis(Image dst, Image src, Axis axis, Range range) 
           F1 distance = (src_pos - center)/filter_scale;
           F1 weight = Max(0, 1.0f - abs_F1(distance));
 
-          L1 sample_pos = (L1)Clamp(0.0f, src_pos, (F1)src_dim-1.0f);
-          L1 sample_x = axis == AXIS__X ? sample_pos : orthogonal_pos;
-          L1 sample_y = axis == AXIS__X ? orthogonal_pos : sample_pos;
-
-          sum += image_row_F4(src, sample_y)[sample_x]*weight;
+          L1 sample_x = (L1)Clamp(0.0f, src_pos, (F1)src_dim-1.0f);
+          sum += src_row[sample_x]*weight;
           weight_sum += weight;
         }
 
-        L1 dst_x = axis == AXIS__X ? dst_pos : orthogonal_pos;
-        L1 dst_y = axis == AXIS__X ? orthogonal_pos : dst_pos;
-
         if (weight_sum > 0.0f) {
-          image_row_F4(dst, dst_y)[dst_x] = sum/weight_sum;
+          dst_row[dst_x] = sum/weight_sum;
         } else {
-          L1 nearest_pos = (L1)Clamp(0.0f, floor_F1(center+0.5f), (F1)src_dim-1.0f);
-          L1 nearest_x = axis == AXIS__X ? nearest_pos : orthogonal_pos;
-          L1 nearest_y = axis == AXIS__X ? orthogonal_pos : nearest_pos;
-          image_row_F4(dst, dst_y)[dst_x] = image_row_F4(src, nearest_y)[nearest_x];
+          L1 nearest_x = (L1)Clamp(0.0f, floor_F1(center+0.5f), (F1)src_dim-1.0f);
+          dst_row[dst_x] = src_row[nearest_x];
+        }
+      }
+    }
+  }
+}
+
+Internal void image_resample_y(Image dst, Image src, Range rows) {
+  if (src.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
+      dst.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
+      src.width == dst.width) {
+    L1 src_dim = src.height;
+    L1 dst_dim = dst.height;
+
+    F1 scale = (F1)src_dim / (F1)dst_dim;
+    F1 filter_scale = Max(1, scale);
+    F1 filter_radius = 1.0f;
+    F1 support = filter_radius*filter_scale;
+
+    for (L1 dst_y = rows.min; dst_y < rows.max; dst_y += 1) {
+      F1 center = ((F1)dst_y + 0.5f)*scale - 0.5f;
+
+      F1 first_src_pos = ceil_F1(center - support);
+      F1 last_src_pos = floor_F1(center + support);
+      L1 src_pos_count = (L1)(last_src_pos - first_src_pos) + 1;
+
+      F4 *dst_row = image_row_F4(dst, dst_y);
+      for (L1 x = 0; x < dst.width; x += 1) {
+        dst_row[x] = (F4){0};
+      }
+
+      F1 weight_sum = 0;
+      for (L1 src_pos_idx = 0; src_pos_idx < src_pos_count; src_pos_idx += 1) {
+        F1 src_pos = first_src_pos + (F1)src_pos_idx;
+        F1 distance = (src_pos - center)/filter_scale;
+        F1 weight = Max(0, 1.0f - abs_F1(distance));
+
+        L1 sample_y = (L1)Clamp(0.0f, src_pos, (F1)src_dim-1.0f);
+        F4 *src_row = image_row_F4(src, sample_y);
+        for (L1 x = 0; x < dst.width; x += 1) {
+          dst_row[x] += src_row[x]*weight;
+        }
+        weight_sum += weight;
+      }
+
+      if (weight_sum > 0.0f) {
+        for (L1 x = 0; x < dst.width; x += 1) {
+          dst_row[x] /= weight_sum;
+        }
+      } else {
+        L1 nearest_y = (L1)Clamp(0.0f, floor_F1(center+0.5f), (F1)src_dim-1.0f);
+        F4 *src_row = image_row_F4(src, nearest_y);
+        for (L1 x = 0; x < dst.width; x += 1) {
+          dst_row[x] = src_row[x];
         }
       }
     }
@@ -305,8 +352,8 @@ Internal void image_resample(Image dst, Image src) {
 
   Image horizontal = image_alloc(scratch.arena, dst.width, src.height, IMAGE_FORMAT__RGBA32F_LINEAR);
 
-  image_resample_axis(horizontal, src, AXIS__X, {0, src.width});
-  image_resample_axis(dst, horizontal, AXIS__Y, {0, src.height});
+  image_resample_x(horizontal, src, (Range){0, horizontal.height});
+  image_resample_y(dst, horizontal, (Range){0, dst.height});
 
   scratch_end(scratch);
 }

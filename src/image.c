@@ -370,6 +370,18 @@ Internal void image_apply_karis(Image image, Range rows) {
   }
 }
 
+Internal void image_add(Image dst, Image src, Range rows) {
+  if (src.format == dst.format && src.format == IMAGE_FORMAT__RGBA32F_LINEAR && src.width == dst.width && src.height == dst.height) {
+    for (L1 y = rows.min; y < rows.max; y += 1) {
+      F4 *src_row = image_row_F4(src, y);
+      F4 *dst_row = image_row_F4(dst, y);
+      for (L1 x = 0; x < src.width; x += 1) {
+        dst_row[x] += src_row[x];
+      }
+    }
+  }
+}
+
 Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params params) {
   Image result = hdr;
 
@@ -383,8 +395,12 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
     image_bloom_threshold(bloom_passes[0], hdr, params, (Range){0, hdr.height});
 
     //- kti: Downsample multiple times.
+    L1 last_pass_index = 0;
     for (L1 pass_index = 0; pass_index < params.pass_count; pass_index += 1) {
       Image in = bloom_passes[pass_index];
+      if (in.width < 2 || in.height < 2) {
+        break;
+      }
       Image out = image_alloc(scratch.arena, in.width/2, in.height/2, IMAGE_FORMAT__RGBA32F_LINEAR);
 
       image_resample(out, in);
@@ -394,10 +410,11 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
       }
 
       bloom_passes[pass_index+1] = out;
+      last_pass_index = pass_index+1;
     }
 
     //- kti: Upsample and sum.
-    for (L1 pass_index = params.pass_count-1; pass_index >= 1; pass_index -= 1) {
+    for (L1 pass_index = last_pass_index; pass_index > 0; pass_index -= 1) {
       Image in = bloom_passes[pass_index];
       Image out = bloom_passes[pass_index-1];
 
@@ -405,8 +422,8 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
 
       Image upsampled = image_alloc(scratch2.arena, out.width, out.height, IMAGE_FORMAT__RGBA32F_LINEAR);
 
-      image_resmple(upsampled, in);
-      image_add(out, upsampled, (™ange){0, out.height});
+      image_resample(upsampled, in);
+      image_add(out, upsampled, (Range){0, out.height});
 
       temp_arena_end(scratch2);
     }

@@ -1,5 +1,13 @@
+////////////////////////////////
+//~ kti: Utils
+
 Internal I1 image_is_nil(Image image) {
   I1 result = image.width == 0 || image.height == 0 || image.pixels == 0;
+  return result;
+}
+
+Inline F4 *image_row_F4(Image image, L1 y) {
+  F4 *result = (F4 *)(image.pixels + y * image.row_pitch);
   return result;
 }
 
@@ -35,6 +43,9 @@ Internal L1 image_format_alignment(Image_Format format) {
   return result;
 }
 
+////////////////////////////////
+//~ kti: Create
+
 Internal Image image_alloc(Arena *arena, I1 width, I1 height, Image_Format format) {
   Image image = {0};
   I1 pixel_size = image_format_pixel_size(format);
@@ -46,11 +57,6 @@ Internal Image image_alloc(Arena *arena, I1 width, I1 height, Image_Format forma
     image.pixels = arena_push(arena, image.row_pitch*height, Max(8, image_format_alignment(format)), 1);
   }
   return image;
-}
-
-Inline F4 *image_row_F4(Image image, L1 y) {
-  F4 *result = (F4 *)(image.pixels + y * image.row_pitch);
-  return result;
 }
 
 Internal Image image_read_from_file(Arena *arena, String8 filename) {
@@ -112,6 +118,9 @@ Internal Image image_read_from_file(Arena *arena, String8 filename) {
   return result;
 }
 
+////////////////////////////////
+//~ kti: Write
+
 Internal void image_write_to_file(Image image, String8 filename) {
   Assert(image.format == IMAGE_FORMAT__RGBA8_SRGB);
 
@@ -160,6 +169,9 @@ Internal void image_write_to_file(Image image, String8 filename) {
   scratch_end(scratch);
 }
 
+////////////////////////////////
+//~ kti: Sample
+
 Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
   F4 result = {0};
   if (!image_is_nil(image) && image.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
@@ -193,7 +205,11 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
   return result;
 }
 
+////////////////////////////////
+//~ kti: MT
+
 Internal void image_bloom_threshold(Image dst, Image src, Image_Bloom_Params params, Range rows) {
+  //- kti: Equal 32F format and dimensions.
   if (src.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
       dst.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
       src.width == dst.width && src.height == dst.height) {
@@ -231,8 +247,80 @@ Internal void image_bloom_threshold(Image dst, Image src, Image_Bloom_Params par
   }
 }
 
-Internal void image_downsample(Image dst, Image src, Range rows) {
+Internal void image_resample_axis(Image dst, Image src, Axis axis, Range range) {
+  if (src.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
+      dst.format == IMAGE_FORMAT__RGBA32F_LINEAR &&
+      axis < AXIS2_COUNT &&
+      (axis == AXIS__X ? src.height == dst.height : src.width == dst.width)) {
+    L1 src_dim = axis == AXIS__X ? src.width : src.height;
+    L1 dst_dim = axis == AXIS__X ? dst.width : dst.height;
 
+    F1 scale = (F1)src_dim / (F1)dst_dim;
+    F1 filter_scale = Max(1, scale);
+    F1 filter_radius = 1.0f;
+    F1 support = filter_radius*filter_scale;
+
+    for (L1 orthogonal_pos = range.min; orthogonal_pos < range.max; orthogonal_pos += 1) {
+      for (L1 dst_pos = 0; dst_pos < dst_dim; dst_pos += 1) {
+        F1 center = ((F1)dst_pos + 0.5f)*scale - 0.5f;
+
+        F1 first_src_pos = ceil_F1(center - support);
+        F1 last_src_pos = floor_F1(center + support);
+        L1 src_pos_count = (L1)(last_src_pos - first_src_pos) + 1;
+
+        F4 sum = {0};
+        F1 weight_sum = 0;
+
+        for (L1 src_pos_idx = 0; src_pos_idx < src_pos_count; src_pos_idx += 1) {
+          F1 src_pos = first_src_pos + (F1)src_pos_idx;
+          F1 distance = (src_pos - center)/filter_scale;
+          F1 weight = Max(0, 1.0f - abs_F1(distance));
+
+          L1 sample_pos = (L1)Clamp(0.0f, src_pos, (F1)src_dim-1.0f);
+          L1 sample_x = axis == AXIS__X ? sample_pos : orthogonal_pos;
+          L1 sample_y = axis == AXIS__X ? orthogonal_pos : sample_pos;
+
+          sum += image_row_F4(src, sample_y)[sample_x]*weight;
+          weight_sum += weight;
+        }
+
+        L1 dst_x = axis == AXIS__X ? dst_pos : orthogonal_pos;
+        L1 dst_y = axis == AXIS__X ? orthogonal_pos : dst_pos;
+
+        if (weight_sum > 0.0f) {
+          image_row_F4(dst, dst_y)[dst_x] = sum/weight_sum;
+        } else {
+          L1 nearest_pos = (L1)Clamp(0.0f, floor_F1(center+0.5f), (F1)src_dim-1.0f);
+          L1 nearest_x = axis == AXIS__X ? nearest_pos : orthogonal_pos;
+          L1 nearest_y = axis == AXIS__X ? orthogonal_pos : nearest_pos;
+          image_row_F4(dst, dst_y)[dst_x] = image_row_F4(src, nearest_y)[nearest_x];
+        }
+      }
+    }
+  }
+}
+
+Internal void image_resample(Image dst, Image src) {
+  Temp_Arena scratch = scratch_begin(0, 0);
+
+  Image horizontal = image_alloc(scratch.arena, dst.width, src.height, IMAGE_FORMAT__RGBA32F_LINEAR);
+
+  image_resample_axis(horizontal, src, AXIS__X, {0, src.width});
+  image_resample_axis(dst, horizontal, AXIS__Y, {0, src.height});
+
+  scratch_end(scratch);
+}
+
+Internal void image_apply_karis(Image image, Range rows) {
+  if (image.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
+    for (L1 y = rows.min; y < rows.max; y += 1) {
+      F4 *row = image_row_F4(image, y);
+      for (L1 x = 0; x < image.width; x += 1) {
+        F4 color = row[x];
+        row[x] = color / (1.0f + luminance_F4(color));
+      }
+    }
+  }
 }
 
 Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params params) {
@@ -248,110 +336,32 @@ Internal Image image_apply_bloom(Arena *arena, Image hdr, Image_Bloom_Params par
     image_bloom_threshold(bloom_passes[0], hdr, params, (Range){0, hdr.height});
 
     //- kti: Downsample multiple times.
-    L1 last_pass_index = 0;
     for (L1 pass_index = 0; pass_index < params.pass_count; pass_index += 1) {
       Image in = bloom_passes[pass_index];
-      if (in.width < 2 || in.height < 2) {
-        break;
-      }
       Image out = image_alloc(scratch.arena, in.width/2, in.height/2, IMAGE_FORMAT__RGBA32F_LINEAR);
 
-      bloom_passes[pass_index+1] = out;
-      last_pass_index = pass_index+1;
+      image_resample(out, in);
 
-      for (L1 y = 0; y < out.height; y += 1) {
-        L1 sy = y*2;
-        for (L1 x = 0; x < out.width; x += 1) {
-          L1 sx = x*2;
-
-          // TODO: look into 13-tap bilinear tent filter.
-
-          F4 sum = {0};
-
-          L1 left = sx;
-          L1 right = Min(sx+1, in.width-1);
-          L1 far_left = sx-Min(sx, 1);
-          L1 far_right = Min(sx+2, in.width-1);
-
-          F4 *top = image_row_F4(in, sy);
-          F4 *bottom = image_row_F4(in, Min(sy+1, in.height-1));
-          F4 *far_bottom = image_row_F4(in, Min(sy+2, in.height-1));
-          F4 *far_top = image_row_F4(in, sy-Min(sy, 1));
-
-          // Center (4)
-          sum += top[left] * 4.0f;
-          sum += top[right] * 4.0f;
-          sum += bottom[right] * 4.0f;
-          sum += bottom[left] * 4.0f;
-
-          // Edges (2)
-          sum += top[far_left] * 2.0f;
-          sum += bottom[far_left] * 2.0f;
-
-          sum += top[far_right] * 2.0f;
-          sum += bottom[far_right] * 2.0f;
-
-          sum += far_top[left] * 2.0f;
-          sum += far_top[right] * 2.0f;
-
-          sum += far_bottom[left] * 2.0f;
-          sum += far_bottom[right] * 2.0f;
-
-          // Corners (1)
-          sum += far_top[far_left] * 1.0f;
-          sum += far_top[far_right] * 1.0f;
-          sum += far_bottom[far_left] * 1.0f;
-          sum += far_bottom[far_right] * 1.0f;
-
-          sum /= 36.0f;
-          F4 karis_average = sum / (1.0f + luminance_F4(sum));
-
-          image_row_F4(out, y)[x] = karis_average;
-        }
+      if (pass_index == 0) {
+        image_apply_karis(out, (Range){0, out.height});
       }
+
+      bloom_passes[pass_index+1] = out;
     }
 
     //- kti: Upsample and sum.
-    for (L1 pass_index = last_pass_index; pass_index >= 1; pass_index -= 1) {
+    for (L1 pass_index = params.pass_count-1; pass_index >= 1; pass_index -= 1) {
       Image in = bloom_passes[pass_index];
       Image out = bloom_passes[pass_index-1];
 
-      for (L1 y = 0; y < out.height; y += 1) {
-        L1 sy = y/2;
-        for (L1 x = 0; x < out.width; x += 1) {
-          L1 sx = x/2;
+      Temp_Arena scratch2 = temp_arena_begin(scratch.arena);
 
-          F4 sum = {0};
+      Image upsampled = image_alloc(scratch2.arena, out.width, out.height, IMAGE_FORMAT__RGBA32F_LINEAR);
 
-          L1 center = Min(sx, in.width-1);
-          L1 left = center-Min(center, 1);
-          L1 right = Min(center+1, in.width-1);
+      image_resmple(upsampled, in);
+      image_add(out, upsampled, (™ange){0, out.height});
 
-          L1 center_y = Min(sy, in.height-1);
-          F4 *middle = image_row_F4(in, center_y);
-          F4 *top = image_row_F4(in, center_y-Min(center_y, 1));
-          F4 *bottom = image_row_F4(in, Min(center_y+1, in.height-1));
-
-          // center
-          sum += middle[center] * 4.0f;
-
-          // edges
-          sum += middle[left] * 2.0f;
-          sum += middle[right] * 2.0f;
-          sum += top[center] * 2.0f;
-          sum += bottom[center] * 2.0f;
-
-          // corners
-          sum += top[left] * 1.0f;
-          sum += top[right] * 1.0f;
-          sum += bottom[left] * 1.0f;
-          sum += bottom[right] * 1.0f;
-
-          sum /= 16.0f;
-
-          image_row_F4(out, y)[x] += sum;
-        }
-      }
+      temp_arena_end(scratch2);
     }
 
     //- kti: Combine input image and bloom result, optionally use overlay image.

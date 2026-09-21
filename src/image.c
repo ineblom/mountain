@@ -258,7 +258,7 @@ Internal void image_bloom_threshold( Image dst, Image src, Image_Bloom_Params pa
         } else if ( luminance > soft_threshold ) {
 
           F1  x             =  luminance - soft_threshold;
-          F1  knee_contrib  =  x*x / 4.0f*knee_range*knee_range;
+          F1  knee_contrib  =  Square( x ) / ( 4.0f * Square( knee_range ) );
           contrib           =  knee_contrib;
 
         }

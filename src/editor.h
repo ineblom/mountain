@@ -198,6 +198,7 @@ struct Image_Bloom_Work {
   Image *levels;
   Image *downsample_horizontal;
   Image *upsample_horizontal;
+  Image *upsampled;
 };
 
 typedef struct Async_Request Async_Request;

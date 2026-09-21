@@ -265,24 +265,31 @@ Internal void async_lane(void *) {
 
             work.levels                 =  push_array( scratch.arena, Image, work.level_count );
             work.downsample_horizontal  =  push_array( scratch.arena, Image, work.level_count );
+            work.upsample_horizontal    =  push_array( scratch.arena, Image, work.level_count-1 );
+            work.upsampled              =  push_array( scratch.arena, Image, work.level_count-1 );
 
             //- kti: Alloc images.
 
             width   =  req.hdr.width;
             height  =  req.hdr.height;
 
-            for ( L1 i=0; i<work.level_count; i+=1 ) {
+            for ( L1 i=0;  i<work.level_count;  i+=1 ) {
 
               work.levels[i]  =  image_alloc( scratch.arena, width, height );
 
-              if ( i > 0 ) {
-
-                work.downsample_horizontal[i] = image_alloc( scratch.arena, width, req.hdr.height );
-
-              }
-
               width   /=  2;
               height  /=  2;
+
+            }
+
+            for ( L1 i=0;  i+1<work.level_count;  i+= 1 ) {
+
+              Image  high  =  work.levels [i    ];
+              Image  low   =  work.levels [i + 1];
+
+              work.downsample_horizontal[i]  =  image_alloc( scratch.arena, low .width, high.height );
+              work.upsample_horizontal  [i]  =  image_alloc( scratch.arena, high.width, low .height  );
+              work.upsampled            [i]  =  image_alloc( scratch.arena, high.width, high.height );
 
             }
 
@@ -312,29 +319,45 @@ Internal void async_lane(void *) {
 
           lane_sync();
 
-          //- kti: Downsample horizontal
+          //- kti: Downsample
 
-          for ( L1 i=1;  i<work.level_count; i+=1 ) {
+          for ( L1 i=0;  i<work.level_count-1;  i+=1 ) {
 
-            Image  in     =  work.downsample_horizontal [ i-1 ];
-            Image  out    =  work.downsample_horizontal [ i   ];
-            Range  range  =  lane_range( out.height );
+            Image  in         =  work.levels                [i];
+            Image  horizontal =  work.downsample_horizontal [i];
+            Image  out        =  work.levels                [i+1];
+            Range  x_range    =  lane_range( horizontal.height );
+            Range  y_range    =  lane_range( out.height );
 
-            image_resample_x( out, in, range );
+            image_resample_x( horizontal, in, x_range );
 
             lane_sync();
 
+            image_resample_y( out, horizontal, y_range );
+
+            lane_sync();
           }
 
-          //- kti: Downsample vertical 
+          //- kti: Upsample
 
-          for ( L1 i=1;  i<work.level_count;  i += 1 ) {
+          for ( L1 i=work.level_count-1; i>=1; i-=1 ) {
 
-            Image in     =  work.downsample_horizontal [i];
-            Image out    =  work.levels                [i];
-            Range range  =  lane_range( out.height );
+            Image  in          =  work.levels              [i];
+            Image  horizontal  =  work.upsample_horizontal [i-1];
+            Image  upsampled   =  work.upsampled           [i-1];
+            Image  out         =  work.levels              [i-1];
+            Range  x_range     =  lane_range( horizontal.height );
+            Range  y_range     =  lane_range( upsampled.height );
 
-            image_resample_y( out, in, range );
+            image_resample_x( horizontal, in, x_range );
+
+            lane_sync();
+
+            image_resample_y( upsampled, horizontal, y_range );
+
+            lane_sync();
+
+            image_add( out, upsampled, range );
 
             lane_sync();
 

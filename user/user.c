@@ -36,10 +36,10 @@ Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time) {
   c->pos[2] = -2.0f;
   c->direction = (F4){0.0f, 0.0f, 1.0f, 0.0f};
 
-  Image image = api.image_alloc(frame_arena, 320, 240, IMAGE_FORMAT__RGBA32F_LINEAR);
+  Image image = api.image_alloc(frame_arena, 320, 240);
 
   for (L1 y = 0; y < image.height; y += 1) {
-    F4 *row = (F4 *)(image.pixels + y*image.row_pitch);
+    F4 *row = image.pixels + y*image.row_stride;
     for (L1 x = 0; x < image.width; x += 1) {
       F1 a = (F1)x/20.0f+time;
       F1 b = (F1)x/20.0f;

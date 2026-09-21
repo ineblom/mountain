@@ -28,19 +28,25 @@ struct Bitmap_Header {
 };
 #pragma pack(pop)
 
-typedef enum Image_Format {
-  IMAGE_FORMAT__NULL,
-  IMAGE_FORMAT__RGBA8_SRGB,
-  IMAGE_FORMAT__RGBA32F_LINEAR,
-} Image_Format;
-
 typedef struct Image Image;
 struct Image {
   I1 width;
   I1 height;
-  L1 row_pitch;
-  Image_Format format;
-  B1 *pixels;
+  L1 row_stride;
+  F4 *pixels;
+};
+
+typedef struct RGBA8 RGBA8;
+struct RGBA8 {
+  B1 r, g, b, a;
+};
+
+typedef struct Image_RGBA8 Image_RGBA8;
+struct Image_RGBA8 {
+  I1 width;
+  I1 height;
+  L1 row_stride;
+  RGBA8 *pixels;
 };
 
 typedef struct Image_Bloom_Params Image_Bloom_Params;

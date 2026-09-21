@@ -192,6 +192,14 @@ typedef enum Async_Request_Kind {
   ASYNC_REQUEST_KIND__POSTPROCESS,
 } Async_Request_Kind;
 
+typedef struct Image_Bloom_Work Image_Bloom_Work;
+struct Image_Bloom_Work {
+  L1 level_count;
+  Image *levels;
+  Image *downsample_horizontal;
+  Image *upsample_horizontal;
+};
+
 typedef struct Async_Request Async_Request;
 struct Async_Request {
   Async_Request_Kind kind;
@@ -203,6 +211,7 @@ struct Async_Request {
   Image hdr;
   Render_Progress *render_progress;
   Postprocess_Settings postprocess_settings;
+  Image_Bloom_Work bloom_work;
 };
 
 typedef struct Async_Request_Queue Async_Request_Queue;
@@ -227,6 +236,7 @@ struct Async_Event {
 
   Arena *arena;
   Image image;
+  Image_RGBA8 image_rgba8;
 };
 
 typedef struct Async_Event_Queue Async_Event_Queue;

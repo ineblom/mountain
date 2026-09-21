@@ -196,10 +196,7 @@ Internal void async_lane(void *) {
         case ASYNC_REQUEST_KIND__NONE: {} break;
         case ASYNC_REQUEST_KIND__RENDER: {
           if (lane_idx() == 0) {
-            async.active_request.hdr = image_alloc(req.arena,
-              req.render_settings.width,
-              req.render_settings.height,
-              IMAGE_FORMAT__RGBA32F_LINEAR);
+            async.active_request.hdr = image_alloc(req.arena, req.render_settings.width, req.render_settings.height);
 
             L1 pixels_total = async.active_request.hdr.width * async.active_request.hdr.height;
             atomic_swap_L1(&req.render_progress->next_pixel, 0);
@@ -232,20 +229,135 @@ Internal void async_lane(void *) {
             });
           }
         } break;
-        //- kti: Postprocessing
-        case ASYNC_REQUEST_KIND__POSTPROCESS: {
-          if (lane_idx() == 0) {
-            arena_clear(req.arena);
 
-            Image bloomed = image_alloc(req.arena, req.hdr.width, req.hdr.height, IMAGE_FORMAT__RGBA32F_LINEAR);
-            image_bloom(bloomed, req.hdr, req.postprocess_settings.bloom);
-            Image result = image_I1_from_F4_tonemap(req.arena, bloomed, TONEMAP_KIND__LOTTES);
+        case ASYNC_REQUEST_KIND__POSTPROCESS: {
+
+          Temp_Arena          scratch  =  scratch_begin( &req.arena, 1 );
+          Image_Bloom_Params  params   =  req.postprocess_settings.bloom;
+
+          //- kti: Narrow setup.
+          if ( lane_idx() == 0 ) {
+
+            Image_Bloom_Work  work  =  {0};
+
+            //- kti: Calculate num levels
+            L1  width   =  req.hdr.width;
+            L1  height  =  req.hdr.height;
+            while ( work.level_count < params.pass_count
+                    &&
+                    width  >= 2
+                    &&
+                    height >=  2 )
+            {
+
+              width             /=  2;
+              height            /=  2;
+              work.level_count  +=  1;
+
+            }
+
+            // NOTE(kti): add lowest level (final result)
+            work.level_count  +=  1;
+
+            //- kti: Alloc arrays.
+
+            arena_clear( req.arena );
+
+            work.levels                 =  push_array( scratch.arena, Image, work.level_count );
+            work.downsample_horizontal  =  push_array( scratch.arena, Image, work.level_count );
+
+            //- kti: Alloc images.
+
+            width   =  req.hdr.width;
+            height  =  req.hdr.height;
+
+            for ( L1 i=0; i<work.level_count; i+=1 ) {
+
+              work.levels[i]  =  image_alloc( scratch.arena, width, height );
+
+              if ( i > 0 ) {
+
+                work.downsample_horizontal[i] = image_alloc( scratch.arena, width, req.hdr.height );
+
+              }
+
+              width   /=  2;
+              height  /=  2;
+
+            }
+
+            async.active_request.bloom_work  =  work;
+
+          }
+
+          lane_sync();
+
+          Image_Bloom_Work work = async.active_request.bloom_work;
+
+          //- kti: Fill level 0
+
+          Range   range  =  lane_range( req.hdr.height );
+
+          image_bloom_threshold( work.levels[0], req.hdr, params, range );
+
+          //- kti: Set downsample_horizontal[0]
+
+          lane_sync();
+
+          if (lane_idx() == 0) {
+
+            work.downsample_horizontal[0]  =  work.levels[0];
+
+          }
+
+          lane_sync();
+
+          //- kti: Downsample horizontal
+
+          for ( L1 i=1;  i<work.level_count; i+=1 ) {
+
+            Image  in     =  work.downsample_horizontal [ i-1 ];
+            Image  out    =  work.downsample_horizontal [ i   ];
+            Range  range  =  lane_range( out.height );
+
+            image_resample_x( out, in, range );
+
+            lane_sync();
+
+          }
+
+          //- kti: Downsample vertical 
+
+          for ( L1 i=1;  i<work.level_count;  i += 1 ) {
+
+            Image in     =  work.downsample_horizontal [i];
+            Image out    =  work.levels                [i];
+            Range range  =  lane_range( out.height );
+
+            image_resample_y( out, in, range );
+
+            lane_sync();
+
+          }
+
+          lane_sync();
+
+          //- kti: Push complete event
+
+          if (lane_idx() == 0) {
+
+            Image_RGBA8 result = image_tonemap( req.arena, work.levels[0], TONEMAP_KIND__LOTTES );
 
             async_event_push((Async_Event){
-              .kind = ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
-              .image = result,
+
+              .kind         =  ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
+              .image_rgba8  =  result,
+
             });
+
           }
+
+          scratch_end(scratch);
         } break;
       }
     }
@@ -972,7 +1084,7 @@ Internal void lane(void *user_data) {
 
           gfx_tex2d_free(state->render_result_texture);
 
-          Image image = e.image;
+          Image_RGBA8 image = e.image_rgba8;
           state->render_result_texture = gfx_tex2d_alloc(GFX_TEXTURE_USAGE__STATIC, image.width, image.height, image.pixels);
         } break;
       }
@@ -994,31 +1106,28 @@ Internal void lane(void *user_data) {
       Image user_image = state->user_render_func(api, scratch.arena, state->scene_frame_index, time);
 
       //- kti: Ensure correct image format.
-      Image upload_image = user_image;
-      if (user_image.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
-        upload_image = image_I1_from_F4_tonemap(scratch.arena, user_image, TONEMAP_KIND__LOTTES);
-      }
+      Image_RGBA8 upload_image = image_tonemap(scratch.arena, user_image, TONEMAP_KIND__LOTTES);
 
       GFX_Texture *texture = state->user_render_texture;
-      if (!image_is_nil(upload_image) && upload_image.format == IMAGE_FORMAT__RGBA8_SRGB) {
-        //- kti: Delete previous texture if necessary.
-        if (texture != 0 && (texture->width != upload_image.width || texture->height != upload_image.height)) {
-          gfx_tex2d_free(texture);
-          texture = 0;
-        }
 
-        //- kti: Create or fill texture.
-        if (texture == 0) {
-          texture = gfx_tex2d_alloc(
+      //- kti: Delete previous texture if necessary.
+      if (texture != 0 && (texture->width != upload_image.width || texture->height != upload_image.height)) {
+        gfx_tex2d_free(texture);
+        texture = 0;
+      }
+
+      //- kti: Create or fill texture.
+      if (texture == 0) {
+        texture = gfx_tex2d_alloc(
             GFX_TEXTURE_USAGE__DYNAMIC,
             upload_image.width,
             upload_image.height,
             upload_image.pixels);
-        } else {
-          gfx_fill_tex2d_region(texture, (SI4){0, 0, upload_image.width, upload_image.height}, upload_image.pixels);
-        }
-        texture->filter = GFX_TEXTURE_FILTER__NEAREST;
+      } else {
+        gfx_fill_tex2d_region(texture, (SI4){0, 0, upload_image.width, upload_image.height}, upload_image.pixels);
       }
+      texture->filter = GFX_TEXTURE_FILTER__NEAREST;
+
       state->user_render_texture = texture;
     }
 

@@ -197,10 +197,13 @@ Internal void image_write_to_file( Image_RGBA8 image, String8 filename ) {
 
 ////////////////////////////////
 //~ kti: Sample
-/* TODO
-Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
+
+Inline F4 image_sample_bilinear_F4( Image image, F1 u, F1 v ) {
+
   F4 result = {0};
-  if (!image_is_nil(image) && image.format == IMAGE_FORMAT__RGBA32F_LINEAR) {
+
+  if ( !image_is_nil( image ) ) {
+
     u = clamp01_F1(u);
     v = clamp01_F1(v);
 
@@ -215,8 +218,8 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
     F1 fx = tex_x - (F1)x0;
     F1 fy = tex_y - (F1)y0;
 
-    F4 *top = image_row_F4(image, y0);
-    F4 *bot = image_row_F4(image, y1);
+    F4 *top = image_row(image, y0);
+    F4 *bot = image_row(image, y1);
     F4 c00 = top[x0];
     F4 c10 = top[x1];
     F4 c01 = bot[x0];
@@ -226,13 +229,14 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v) {
     F4 bot_row = lerp_F4(c01, fx, c11);
 
     result = lerp_F4(top_row, fy, bot_row);
+
   }
 
   return result;
 }
-*/
 
 Internal void image_bloom_threshold( Image dst, Image src, Image_Bloom_Params params, Range rows ) {
+
   //- kti: Equal dimensions.
   if (    src.width  == dst.width
        && src.height == dst.height ) {
@@ -435,6 +439,36 @@ Internal void image_add( Image dst, Image src, Range rows ) {
 
   }
 
+}
+
+Internal void image_bloom_combine( Image dst, Image hdr, Image bloom,
+                                   Image_Bloom_Params params, Range rows ) {
+
+  if (    dst.width   == hdr.width
+       && dst.height  == hdr.height
+       && bloom.width == hdr.width
+       && bloom.height == hdr.height ) {
+
+    for ( L1 y=rows.min;  y<rows.max;  y+=1 ) {
+
+      F4  *dst_row    =  image_row( dst, y );
+      F4  *hdr_row    =  image_row( hdr, y );
+      F4  *bloom_row  =  image_row( bloom, y );
+      F1  v           =  dst.height > 1 ? (F1)y / (F1)( dst.height - 1 ) : 0.0f;
+
+      for ( L1 x=0;  x<dst.width;  x+=1 ) {
+
+        F1  u              =  dst.width > 1 ? (F1)x / (F1)( dst.width - 1 ) : 0.0f;
+        F4  bloom_overlay  =  image_sample_bilinear_F4( params.overlay, u, v );
+        F4  bloom_px       =  bloom_row[x];
+
+        bloom_px  *=  1.0f + luminance_F4( bloom_overlay ) * params.overlay_strength;
+        dst_row[x] =   hdr_row[x] * ( 1.0f - 0.5f*params.strength )
+                     + bloom_px   * params.strength;
+
+      }
+    }
+  }
 }
 
 Inline F4 tonemap_aces( F4 v ) {

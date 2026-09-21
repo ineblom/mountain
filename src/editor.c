@@ -307,16 +307,6 @@ Internal void async_lane(void *) {
 
           image_bloom_threshold( work.levels[0], req.hdr, params, range );
 
-          //- kti: Set downsample_horizontal[0]
-
-          lane_sync();
-
-          if (lane_idx() == 0) {
-
-            work.downsample_horizontal[0]  =  work.levels[0];
-
-          }
-
           lane_sync();
 
           //- kti: Downsample
@@ -336,6 +326,14 @@ Internal void async_lane(void *) {
             image_resample_y( out, horizontal, y_range );
 
             lane_sync();
+
+            if ( i == 0 ) {
+
+              image_apply_karis( out, y_range );
+
+              lane_sync();
+
+            }
           }
 
           //- kti: Upsample
@@ -357,11 +355,17 @@ Internal void async_lane(void *) {
 
             lane_sync();
 
-            image_add( out, upsampled, range );
+            image_add( out, upsampled, y_range );
 
             lane_sync();
 
           }
+
+          //- kti: Combine HDR input and reconstructed bloom.
+
+          Range  combine_range  =  lane_range( work.levels[0].height );
+
+          image_bloom_combine( work.levels[0], req.hdr, work.levels[0], params, combine_range );
 
           lane_sync();
 
@@ -2326,4 +2330,3 @@ SI1 main(void) {
 
   return 0;
 }
-

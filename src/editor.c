@@ -128,101 +128,105 @@ Internal I1 async_request_pop(Async_Request *out) {
   return result;
 }
 
-Internal void async_event_push(Async_Event event) {
+Internal void async_event_push(Async_Event event)
+{
   Async_Event_Queue *queue = &async.event_queue;
 
-  MutexScope(queue->mutex) {
+  MutexScope(queue->mutex)
+  {
     L1 used = queue->write_pos - queue->read_pos;
-    if (used < ArrayCount(queue->events)) {
+    if (used < ArrayCount(queue->events))
+    {
       L1 idx = queue->write_pos % ArrayCount(queue->events);
-      queue->events[idx] = event;
-      queue->write_pos += 1;
+
+      queue->events[idx]   =  event;
+      queue->write_pos    +=  1;
     }
   }
 
   os_send_wakeup_event();
 }
 
-Internal I1 async_event_pop(Async_Event *out) {
-  I1 result = 0;
+Internal I1 async_event_pop(Async_Event *out)
+{
+  I1                 result  =  0;
+  Async_Event_Queue  *queue  =  &async.event_queue;
 
-  Async_Event_Queue *queue = &async.event_queue;
-  MutexScope(queue->mutex) {
-    if (queue->read_pos != queue->write_pos) {
+  MutexScope(queue->mutex)
+  {
+    if (queue->read_pos != queue->write_pos)
+    {
       L1 idx = queue->read_pos % ArrayCount(queue->events);
 
-      out[0] = queue->events[idx];
-      queue->read_pos += 1;
-      result = 1;
+      out[0]            =  queue->events[idx];
+      queue->read_pos  +=  1;
+      result            =  1;
     }
   }
 
   return result;
 }
 
-Internal void async_lane( void * ) {
-
+Internal void async_lane(void *)
+{
   //- kti: Loop
 
-  for (;;) {
-
+  for (;;)
+  {
     //- kti: Wait for message.
 
-    if ( lane_idx() == 0 ) {
-
+    if (lane_idx() == 0)
+    {
       os_mutex_take( async.mutex );
 
-      while ( !async.loop_again && !async.exit ) {
-
-        os_cond_var_wait( async.cond_var, async.mutex, L1_MAX );
-
+      while (async.loop_again == 0 && async.exit == 0)
+      {
+        os_cond_var_wait(async.cond_var, async.mutex, L1_MAX);
       }
 
       async.loop_again = 0;
       
       os_mutex_drop( async.mutex );
-
     }
     
     lane_sync();
 
-    if ( atomic_load_I1( &async.exit ) == 1 ) {
+    if (atomic_load_I1(&async.exit) == 1)
+    {
       break;
     }
     
     //- kti: Do async ticks.
 
-    if ( lane_idx() == 0 ) {
-
-      async.request_valid = async_request_pop( &async.active_request );
-
+    if (lane_idx() == 0)
+    {
+      async.request_valid = async_request_pop(&async.active_request);
     }
 
     lane_sync();
     
-    if ( async.request_valid ) {
-
+    if (async.request_valid) 
+    {
       Async_Request req = async.active_request;
 
-      switch (req.kind) {
-
+      switch (req.kind)
+      {
         case ASYNC_REQUEST_KIND__NONE: {} break;
 
-        case ASYNC_REQUEST_KIND__RENDER: {
-
+        case ASYNC_REQUEST_KIND__RENDER:
+        {
           //- kti: Result image alloc and progress reset.
-          if ( lane_idx() == 0 ) {
-
+          if (lane_idx() == 0)
+          {
             L1  width         =  req.render_settings.width;
             L1  height        =  req.render_settings.height;
             L1  pixels_total  =  width * height;
 
-            async.active_request.hdr = image_alloc( req.arena, width, height );
+            async.active_request.hdr = image_alloc(req.arena, width, height);
 
-            atomic_swap_L1( &req.render_progress->next_pixel      ,  0 );
-            atomic_swap_L1( &req.render_progress->pixels_completed,  0 );
-            atomic_swap_L1( &req.render_progress->pixels_total    ,  pixels_total );
-
+            atomic_swap_L1(&req.render_progress->next_pixel,       0);
+            atomic_swap_L1(&req.render_progress->pixels_completed, 0);
+            atomic_swap_L1(&req.render_progress->pixels_total,     pixels_total);
           }
 
           lane_sync();
@@ -231,64 +235,58 @@ Internal void async_lane( void * ) {
           L1     pixels_total      =  hdr.width * hdr.height;
           L1     pixels_per_chunk  =  256;
 
-          while ( atomic_load_I1( &req.render_progress->cancel_requested ) == 0 ) {
-
-            L1     first_pixel  =  atomic_add_L1( &req.render_progress->next_pixel, pixels_per_chunk );
-            L1     last_pixel   =  Min( first_pixel + pixels_per_chunk, pixels_total );
+          while (atomic_load_I1(&req.render_progress->cancel_requested) == 0)
+          {
+            L1     first_pixel  =  atomic_add_L1(&req.render_progress->next_pixel, pixels_per_chunk);
+            L1     last_pixel   =  Min(first_pixel + pixels_per_chunk, pixels_total);
             Range  range        =  { first_pixel, last_pixel };
 
             if (first_pixel >= pixels_total) break;
 
             rt_trace_scene(req.scene, hdr, range);
 
-            atomic_add_L1( &req.render_progress->pixels_completed, range.max - range.min );
-
+            atomic_add_L1(&req.render_progress->pixels_completed, range.max - range.min);
           }
 
           lane_sync();
 
-          if ( lane_idx() == 0 ) {
-
-            async_event_push((Async_Event){
-
+          if (lane_idx() == 0)
+          {
+            Async_Event event = {
               .kind        =  ASYNC_EVENT_KIND__RENDER_COMPLETE,
               .request_id  =  req.id,
               .arena       =  req.arena,
               .image       =  hdr,
-
-            });
-
+            };
+            async_event_push(event);
           }
-
         } break;
 
-        case ASYNC_REQUEST_KIND__POSTPROCESS: {
-
-          Temp_Arena          scratch  =  scratch_begin( &req.arena, 1 );
+        case ASYNC_REQUEST_KIND__POSTPROCESS:
+        {
+          Temp_Arena          scratch  =  scratch_begin(&req.arena, 1);
           Image_Bloom_Params  params   =  req.postprocess_settings.bloom;
 
           //- kti: Narrow setup.
 
-          if ( lane_idx() == 0 ) {
-
-            Image_Bloom_Work  work  =  {0};
+          if (lane_idx() == 0)
+          {
+            Image_Bloom_Work work = {0};
 
             //- kti: Calculate num levels
 
             L1  width   =  req.hdr.width;
             L1  height  =  req.hdr.height;
 
-            while ( work.level_count < params.pass_count
-                    &&
-                    width  >= 2
-                    &&
-                    height >=  2 )
+            while (work.level_count < params.pass_count
+                   &&
+                   width  >= 2
+                   &&
+                   height >=  2)
             {
-
               width             /=  2;
               height            /=  2;
               work.level_count  +=  1;
-
             }
 
             // NOTE(kti): add lowest level (final result)
@@ -296,46 +294,41 @@ Internal void async_lane( void * ) {
 
             //- kti: Alloc arrays.
 
-            arena_clear( req.arena );
+            arena_clear(req.arena);
 
-            work.levels     =  push_array( scratch.arena, Image, work.level_count );
-            work.upsampled  =  push_array( scratch.arena, Image, work.level_count-1 );
+            work.levels     =  push_array(scratch.arena, Image, work.level_count);
+            work.upsampled  =  push_array(scratch.arena, Image, work.level_count-1);
 
             //- kti: Alloc images.
 
             width   =  req.hdr.width;
             height  =  req.hdr.height;
 
-            for ( L1 i=0;  i<work.level_count;  i+=1 ) {
-
-              work.levels[i] = image_alloc( scratch.arena, width, height );
+            for (L1 i=0;  i<work.level_count;  i+=1)
+            {
+              work.levels[i] = image_alloc(scratch.arena, width, height);
 
               width   /=  2;
               height  /=  2;
-
             }
 
-            if ( work.level_count > 1 ) {
-
+            if (work.level_count > 1)
+            {
               Image high = work.levels[0];
               Image low  = work.levels[1];
-              // Each later horizontal pass is smaller; both directions share this storage.
-              L1 horizontal_count = Max( (L1)low.width * high.height,
-                                         (L1)high.width * low.height );
+              L1 horizontal_count = Max((L1)low.width  * high.height,
+                                        (L1)high.width * low.height);
 
-              work.horizontal_pixels = push_array_no_zero( scratch.arena, F4, horizontal_count );
-
+              work.horizontal_pixels = push_array_no_zero(scratch.arena, F4, horizontal_count);
             }
 
-            for ( L1 i=0;  i+1<work.level_count;  i+=1 ) {
-
-              Image  high  =  work.levels [i  ];
-              work.upsampled[i] = image_alloc( scratch.arena, high.width, high.height );
-
+            for (L1 i=0;  i+1<work.level_count;  i+=1)
+            {
+              Image  high               =  work.levels[i];
+                     work.upsampled[i]  =  image_alloc(scratch.arena, high.width, high.height);
             }
 
             async.active_request.bloom_work = work;
-
           }
 
           lane_sync();
@@ -344,95 +337,89 @@ Internal void async_lane( void * ) {
 
           //- kti: Fill level 0
 
-          Range range = lane_range( req.hdr.height );
+          Range range = lane_range(req.hdr.height);
 
-          image_bloom_threshold( work.levels[0], req.hdr, params, range );
+          image_bloom_threshold(work.levels[0], req.hdr, params, range);
 
           lane_sync();
 
           //- kti: Downsample
 
-          for ( L1 i=0;  i<work.level_count-1;  i+=1 ) {
-
+          for (L1 i=0;  i<work.level_count-1;  i+=1)
+          {
             Image  in          =  work.levels[i];
             Image  out         =  work.levels[i+1];
-            Image  horizontal  =  {
-              .width = out.width, .height = in.height,
-              .row_stride = out.width, .pixels = work.horizontal_pixels,
+
+            Image horizontal = {
+              .width       =  out.width,
+              .height      =  in.height,
+              .row_stride  =  out.width,
+              .pixels      =  work.horizontal_pixels,
             };
-            Range  x_range     =  lane_range( horizontal.height );
-            Range  y_range     =  lane_range( out.height );
 
-            image_resample_x( horizontal, in, x_range );
+            Range  x_range  =  lane_range(horizontal.height);
+            Range  y_range  =  lane_range(out.height);
 
+            image_resample_x(horizontal, in, x_range);
             lane_sync();
-
-            image_resample_y( out, horizontal, y_range );
-
+            image_resample_y(out, horizontal, y_range);
             lane_sync();
 
             //- kti: Apply karis average to first downsample.
-            if ( i == 0 ) {
-
-              image_apply_karis( out, y_range );
-
+            if (i == 0)
+            {
+              image_apply_karis(out, y_range);
               lane_sync();
-
             }
           }
 
           //- kti: Upsample
 
-          for ( L1 i=work.level_count-1; i>=1; i-=1 ) {
-
+          for (L1 i=work.level_count-1; i>=1; i-=1)
+          {
             Image  in          =  work.levels[i];
             Image  upsampled   =  work.upsampled[i-1];
             Image  out         =  work.levels[i-1];
-            Image  horizontal  =  {
-              .width = out.width, .height = in.height,
-              .row_stride = out.width, .pixels = work.horizontal_pixels,
+
+            Image horizontal = {
+              .width       =  out.width,
+              .height      =  in.height,
+              .row_stride  =  out.width,
+              .pixels      =  work.horizontal_pixels,
             };
-            Range  x_range     =  lane_range( horizontal.height );
-            Range  y_range     =  lane_range( upsampled.height );
 
-            image_resample_x( horizontal, in, x_range );
+            Range  x_range  =  lane_range(horizontal.height);
+            Range  y_range  =  lane_range(upsampled.height);
 
+            image_resample_x(horizontal, in, x_range);
             lane_sync();
-
-            image_resample_y( upsampled, horizontal, y_range );
-
+            image_resample_y(upsampled, horizontal, y_range);
             lane_sync();
-
-            image_add( out, upsampled, y_range );
-
+            image_add(out, upsampled, y_range);
             lane_sync();
-
           }
 
           //- kti: Combine HDR input and reconstructed bloom.
 
-          Range combine_range = lane_range( work.levels[0].height );
-          image_bloom_combine( work.levels[0], req.hdr, work.levels[0], params, combine_range );
+          Range combine_range = lane_range(work.levels[0].height);
 
+          image_bloom_combine(work.levels[0], req.hdr, work.levels[0], params, combine_range);
           lane_sync();
 
           //- kti: Push complete event
 
-          if (lane_idx() == 0) {
-
-            Image_RGBA8 result = image_tonemap( req.arena, work.levels[0], TONEMAP_KIND__LOTTES );
-
-            async_event_push((Async_Event){
-
+          if (lane_idx() == 0)
+          {
+            Image_RGBA8  result  =  image_tonemap(req.arena, work.levels[0], TONEMAP_KIND__LOTTES);
+            Async_Event  event   =  {
               .kind         =  ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
               .image_rgba8  =  result,
+            };
 
-            });
-
+            async_event_push(event);
           }
 
           scratch_end(scratch);
-
         } break;
       }
     }

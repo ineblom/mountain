@@ -39,7 +39,7 @@ Internal Image image_alloc( Arena *arena, I1 width, I1 height ) {
     image.width       =  width;
     image.height      =  height;
     image.row_stride  =  width;
-    image.pixels      =  push_array( arena, F4, pixel_count );
+    image.pixels      =  push_array_no_zero( arena, F4, pixel_count );
 
   }
 
@@ -57,7 +57,7 @@ Internal Image_RGBA8 image_rgba8_alloc( Arena *arena, I1 width, I1 height ) {
     image.width       =  width;
     image.height      =  height;
     image.row_stride  =  width;
-    image.pixels      =  push_array( arena, RGBA8, pixel_count );
+    image.pixels      =  push_array_no_zero( arena, RGBA8, pixel_count );
 
   }
 
@@ -295,6 +295,51 @@ Internal void image_resample_x( Image dst, Image src, Range rows ) {
     L1 src_dim = src.width;
     L1 dst_dim = dst.width;
 
+    if ( dst_dim > 0 && src_dim == 2*dst_dim ) {
+
+      for ( L1 y=rows.min;  y<rows.max;  y+=1 ) {
+
+        F4 *src_row = image_row( src, y );
+        F4 *dst_row = image_row( dst, y );
+
+        for ( L1 x=0;  x<dst_dim;  x+=1 ) {
+
+          L1 base = 2*x;
+          F4 a = src_row[base > 0 ? base-1 : 0];
+          F4 b = src_row[base];
+          F4 c = src_row[base+1];
+          F4 d = src_row[Min(base+2, src_dim-1)];
+
+          dst_row[x] = (0.25f*a + 0.75f*b + 0.75f*c + 0.25f*d) * 0.5f;
+
+        }
+      }
+
+      return;
+    }
+
+    if ( src_dim > 0 && dst_dim == 2*src_dim ) {
+
+      for ( L1 y=rows.min;  y<rows.max;  y+=1 ) {
+
+        F4 *src_row = image_row( src, y );
+        F4 *dst_row = image_row( dst, y );
+
+        for ( L1 x=0;  x<src_dim;  x+=1 ) {
+
+          F4 prev = src_row[x > 0 ? x-1 : 0];
+          F4 curr = src_row[x];
+          F4 next = src_row[Min(x+1, src_dim-1)];
+
+          dst_row[2*x  ] = 0.25f*prev + 0.75f*curr;
+          dst_row[2*x+1] = 0.75f*curr + 0.25f*next;
+
+        }
+      }
+
+      return;
+    }
+
     F1  scale          =  (F1)src_dim / (F1)dst_dim;
     F1  filter_scale   =  Max( 1, scale );
     F1  filter_radius  =  1.0f;
@@ -347,6 +392,51 @@ Internal void image_resample_y(Image dst, Image src, Range rows) {
 
     L1 src_dim = src.height;
     L1 dst_dim = dst.height;
+
+    if ( dst_dim > 0 && src_dim == 2*dst_dim ) {
+
+      for ( L1 y=rows.min;  y<rows.max;  y+=1 ) {
+
+        L1 base = 2*y;
+        F4 *a = image_row( src, base > 0 ? base-1 : 0 );
+        F4 *b = image_row( src, base );
+        F4 *c = image_row( src, base+1 );
+        F4 *d = image_row( src, Min(base+2, src_dim-1) );
+        F4 *dst_row = image_row( dst, y );
+
+        for ( L1 x=0;  x<dst.width;  x+=1 ) {
+          dst_row[x] = (0.25f*a[x] + 0.75f*b[x] + 0.75f*c[x] + 0.25f*d[x]) * 0.5f;
+        }
+      }
+
+      return;
+    }
+
+    if ( src_dim > 0 && dst_dim == 2*src_dim ) {
+
+      for ( L1 y=rows.min;  y<rows.max;  y+=1 ) {
+
+        L1 base = y/2;
+        F4 *dst_row = image_row( dst, y );
+
+        if ( y & 1 ) {
+          F4 *a = image_row( src, base );
+          F4 *b = image_row( src, Min(base+1, src_dim-1) );
+          for ( L1 x=0;  x<dst.width;  x+=1 ) {
+            dst_row[x] = 0.75f*a[x] + 0.25f*b[x];
+          }
+        } else {
+          F4 *a = image_row( src, base > 0 ? base-1 : 0 );
+          F4 *b = image_row( src, base );
+          for ( L1 x=0;  x<dst.width;  x+=1 ) {
+            dst_row[x] = 0.25f*a[x] + 0.75f*b[x];
+          }
+        }
+
+      }
+
+      return;
+    }
 
     F1  scale          =  (F1)src_dim / (F1)dst_dim;
     F1  filter_scale   =  Max(1, scale);

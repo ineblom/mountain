@@ -196,8 +196,7 @@ typedef struct Image_Bloom_Work Image_Bloom_Work;
 struct Image_Bloom_Work {
   L1 level_count;
   Image *levels;
-  Image *downsample_horizontal;
-  Image *upsample_horizontal;
+  F4 *horizontal_pixels;
   Image *upsampled;
 };
 

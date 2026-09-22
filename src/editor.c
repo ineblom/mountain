@@ -172,7 +172,7 @@ Internal void async_lane( void * ) {
 
       os_mutex_take( async.mutex );
 
-      while (  !async.loop_again  &&  !async.exit  ) {
+      while ( !async.loop_again && !async.exit ) {
 
         os_cond_var_wait( async.cond_var, async.mutex, L1_MAX );
 
@@ -298,10 +298,8 @@ Internal void async_lane( void * ) {
 
             arena_clear( req.arena );
 
-            work.levels                 =  push_array( scratch.arena, Image, work.level_count );
-            work.downsample_horizontal  =  push_array( scratch.arena, Image, work.level_count );
-            work.upsample_horizontal    =  push_array( scratch.arena, Image, work.level_count-1 );
-            work.upsampled              =  push_array( scratch.arena, Image, work.level_count-1 );
+            work.levels     =  push_array( scratch.arena, Image, work.level_count );
+            work.upsampled  =  push_array( scratch.arena, Image, work.level_count-1 );
 
             //- kti: Alloc images.
 
@@ -317,14 +315,22 @@ Internal void async_lane( void * ) {
 
             }
 
+            if ( work.level_count > 1 ) {
+
+              Image high = work.levels[0];
+              Image low  = work.levels[1];
+              // Each later horizontal pass is smaller; both directions share this storage.
+              L1 horizontal_count = Max( (L1)low.width * high.height,
+                                         (L1)high.width * low.height );
+
+              work.horizontal_pixels = push_array_no_zero( scratch.arena, F4, horizontal_count );
+
+            }
+
             for ( L1 i=0;  i+1<work.level_count;  i+=1 ) {
 
               Image  high  =  work.levels [i  ];
-              Image  low   =  work.levels [i+1];
-
-              work.downsample_horizontal[i]  =  image_alloc( scratch.arena, low .width, high.height );
-              work.upsample_horizontal  [i]  =  image_alloc( scratch.arena, high.width, low .height );
-              work.upsampled            [i]  =  image_alloc( scratch.arena, high.width, high.height );
+              work.upsampled[i] = image_alloc( scratch.arena, high.width, high.height );
 
             }
 
@@ -348,9 +354,12 @@ Internal void async_lane( void * ) {
 
           for ( L1 i=0;  i<work.level_count-1;  i+=1 ) {
 
-            Image  in          =  work.levels                [i];
-            Image  horizontal  =  work.downsample_horizontal [i];
-            Image  out         =  work.levels                [i+1];
+            Image  in          =  work.levels[i];
+            Image  out         =  work.levels[i+1];
+            Image  horizontal  =  {
+              .width = out.width, .height = in.height,
+              .row_stride = out.width, .pixels = work.horizontal_pixels,
+            };
             Range  x_range     =  lane_range( horizontal.height );
             Range  y_range     =  lane_range( out.height );
 
@@ -376,10 +385,13 @@ Internal void async_lane( void * ) {
 
           for ( L1 i=work.level_count-1; i>=1; i-=1 ) {
 
-            Image  in          =  work.levels              [i];
-            Image  horizontal  =  work.upsample_horizontal [i-1];
-            Image  upsampled   =  work.upsampled           [i-1];
-            Image  out         =  work.levels              [i-1];
+            Image  in          =  work.levels[i];
+            Image  upsampled   =  work.upsampled[i-1];
+            Image  out         =  work.levels[i-1];
+            Image  horizontal  =  {
+              .width = out.width, .height = in.height,
+              .row_stride = out.width, .pixels = work.horizontal_pixels,
+            };
             Range  x_range     =  lane_range( horizontal.height );
             Range  y_range     =  lane_range( upsampled.height );
 

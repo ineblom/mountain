@@ -1269,10 +1269,8 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw) {
   VkSurfaceCapabilitiesKHR surface_capabilities = {0};
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gfx_state->physical_device, vkw->surface, &surface_capabilities);
 
-  I1 desired_image_count = 2;
-  if (desired_image_count < surface_capabilities.minImageCount) {
-    desired_image_count = surface_capabilities.minImageCount;
-  } else if (surface_capabilities.maxImageCount != 0 && desired_image_count > surface_capabilities.maxImageCount) {
+  I1 desired_image_count = Max(3, surface_capabilities.minImageCount + 1);
+  if (surface_capabilities.maxImageCount != 0 && desired_image_count > surface_capabilities.maxImageCount) {
     desired_image_count = surface_capabilities.maxImageCount;
   }
 

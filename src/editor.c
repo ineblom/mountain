@@ -2290,8 +2290,7 @@ Internal void lane(void *user_data) {
     ProfEnd();
     ProfFlush();
 
-    //- kti: Calculate time spent and sleep until target frame time is met.
-    L1 target_frame_time = 1000000000ULL / 60;
+    //- kti: Calculate time spent. Frame pacing comes from FIFO present.
     L1 frame_end_time = os_clock();
     L1 frame_time = frame_end_time - frame_begin_time;
 
@@ -2317,10 +2316,6 @@ Internal void lane(void *user_data) {
 
     if (state->frames_requested > 0) {
       state->frames_requested -= 1;
-    }
-
-    if (state->frames_requested > 0 && frame_time < target_frame_time) {
-      os_sleep_until(frame_begin_time + target_frame_time);
     }
   }
 

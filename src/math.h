@@ -18,6 +18,18 @@ struct V3 {
   F1 x, y, z;
 };
 
+typedef struct F4x3 F4x3;
+struct F4x3 {
+  F4 x, y, z;
+};
+
+typedef union F4x4 F4x4;
+union F4x4 {
+  F4 r[4];
+  F1 m[4][4];
+  F1 v[16];
+};
+
 typedef enum Side {
   SIDE__INVALID = -1,
   SIDE__MIN,

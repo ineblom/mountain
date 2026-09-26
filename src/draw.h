@@ -63,7 +63,7 @@ struct DR_Bucket {
   DR_Bucket *next;
   GFX_Pass_List passes;
   DR_Clip_Node *top_clip;
-  M4F mesh_view_projection;
+  F4x4 mesh_view_projection;
   F4 mesh_viewport_rect;
   L1 stack_gen;
   L1 last_cmd_stack_gen;

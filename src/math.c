@@ -168,10 +168,10 @@ Inline F4 reflect_F4(F4 v, F4 normal) {
 }
 
 ////////////////////////////////
-//~ M4F
+//~ F4x4
 
-Inline M4F identity_M4F(void) {
-  M4F result = {0};
+Inline F4x4 identity_F4x4(void) {
+  F4x4 result = {0};
   result.m[0][0] = 1.0f;
   result.m[1][1] = 1.0f;
   result.m[2][2] = 1.0f;
@@ -179,8 +179,8 @@ Inline M4F identity_M4F(void) {
   return result;
 }
 
-Inline M4F mul_M4F(M4F a, M4F b) {
-  M4F result = {0};
+Inline F4x4 mul_F4x4(F4x4 a, F4x4 b) {
+  F4x4 result = {0};
   for (I1 row = 0; row < 4; row += 1) {
     for (I1 col = 0; col < 4; col += 1) {
       F1 sum = 0.0f;
@@ -193,26 +193,26 @@ Inline M4F mul_M4F(M4F a, M4F b) {
   return result;
 }
 
-Inline M4F translate_M4F(F4 p) {
-  M4F result = identity_M4F();
+Inline F4x4 translate_F4x4(F4 p) {
+  F4x4 result = identity_F4x4();
   result.m[3][0] = p[0];
   result.m[3][1] = p[1];
   result.m[3][2] = p[2];
   return result;
 }
 
-Inline M4F scale_M4F(F4 s) {
-  M4F result = identity_M4F();
+Inline F4x4 scale_F4x4(F4 s) {
+  F4x4 result = identity_F4x4();
   result.m[0][0] = s[0];
   result.m[1][1] = s[1];
   result.m[2][2] = s[2];
   return result;
 }
 
-Inline M4F rotate_x_M4F(F1 angle_rad) {
+Inline F4x4 rotate_x_F4x4(F1 angle_rad) {
   F1 c = cos_F1(angle_rad);
   F1 s = sin_F1(angle_rad);
-  M4F result = identity_M4F();
+  F4x4 result = identity_F4x4();
   result.m[1][1] = c;
   result.m[1][2] = s;
   result.m[2][1] = -s;
@@ -220,10 +220,10 @@ Inline M4F rotate_x_M4F(F1 angle_rad) {
   return result;
 }
 
-Inline M4F rotate_y_M4F(F1 angle_rad) {
+Inline F4x4 rotate_y_F4x4(F1 angle_rad) {
   F1 c = cos_F1(angle_rad);
   F1 s = sin_F1(angle_rad);
-  M4F result = identity_M4F();
+  F4x4 result = identity_F4x4();
   result.m[0][0] = c;
   result.m[0][2] = -s;
   result.m[2][0] = s;
@@ -231,10 +231,10 @@ Inline M4F rotate_y_M4F(F1 angle_rad) {
   return result;
 }
 
-Inline M4F rotate_z_M4F(F1 angle_rad) {
+Inline F4x4 rotate_z_F4x4(F1 angle_rad) {
   F1 c = cos_F1(angle_rad);
   F1 s = sin_F1(angle_rad);
-  M4F result = identity_M4F();
+  F4x4 result = identity_F4x4();
   result.m[0][0] = c;
   result.m[0][1] = s;
   result.m[1][0] = -s;
@@ -242,14 +242,14 @@ Inline M4F rotate_z_M4F(F1 angle_rad) {
   return result;
 }
 
-Inline M4F perspective_fov_M4F(F1 fov_angle_y, F1 aspect_ratio, F1 near_distance, F1 far_distance) {
+Inline F4x4 perspective_fov_F4x4(F1 fov_angle_y, F1 aspect_ratio, F1 near_distance, F1 far_distance) {
   F1 sin_fov = sin_F1(fov_angle_y * 0.5f);
   F1 cos_fov = cos_F1(fov_angle_y * 0.5f);
   F1 scaled_view_height = cos_fov / sin_fov;
   F1 scaled_view_width = scaled_view_height / aspect_ratio;
   F1 scaled_far_distance = far_distance / (far_distance - near_distance);
 
-  M4F result = {0};
+  F4x4 result = {0};
   result.m[0][0] = scaled_view_width;
   result.m[1][1] = scaled_view_height;
   result.m[2][2] = scaled_far_distance;
@@ -258,7 +258,7 @@ Inline M4F perspective_fov_M4F(F1 fov_angle_y, F1 aspect_ratio, F1 near_distance
   return result;
 }
 
-Inline F4 mul_M4F_F4(M4F m, F4 v) {
+Inline F4 mul_F4x4_F4(F4x4 m, F4 v) {
   F4 result = {0};
   for (I1 col = 0; col < 4; col += 1) {
     result[col] =

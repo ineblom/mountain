@@ -225,14 +225,14 @@ enum {
 
 typedef struct GFX_Mesh_Instance GFX_Mesh_Instance;
 struct GFX_Mesh_Instance {
-  M4F transform;
+  F4x4 transform;
   F4 color;
   GFX_Mesh_Feature_Flags feature_flags;
 };
 
 typedef struct GFX_Mesh_Push_Constants GFX_Mesh_Push_Constants;
 struct GFX_Mesh_Push_Constants {
-  M4F view_projection;
+  F4x4 view_projection;
   F2 viewport_size;
   F2 outline_offset;
 };
@@ -276,7 +276,7 @@ struct GFX_Rect_Pass {
 
 typedef struct GFX_Mesh_Pass GFX_Mesh_Pass;
 struct GFX_Mesh_Pass {
-  M4F view_projection;
+  F4x4 view_projection;
   F4 viewport_rect;
   GFX_Mesh_Batch *first_batch;
   GFX_Mesh_Batch *last_batch;

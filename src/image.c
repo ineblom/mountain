@@ -496,66 +496,63 @@ Internal void image_resample_y(Image dst, Image src, Range rows) {
   }
 }
 
-Internal void image_apply_karis( Image image, Range rows ) {
-
-  for ( L1 y=rows.min;  y<rows.max;  y+=1 ) {
-
+Internal void image_apply_karis(Image image, Range rows)
+{
+  for (L1 y = rows.min; y < rows.max; y+=1)
+  {
     F4 *row = image_row(image, y);
 
-    for ( L1 x=0;  x<image.width;  x+=1 ) {
+    for (L1 x=0; x<image.width; x+=1)
+    {
+      F4 color = row[x];
 
-      F4 color   =  row[x];
-         row[x]  =  color / ( 1.0f + luminance_F4( color ) );
-
+      row[x] = color / (1.0f + luminance_F4(color));
     }
   }
 }
 
-Internal void image_add( Image dst, Image src, Range rows ) {
-
-  if (    src.width  == dst.width
-       && src.height == dst.height ) {
-
-    for (L1 y = rows.min; y < rows.max; y += 1) {
-
+Internal void image_add(Image dst, Image src, Range rows)
+{
+  if (src.width == dst.width
+      &&
+      src.height == dst.height)
+  {
+    for (L1 y = rows.min; y < rows.max; y += 1)
+    {
       F4 *src_row = image_row(src, y);
       F4 *dst_row = image_row(dst, y);
 
-      for (L1 x = 0; x < src.width; x += 1) {
+      for (L1 x = 0; x < src.width; x += 1)
+      {
         dst_row[x] += src_row[x];
       }
-
     }
-
   }
-
 }
 
-Internal void image_bloom_combine( Image dst, Image hdr, Image bloom,
-                                   Image_Bloom_Params params, Range rows ) {
-
+Internal void image_bloom_combine(Image dst, Image hdr, Image bloom,
+                                  Image_Bloom_Params params, Range rows)
+{
   if (    dst.width   == hdr.width
        && dst.height  == hdr.height
        && bloom.width == hdr.width
-       && bloom.height == hdr.height ) {
+       && bloom.height == hdr.height)
+  {
+    for (L1 y=rows.min;  y<rows.max;  y+=1)
+    {
+      F4  *dst_row    =  image_row(dst,   y);
+      F4  *hdr_row    =  image_row(hdr,   y);
+      F4  *bloom_row  =  image_row(bloom, y);
+      F1  v           =  dst.height > 1 ? (F1)y / (F1)(dst.height - 1) : 0.0f;
 
-    for ( L1 y=rows.min;  y<rows.max;  y+=1 ) {
-
-      F4  *dst_row    =  image_row( dst, y );
-      F4  *hdr_row    =  image_row( hdr, y );
-      F4  *bloom_row  =  image_row( bloom, y );
-      F1  v           =  dst.height > 1 ? (F1)y / (F1)( dst.height - 1 ) : 0.0f;
-
-      for ( L1 x=0;  x<dst.width;  x+=1 ) {
-
-        F1  u              =  dst.width > 1 ? (F1)x / (F1)( dst.width - 1 ) : 0.0f;
-        F4  bloom_overlay  =  image_sample_bilinear_F4( params.overlay, u, v );
+      for (L1 x=0;  x<dst.width;  x+=1)
+      {
+        F1  u              =  dst.width > 1 ? (F1)x / (F1)(dst.width - 1) : 0.0f;
+        F4  bloom_overlay  =  image_sample_bilinear_F4(params.overlay, u, v);
         F4  bloom_px       =  bloom_row[x];
 
-        bloom_px  *=  1.0f + luminance_F4( bloom_overlay ) * params.overlay_strength;
-        dst_row[x] =   hdr_row[x] * ( 1.0f - 0.5f*params.strength )
-                     + bloom_px   * params.strength;
-
+        bloom_px  *=  1.0f + luminance_F4(bloom_overlay) * params.overlay_strength;
+        dst_row[x] =   hdr_row[x] * (1.0f - 0.5f*params.strength) + bloom_px * params.strength;
       }
     }
   }

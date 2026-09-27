@@ -7,30 +7,35 @@
 #include <math.h>
 
 typedef struct Random_State Random_State;
-struct Random_State {
+struct Random_State
+{
   L1 state;
   L1 inc;
 };
 
 // NOTE(kti): Used for compact storage.
 typedef struct V3 V3;
-struct V3 {
+struct V3
+{
   F1 x, y, z;
 };
 
 typedef struct F4x3 F4x3;
-struct F4x3 {
+struct F4x3
+{
   F4 x, y, z;
 };
 
 typedef union F4x4 F4x4;
-union F4x4 {
+union F4x4
+{
   F4 r[4];
   F1 m[4][4];
   F1 v[16];
 };
 
-typedef enum Side {
+typedef enum Side
+{
   SIDE__INVALID = -1,
   SIDE__MIN,
   SIDE__MAX,
@@ -39,19 +44,21 @@ typedef enum Side {
 #define side_flip(s) ((Side)(!(s)))
 
 typedef I1 Axis;
-enum {
+enum
+{
   AXIS__INVALID = -1,
   AXIS__X,
   AXIS__Y,
   AXIS__Z,
 
-  AXIS2_COUNT = 2,
-  AXIS3_COUNT = 3,
+  AXIS2_COUNT  =  2,
+  AXIS3_COUNT  =  3,
 };
 #define axis2_flip(a) ((Axis)(!(a)))
 
 typedef I1 Dir;
-enum {
+enum
+{
   DIR__RIGHT = 0,
   DIR__UP,
   DIR__LEFT,
@@ -60,7 +67,8 @@ enum {
   DIR_COUNT,
 };
 
-typedef enum Shape_Kind {
+typedef enum Shape_Kind
+{
   SHAPE_KIND__SPHERE,
   SHAPE_KIND__BOX,
   SHAPE_KIND__PLANE,
@@ -69,41 +77,47 @@ typedef enum Shape_Kind {
 } Shape_Kind;
 
 typedef struct Sphere Sphere;
-struct Sphere {
+struct Sphere
+{
   V3 pos;
   F1 radius;
 };
 
 typedef struct Box Box;
-struct Box {
+struct Box
+{
   V3 min;
   V3 max;
 };
 
 typedef struct Plane Plane;
-struct Plane {
+struct Plane
+{
   V3 normal;
   F1 d;
 };
 
 typedef struct Shape Shape;
-struct Shape {
+struct Shape
+{
   Shape_Kind kind;
-  union {
+  union
+  {
     Sphere sphere;
-    Box box;
-    Plane plane;
+    Box    box;
+    Plane  plane;
   };
 };
 
 typedef struct Ray Ray;
-struct Ray {
+struct Ray
+{
   F4 pos;
   F4 dir;
   F4 inv_dir;
 };
 
-#define Square(x) ((x)*(x))
+#define Square(x) ((x) * (x))
 
 #define sqrt_F1(x) sqrtf(x)
 #define abs_F1(x) fabsf(x)

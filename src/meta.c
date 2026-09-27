@@ -1,82 +1,109 @@
-Internal Line *parse_line(Arena *arena, String8 str) {
+Internal Line *parse_line(Arena *arena, String8 str)
+{
   Line *line = push_array(arena, Line, 1);
+
   line->str = str;
 
-  I1 in_backtick = 0;
-  L1 param_begin_idx = L1_MAX;
+  I1  in_backtick      =  0;
+  L1  param_begin_idx  =  L1_MAX;
 
-  for (L1 i = 0; i < str.len; i += 1) {
+  for (L1 i = 0; i < str.len; i += 1)
+  {
     char c = str.str[i];
 
-    if (c == ' ' || c == '\t') {
+    if (c == ' ' || c == '\t')
+    {
       continue;
     }
 
-    if (c == '`') {
+    if (c == '`')
+    {
       in_backtick = !in_backtick;
-    } else if (in_backtick) {
+    }
+    else if (in_backtick)
+    {
       continue;
     }
-  
-    if ((c == ',' || c == '\n') && param_begin_idx != L1_MAX) {
-      if (line->param_count < MAX_PARAM_COUNT) {
+
+    if ((c == ',' || c == '\n') && param_begin_idx != L1_MAX)
+    {
+      if (line->param_count < MAX_PARAM_COUNT)
+      {
         String8 param = {
-          .str = str.str + param_begin_idx,
-          .len = i - param_begin_idx,
+          .str  =  str.str + param_begin_idx,
+          .len  =  i - param_begin_idx,
         };
-        if (param.str[0] == '`') {
+        if (param.str[0] == '`')
+        {
           param.str += 1;
           param.len -= 1;
         }
-        if (param.len > 0 && param.str[param.len-1] == '`') {
+
+        if (param.len > 0 && param.str[param.len - 1] == '`')
+        {
           param.len -= 1;
         }
+
         line->params[line->param_count] = param;
         line->param_count += 1;
-      } else {
+      }
+      else
+      {
         printf("meta.c: MAX PARAM COUNT FOR LINE REACHED.\n");
       }
+
       param_begin_idx = L1_MAX;
-    } else if (param_begin_idx == L1_MAX) {
+    }
+    else if (param_begin_idx == L1_MAX)
+    {
       param_begin_idx = i;
     }
   }
 
-  if (in_backtick) {
+  if (in_backtick)
+  {
     printf("meta.c: Backtick not closed.\n");
+
     line->param_count = 0;
   }
 
   return line;
 }
 
-Global L1 final_header_length = 0;
-Global L1 final_impl_length = 0;
-Global String8 final_header = {0};
-Global String8 final_impl = {0};
+Global L1       final_header_length  =  0;
+Global L1       final_impl_length    =  0;
+Global String8  final_header         =  {0};
+Global String8  final_impl           =  {0};
 
-Internal void lane(void *user_data) {
+Internal void lane(void *user_data)
+{
   Arena *arena = lane_arena();
 
   ////////////////////////////////
   //~ kti: Parse
 
-  String8 content = os_read_entire_file(arena, str8("./src/ui.meta"));
-  Line_List lines = {0};
-  Range range = lane_range(content.len);
-  L1 line_start = 0;
-  for (L1 i = range.min; i < range.max; i += 1) {
-    if (content.str[i] == '\n') {
+  String8    content     =  os_read_entire_file(arena, str8("./src/ui.meta"));
+  Line_List  lines       =  {0};
+  Range      range       =  lane_range(content.len);
+  L1         line_start  =  0;
+
+  for (L1 i = range.min; i < range.max; i += 1)
+  {
+    if (content.str[i] == '\n')
+    {
       line_start = i;
-      while (line_start > 0 && content.str[line_start-1] != '\n') {
+
+      while (line_start > 0 && content.str[line_start - 1] != '\n')
+      {
         line_start -= 1;
       }
 
       String8 str = {
-        .str = content.str + line_start,
-        .len = i - line_start + 1,
+        .str  =  content.str + line_start,
+        .len  =  i - line_start + 1,
       };
       Line *line = parse_line(arena, str);
+
       DLLPushBack(lines.first, lines.last, line);
       lines.count += 1;
       line_start = i + 1;
@@ -94,13 +121,15 @@ Internal void lane(void *user_data) {
         
         for (L1 param_idx = 0; param_idx < line->param_count; param_idx += 1) {
           String8 param = line->params[param_idx];
+
           printf("  PARAM: %.*s\n", (I1)param.len, param.str);
         }
       }
-
     }
+
     lane_sync();
   }
+
 #endif
 
   ////////////////////////////////
@@ -108,36 +137,42 @@ Internal void lane(void *user_data) {
 
   Temp_Arena scratch = scratch_begin(0, 0);
 
-  String8_List header_strings = {0};
-  String8_List impl_strings = {0};
-  String8_List stacks_strings = {0};
-  String8_List reset_stacks_strings = {0};
-  String8_List init_nil_stacks_strings = {0};
-  String8_List auto_pop_stacks_strings = {0};
+  String8_List  header_strings           =  {0};
+  String8_List  impl_strings             =  {0};
+  String8_List  stacks_strings           =  {0};
+  String8_List  reset_stacks_strings     =  {0};
+  String8_List  init_nil_stacks_strings  =  {0};
+  String8_List  auto_pop_stacks_strings  =  {0};
 
-  String8 stacks_macro_def = str8("#define UIStacks struct {\\\n");
-  String8 reset_stacks_macro_def = str8("#define UIResetStacks() {\\\n");
-  String8 init_nil_stacks_macro_def = str8("#define UIInitStackNils() {\\\n");
-  String8 auto_pop_stacks_macro_def = str8("#define UIAutoPopStacks() {\\\n");
-  String8 macro_end = str8("}\n");
-  if (lane_idx() == 0) {
+  String8  stacks_macro_def           =  str8("#define UIStacks struct {\\\n");
+  String8  reset_stacks_macro_def     =  str8("#define UIResetStacks() {\\\n");
+  String8  init_nil_stacks_macro_def  =  str8("#define UIInitStackNils() {\\\n");
+  String8  auto_pop_stacks_macro_def  =  str8("#define UIAutoPopStacks() {\\\n");
+  String8  macro_end                  =  str8("}\n");
+
+  if (lane_idx() == 0)
+  {
     str8_list_push(scratch.arena, &stacks_strings, stacks_macro_def);
     str8_list_push(scratch.arena, &reset_stacks_strings, reset_stacks_macro_def);
     str8_list_push(scratch.arena, &init_nil_stacks_strings, init_nil_stacks_macro_def);
     str8_list_push(scratch.arena, &auto_pop_stacks_strings, auto_pop_stacks_macro_def);
   }
 
-  for (Line *line = lines.first; line != 0; line = line->next) {
-    if (line->param_count == 4 || line->param_count == 5) {
-      String8 node_type = str8f(scratch.arena, "UI_%.*s_Node", (I1)line->params[0].len, line->params[0].str);
-      String8 stack_type = str8f(scratch.arena, "UI_%.*s_Stack", (I1)line->params[0].len, line->params[0].str);
-      String8 name = push_str8_copy(scratch.arena, line->params[1]);
-      String8 type = push_str8_copy(scratch.arena, line->params[2]);
-      String8 default_value = push_str8_copy(scratch.arena, line->params[3]);
-      String8 pascal_case_name = push_str8_copy(scratch.arena, line->params[0]);
-      I1 has_manual_implementation = (line->param_count == 5 && str8_match(line->params[4], str8("Manual")));
+  for (Line *line = lines.first; line != 0; line = line->next)
+  {
+    if (line->param_count == 4 || line->param_count == 5)
+    {
+      String8  node_type                  =  str8f(scratch.arena, "UI_%.*s_Node", (I1)line->params[0].len, line->params[0].str);
+      String8  stack_type                 =  str8f(scratch.arena, "UI_%.*s_Stack", (I1)line->params[0].len, line->params[0].str);
+      String8  name                       =  push_str8_copy(scratch.arena, line->params[1]);
+      String8  type                       =  push_str8_copy(scratch.arena, line->params[2]);
+      String8  default_value              =  push_str8_copy(scratch.arena, line->params[3]);
+      String8  pascal_case_name           =  push_str8_copy(scratch.arena, line->params[0]);
+      I1       has_manual_implementation  =  (line->param_count == 5 && str8_match(line->params[4], str8("Manual")));
 
-      str8_list_pushf(scratch.arena, &header_strings, R"(
+      str8_list_pushf(scratch.arena,
+                      &header_strings,
+                      R"(
 typedef struct %1$s %1$s;
 struct %1$s { %1$s *next; %4$s value; };
 typedef struct %2$s %2$s;
@@ -146,161 +181,215 @@ Internal void ui_push_%3$s(%4$s value);
 Internal %4$s ui_pop_%3$s(void);
 Internal void ui_set_next_%3$s(%4$s value);
 Internal %4$s ui_top_%3$s(void);
-)", node_type.str, stack_type.str, name.str, type.str);
+)",
+                      node_type.str,
+                      stack_type.str,
+                      name.str,
+                      type.str);
 
-      if (!has_manual_implementation) {
-        str8_list_pushf(scratch.arena, &impl_strings, R"(
+      if (!has_manual_implementation)
+      {
+        str8_list_pushf(scratch.arena,
+                        &impl_strings,
+                        R"(
 Internal void ui_push_%3$s(%4$s value) {
-  %2$s *stack = &ui_state->%3$s_stack;
-  %1$s *node = stack->free;
+  %2$s *stack  =  &ui_state->%3$s_stack;
+  %1$s *node   =  stack->free;
+
   if (node == 0) { node = push_array(ui_build_arena(), %1$s, 1); }
   else { SLLStackPop(stack->free); }
   node->value = value;
+
   SLLStackPush(stack->top, node);
+
   stack->auto_pop = 0;
 }
+
 Internal %4$s ui_pop_%3$s(void) {
-  %2$s *stack = &ui_state->%3$s_stack;
-  %1$s *popped_node = stack->top;
+  %2$s *stack        =  &ui_state->%3$s_stack;
+  %1$s *popped_node  =  stack->top;
+
   if (popped_node != &ui_state->nil_%3$s) {
     SLLStackPop(stack->top);
     SLLStackPush(stack->free, popped_node);
+
     stack->auto_pop = 0;
   }
+
   return popped_node->value;
 }
+
 Internal void ui_set_next_%3$s(%4$s value) {
   ui_push_%3$s(value);
   ui_state->%3$s_stack.auto_pop = 1;
 }
+
 Internal %4$s ui_top_%3$s(void) {
   return ui_state->%3$s_stack.top->value;
 }
+
 #define UI_%5$s(v) DeferLoop(ui_push_%3$s((v)), ui_pop_%3$s())
-)", node_type.str, stack_type.str, name.str, type.str, pascal_case_name.str);
+)",
+                        node_type.str,
+                        stack_type.str,
+                        name.str,
+                        type.str,
+                        pascal_case_name.str);
       }
 
-      str8_list_pushf(scratch.arena, &stacks_strings,
-          " %2$s %3$s_stack;\\\n"
-          " %1$s nil_%3$s; \\\n",
-          node_type.str, stack_type.str, name.str, type.str);
+      str8_list_pushf(scratch.arena,
+                      &stacks_strings,
+                      " %2$s %3$s_stack;\\\n"
+                      " %1$s nil_%3$s; \\\n",
+                      node_type.str,
+                      stack_type.str,
+                      name.str,
+                      type.str);
 
-      str8_list_pushf(scratch.arena, &reset_stacks_strings,
-          " ui_state->%1$s_stack.top = &ui_state->nil_%1$s; ui_state->%1$s_stack.free = 0; ui_state->%1$s_stack.auto_pop = 0;\\\n",
-          name.str);
+      str8_list_pushf(scratch.arena,
+                      &reset_stacks_strings,
+                      " ui_state->%1$s_stack.top      =  &ui_state->nil_%1$s; ui_state->%1$s_stack.free = 0; "
+                      "ui_state->%1$s_stack.auto_pop  =  0;\\\n",
+                      name.str);
 
-      str8_list_pushf(scratch.arena, &init_nil_stacks_strings,
-          " ui_state->nil_%1$s.value = %2$s;\\\n",
-          name.str, default_value.str);
+      str8_list_pushf(
+        scratch.arena, &init_nil_stacks_strings, " ui_state->nil_%1$s.value = %2$s;\\\n", name.str, default_value.str);
 
-      str8_list_pushf(scratch.arena, &auto_pop_stacks_strings,
-          " if (ui_state->%1$s_stack.auto_pop) { ui_pop_%1$s(); ui_state->%1$s_stack.auto_pop = 0; }\\\n",
-          name.str);
+      str8_list_pushf(scratch.arena,
+                      &auto_pop_stacks_strings,
+                      " if (ui_state->%1$s_stack.auto_pop) { ui_pop_%1$s(); ui_state->%1$s_stack.auto_pop = 0; }\\\n",
+                      name.str);
     }
   }
 
-  if (lane_idx() == lane_count()-1) {
+  if (lane_idx() == lane_count() - 1)
+  {
     str8_list_push(scratch.arena, &stacks_strings, macro_end);
     str8_list_push(scratch.arena, &reset_stacks_strings, macro_end);
     str8_list_push(scratch.arena, &init_nil_stacks_strings, macro_end);
     str8_list_push(scratch.arena, &auto_pop_stacks_strings, macro_end);
   }
 
-  String8 header_result = str8_list_join(arena, &header_strings);
-  String8 impl_result = str8_list_join(arena, &impl_strings);
-  String8 stacks_result = str8_list_join(arena, &stacks_strings);
-  String8 reset_stacks_result = str8_list_join(arena, &reset_stacks_strings);
-  String8 init_nil_stacks_result = str8_list_join(arena, &init_nil_stacks_strings);
-  String8 auto_pop_stacks_result = str8_list_join(arena, &auto_pop_stacks_strings);
+  String8  header_result           =  str8_list_join(arena, &header_strings);
+  String8  impl_result             =  str8_list_join(arena, &impl_strings);
+  String8  stacks_result           =  str8_list_join(arena, &stacks_strings);
+  String8  reset_stacks_result     =  str8_list_join(arena, &reset_stacks_strings);
+  String8  init_nil_stacks_result  =  str8_list_join(arena, &init_nil_stacks_strings);
+  String8  auto_pop_stacks_result  =  str8_list_join(arena, &auto_pop_stacks_strings);
 
-  atomic_add_L1(&final_header_length, header_result.len+stacks_result.len+reset_stacks_result.len+init_nil_stacks_result.len+auto_pop_stacks_result.len);
+  atomic_add_L1(&final_header_length,
+                header_result.len + stacks_result.len + reset_stacks_result.len + init_nil_stacks_result.len +
+                  auto_pop_stacks_result.len);
   atomic_add_L1(&final_impl_length, impl_result.len);
 
   scratch_end(scratch);
 
   //- kti: Allocate result header and impl strings.
   lane_sync();
-  if (lane_idx() == 0) {
+
+  if (lane_idx() == 0)
+  {
     String8 notice = str8("// IMPORTANT: DO NOT EDIT! This file was generated by meta.c\n");
 
     String8 header_top = str8("#pragma once\n");
+
     final_header.str = push_array(arena, B1, final_header_length + notice.len + header_top.len);
-    memmove(final_header.str+final_header.len, notice.str, notice.len);
+
+    memmove(final_header.str + final_header.len, notice.str, notice.len);
     final_header.len += notice.len;
 
-    memmove(final_header.str+final_header.len, header_top.str, header_top.len);
+    memmove(final_header.str + final_header.len, header_top.str, header_top.len);
     final_header.len += header_top.len;
-    
+
     final_impl.str = push_array(arena, B1, final_impl_length + notice.len);
-    memmove(final_impl.str+final_impl.len, notice.str, notice.len);
+
+    memmove(final_impl.str + final_impl.len, notice.str, notice.len);
     final_impl.len += notice.len;
   }
+
   lane_sync();
 
   //- kti: Write types and functions.
-  for (L1 i = 0; i < lane_count(); i += 1) {
-    if (i == lane_idx()) {
-      memmove(final_header.str+final_header.len, header_result.str, header_result.len);
-      memmove(final_impl.str+final_impl.len, impl_result.str, impl_result.len);
+  for (L1 i = 0; i < lane_count(); i += 1)
+  {
+    if (i == lane_idx())
+    {
+      memmove(final_header.str + final_header.len, header_result.str, header_result.len);
+      memmove(final_impl.str + final_impl.len, impl_result.str, impl_result.len);
       final_header.len += header_result.len;
       final_impl.len += impl_result.len;
     }
+
     lane_sync();
   }
 
   //- kti: Write UIStacks macro.
-  for (L1 i = 0; i < lane_count(); i += 1) {
-    if (i == lane_idx()) {
-      memmove(final_header.str+final_header.len, stacks_result.str, stacks_result.len);
+  for (L1 i = 0; i < lane_count(); i += 1)
+  {
+    if (i == lane_idx())
+    {
+      memmove(final_header.str + final_header.len, stacks_result.str, stacks_result.len);
       final_header.len += stacks_result.len;
     }
+
     lane_sync();
   }
+
   lane_sync();
 
   //- kti: Write UIResetStacks macro.
-  for (L1 i = 0; i < lane_count(); i += 1) {
-    if (i == lane_idx()) {
-      memmove(final_header.str+final_header.len, reset_stacks_result.str, reset_stacks_result.len);
+  for (L1 i = 0; i < lane_count(); i += 1)
+  {
+    if (i == lane_idx())
+    {
+      memmove(final_header.str + final_header.len, reset_stacks_result.str, reset_stacks_result.len);
       final_header.len += reset_stacks_result.len;
     }
+
     lane_sync();
   }
 
   //- kti: Write UIInitNil macro.
-  for (L1 i = 0; i < lane_count(); i += 1) {
-    if (i == lane_idx()) {
-      memmove(final_header.str+final_header.len, init_nil_stacks_result.str, init_nil_stacks_result.len);
+  for (L1 i = 0; i < lane_count(); i += 1)
+  {
+    if (i == lane_idx())
+    {
+      memmove(final_header.str + final_header.len, init_nil_stacks_result.str, init_nil_stacks_result.len);
       final_header.len += init_nil_stacks_result.len;
     }
+
     lane_sync();
   }
 
   //- kti: Write UIAutoPopStacks macro.
-  for (L1 i = 0; i < lane_count(); i += 1) {
-    if (i == lane_idx()) {
-      memmove(final_header.str+final_header.len, auto_pop_stacks_result.str, auto_pop_stacks_result.len);
+  for (L1 i = 0; i < lane_count(); i += 1)
+  {
+    if (i == lane_idx())
+    {
+      memmove(final_header.str + final_header.len, auto_pop_stacks_result.str, auto_pop_stacks_result.len);
       final_header.len += auto_pop_stacks_result.len;
     }
+
     lane_sync();
   }
 
   lane_sync();
 
-  if (lane_idx() == 0) {
+  if (lane_idx() == 0)
+  {
     os_write_entire_file(str8("./src/ui.meta.h"), final_header.str, final_header.len);
     os_write_entire_file(str8("./src/ui.meta.c"), final_impl.str, final_impl.len);
   }
-
 }
 
-SI1 main(void) {
+SI1 main(void)
+{
   Lane_Group_Params params = {
-    .count = os_core_count()/2,
-    .proc = lane,
+    .count  =  os_core_count() / 2,
+    .proc   =  lane,
 
-    .arena_size = GiB(1),
-    .scratch_size = MiB(64),
+    .arena_size    =  GiB(1),
+    .scratch_size  =  MiB(64),
 
     .lane_zero_on_caller = 1,
   };

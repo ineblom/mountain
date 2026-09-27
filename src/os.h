@@ -15,34 +15,39 @@
 typedef void *ThreadFunc(void *);
 
 typedef struct OS_Thread OS_Thread;
-struct OS_Thread {
+struct OS_Thread
+{
   pthread_t handle;
 };
 
 typedef struct OS_Mutex *OS_Mutex;
-struct OS_Mutex {
-  OS_Mutex next;
+struct OS_Mutex
+{
+  OS_Mutex        next;
   pthread_mutex_t handle;
 };
 
 typedef struct OS_Cond_Var *OS_Cond_Var;
-struct OS_Cond_Var {
-  OS_Cond_Var next;
+struct OS_Cond_Var
+{
+  OS_Cond_Var    next;
   pthread_cond_t handle;
 };
 
 typedef struct OS_Barrier OS_Barrier;
-struct OS_Barrier {
+struct OS_Barrier
+{
   pthread_mutex_t mutex;
-  pthread_cond_t condition;
-  I1 threshold;
-  I1 count;
-  I1 generation;
+  pthread_cond_t  condition;
+  I1              threshold;
+  I1              count;
+  I1              generation;
 };
 
 typedef struct OS_Window OS_Window;
 
-enum {
+enum
+{
   OS_EVENT_KIND__NULL,
   OS_EVENT_KIND__PRESS,
   OS_EVENT_KIND__RELEASE,
@@ -57,35 +62,39 @@ typedef I1 OS_Key;
 
 typedef I1 OS_Modifier_Flags;
 
-enum {
-  OS_MODIFIER_FLAG__CTRL  = (1<<0),
-  OS_MODIFIER_FLAG__SHIFT = (1<<1),
-  OS_MODIFIER_FLAG__ALT   = (1<<2),
+enum
+{
+  OS_MODIFIER_FLAG__CTRL   =  (1 << 0),
+  OS_MODIFIER_FLAG__SHIFT  =  (1 << 1),
+  OS_MODIFIER_FLAG__ALT    =  (1 << 2),
 };
 
 typedef struct OS_Event OS_Event;
-struct OS_Event {
-  OS_Event *next;
-  OS_Event *prev;
-  OS_Window *window;
-  L1 timestamp_ns;
-  I1 kind;
-  OS_Key key;
-  I1 is_repeat;
-  B1 text[4];
-  L1 text_len;
+struct OS_Event
+{
+  OS_Event         *next;
+  OS_Event         *prev;
+  OS_Window        *window;
+  L1                timestamp_ns;
+  I1                kind;
+  OS_Key            key;
+  I1                is_repeat;
+  B1                text[4];
+  L1                text_len;
   OS_Modifier_Flags modifiers;
-  D1 x, y;
-  D1 delta_x, delta_y;
+  D1                x, y;
+  D1                delta_x, delta_y;
 };
 typedef struct OS_Event_List OS_Event_List;
-struct OS_Event_List {
+struct OS_Event_List
+{
   OS_Event *first;
   OS_Event *last;
-  L1 count;
+  L1        count;
 };
 
-enum {
+enum
+{
   OS_KEY__NULL,
   OS_KEY__ESC,
   OS_KEY__F1,
@@ -232,29 +241,29 @@ enum {
   OS_KEY_COUNT,
 };
 
-#define OS_MOUSE_BUTTON__LEFT   OS_KEY__LEFT_MOUSE_BUTTON
+#define OS_MOUSE_BUTTON__LEFT OS_KEY__LEFT_MOUSE_BUTTON
 #define OS_MOUSE_BUTTON__MIDDLE OS_KEY__MIDDLE_MOUSE_BUTTON
-#define OS_MOUSE_BUTTON__RIGHT  OS_KEY__RIGHT_MOUSE_BUTTON
+#define OS_MOUSE_BUTTON__RIGHT OS_KEY__RIGHT_MOUSE_BUTTON
 #define OS_MOUSE_BUTTON_COUNT 3
 
 Internal void *os_reserve(L1);
-Internal void os_commit(void *, L1);
-Internal void os_memory_release(void *, L1);
-Internal L1 os_clock(void);
-Internal void os_sleep_until(L1 deadline);
-Internal void os_send_wakeup_event(void);
+Internal void  os_commit(void *, L1);
+Internal void  os_memory_release(void *, L1);
+Internal L1    os_clock(void);
+Internal void  os_sleep_until(L1 deadline);
+Internal void  os_send_wakeup_event(void);
 
 Internal OS_Mutex os_mutex_alloc(void);
-Internal void os_mutex_release(OS_Mutex mutex);
-Internal void os_mutex_take(OS_Mutex mutex);
-Internal void os_mutex_drop(OS_Mutex mutex);
+Internal void     os_mutex_release(OS_Mutex mutex);
+Internal void     os_mutex_take(OS_Mutex mutex);
+Internal void     os_mutex_drop(OS_Mutex mutex);
 
 #define MutexScope(m) DeferLoop(os_mutex_take(m), os_mutex_drop(m))
 
 Internal OS_Cond_Var os_cond_var_alloc(void);
-Internal void os_cond_var_release(OS_Cond_Var cond_var);
-Internal I1 os_cond_var_wait(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt);
-Internal void os_cond_var_signal(OS_Cond_Var cond_var);
-Internal void os_cond_var_broadcast(OS_Cond_Var cond_var);
+Internal void        os_cond_var_release(OS_Cond_Var cond_var);
+Internal I1          os_cond_var_wait(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt);
+Internal void        os_cond_var_signal(OS_Cond_Var cond_var);
+Internal void        os_cond_var_broadcast(OS_Cond_Var cond_var);
 
 #endif

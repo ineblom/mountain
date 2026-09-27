@@ -7,7 +7,8 @@
 #include "image.h"
 
 typedef struct User_API User_API;
-struct User_API {
+struct User_API
+{
   Entity *(*entity)(String8 name);
   Image (*image_alloc)(Arena *arena, I1 width, I1 height);
 };

@@ -1,359 +1,469 @@
 #include <xdg-shell-protocol.c>
 
-Internal I1 os_cond_var_init_platform(OS_Cond_Var cond_var) {
+Internal I1 os_cond_var_init_platform(OS_Cond_Var cond_var)
+{
   pthread_condattr_t attr;
   pthread_condattr_init(&attr);
   pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
-  I1 init_result = pthread_cond_init(&cond_var->handle, &attr);
+
+  I1 result = pthread_cond_init(&cond_var->handle, &attr);
+
   pthread_condattr_destroy(&attr);
-  return init_result;
+
+  return result;
 }
 
-Internal I1 os_cond_var_wait_platform(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt) {
+Internal I1 os_cond_var_wait_platform(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt)
+{
   struct timespec endt_timespec = {
-    .tv_sec = endt / 1000000000LLU,
-    .tv_nsec = endt % 1000000000LLU,
+    .tv_sec   =  endt / 1000000000LLU,
+    .tv_nsec  =  endt % 1000000000LLU,
   };
-  I1 wait_result = pthread_cond_timedwait(&cond_var->handle, &mutex->handle, &endt_timespec);
-  return wait_result != ETIMEDOUT;
+
+  I1 wait_result  =  pthread_cond_timedwait(&cond_var->handle, &mutex->handle, &endt_timespec);
+  I1 result       =  wait_result != ETIMEDOUT;
+
+  return result;
 }
 
-Internal void os_sleep_until(L1 deadline) {
+Internal void os_sleep_until(L1 deadline)
+{
   struct timespec ts = {
-    .tv_sec = deadline / 1000000000LLU,
-    .tv_nsec = deadline % 1000000000LLU,
+    .tv_sec   =  deadline / 1000000000LLU,
+    .tv_nsec  =  deadline % 1000000000LLU,
   };
+
   while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, 0) == EINTR) {}
 }
 
-Internal I1 os_key_from_wl_key(I1 wl_key) {
-  I1 result = OS_KEY__NULL;
-  Local_Persist I1 initialized = 0;
-  Local_Persist I1 key_table[256] = {0};
-  if (initialized == 0) {
-    initialized = 1;
-    key_table[1] = OS_KEY__ESC;
-    key_table[2] = OS_KEY__1;
-    key_table[3] = OS_KEY__2;
-    key_table[4] = OS_KEY__3;
-    key_table[5] = OS_KEY__4;
-    key_table[6] = OS_KEY__5;
-    key_table[7] = OS_KEY__6;
-    key_table[8] = OS_KEY__7;
-    key_table[9] = OS_KEY__8;
-    key_table[10] = OS_KEY__9;
-    key_table[11] = OS_KEY__0;
-    key_table[12] = OS_KEY__MINUS;
-    key_table[13] = OS_KEY__EQUAL;
-    key_table[14] = OS_KEY__BACKSPACE;
-    key_table[15] = OS_KEY__TAB;
-    key_table[16] = OS_KEY__Q;
-    key_table[17] = OS_KEY__W;
-    key_table[18] = OS_KEY__E;
-    key_table[19] = OS_KEY__R;
-    key_table[20] = OS_KEY__T;
-    key_table[21] = OS_KEY__Y;
-    key_table[22] = OS_KEY__U;
-    key_table[23] = OS_KEY__I;
-    key_table[24] = OS_KEY__O;
-    key_table[25] = OS_KEY__P;
-    key_table[26] = OS_KEY__LEFT_BRACKET;
-    key_table[27] = OS_KEY__RIGHT_BRACKET;
-    key_table[28] = OS_KEY__ENTER;
-    key_table[29] = OS_KEY__CTRL;
-    key_table[30] = OS_KEY__A;
-    key_table[31] = OS_KEY__S;
-    key_table[32] = OS_KEY__D;
-    key_table[33] = OS_KEY__F;
-    key_table[34] = OS_KEY__G;
-    key_table[35] = OS_KEY__H;
-    key_table[36] = OS_KEY__J;
-    key_table[37] = OS_KEY__K;
-    key_table[38] = OS_KEY__L;
-    key_table[39] = OS_KEY__SEMICOLON;
-    key_table[40] = OS_KEY__QUOTE;
-    key_table[41] = OS_KEY__TICK;
-    key_table[42] = OS_KEY__SHIFT;
-    key_table[43] = OS_KEY__BACK_SLASH;
-    key_table[44] = OS_KEY__Z;
-    key_table[45] = OS_KEY__X;
-    key_table[46] = OS_KEY__C;
-    key_table[47] = OS_KEY__V;
-    key_table[48] = OS_KEY__B;
-    key_table[49] = OS_KEY__N;
-    key_table[50] = OS_KEY__M;
-    key_table[51] = OS_KEY__COMMA;
-    key_table[52] = OS_KEY__PERIOD;
-    key_table[53] = OS_KEY__SLASH;
-    key_table[54] = OS_KEY__SHIFT;
-    key_table[55] = OS_KEY__NUM_STAR;
-    key_table[56] = OS_KEY__ALT;
-    key_table[57] = OS_KEY__SPACE;
-    key_table[58] = OS_KEY__CAPS_LOCK;
-    key_table[59] = OS_KEY__F1;
-    key_table[60] = OS_KEY__F2;
-    key_table[61] = OS_KEY__F3;
-    key_table[62] = OS_KEY__F4;
-    key_table[63] = OS_KEY__F5;
-    key_table[64] = OS_KEY__F6;
-    key_table[65] = OS_KEY__F7;
-    key_table[66] = OS_KEY__F8;
-    key_table[67] = OS_KEY__F9;
-    key_table[68] = OS_KEY__F10;
-    key_table[69] = OS_KEY__NUM_LOCK;
-    key_table[70] = OS_KEY__SCROLL_LOCK;
-    key_table[71] = OS_KEY__NUM7;
-    key_table[72] = OS_KEY__NUM8;
-    key_table[73] = OS_KEY__NUM9;
-    key_table[74] = OS_KEY__NUM_MINUS;
-    key_table[75] = OS_KEY__NUM4;
-    key_table[76] = OS_KEY__NUM5;
-    key_table[77] = OS_KEY__NUM6;
-    key_table[78] = OS_KEY__NUM_PLUS;
-    key_table[79] = OS_KEY__NUM1;
-    key_table[80] = OS_KEY__NUM2;
-    key_table[81] = OS_KEY__NUM3;
-    key_table[82] = OS_KEY__NUM0;
-    key_table[83] = OS_KEY__NUM_PERIOD;
-    key_table[87] = OS_KEY__F11;
-    key_table[88] = OS_KEY__F12;
-    key_table[97] = OS_KEY__CTRL;
-    key_table[98] = OS_KEY__NUM_SLASH;
-    key_table[100] = OS_KEY__ALT;
-    key_table[102] = OS_KEY__HOME;
-    key_table[103] = OS_KEY__UP;
-    key_table[104] = OS_KEY__PAGE_UP;
-    key_table[105] = OS_KEY__LEFT;
-    key_table[106] = OS_KEY__RIGHT;
-    key_table[107] = OS_KEY__END;
-    key_table[108] = OS_KEY__DOWN;
-    key_table[109] = OS_KEY__PAGE_DOWN;
-    key_table[110] = OS_KEY__INSERT;
-    key_table[111] = OS_KEY__DELETE;
-    key_table[119] = OS_KEY__PAUSE;
-    key_table[139] = OS_KEY__MENU;
-    key_table[183] = OS_KEY__F13;
-    key_table[184] = OS_KEY__F14;
-    key_table[185] = OS_KEY__F15;
-    key_table[186] = OS_KEY__F16;
-    key_table[187] = OS_KEY__F17;
-    key_table[188] = OS_KEY__F18;
-    key_table[189] = OS_KEY__F19;
-    key_table[190] = OS_KEY__F20;
-    key_table[191] = OS_KEY__F21;
-    key_table[192] = OS_KEY__F22;
-    key_table[193] = OS_KEY__F23;
-    key_table[194] = OS_KEY__F24;
+Internal I1 os_key_from_wl_key(I1 wl_key)
+{
+  I1               result          =  OS_KEY__NULL;
+  Local_Persist I1 initialized     =  0;
+  Local_Persist I1 key_table[256]  =  {0};
+
+  if (initialized == 0)
+  {
+    initialized     =  1;
+    key_table[1]    =  OS_KEY__ESC;
+    key_table[2]    =  OS_KEY__1;
+    key_table[3]    =  OS_KEY__2;
+    key_table[4]    =  OS_KEY__3;
+    key_table[5]    =  OS_KEY__4;
+    key_table[6]    =  OS_KEY__5;
+    key_table[7]    =  OS_KEY__6;
+    key_table[8]    =  OS_KEY__7;
+    key_table[9]    =  OS_KEY__8;
+    key_table[10]   =  OS_KEY__9;
+    key_table[11]   =  OS_KEY__0;
+    key_table[12]   =  OS_KEY__MINUS;
+    key_table[13]   =  OS_KEY__EQUAL;
+    key_table[14]   =  OS_KEY__BACKSPACE;
+    key_table[15]   =  OS_KEY__TAB;
+    key_table[16]   =  OS_KEY__Q;
+    key_table[17]   =  OS_KEY__W;
+    key_table[18]   =  OS_KEY__E;
+    key_table[19]   =  OS_KEY__R;
+    key_table[20]   =  OS_KEY__T;
+    key_table[21]   =  OS_KEY__Y;
+    key_table[22]   =  OS_KEY__U;
+    key_table[23]   =  OS_KEY__I;
+    key_table[24]   =  OS_KEY__O;
+    key_table[25]   =  OS_KEY__P;
+    key_table[26]   =  OS_KEY__LEFT_BRACKET;
+    key_table[27]   =  OS_KEY__RIGHT_BRACKET;
+    key_table[28]   =  OS_KEY__ENTER;
+    key_table[29]   =  OS_KEY__CTRL;
+    key_table[30]   =  OS_KEY__A;
+    key_table[31]   =  OS_KEY__S;
+    key_table[32]   =  OS_KEY__D;
+    key_table[33]   =  OS_KEY__F;
+    key_table[34]   =  OS_KEY__G;
+    key_table[35]   =  OS_KEY__H;
+    key_table[36]   =  OS_KEY__J;
+    key_table[37]   =  OS_KEY__K;
+    key_table[38]   =  OS_KEY__L;
+    key_table[39]   =  OS_KEY__SEMICOLON;
+    key_table[40]   =  OS_KEY__QUOTE;
+    key_table[41]   =  OS_KEY__TICK;
+    key_table[42]   =  OS_KEY__SHIFT;
+    key_table[43]   =  OS_KEY__BACK_SLASH;
+    key_table[44]   =  OS_KEY__Z;
+    key_table[45]   =  OS_KEY__X;
+    key_table[46]   =  OS_KEY__C;
+    key_table[47]   =  OS_KEY__V;
+    key_table[48]   =  OS_KEY__B;
+    key_table[49]   =  OS_KEY__N;
+    key_table[50]   =  OS_KEY__M;
+    key_table[51]   =  OS_KEY__COMMA;
+    key_table[52]   =  OS_KEY__PERIOD;
+    key_table[53]   =  OS_KEY__SLASH;
+    key_table[54]   =  OS_KEY__SHIFT;
+    key_table[55]   =  OS_KEY__NUM_STAR;
+    key_table[56]   =  OS_KEY__ALT;
+    key_table[57]   =  OS_KEY__SPACE;
+    key_table[58]   =  OS_KEY__CAPS_LOCK;
+    key_table[59]   =  OS_KEY__F1;
+    key_table[60]   =  OS_KEY__F2;
+    key_table[61]   =  OS_KEY__F3;
+    key_table[62]   =  OS_KEY__F4;
+    key_table[63]   =  OS_KEY__F5;
+    key_table[64]   =  OS_KEY__F6;
+    key_table[65]   =  OS_KEY__F7;
+    key_table[66]   =  OS_KEY__F8;
+    key_table[67]   =  OS_KEY__F9;
+    key_table[68]   =  OS_KEY__F10;
+    key_table[69]   =  OS_KEY__NUM_LOCK;
+    key_table[70]   =  OS_KEY__SCROLL_LOCK;
+    key_table[71]   =  OS_KEY__NUM7;
+    key_table[72]   =  OS_KEY__NUM8;
+    key_table[73]   =  OS_KEY__NUM9;
+    key_table[74]   =  OS_KEY__NUM_MINUS;
+    key_table[75]   =  OS_KEY__NUM4;
+    key_table[76]   =  OS_KEY__NUM5;
+    key_table[77]   =  OS_KEY__NUM6;
+    key_table[78]   =  OS_KEY__NUM_PLUS;
+    key_table[79]   =  OS_KEY__NUM1;
+    key_table[80]   =  OS_KEY__NUM2;
+    key_table[81]   =  OS_KEY__NUM3;
+    key_table[82]   =  OS_KEY__NUM0;
+    key_table[83]   =  OS_KEY__NUM_PERIOD;
+    key_table[87]   =  OS_KEY__F11;
+    key_table[88]   =  OS_KEY__F12;
+    key_table[97]   =  OS_KEY__CTRL;
+    key_table[98]   =  OS_KEY__NUM_SLASH;
+    key_table[100]  =  OS_KEY__ALT;
+    key_table[102]  =  OS_KEY__HOME;
+    key_table[103]  =  OS_KEY__UP;
+    key_table[104]  =  OS_KEY__PAGE_UP;
+    key_table[105]  =  OS_KEY__LEFT;
+    key_table[106]  =  OS_KEY__RIGHT;
+    key_table[107]  =  OS_KEY__END;
+    key_table[108]  =  OS_KEY__DOWN;
+    key_table[109]  =  OS_KEY__PAGE_DOWN;
+    key_table[110]  =  OS_KEY__INSERT;
+    key_table[111]  =  OS_KEY__DELETE;
+    key_table[119]  =  OS_KEY__PAUSE;
+    key_table[139]  =  OS_KEY__MENU;
+    key_table[183]  =  OS_KEY__F13;
+    key_table[184]  =  OS_KEY__F14;
+    key_table[185]  =  OS_KEY__F15;
+    key_table[186]  =  OS_KEY__F16;
+    key_table[187]  =  OS_KEY__F17;
+    key_table[188]  =  OS_KEY__F18;
+    key_table[189]  =  OS_KEY__F19;
+    key_table[190]  =  OS_KEY__F20;
+    key_table[191]  =  OS_KEY__F21;
+    key_table[192]  =  OS_KEY__F22;
+    key_table[193]  =  OS_KEY__F23;
+    key_table[194]  =  OS_KEY__F24;
   }
+
   result = key_table[wl_key];
+
   return result;
 }
 
-Internal OS_Modifier_Flags os_get_modifiers(void) {
+Internal OS_Modifier_Flags os_get_modifiers(void)
+{
   OS_Modifier_Flags result = 0;
 
-  if (os_gfx_state->key_states[OS_KEY__CTRL]) {
+  if (os_gfx_state->key_states[OS_KEY__CTRL])
+  {
     result |= OS_MODIFIER_FLAG__CTRL;
   }
-  if (os_gfx_state->key_states[OS_KEY__SHIFT]) {
+
+  if (os_gfx_state->key_states[OS_KEY__SHIFT])
+  {
     result |= OS_MODIFIER_FLAG__SHIFT;
   }
-  if (os_gfx_state->key_states[OS_KEY__ALT]) {
+
+  if (os_gfx_state->key_states[OS_KEY__ALT])
+  {
     result |= OS_MODIFIER_FLAG__ALT;
   }
-  
+
   return result;
 }
 
-Internal void os_event_list_push(Arena *arena, OS_Event_List *list, OS_Event event) {
+Internal void os_event_list_push(Arena *arena, OS_Event_List *list, OS_Event event)
+{
   OS_Event *new_event = push_array(arena, OS_Event, 1);
+
   memmove(new_event, &event, sizeof(OS_Event));
+
   new_event->modifiers = os_get_modifiers();
+
   DLLPushBack(list->first, list->last, new_event);
+
   list->count += 1;
 }
 
-Internal void os_push_event(OS_Event event) {
+Internal void os_push_event(OS_Event event)
+{
   os_event_list_push(os_gfx_state->event_arena, &os_gfx_state->events, event);
 }
 
-Internal I1 os_xkb_keycode_from_wl_key(I1 wl_key) {
+Internal I1 os_xkb_keycode_from_wl_key(I1 wl_key)
+{
   I1 result = wl_key + 8;
   return result;
 }
 
-Internal void os_push_text_event(OS_Window *window, I1 wl_key, L1 timestamp_ns, I1 is_repeat) {
-  if (os_gfx_state->xkb_state != 0) {
-    char text[ArrayCount(Member(OS_Event, text))+1] = {0};
+Internal void os_push_text_event(OS_Window *window, I1 wl_key, L1 timestamp_ns, I1 is_repeat)
+{
+  if (os_gfx_state->xkb_state != 0)
+  {
+    char text[ArrayCount(Member(OS_Event, text)) + 1] = {0};
+
     I1 text_len = xkb_state_key_get_utf8(os_gfx_state->xkb_state, os_xkb_keycode_from_wl_key(wl_key), text, sizeof(text));
-    if (text_len > 0 && text_len <= ArrayCount(Member(OS_Event, text)) && (B1)text[0] >= 0x20 && (B1)text[0] != 0x7F) {
+
+    if (   text_len > 0
+        && text_len <= ArrayCount(Member(OS_Event, text))
+        && (B1)text[0] >= 0x20
+        && (B1)text[0] != 0x7F)
+    {
       OS_Event event = {
-        .window = window,
-        .timestamp_ns = timestamp_ns,
-        .kind = OS_EVENT_KIND__TEXT,
-        .is_repeat = is_repeat,
-        .text_len = text_len,
+        .window        =  window,
+        .timestamp_ns  =  timestamp_ns,
+        .kind          =  OS_EVENT_KIND__TEXT,
+        .is_repeat     =  is_repeat,
+        .text_len      =  text_len,
       };
+
       memmove(event.text, text, text_len);
       os_push_event(event);
     }
   }
 }
 
-Internal void os_key_repeat_clear(void) {
-  os_gfx_state->repeat_key = OS_KEY__NULL;
-  os_gfx_state->repeat_wl_key = 0;
-  os_gfx_state->repeat_window = 0;
-  os_gfx_state->next_repeat_ns = 0;
+Internal void os_key_repeat_clear(void)
+{
+  os_gfx_state->repeat_key      =  OS_KEY__NULL;
+  os_gfx_state->repeat_wl_key   =  0;
+  os_gfx_state->repeat_window   =  0;
+  os_gfx_state->next_repeat_ns  =  0;
 }
 
-Internal void os_wayland_cursor_update(OS_Window *window) {
-  if (window == 0 ||
-      os_gfx_state->pointer == 0 ||
-      os_gfx_state->cursor_surface == 0 ||
-      os_gfx_state->cursor_enter_serial == 0) {
+Internal void os_wayland_cursor_update(OS_Window *window)
+{
+  if (   window                             ==  0
+      || os_gfx_state->pointer              ==  0
+      || os_gfx_state->cursor_surface       ==  0
+      || os_gfx_state->cursor_enter_serial  ==  0)
+  {
     return;
   }
 
   SI1 scale = (SI1)window->pixel_ratio;
-  if (scale < 1) scale = 1;
 
-  if (os_gfx_state->cursor_theme == 0 || os_gfx_state->cursor_scale != scale) {
-    if (os_gfx_state->cursor_theme != 0) {
+  if (scale < 1)
+    scale = 1;
+
+  if (os_gfx_state->cursor_theme == 0 || os_gfx_state->cursor_scale != scale)
+  {
+    if (os_gfx_state->cursor_theme != 0)
+    {
       wl_cursor_theme_destroy(os_gfx_state->cursor_theme);
     }
-    os_gfx_state->cursor_theme = wl_cursor_theme_load(0, 24*scale, os_gfx_state->shm);
-    os_gfx_state->default_cursor = 0;
-    os_gfx_state->cursor_scale = scale;
-    if (os_gfx_state->cursor_theme != 0) {
+
+    os_gfx_state->cursor_theme    =  wl_cursor_theme_load(0, 24 * scale, os_gfx_state->shm);
+    os_gfx_state->default_cursor  =  0;
+    os_gfx_state->cursor_scale    =  scale;
+
+    if (os_gfx_state->cursor_theme != 0)
+    {
       os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "default");
-      if (os_gfx_state->default_cursor == 0) {
+
+      if (os_gfx_state->default_cursor == 0)
+      {
         os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "left_ptr");
       }
     }
   }
 
-  if (os_gfx_state->default_cursor != 0) {
-    struct wl_cursor_image *image = os_gfx_state->default_cursor->images[0];
-    struct wl_buffer *buffer = wl_cursor_image_get_buffer(image);
-    if (wl_surface_get_version(os_gfx_state->cursor_surface) >= WL_SURFACE_SET_BUFFER_SCALE_SINCE_VERSION) {
+  if (os_gfx_state->default_cursor != 0)
+  {
+    struct wl_cursor_image  *image   =  os_gfx_state->default_cursor->images[0];
+    struct wl_buffer        *buffer  =  wl_cursor_image_get_buffer(image);
+
+    if (wl_surface_get_version(os_gfx_state->cursor_surface) >= WL_SURFACE_SET_BUFFER_SCALE_SINCE_VERSION)
+    {
       wl_surface_set_buffer_scale(os_gfx_state->cursor_surface, scale);
     }
-    wl_pointer_set_cursor(os_gfx_state->pointer, os_gfx_state->cursor_enter_serial,
+
+    wl_pointer_set_cursor(os_gfx_state->pointer,
+                          os_gfx_state->cursor_enter_serial,
                           os_gfx_state->cursor_surface,
-                          image->hotspot_x/scale, image->hotspot_y/scale);
+                          image->hotspot_x / scale,
+                          image->hotspot_y / scale);
     wl_surface_attach(os_gfx_state->cursor_surface, buffer, 0, 0);
+
 #if defined(WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION)
-    if (wl_surface_get_version(os_gfx_state->cursor_surface) >= WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION) {
+    if (wl_surface_get_version(os_gfx_state->cursor_surface) >= WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION)
+    {
       wl_surface_damage_buffer(os_gfx_state->cursor_surface, 0, 0, image->width, image->height);
-    } else
+    }
+    else
 #endif
     {
-      wl_surface_damage(os_gfx_state->cursor_surface, 0, 0,
-                        (image->width + scale - 1)/scale,
-                        (image->height + scale - 1)/scale);
+      wl_surface_damage(os_gfx_state->cursor_surface, 0, 0, (image->width + scale - 1) / scale, (image->height + scale - 1) / scale);
     }
+
     wl_surface_commit(os_gfx_state->cursor_surface);
   }
 }
 
-Internal void os_wayland_window_set_scale(OS_Window *window, SI1 scale) {
-  if (scale < 1) scale = 1;
-  if (wl_surface_get_version(window->surface) < WL_SURFACE_SET_BUFFER_SCALE_SINCE_VERSION) {
+Internal void os_wayland_window_set_scale(OS_Window *window, SI1 scale)
+{
+  if (scale < 1)
+    scale = 1;
+
+  if (wl_surface_get_version(window->surface) < WL_SURFACE_SET_BUFFER_SCALE_SINCE_VERSION)
+  {
     scale = 1;
   }
 
   // xdg-shell dimensions stay in logical coordinates. Only the surface buffer
   // and pixel_ratio use physical pixels, matching the macOS backing-size path.
-  if (window->pixel_ratio != (D1)scale) {
-    window->pixel_ratio = (D1)scale;
-    os_gfx_state->redraw_requested = 1;
+  if (window->pixel_ratio != (D1)scale)
+  {
+    window->pixel_ratio             =  (D1)scale;
+    os_gfx_state->redraw_requested  =  1;
+
     wl_surface_set_buffer_scale(window->surface, scale);
-    if (os_gfx_state->hovered_window == window) {
+
+    if (os_gfx_state->hovered_window == window)
+    {
       os_wayland_cursor_update(window);
     }
   }
 }
 
-Internal void os_wayland_window_update_scale_from_outputs(OS_Window *window) {
+Internal void os_wayland_window_update_scale_from_outputs(OS_Window *window)
+{
   // A surface can span outputs; render for the highest-density one so no part
   // of it is supplied with an undersized buffer.
   SI1 scale = 1;
-  for (OS_Wayland_Window_Output *it = window->first_output; it != 0; it = it->next) {
+
+  for (OS_Wayland_Window_Output *it = window->first_output; it != 0; it = it->next)
+  {
     scale = Max(scale, it->output->scale);
   }
+
   os_wayland_window_set_scale(window, scale);
 }
 
-Internal void surface_enter_handler(void *data, struct wl_surface *surface, struct wl_output *wl_output) {
-  OS_Window *window = (OS_Window *)data;
-  OS_Wayland_Output *output = 0;
-  for (OS_Wayland_Output *it = os_gfx_state->first_output; it != 0; it = it->next) {
-    if (it->output == wl_output) {
+Internal void surface_enter_handler(void *data, struct wl_surface *surface, struct wl_output *wl_output)
+{
+  OS_Window          *window  =  (OS_Window *)data;
+  OS_Wayland_Output  *output  =  0;
+
+  for (OS_Wayland_Output *it = os_gfx_state->first_output; it != 0; it = it->next)
+  {
+    if (it->output == wl_output)
+    {
       output = it;
       break;
     }
   }
 
-  if (output != 0) {
-    for (OS_Wayland_Window_Output *it = window->first_output; it != 0; it = it->next) {
-      if (it->output == output) return;
+  if (output != 0)
+  {
+    for (OS_Wayland_Window_Output *it = window->first_output; it != 0; it = it->next)
+    {
+      if (it->output == output)
+        return;
     }
+
     OS_Wayland_Window_Output *window_output = window->first_free_output;
-    if (window_output != 0) {
+
+    if (window_output != 0)
+    {
       SLLStackPop(window->first_free_output);
-    } else {
+    }
+    else
+    {
       window_output = push_array(os_gfx_state->arena, OS_Wayland_Window_Output, 1);
     }
+
     window_output->output = output;
+
     SLLStackPush(window->first_output, window_output);
-    if (!window->has_preferred_buffer_scale) {
+
+    if (!window->has_preferred_buffer_scale)
+    {
       os_wayland_window_update_scale_from_outputs(window);
     }
   }
 }
 
-Internal void surface_leave_handler(void *data, struct wl_surface *surface, struct wl_output *wl_output) {
-  OS_Window *window = (OS_Window *)data;
-  OS_Wayland_Window_Output **link = &window->first_output;
-  while (link[0] != 0) {
-    if (link[0]->output->output == wl_output) {
+Internal void surface_leave_handler(void *data, struct wl_surface *surface, struct wl_output *wl_output)
+{
+  OS_Window                 *window  =  (OS_Window *)data;
+  OS_Wayland_Window_Output  **link   =  &window->first_output;
+
+  while (link[0] != 0)
+  {
+    if (link[0]->output->output == wl_output)
+    {
       OS_Wayland_Window_Output *window_output = link[0];
+
       link[0] = window_output->next;
+
       SLLStackPush(window->first_free_output, window_output);
       break;
     }
+
     link = &link[0]->next;
   }
-  if (!window->has_preferred_buffer_scale) {
+
+  if (!window->has_preferred_buffer_scale)
+  {
     os_wayland_window_update_scale_from_outputs(window);
   }
 }
 
 #if defined(WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION)
-Internal void surface_preferred_buffer_scale_handler(void *data, struct wl_surface *surface, SI1 scale) {
+Internal void surface_preferred_buffer_scale_handler(void *data, struct wl_surface *surface, SI1 scale)
+{
   OS_Window *window = (OS_Window *)data;
+
   window->has_preferred_buffer_scale = 1;
+
   os_wayland_window_set_scale(window, scale);
 }
 
 Internal void surface_preferred_buffer_transform_handler(void *data, struct wl_surface *surface, I1 transform) {}
 #endif
 
-Internal void output_geometry_handler(void *data, struct wl_output *output, SI1 x, SI1 y,
-                                      SI1 physical_width, SI1 physical_height, SI1 subpixel,
-                                      CString make, CString model, SI1 transform) {}
+Internal void output_geometry_handler(void             *data,
+                                      struct wl_output *output,
+                                      SI1               x,
+                                      SI1               y,
+                                      SI1               physical_width,
+                                      SI1               physical_height,
+                                      SI1               subpixel,
+                                      CString           make,
+                                      CString           model,
+                                      SI1               transform)
+{
+}
 
-Internal void output_mode_handler(void *data, struct wl_output *output, I1 flags,
-                                  SI1 width, SI1 height, SI1 refresh) {}
+Internal void output_mode_handler(void *data, struct wl_output *output, I1 flags, SI1 width, SI1 height, SI1 refresh) {}
 
 Internal void output_done_handler(void *data, struct wl_output *output) {}
 
-Internal void output_scale_handler(void *data, struct wl_output *wl_output, SI1 scale) {
+Internal void output_scale_handler(void *data, struct wl_output *wl_output, SI1 scale)
+{
   OS_Wayland_Output *output = (OS_Wayland_Output *)data;
+
   output->scale = Max(1, scale);
-  for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next) {
-    if (!window->has_preferred_buffer_scale) {
+
+  for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next)
+  {
+    if (!window->has_preferred_buffer_scale)
+    {
       os_wayland_window_update_scale_from_outputs(window);
     }
   }
@@ -364,127 +474,187 @@ Internal void output_name_handler(void *data, struct wl_output *output, CString 
 Internal void output_description_handler(void *data, struct wl_output *output, CString description) {}
 #endif
 
-Internal void os_wayland_output_destroy(OS_Wayland_Output *output) {
+Internal void os_wayland_output_destroy(OS_Wayland_Output *output)
+{
 #if defined(WL_OUTPUT_RELEASE_SINCE_VERSION)
-  if (wl_output_get_version(output->output) >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
+  if (wl_output_get_version(output->output) >= WL_OUTPUT_RELEASE_SINCE_VERSION)
+  {
     wl_output_release(output->output);
-  } else
+  }
+  else
 #endif
   {
     wl_output_destroy(output->output);
   }
+
   output->output = 0;
 }
 
-Internal void registry_global_handler(void *data, struct wl_registry *registry, I1 name, CString interface, I1 version) {
-  if (cstr_compare(interface, wl_compositor_interface.name)) {
+Internal void registry_global_handler(void *data, struct wl_registry *registry, I1 name, CString interface, I1 version)
+{
+  if (cstr_compare(interface, wl_compositor_interface.name))
+  {
     I1 bind_version = Min(Min(version, (I1)wl_compositor_interface.version), 6);
+
     os_gfx_state->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, bind_version);
-  } else if (cstr_compare(interface, wl_shm_interface.name)) {
+  }
+  else if (cstr_compare(interface, wl_shm_interface.name))
+  {
     os_gfx_state->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
-  } else if (cstr_compare(interface, xdg_wm_base_interface.name)) {
+  }
+  else if (cstr_compare(interface, xdg_wm_base_interface.name))
+  {
     os_gfx_state->xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
-  } else if (cstr_compare(interface, wl_seat_interface.name)) {
+  }
+  else if (cstr_compare(interface, wl_seat_interface.name))
+  {
     I1 bind_version = Min(version, 5);
+
     os_gfx_state->seat = wl_registry_bind(registry, name, &wl_seat_interface, bind_version);
-  } else if (cstr_compare(interface, wl_output_interface.name)) {
-    OS_Wayland_Output *output = push_array(os_gfx_state->arena, OS_Wayland_Output, 1);
-    output->registry_name = name;
-    output->scale = 1;
-    I1 bind_version = Min(Min(version, (I1)wl_output_interface.version), 4);
-    output->output = wl_registry_bind(registry, name, &wl_output_interface, bind_version);
-    output->listener.geometry = output_geometry_handler;
-    output->listener.mode = output_mode_handler;
-    output->listener.done = output_done_handler;
-    output->listener.scale = output_scale_handler;
+  }
+  else if (cstr_compare(interface, wl_output_interface.name))
+  {
+    OS_Wayland_Output  *output       =  push_array(os_gfx_state->arena, OS_Wayland_Output, 1);
+    I1                 bind_version  =  Min(Min(version, (I1)wl_output_interface.version), 4);
+
+    output->registry_name      =  name;
+    output->scale              =  1;
+    output->output             =  wl_registry_bind(registry, name, &wl_output_interface, bind_version);
+    output->listener.geometry  =  output_geometry_handler;
+    output->listener.mode      =  output_mode_handler;
+    output->listener.done      =  output_done_handler;
+    output->listener.scale     =  output_scale_handler;
+
 #if defined(WL_OUTPUT_NAME_SINCE_VERSION)
-    output->listener.name = output_name_handler;
-    output->listener.description = output_description_handler;
+    output->listener.name         =  output_name_handler;
+    output->listener.description  =  output_description_handler;
 #endif
+
     wl_output_add_listener(output->output, &output->listener, output);
     SLLStackPush(os_gfx_state->first_output, output);
   }
 }
 
-Internal void registry_global_remove_handler(void *data, struct wl_registry *registry, I1 name) {
+Internal void registry_global_remove_handler(void *data, struct wl_registry *registry, I1 name)
+{
   OS_Wayland_Output **link = &os_gfx_state->first_output;
-  while (link[0] != 0) {
+
+  while (link[0] != 0)
+  {
     OS_Wayland_Output *output = link[0];
-    if (output->registry_name == name) {
-      for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next) {
+
+    if (output->registry_name == name)
+    {
+      for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next)
+      {
         OS_Wayland_Window_Output **window_link = &window->first_output;
-        while (window_link[0] != 0) {
-          if (window_link[0]->output == output) {
+
+        while (window_link[0] != 0)
+        {
+          if (window_link[0]->output == output)
+          {
             OS_Wayland_Window_Output *window_output = window_link[0];
+
             window_link[0] = window_output->next;
+
             SLLStackPush(window->first_free_output, window_output);
             break;
           }
+
           window_link = &window_link[0]->next;
         }
-        if (!window->has_preferred_buffer_scale) {
+
+        if (!window->has_preferred_buffer_scale)
+        {
           os_wayland_window_update_scale_from_outputs(window);
         }
       }
+
       link[0] = output->next;
+
       os_wayland_output_destroy(output);
       break;
     }
+
     link = &link[0]->next;
   }
 }
 
-Internal void xdg_wm_base_ping_handler(void *data, struct xdg_wm_base *xdg_wm_base, I1 serial) {
+Internal void xdg_wm_base_ping_handler(void *data, struct xdg_wm_base *xdg_wm_base, I1 serial)
+{
   xdg_wm_base_pong(xdg_wm_base, serial);
 }
 
-Internal void xdg_surface_configure_handler(void *data, struct xdg_surface *xdg_surface, I1 serial) {
+Internal void xdg_surface_configure_handler(void *data, struct xdg_surface *xdg_surface, I1 serial)
+{
   OS_Window *window = (OS_Window *)data;
+
   xdg_surface_ack_configure(xdg_surface, serial);
+
   window->configured = 1;
 }
 
-Internal void xdg_toplevel_configure_handler(void *data, struct xdg_toplevel *xdg_toplevel, SI1 width, SI1 height, struct wl_array *states) {
-  if (width > 0 && height > 0) {
+Internal void xdg_toplevel_configure_handler(
+  void *data, struct xdg_toplevel *xdg_toplevel, SI1 width, SI1 height, struct wl_array *states)
+{
+  if (width > 0 && height > 0)
+  {
     OS_Window *window = (OS_Window *)data;
-    if (window->width != width || window->height != height) {
-      window->width = width;
-      window->height = height;
-      os_gfx_state->redraw_requested = 1;
+
+    if (window->width != width || window->height != height)
+    {
+      window->width                   =  width;
+      window->height                  =  height;
+      os_gfx_state->redraw_requested  =  1;
     }
   }
 }
 
-Internal void xdg_toplevel_close_handler(void *data, struct xdg_toplevel *xdg_toplevel) {
+Internal void xdg_toplevel_close_handler(void *data, struct xdg_toplevel *xdg_toplevel)
+{
   OS_Window *window = (OS_Window *)data;
 
   OS_Event event = {
-    .timestamp_ns = 0,
-    .kind = OS_EVENT_KIND__WINDOW_CLOSE,
-    .window = window,
+    .timestamp_ns  =  0,
+    .kind          =  OS_EVENT_KIND__WINDOW_CLOSE,
+    .window        =  window,
   };
+
   os_push_event(event);
 }
 
 ////////////////////////////////
 //~ kti: Seat event handlers
 
-Internal void seat_capabilities_handler(void *data, struct wl_seat *seat, I1 capabilities) {
-  if ((capabilities & WL_SEAT_CAPABILITY_POINTER) && os_gfx_state->pointer == 0) {
+Internal void seat_capabilities_handler(void *data, struct wl_seat *seat, I1 capabilities)
+{
+  if ((capabilities & WL_SEAT_CAPABILITY_POINTER) && os_gfx_state->pointer == 0)
+  {
     os_gfx_state->pointer = wl_seat_get_pointer(seat);
+
     wl_pointer_add_listener(os_gfx_state->pointer, &os_gfx_state->pointer_listener, 0);
-  } else if (!(capabilities & WL_SEAT_CAPABILITY_POINTER) && os_gfx_state->pointer != 0) {
-    wl_pointer_release(os_gfx_state->pointer);
-    os_gfx_state->pointer = 0;
-    os_gfx_state->hovered_window = 0;
   }
-  if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && os_gfx_state->keyboard == 0) {
+  else if (!(capabilities & WL_SEAT_CAPABILITY_POINTER) && os_gfx_state->pointer != 0)
+  {
+    wl_pointer_release(os_gfx_state->pointer);
+
+    os_gfx_state->pointer         =  0;
+    os_gfx_state->hovered_window  =  0;
+  }
+
+  if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && os_gfx_state->keyboard == 0)
+  {
     os_gfx_state->keyboard = wl_seat_get_keyboard(seat);
+
     wl_keyboard_add_listener(os_gfx_state->keyboard, &os_gfx_state->keyboard_listener, 0);
-  } else if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && os_gfx_state->keyboard != 0) {
+  }
+  else if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && os_gfx_state->keyboard != 0)
+  {
     wl_keyboard_release(os_gfx_state->keyboard);
-    os_gfx_state->keyboard = 0;
-    os_gfx_state->focused_window = 0;
+
+    os_gfx_state->keyboard        =  0;
+    os_gfx_state->focused_window  =  0;
+
     MemoryZeroArray(os_gfx_state->key_states);
     os_key_repeat_clear();
   }
@@ -493,88 +663,103 @@ Internal void seat_capabilities_handler(void *data, struct wl_seat *seat, I1 cap
 Internal void seat_name_handler(void *data, struct wl_seat *seat, CString name) {}
 
 // Pointer event handlers
-Internal void pointer_enter_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface, wl_fixed_t surface_x, wl_fixed_t surface_y) {
-  for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next) {
-    if (surface == it->surface) {
+Internal void pointer_enter_handler(void              *data,
+                                    struct wl_pointer *pointer,
+                                    I1                 serial,
+                                    struct wl_surface *surface,
+                                    wl_fixed_t         surface_x,
+                                    wl_fixed_t         surface_y)
+{
+  for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next)
+  {
+    if (surface == it->surface)
+    {
       os_gfx_state->hovered_window = it;
       break;
     }
   }
 
-  os_gfx_state->cursor_enter_serial = serial;
+  os_gfx_state->cursor_enter_serial  =  serial;
+  os_gfx_state->redraw_requested     =  1;
+
   os_wayland_cursor_update(os_gfx_state->hovered_window);
-  os_gfx_state->redraw_requested = 1;
 }
 
-Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface) {
-  os_gfx_state->hovered_window = 0;
-  os_gfx_state->cursor_enter_serial = 0;
-  os_gfx_state->redraw_requested = 1;
+Internal void pointer_leave_handler(void *data, struct wl_pointer *pointer, I1 serial, struct wl_surface *surface)
+{
+  os_gfx_state->hovered_window       =  0;
+  os_gfx_state->cursor_enter_serial  =  0;
+  os_gfx_state->redraw_requested     =  1;
 }
 
-Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
-  OS_Window *window = os_gfx_state->hovered_window;
-  D1 x = wl_fixed_to_double(surface_x);
-  D1 y = wl_fixed_to_double(surface_y);
+Internal void pointer_motion_handler(void *data, struct wl_pointer *pointer, I1 time, wl_fixed_t surface_x, wl_fixed_t surface_y)
+{
+  OS_Window  *window  =  os_gfx_state->hovered_window;
+  D1         x        =  wl_fixed_to_double(surface_x);
+  D1         y        =  wl_fixed_to_double(surface_y);
 
   OS_Event event = {
-    .window = window,
-    .timestamp_ns = (L1)time * 1000000LLU,
-    .kind = OS_EVENT_KIND__MOUSE_MOVE,
-    .x = x,
-    .y = y,
+    .window        =  window,
+    .timestamp_ns  =  (L1)time * 1000000LLU,
+    .kind          =  OS_EVENT_KIND__MOUSE_MOVE,
+    .x             =  x,
+    .y             =  y,
   };
+
   os_push_event(event);
 
-  os_gfx_state->mouse_x = x;
-  os_gfx_state->mouse_y = y;
+  os_gfx_state->mouse_x  =  x;
+  os_gfx_state->mouse_y  =  y;
 }
 
-Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 serial, I1 time, I1 button, I1 state) {
-  OS_Window *window = os_gfx_state->hovered_window;
+Internal void pointer_button_handler(void *data, struct wl_pointer *pointer, I1 serial, I1 time, I1 button, I1 state)
+{
+  OS_Window *window  =  os_gfx_state->hovered_window;
+  I1        key      =  OS_KEY__NULL;
 
-  I1 key = OS_KEY__NULL;
-  switch (button) {
-    case 0x110: {
-      key = OS_KEY__LEFT_MOUSE_BUTTON;
-    } break;
-    case 0x111: {
-      key = OS_KEY__RIGHT_MOUSE_BUTTON;
-    } break;
-    case 0x112: {
-      key = OS_KEY__MIDDLE_MOUSE_BUTTON;
-    } break;
+  switch (button)
+  {
+    case 0x110: key = OS_KEY__LEFT_MOUSE_BUTTON;   break;
+    case 0x111: key = OS_KEY__RIGHT_MOUSE_BUTTON;  break;
+    case 0x112: key = OS_KEY__MIDDLE_MOUSE_BUTTON; break;
   }
 
-  if (key != OS_KEY__NULL) {
-    L1 kind = (state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
-    OS_Event event = {
-      .window = window,
-      .timestamp_ns = (L1)time * 1000000LLU,
-      .kind = kind,
-      .key = key,
-      .x = os_gfx_state->mouse_x,
-      .y = os_gfx_state->mouse_y,
+  if (key != OS_KEY__NULL)
+  {
+    L1       kind   =  (state == WL_POINTER_BUTTON_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
+    OS_Event event  =  {
+      .window        =  window,
+      .timestamp_ns  =  (L1)time * 1000000LLU,
+      .kind          =  kind,
+      .key           =  key,
+      .x             =  os_gfx_state->mouse_x,
+      .y             =  os_gfx_state->mouse_y,
     };
+
     os_push_event(event);
 
     os_gfx_state->key_states[key] = (kind == OS_EVENT_KIND__PRESS);
   }
 }
 
-Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer, I1 time, I1 axis, wl_fixed_t value) {
+Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer, I1 time, I1 axis, wl_fixed_t value)
+{
   OS_Window *window = os_gfx_state->hovered_window;
 
   OS_Event event = {
-    .window = window,
-    .timestamp_ns = (L1)time * 1000000LLU,
-    .kind = OS_EVENT_KIND__SCROLL,
-    .x = os_gfx_state->mouse_x,
-    .y = os_gfx_state->mouse_y,
+    .window        =  window,
+    .timestamp_ns  =  (L1)time * 1000000LLU,
+    .kind          =  OS_EVENT_KIND__SCROLL,
+    .x             =  os_gfx_state->mouse_x,
+    .y             =  os_gfx_state->mouse_y,
   };
-  if (axis == 0) {
+
+  if (axis == 0)
+  {
     event.delta_y = wl_fixed_to_double(value);
-  } else if (axis == 1) {
+  }
+  else if (axis == 1)
+  {
     event.delta_x = wl_fixed_to_double(value);
   }
 
@@ -583,8 +768,7 @@ Internal void pointer_axis_handler(void *data, struct wl_pointer *pointer, I1 ti
 
 Internal void pointer_frame_handler(void *data, struct wl_pointer *pointer) {}
 
-Internal void pointer_axis_source_handler(void *data, struct wl_pointer *pointer,
-                                          I1 axis_source) {}
+Internal void pointer_axis_source_handler(void *data, struct wl_pointer *pointer, I1 axis_source) {}
 
 Internal void pointer_axis_stop_handler(void *data, struct wl_pointer *pointer, I1 time, I1 axis) {}
 
@@ -593,241 +777,311 @@ Internal void pointer_axis_discrete_handler(void *data, struct wl_pointer *point
 ////////////////////////////////
 //~ kti: Keyboard Event Handlers
 
-Internal void keyboard_keymap_handler(void *data, struct wl_keyboard *keyboard, I1 format, SI1 fd, I1 size) {
-  if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
+Internal void keyboard_keymap_handler(void *data, struct wl_keyboard *keyboard, I1 format, SI1 fd, I1 size)
+{
+  if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
+  {
     char *map = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (map != MAP_FAILED) {
-      if (os_gfx_state->xkb_context == 0) {
+
+    if (map != MAP_FAILED)
+    {
+      if (os_gfx_state->xkb_context == 0)
+      {
         os_gfx_state->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
       }
-      if (os_gfx_state->xkb_context != 0) {
+
+      if (os_gfx_state->xkb_context != 0)
+      {
         struct xkb_keymap *keymap = xkb_keymap_new_from_string(os_gfx_state->xkb_context, map, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
-        if (keymap != 0) {
+
+        if (keymap != 0)
+        {
           struct xkb_state *state = xkb_state_new(keymap);
-          if (state != 0) {
-            if (os_gfx_state->xkb_state != 0) {
+
+          if (state != 0)
+          {
+            if (os_gfx_state->xkb_state != 0)
+            {
               xkb_state_unref(os_gfx_state->xkb_state);
             }
-            if (os_gfx_state->xkb_keymap != 0) {
+
+            if (os_gfx_state->xkb_keymap != 0)
+            {
               xkb_keymap_unref(os_gfx_state->xkb_keymap);
             }
-            os_gfx_state->xkb_keymap = keymap;
-            os_gfx_state->xkb_state = state;
-            keymap = 0;
+
+            os_gfx_state->xkb_keymap  =  keymap;
+            os_gfx_state->xkb_state   =  state;
+            keymap                    =  0;
           }
-          if (keymap != 0) {
+
+          if (keymap != 0)
+          {
             xkb_keymap_unref(keymap);
           }
         }
       }
+
       munmap(map, size);
     }
   }
+
   close(fd);
 }
 
-Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface, struct wl_array *keys) {
-  for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next) {
-    if (surface == it->surface) {
+Internal void keyboard_enter_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface, struct wl_array *keys)
+{
+  for (OS_Window *it = os_gfx_state->first_window; it != 0; it = it->next)
+  {
+    if (surface == it->surface)
+    {
       os_gfx_state->focused_window = it;
       break;
     }
   }
+
   os_gfx_state->redraw_requested = 1;
 }
 
-Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface) {
-  os_gfx_state->focused_window = 0;
+Internal void keyboard_leave_handler(void *data, struct wl_keyboard *keyboard, I1 serial, struct wl_surface *surface)
+{
+  os_gfx_state->redraw_requested  =  1;
+  os_gfx_state->focused_window    =  0;
+
   MemoryZeroArray(os_gfx_state->key_states);
   os_key_repeat_clear();
-  os_gfx_state->redraw_requested = 1;
 }
 
-Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 time, I1 key, I1 state) {
+Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 time, I1 key, I1 state)
+{
   OS_Window *window = os_gfx_state->focused_window;
-  
+
   I1 os_key = os_key_from_wl_key(key);
-  if (os_key != OS_KEY__NULL) {
-    L1 kind = (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
-    L1 timestamp_ns = (L1)time * 1000000LLU;
-    if (os_gfx_state->xkb_state != 0) {
-      xkb_state_update_key(os_gfx_state->xkb_state, os_xkb_keycode_from_wl_key(key), (kind == OS_EVENT_KIND__PRESS) ? XKB_KEY_DOWN : XKB_KEY_UP);
+
+  if (os_key != OS_KEY__NULL)
+  {
+    L1  kind          =  (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
+    L1  timestamp_ns  =  (L1)time * 1000000LLU;
+
+    if (os_gfx_state->xkb_state != 0)
+    {
+      xkb_state_update_key(os_gfx_state->xkb_state,
+                           os_xkb_keycode_from_wl_key(key),
+                           (kind == OS_EVENT_KIND__PRESS) ? XKB_KEY_DOWN : XKB_KEY_UP);
     }
+
     OS_Event event = {
-      .window = window,
-      .timestamp_ns = timestamp_ns,
-      .kind = kind,
-      .key = os_key,
+      .window        =  window,
+      .timestamp_ns  =  timestamp_ns,
+      .kind          =  kind,
+      .key           =  os_key,
     };
     os_push_event(event);
+
     os_gfx_state->key_states[os_key] = (kind == OS_EVENT_KIND__PRESS) ? 1 : 0;
 
     //- kti: Repeat key
-    if (kind == OS_EVENT_KIND__PRESS) {
+    if (kind == OS_EVENT_KIND__PRESS)
+    {
       os_push_text_event(window, key, timestamp_ns, 0);
-      if (os_gfx_state->key_repeat_rate > 0 && (os_gfx_state->xkb_keymap == 0 || xkb_keymap_key_repeats(os_gfx_state->xkb_keymap, os_xkb_keycode_from_wl_key(key)))) {
-        os_gfx_state->repeat_key = os_key;
-        os_gfx_state->repeat_wl_key = key;
-        os_gfx_state->repeat_window = window;
-        os_gfx_state->next_repeat_ns = os_clock() + (L1)os_gfx_state->key_repeat_delay_ms * 1000000LLU;
+
+      if (os_gfx_state->key_repeat_rate > 0
+          && (os_gfx_state->xkb_keymap == 0 || xkb_keymap_key_repeats(os_gfx_state->xkb_keymap, os_xkb_keycode_from_wl_key(key))))
+      {
+        os_gfx_state->repeat_key      =  os_key;
+        os_gfx_state->repeat_wl_key   =  key;
+        os_gfx_state->repeat_window   =  window;
+        os_gfx_state->next_repeat_ns  =  os_clock() + (L1)os_gfx_state->key_repeat_delay_ms * 1000000LLU;
       }
-    } else if (os_gfx_state->repeat_key == os_key) {
+    }
+    else if (os_gfx_state->repeat_key == os_key)
+    {
       os_key_repeat_clear();
     }
   }
 }
 
-Internal void keyboard_modifiers_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 mods_depressed, I1 mods_latched, I1 mods_locked, I1 group) {
-  if (os_gfx_state->xkb_state != 0) {
+Internal void keyboard_modifiers_handler(void *data, struct wl_keyboard *keyboard, I1 serial, I1 mods_depressed, I1 mods_latched, I1 mods_locked, I1 group)
+{
+  if (os_gfx_state->xkb_state != 0)
+  {
     xkb_state_update_mask(os_gfx_state->xkb_state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
   }
 }
 
-Internal void keyboard_repeat_info_handler(void *data, struct wl_keyboard *keyboard, SI1 rate, SI1 delay) {
-  os_gfx_state->key_repeat_rate = rate;
-  os_gfx_state->key_repeat_delay_ms = delay;
-  if (rate <= 0) {
+Internal void keyboard_repeat_info_handler(void *data, struct wl_keyboard *keyboard, SI1 rate, SI1 delay)
+{
+  os_gfx_state->key_repeat_rate      =  rate;
+  os_gfx_state->key_repeat_delay_ms  =  delay;
+
+  if (rate <= 0)
+  {
     os_key_repeat_clear();
   }
 }
 
-Internal OS_Window *os_window_open(String8 title, I1 width, I1 height) {
-  if (os_gfx_state == 0) {
+Internal OS_Window *os_window_open(String8 title, I1 width, I1 height)
+{
+  if (os_gfx_state == 0)
+  {
     Arena *arena = arena_alloc(MiB(64));
-    os_gfx_state = push_array(arena, OS_GFX_State, 1);
-    os_gfx_state->arena = arena;
 
-    os_gfx_state->wakeup_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
-    Assert(os_gfx_state->wakeup_fd >= 0);
-
-    os_gfx_state->display = wl_display_connect(0);
-    Assert(os_gfx_state->display != 0);
+    os_gfx_state             =  push_array(arena, OS_GFX_State, 1);
+    os_gfx_state->arena      =  arena;
+    os_gfx_state->wakeup_fd  =  eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    os_gfx_state->display    =  wl_display_connect(0);
 
     struct wl_registry *registry = wl_display_get_registry(os_gfx_state->display);
+
+    Assert(os_gfx_state->wakeup_fd >= 0);
+    Assert(os_gfx_state->display != 0);
     Assert(registry != 0);
 
-    os_gfx_state->registry_listener.global = registry_global_handler;
-    os_gfx_state->registry_listener.global_remove = registry_global_remove_handler;
+    os_gfx_state->registry_listener.global         =  registry_global_handler;
+    os_gfx_state->registry_listener.global_remove  =  registry_global_remove_handler;
+
     wl_registry_add_listener(registry, &os_gfx_state->registry_listener, 0);
     wl_display_roundtrip(os_gfx_state->display);
     Assert(os_gfx_state->compositor != 0);
     Assert(os_gfx_state->xdg_wm_base != 0);
     Assert(os_gfx_state->seat != 0);
 
-    os_gfx_state->xdg_wm_base_listener.ping = xdg_wm_base_ping_handler;
-    xdg_wm_base_add_listener(os_gfx_state->xdg_wm_base, &os_gfx_state->xdg_wm_base_listener, 0);
+    os_gfx_state->xdg_wm_base_listener.ping   =  xdg_wm_base_ping_handler;
+    os_gfx_state->seat_listener.capabilities  =  seat_capabilities_handler;
+    os_gfx_state->seat_listener.name          =  seat_name_handler;
 
-    os_gfx_state->seat_listener.capabilities = seat_capabilities_handler;
-    os_gfx_state->seat_listener.name = seat_name_handler;
+    xdg_wm_base_add_listener(os_gfx_state->xdg_wm_base, &os_gfx_state->xdg_wm_base_listener, 0);
     wl_seat_add_listener(os_gfx_state->seat, &os_gfx_state->seat_listener, 0);
 
-    os_gfx_state->pointer_listener.enter = pointer_enter_handler;
-    os_gfx_state->pointer_listener.leave = pointer_leave_handler;
-    os_gfx_state->pointer_listener.motion = pointer_motion_handler;
-    os_gfx_state->pointer_listener.button = pointer_button_handler;
-    os_gfx_state->pointer_listener.axis = pointer_axis_handler;
-    os_gfx_state->pointer_listener.frame = pointer_frame_handler;
-    os_gfx_state->pointer_listener.axis_source = pointer_axis_source_handler;
-    os_gfx_state->pointer_listener.axis_stop = pointer_axis_stop_handler;
-    os_gfx_state->pointer_listener.axis_discrete = pointer_axis_discrete_handler;
+    os_gfx_state->pointer_listener.enter          =  pointer_enter_handler;
+    os_gfx_state->pointer_listener.leave          =  pointer_leave_handler;
+    os_gfx_state->pointer_listener.motion         =  pointer_motion_handler;
+    os_gfx_state->pointer_listener.button         =  pointer_button_handler;
+    os_gfx_state->pointer_listener.axis           =  pointer_axis_handler;
+    os_gfx_state->pointer_listener.frame          =  pointer_frame_handler;
+    os_gfx_state->pointer_listener.axis_source    =  pointer_axis_source_handler;
+    os_gfx_state->pointer_listener.axis_stop      =  pointer_axis_stop_handler;
+    os_gfx_state->pointer_listener.axis_discrete  =  pointer_axis_discrete_handler;
 
-    os_gfx_state->keyboard_listener.keymap = keyboard_keymap_handler;
-    os_gfx_state->keyboard_listener.enter = keyboard_enter_handler;
-    os_gfx_state->keyboard_listener.leave = keyboard_leave_handler;
-    os_gfx_state->keyboard_listener.key = keyboard_key_handler;
-    os_gfx_state->keyboard_listener.modifiers = keyboard_modifiers_handler;
-    os_gfx_state->keyboard_listener.repeat_info = keyboard_repeat_info_handler;
+    os_gfx_state->keyboard_listener.keymap       =  keyboard_keymap_handler;
+    os_gfx_state->keyboard_listener.enter        =  keyboard_enter_handler;
+    os_gfx_state->keyboard_listener.leave        =  keyboard_leave_handler;
+    os_gfx_state->keyboard_listener.key          =  keyboard_key_handler;
+    os_gfx_state->keyboard_listener.modifiers    =  keyboard_modifiers_handler;
+    os_gfx_state->keyboard_listener.repeat_info  =  keyboard_repeat_info_handler;
 
     wl_display_roundtrip(os_gfx_state->display);
 
     // Initialize cursor theme and default cursor.
-    os_gfx_state->cursor_theme = wl_cursor_theme_load(0, 24, os_gfx_state->shm);
-    os_gfx_state->cursor_scale = 1;
-    if (os_gfx_state->cursor_theme) {
+    os_gfx_state->cursor_theme  =  wl_cursor_theme_load(0, 24, os_gfx_state->shm);
+    os_gfx_state->cursor_scale  =  1;
+
+    if (os_gfx_state->cursor_theme)
+    {
       os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "default");
-      if (!os_gfx_state->default_cursor) {
+
+      if (!os_gfx_state->default_cursor)
+      {
         os_gfx_state->default_cursor = wl_cursor_theme_get_cursor(os_gfx_state->cursor_theme, "left_ptr");
       }
     }
+
     os_gfx_state->cursor_surface = wl_compositor_create_surface(os_gfx_state->compositor);
   }
 
   OS_Window *result = push_array(os_gfx_state->arena, OS_Window, 1);
-  result->width = width;
-  result->height = height;
-  result->pixel_ratio = 1.0;
+
+  result->width        =  width;
+  result->height       =  height;
+  result->pixel_ratio  =  1.0;
 
   result->surface = wl_compositor_create_surface(os_gfx_state->compositor);
+
   Assert(result->surface != 0);
 
-  result->surface_listener.enter = surface_enter_handler;
-  result->surface_listener.leave = surface_leave_handler;
+  result->surface_listener.enter  =  surface_enter_handler;
+  result->surface_listener.leave  =  surface_leave_handler;
+
 #if defined(WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION)
-  if (wl_surface_get_version(result->surface) >= WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION) {
-    result->surface_listener.preferred_buffer_scale = surface_preferred_buffer_scale_handler;
-    result->surface_listener.preferred_buffer_transform = surface_preferred_buffer_transform_handler;
+  if (wl_surface_get_version(result->surface) >= WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION)
+  {
+    result->surface_listener.preferred_buffer_scale      =  surface_preferred_buffer_scale_handler;
+    result->surface_listener.preferred_buffer_transform  =  surface_preferred_buffer_transform_handler;
   }
+
 #endif
   wl_surface_add_listener(result->surface, &result->surface_listener, result);
 
-  result->xdg_surface = xdg_wm_base_get_xdg_surface(os_gfx_state->xdg_wm_base, result->surface);
-  Assert(result->xdg_surface);
+  result->xdg_surface                     =  xdg_wm_base_get_xdg_surface(os_gfx_state->xdg_wm_base, result->surface);
+  result->xdg_surface_listener.configure  =  xdg_surface_configure_handler;
 
-  result->xdg_surface_listener.configure = xdg_surface_configure_handler;
   xdg_surface_add_listener(result->xdg_surface, &result->xdg_surface_listener, (void *)result);
 
-  result->xdg_toplevel = xdg_surface_get_toplevel(result->xdg_surface);
-  Assert(result->xdg_toplevel);
+  result->xdg_toplevel                     =  xdg_surface_get_toplevel(result->xdg_surface);
+  result->xdg_toplevel_listener.configure  =  xdg_toplevel_configure_handler;
+  result->xdg_toplevel_listener.close      =  xdg_toplevel_close_handler;
 
-  result->xdg_toplevel_listener.configure = xdg_toplevel_configure_handler;
-  result->xdg_toplevel_listener.close = xdg_toplevel_close_handler;
   xdg_toplevel_add_listener(result->xdg_toplevel, &result->xdg_toplevel_listener, (void *)result);
 
-  Temp_Arena scratch = scratch_begin(0, 0);
-  String8 cstr_title = push_str8_copy(scratch.arena, title);
+  Temp_Arena  scratch     =  scratch_begin(0, 0);
+  String8     cstr_title  =  push_str8_copy(scratch.arena, title);
+
   xdg_toplevel_set_title(result->xdg_toplevel, (CString)cstr_title.str);
   scratch_end(scratch);
 
   result->next = os_gfx_state->first_window;
-  if (result->next != 0) {
+
+  if (result->next != 0)
+  {
     result->next->prev = result;
   }
+
   os_gfx_state->first_window = result;
 
   wl_surface_commit(result->surface);
 
-  while (!result->configured) {
+  while (!result->configured)
+  {
     wl_display_dispatch(os_gfx_state->display);
   }
 
   return result;
 }
 
-Internal void os_send_wakeup_event(void) {
-  if (os_gfx_state != 0 && os_gfx_state->wakeup_fd >= 0) {
+Internal void os_send_wakeup_event(void)
+{
+  if (os_gfx_state != 0 && os_gfx_state->wakeup_fd >= 0)
+  {
     eventfd_write(os_gfx_state->wakeup_fd, 1);
   }
 }
 
-Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
+Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
+{
   Assert(os_gfx_state->first_window != 0);
 
-  os_gfx_state->event_arena = arena;
-  os_gfx_state->events.first = 0;
-  os_gfx_state->events.last = 0;
-  os_gfx_state->events.count = 0;
-  os_gfx_state->redraw_requested = 0;
+  os_gfx_state->event_arena       =  arena;
+  os_gfx_state->events.first      =  0;
+  os_gfx_state->events.last       =  0;
+  os_gfx_state->events.count      =  0;
+  os_gfx_state->redraw_requested  =  0;
 
   I1 display_ok = 1;
-  for (;;) {
-    while (display_ok && wl_display_prepare_read(os_gfx_state->display) != 0) {
+
+  for (;;)
+  {
+    while (display_ok && wl_display_prepare_read(os_gfx_state->display) != 0)
+    {
       display_ok = (wl_display_dispatch_pending(os_gfx_state->display) >= 0);
     }
-    if (!display_ok) break;
+
+    if (!display_ok)
+      break;
 
     // prepare_read succeeded, so cancel it before returning queued input or a
     // configure/scale redraw discovered while dispatching pending callbacks.
-    if (os_gfx_state->events.count != 0 || os_gfx_state->redraw_requested) {
+    if (os_gfx_state->events.count != 0 || os_gfx_state->redraw_requested)
+    {
       wl_display_cancel_read(os_gfx_state->display);
       break;
     }
@@ -836,81 +1090,100 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
 
     struct pollfd poll_fds[] = {
       {
-        .fd = wl_display_get_fd(os_gfx_state->display),
-        .events = POLLIN,
+        .fd      =  wl_display_get_fd(os_gfx_state->display),
+        .events  =  POLLIN,
       },
       {
-        .fd = os_gfx_state->wakeup_fd,
-        .events = POLLIN,
+        .fd      =  os_gfx_state->wakeup_fd,
+        .events  =  POLLIN,
       },
     };
 
-    SI1 poll_timeout_ms = timeout_ms;
-    I1 waiting_for_repeat = 0;
-    if (os_gfx_state->repeat_key != OS_KEY__NULL &&
-        os_gfx_state->key_repeat_rate > 0 &&
-        os_gfx_state->key_states[os_gfx_state->repeat_key]) {
-      L1 now = os_clock();
-      L1 until_repeat_ns = os_gfx_state->next_repeat_ns > now ? os_gfx_state->next_repeat_ns-now : 0;
-      SI1 repeat_timeout_ms = (SI1)((until_repeat_ns + 999999LLU)/1000000LLU);
-      if (poll_timeout_ms < 0 || repeat_timeout_ms < poll_timeout_ms) {
-        poll_timeout_ms = repeat_timeout_ms;
-        waiting_for_repeat = 1;
+    SI1  poll_timeout_ms     =  timeout_ms;
+    I1   waiting_for_repeat  =  0;
+
+    if (os_gfx_state->repeat_key != OS_KEY__NULL && os_gfx_state->key_repeat_rate > 0 &&
+        os_gfx_state->key_states[os_gfx_state->repeat_key])
+    {
+      L1   now                =  os_clock();
+      L1   until_repeat_ns    =  os_gfx_state->next_repeat_ns > now ? os_gfx_state->next_repeat_ns - now : 0;
+      SI1  repeat_timeout_ms  =  (SI1)((until_repeat_ns + 999999LLU) / 1000000LLU);
+
+      if (poll_timeout_ms < 0 || repeat_timeout_ms < poll_timeout_ms)
+      {
+        poll_timeout_ms     =  repeat_timeout_ms;
+        waiting_for_repeat  =  1;
       }
     }
 
     I1 poll_result = 0;
-    do {
+    do
+    {
       poll_result = poll(poll_fds, ArrayCount(poll_fds), poll_timeout_ms);
     } while (poll_result < 0 && errno == EINTR);
 
     I1 wakeup_received = poll_result > 0 && (poll_fds[1].revents & POLLIN);
-    if (wakeup_received) {
+
+    if (wakeup_received)
+    {
       eventfd_t value;
       eventfd_read(os_gfx_state->wakeup_fd, &value);
     }
 
-    if (poll_result > 0 && (poll_fds[0].revents & POLLIN)) {
+    if (poll_result > 0 && (poll_fds[0].revents & POLLIN))
+    {
       display_ok = (wl_display_read_events(os_gfx_state->display) >= 0);
-    } else {
+    }
+    else
+    {
       wl_display_cancel_read(os_gfx_state->display);
+
       display_ok = (poll_result >= 0 && !(poll_fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)));
     }
-    if (!display_ok) break;
+
+    if (!display_ok)
+      break;
 
     display_ok = (wl_display_dispatch_pending(os_gfx_state->display) >= 0);
-    if (!display_ok) break;
+
+    if (!display_ok)
+      break;
 
     // In idle mode, ignore compositor bookkeeping such as Vulkan buffer
     // releases and continue sleeping. Input, configuration, and key-repeat
     // deadlines return control to the editor for a redraw.
-    if (timeout_ms >= 0 || waiting_for_repeat || wakeup_received ||
-        os_gfx_state->events.count != 0 || os_gfx_state->redraw_requested) {
+    if (timeout_ms >= 0 || waiting_for_repeat || wakeup_received || os_gfx_state->events.count != 0 ||
+        os_gfx_state->redraw_requested)
+    {
       break;
     }
   }
 
-  if (!display_ok) {
-    for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next) {
+  if (!display_ok)
+  {
+    for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next)
+    {
       os_push_event((OS_Event){
-        .kind = OS_EVENT_KIND__WINDOW_CLOSE,
-        .window = window,
+        .kind    =  OS_EVENT_KIND__WINDOW_CLOSE,
+        .window  =  window,
       });
     }
   }
 
-  if (os_gfx_state->repeat_key != OS_KEY__NULL &&
-      os_gfx_state->key_repeat_rate > 0 &&
-      os_gfx_state->key_states[os_gfx_state->repeat_key]) {
-    L1 now = os_clock();
-    L1 repeat_interval_ns = 1000000000LLU / (L1)os_gfx_state->key_repeat_rate;
-    while (now >= os_gfx_state->next_repeat_ns) {
+  if (os_gfx_state->repeat_key != OS_KEY__NULL && os_gfx_state->key_repeat_rate > 0 &&
+      os_gfx_state->key_states[os_gfx_state->repeat_key])
+  {
+    L1  now                 =  os_clock();
+    L1  repeat_interval_ns  =  1000000000LLU / (L1)os_gfx_state->key_repeat_rate;
+
+    while (now >= os_gfx_state->next_repeat_ns)
+    {
       OS_Event event = {
-        .window = os_gfx_state->repeat_window,
-        .timestamp_ns = os_gfx_state->next_repeat_ns,
-        .kind = OS_EVENT_KIND__PRESS,
-        .key = os_gfx_state->repeat_key,
-        .is_repeat = 1,
+        .window        =  os_gfx_state->repeat_window,
+        .timestamp_ns  =  os_gfx_state->next_repeat_ns,
+        .kind          =  OS_EVENT_KIND__PRESS,
+        .key           =  os_gfx_state->repeat_key,
+        .is_repeat     =  1,
       };
       os_push_event(event);
       os_push_text_event(os_gfx_state->repeat_window, os_gfx_state->repeat_wl_key, os_gfx_state->next_repeat_ns, 1);
@@ -921,13 +1194,18 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms) {
   return os_gfx_state->events;
 }
 
-Internal void os_window_close(OS_Window *window) {
-  if (os_gfx_state->hovered_window == window) {
-    os_gfx_state->hovered_window = 0;
-    os_gfx_state->cursor_enter_serial = 0;
+Internal void os_window_close(OS_Window *window)
+{
+  if (os_gfx_state->hovered_window == window)
+  {
+    os_gfx_state->hovered_window       =  0;
+    os_gfx_state->cursor_enter_serial  =  0;
   }
-  if (os_gfx_state->focused_window == window) {
+
+  if (os_gfx_state->focused_window == window)
+  {
     os_gfx_state->focused_window = 0;
+
     MemoryZeroArray(os_gfx_state->key_states);
     os_key_repeat_clear();
   }
@@ -936,7 +1214,8 @@ Internal void os_window_close(OS_Window *window) {
   xdg_surface_destroy(window->xdg_surface);
   wl_surface_destroy(window->surface);
 
-  if (os_gfx_state->first_window == window && window->next == 0) {
+  if (os_gfx_state->first_window == window && window->next == 0)
+  {
     if (os_gfx_state->cursor_surface)
       wl_surface_destroy(os_gfx_state->cursor_surface);
     if (os_gfx_state->cursor_theme)
@@ -960,46 +1239,58 @@ Internal void os_window_close(OS_Window *window) {
     wl_display_disconnect(os_gfx_state->display);
   }
 
-  if (window->prev != 0) {
+  if (window->prev != 0)
+  {
     window->prev->next = window->next;
   }
-  if (window->next != 0) {
+
+  if (window->next != 0)
+  {
     window->next->prev = window->prev;
   }
-  if (window == os_gfx_state->first_window) {
+
+  if (window == os_gfx_state->first_window)
+  {
     os_gfx_state->first_window = window->next;
   }
 }
 
-Internal OS_Window *os_hovered_window(void) {
+Internal OS_Window *os_hovered_window(void)
+{
   return os_gfx_state->hovered_window;
 }
 
-Internal OS_Window *os_focused_window(void) {
+Internal OS_Window *os_focused_window(void)
+{
   return os_gfx_state->focused_window;
 }
 
-Internal I1 os_key_is_down(L1 key) {
+Internal I1 os_key_is_down(L1 key)
+{
   I1 result = 0;
 
-  if (key > OS_KEY__NULL && key < OS_KEY_COUNT) {
+  if (key > OS_KEY__NULL && key < OS_KEY_COUNT)
+  {
     result = os_gfx_state->key_states[key];
   }
 
   return result;
 }
 
-Internal D1 os_mouse_x(void) {
+Internal D1 os_mouse_x(void)
+{
   D1 result = os_gfx_state->mouse_x;
   return result;
 }
 
-Internal D1 os_mouse_y(void) {
+Internal D1 os_mouse_y(void)
+{
   D1 result = os_gfx_state->mouse_y;
   return result;
 }
 
-Internal F2 os_mouse_pos(void) {
+Internal F2 os_mouse_pos(void)
+{
   F2 result = {os_gfx_state->mouse_x, os_gfx_state->mouse_y};
   return result;
 }

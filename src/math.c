@@ -6,63 +6,84 @@
 ////////////////////////////////
 //~ F1
 
+Inline F1 clamp01_F1(F1 x)
+{
+  return Min(Max(x, 0.0f), 1.0f);
+}
 
-Inline F1 clamp01_F1(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
-Inline F1 saturate_F1(F1 x) { return clamp01_F1(x); }
+Inline F1 saturate_F1(F1 x)
+{
+  return clamp01_F1(x);
+}
 
-Inline F1 sign_F1(F1 a) {
+Inline F1 sign_F1(F1 a)
+{
   F1 result = -1.0f;
-  if (a > 0.0f) result = 1.0f;
+
+  if (a > 0.0f)
+    result = 1.0f;
   return result;
 }
 
-Inline F1 lerp_F1(F1 a, F1 t, F1 b) {
-  F1 result = a * (1-t) + b*t;
+Inline F1 lerp_F1(F1 a, F1 t, F1 b)
+{
+  F1 result = a * (1 - t) + b * t;
   return result;
 }
 
-Inline F1 lerp_snap_F1(F1 a, F1 t, F1 b, F1 min_dist) {
+Inline F1 lerp_snap_F1(F1 a, F1 t, F1 b, F1 min_dist)
+{
   F1 result = lerp_F1(a, t, b);
-  if (abs_F1(a-b) < min_dist) {
+
+  if (abs_F1(a - b) < min_dist)
+  {
     result = b;
   }
+
   return result;
 }
 
 ////////////////////////////////
 //~ F2
 
-Inline F1 dot_F2(F2 a, F2 b) {
-  F1 result = a[0]*b[0] + a[1]*b[1];
+Inline F1 dot_F2(F2 a, F2 b)
+{
+  F1 result = a[0] * b[0] + a[1] * b[1];
   return result;
 }
 
-Inline F1 length_sq_F2(F2 v) {
+Inline F1 length_sq_F2(F2 v)
+{
   F1 result = dot_F2(v, v);
   return result;
 }
 
-Inline F1 length_F2(F2 v) {
+Inline F1 length_F2(F2 v)
+{
   F1 result = sqrt_F1(length_sq_F2(v));
   return result;
 }
 
-Internal F1 distance_to_segment_F2(F2 p, F2 a, F2 b) {
-  F2 ab = b - a;
-  F1 ab_len_sq = dot_F2(ab, ab);
+Internal F1 distance_to_segment_F2(F2 p, F2 a, F2 b)
+{
+  F2  ab         =  b - a;
+  F1  ab_len_sq  =  dot_F2(ab, ab);
 
-  if (ab_len_sq <= 0.00001f) {
+  if (ab_len_sq <= 0.00001f)
+  {
     return length_F2(p - a);
   }
 
   F1 t = dot_F2(p - a, ab) / ab_len_sq;
+
   t = Clamp(0.0f, t, 1.0f);
 
-  F2 closest = a + t*ab;
+  F2 closest = a + t * ab;
   return length_F2(p - closest);
 }
 
-Inline F2 F2_from_F4(F4 v) {
+Inline F2 F2_from_F4(F4 v)
+{
   F2 result = {v[0], v[1]};
   return result;
 }
@@ -70,7 +91,8 @@ Inline F2 F2_from_F4(F4 v) {
 ////////////////////////////////
 //~ kti: V3
 
-Inline V3 V3_from_F4(F4 v) {
+Inline V3 V3_from_F4(F4 v)
+{
   V3 result = {v[0], v[1], v[2]};
   return result;
 }
@@ -78,215 +100,247 @@ Inline V3 V3_from_F4(F4 v) {
 ////////////////////////////////
 //~ kti: F4
 
-Inline F4 F4_from_V3(V3 v) {
+Inline F4 F4_from_V3(V3 v)
+{
   F4 result = {v.x, v.y, v.z, 0.0f};
   return result;
 }
 
-Inline F4 F4_with_w(F4 v, F1 w) {
+Inline F4 F4_with_w(F4 v, F1 w)
+{
   F4 result = v;
+
   result[3] = w;
   return result;
 }
 
-Inline F1 dot_F4(F4 a, F4 b) {
-  F1 result = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
+Inline F1 dot_F4(F4 a, F4 b)
+{
+  F1 result = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
   return result;
 }
 
-Inline F1 length_sq_F4(F4 v) {
+Inline F1 length_sq_F4(F4 v)
+{
   F1 result = dot_F4(v, v);
   return result;
 }
 
-Inline F1 length_F4(F4 v) {
+Inline F1 length_F4(F4 v)
+{
   F1 result = sqrt_F1(length_sq_F4(v));
   return result;
 }
 
-Inline F4 normalize_F4(F4 v) {
+Inline F4 normalize_F4(F4 v)
+{
   F4 result = v * (1.0f / length_F4(v));
   return result;
 }
 
-Inline F4 cross_F4(F4 a, F4 b) {
+Inline F4 cross_F4(F4 a, F4 b)
+{
   F4 result = {0};
 
-  result[0] = a[1]*b[2] - a[2]*b[1];
-  result[1] = a[2]*b[0] - a[0]*b[2];
-  result[2] = a[0]*b[1] - a[1]*b[0];
+  result[0]  =  a[1] * b[2] - a[2] * b[1];
+  result[1]  =  a[2] * b[0] - a[0] * b[2];
+  result[2]  =  a[0] * b[1] - a[1] * b[0];
 
   return result;
 }
 
-Inline F4 lerp_F4(F4 a, F1 t, F4 b) {
-  F4 result = a * (1-t) + b*t;
+Inline F4 lerp_F4(F4 a, F1 t, F4 b)
+{
+  F4 result = a * (1 - t) + b * t;
   return result;
 }
 
-Inline F4 lerp_snap_F4(F4 a, F1 t, F4 b, F1 min_dist) {
+Inline F4 lerp_snap_F4(F4 a, F1 t, F4 b, F1 min_dist)
+{
   F4 result = lerp_F4(a, t, b);
-  if (length_sq_F4(a-b) < Square(min_dist)) {
+
+  if (length_sq_F4(a - b) < Square(min_dist))
+  {
     result = b;
   }
+
   return result;
 }
 
-Inline F4 abs_F4(F4 v) {
-  F4 result = { abs_F1(v[0]), abs_F1(v[1]), abs_F1(v[2]), abs_F1(v[3]) };
+Inline F4 abs_F4(F4 v)
+{
+  F4 result = {abs_F1(v[0]), abs_F1(v[1]), abs_F1(v[2]), abs_F1(v[3])};
   return result;
 }
 
-Inline F4 clamp01_F4(F4 v) {
-  F4 result= {
-    clamp01_F1(v[0]),
-    clamp01_F1(v[1]),
-    clamp01_F1(v[2]),
-    clamp01_F1(v[3])
-  };
+Inline F4 clamp01_F4(F4 v)
+{
+  F4 result = {clamp01_F1(v[0]), clamp01_F1(v[1]), clamp01_F1(v[2]), clamp01_F1(v[3])};
   return result;
 }
 
-Inline F1 luminance_F4(F4 v) {
-  F1 result = 0.2126f*v[0] + 0.7152f*v[1] + 0.0722f*v[2];
+Inline F1 luminance_F4(F4 v)
+{
+  F1 result = 0.2126f * v[0] + 0.7152f * v[1] + 0.0722f * v[2];
   return result;
 }
 
-Inline F4 pow_F4(F4 v, F1 exp) {
-  F4 result = {
-    powf(v[0], exp),
-    powf(v[1], exp),
-    powf(v[2], exp),
-    powf(v[3], exp)
-  };
+Inline F4 pow_F4(F4 v, F1 exp)
+{
+  F4 result = {powf(v[0], exp), powf(v[1], exp), powf(v[2], exp), powf(v[3], exp)};
   return result;
 }
 
-Inline F4 reflect_F4(F4 v, F4 normal) {
-  F4 result = v - 2*dot_F4(v, normal) * normal;
+Inline F4 reflect_F4(F4 v, F4 normal)
+{
+  F4 result = v - 2 * dot_F4(v, normal) * normal;
   return result;
 }
 
 ////////////////////////////////
 //~ F4x4
 
-Inline F4x4 identity_F4x4(void) {
+Inline F4x4 identity_F4x4(void)
+{
   F4x4 result = {0};
-  result.m[0][0] = 1.0f;
-  result.m[1][1] = 1.0f;
-  result.m[2][2] = 1.0f;
-  result.m[3][3] = 1.0f;
+
+  result.m[0][0]  =  1.0f;
+  result.m[1][1]  =  1.0f;
+  result.m[2][2]  =  1.0f;
+  result.m[3][3]  =  1.0f;
   return result;
 }
 
-Inline F4x4 mul_F4x4(F4x4 a, F4x4 b) {
+Inline F4x4 mul_F4x4(F4x4 a, F4x4 b)
+{
   F4x4 result = {0};
-  for (I1 row = 0; row < 4; row += 1) {
-    for (I1 col = 0; col < 4; col += 1) {
+
+  for (I1 row = 0; row < 4; row += 1)
+  {
+    for (I1 col = 0; col < 4; col += 1)
+    {
       F1 sum = 0.0f;
-      for (I1 i = 0; i < 4; i += 1) {
+
+      for (I1 i = 0; i < 4; i += 1)
+      {
         sum += a.m[row][i] * b.m[i][col];
       }
+
       result.m[row][col] = sum;
     }
   }
+
   return result;
 }
 
-Inline F4x4 translate_F4x4(F4 p) {
+Inline F4x4 translate_F4x4(F4 p)
+{
   F4x4 result = identity_F4x4();
-  result.m[3][0] = p[0];
-  result.m[3][1] = p[1];
-  result.m[3][2] = p[2];
+
+  result.m[3][0]  =  p[0];
+  result.m[3][1]  =  p[1];
+  result.m[3][2]  =  p[2];
+
   return result;
 }
 
-Inline F4x4 scale_F4x4(F4 s) {
+Inline F4x4 scale_F4x4(F4 s)
+{
   F4x4 result = identity_F4x4();
-  result.m[0][0] = s[0];
-  result.m[1][1] = s[1];
-  result.m[2][2] = s[2];
+
+  result.m[0][0]  =  s[0];
+  result.m[1][1]  =  s[1];
+  result.m[2][2]  =  s[2];
+
   return result;
 }
 
-Inline F4x4 rotate_x_F4x4(F1 angle_rad) {
-  F1 c = cos_F1(angle_rad);
-  F1 s = sin_F1(angle_rad);
-  F4x4 result = identity_F4x4();
-  result.m[1][1] = c;
-  result.m[1][2] = s;
-  result.m[2][1] = -s;
-  result.m[2][2] = c;
+Inline F4x4 rotate_x_F4x4(F1 angle_rad)
+{
+  F1    c       =  cos_F1(angle_rad);
+  F1    s       =  sin_F1(angle_rad);
+  F4x4  result  =  identity_F4x4();
+
+  result.m[1][1]  =  c;
+  result.m[1][2]  =  s;
+  result.m[2][1]  =  -s;
+  result.m[2][2]  =  c;
+
   return result;
 }
 
-Inline F4x4 rotate_y_F4x4(F1 angle_rad) {
-  F1 c = cos_F1(angle_rad);
-  F1 s = sin_F1(angle_rad);
-  F4x4 result = identity_F4x4();
-  result.m[0][0] = c;
-  result.m[0][2] = -s;
-  result.m[2][0] = s;
-  result.m[2][2] = c;
+Inline F4x4 rotate_y_F4x4(F1 angle_rad)
+{
+  F1    c       =  cos_F1(angle_rad);
+  F1    s       =  sin_F1(angle_rad);
+  F4x4  result  =  identity_F4x4();
+
+  result.m[0][0]  =  c;
+  result.m[0][2]  =  -s;
+  result.m[2][0]  =  s;
+  result.m[2][2]  =  c;
+
   return result;
 }
 
-Inline F4x4 rotate_z_F4x4(F1 angle_rad) {
-  F1 c = cos_F1(angle_rad);
-  F1 s = sin_F1(angle_rad);
-  F4x4 result = identity_F4x4();
-  result.m[0][0] = c;
-  result.m[0][1] = s;
-  result.m[1][0] = -s;
-  result.m[1][1] = c;
+Inline F4x4 rotate_z_F4x4(F1 angle_rad)
+{
+  F1    c       =  cos_F1(angle_rad);
+  F1    s       =  sin_F1(angle_rad);
+  F4x4  result  =  identity_F4x4();
+
+  result.m[0][0]  =  c;
+  result.m[0][1]  =  s;
+  result.m[1][0]  =  -s;
+  result.m[1][1]  =  c;
+
   return result;
 }
 
-Inline F4x4 perspective_fov_F4x4(F1 fov_angle_y, F1 aspect_ratio, F1 near_distance, F1 far_distance) {
-  F1 sin_fov = sin_F1(fov_angle_y * 0.5f);
-  F1 cos_fov = cos_F1(fov_angle_y * 0.5f);
-  F1 scaled_view_height = cos_fov / sin_fov;
-  F1 scaled_view_width = scaled_view_height / aspect_ratio;
-  F1 scaled_far_distance = far_distance / (far_distance - near_distance);
+Inline F4x4 perspective_fov_F4x4(F1 fov_angle_y, F1 aspect_ratio, F1 near_distance, F1 far_distance)
+{
+  F1  sin_fov              =  sin_F1(fov_angle_y * 0.5f);
+  F1  cos_fov              =  cos_F1(fov_angle_y * 0.5f);
+  F1  scaled_view_height   =  cos_fov / sin_fov;
+  F1  scaled_view_width    =  scaled_view_height / aspect_ratio;
+  F1  scaled_far_distance  =  far_distance / (far_distance - near_distance);
 
   F4x4 result = {0};
-  result.m[0][0] = scaled_view_width;
-  result.m[1][1] = scaled_view_height;
-  result.m[2][2] = scaled_far_distance;
-  result.m[2][3] = 1.0f;
-  result.m[3][2] = -scaled_far_distance * near_distance;
+
+  result.m[0][0]  =  scaled_view_width;
+  result.m[1][1]  =  scaled_view_height;
+  result.m[2][2]  =  scaled_far_distance;
+  result.m[2][3]  =  1.0f;
+  result.m[3][2]  =  -scaled_far_distance * near_distance;
+
   return result;
 }
 
-Inline F4 mul_F4x4_F4(F4x4 m, F4 v) {
+Inline F4 mul_F4x4_F4(F4x4 m, F4 v)
+{
   F4 result = {0};
-  for (I1 col = 0; col < 4; col += 1) {
-    result[col] =
-      v[0] * m.m[0][col] +
-      v[1] * m.m[1][col] +
-      v[2] * m.m[2][col] +
-      v[3] * m.m[3][col];
+
+  for (I1 col = 0; col < 4; col += 1)
+  {
+    result[col] = v[0] * m.m[0][col] + v[1] * m.m[1][col] + v[2] * m.m[2][col] + v[3] * m.m[3][col];
   }
+
   return result;
 }
 
 ////////////////////////////////
 //~ kti: Shape
 
-Internal String8 shape_kind_name(Shape_Kind kind) {
+Internal String8 shape_kind_name(Shape_Kind kind)
+{
   String8 result = str8("Unknown");
 
-  switch (kind) {
-  case SHAPE_KIND__SPHERE:
-    result = str8("Sphere");
-    break;
-  case SHAPE_KIND__BOX:
-    result = str8("Box");
-    break;
-  case SHAPE_KIND__PLANE:
-    result = str8("Plane");
-    break;
-  default: break;
+  switch (kind)
+  {
+    case SHAPE_KIND__SPHERE: result  =  str8("Sphere"); break;
+    case SHAPE_KIND__BOX:    result  =  str8("Box");    break;
+    case SHAPE_KIND__PLANE:  result  =  str8("Plane");  break;
+    default: break;
   }
 
   return result;
@@ -295,15 +349,18 @@ Internal String8 shape_kind_name(Shape_Kind kind) {
 ////////////////////////////////
 //~ kti: Ray
 
-Internal F1 ray_plane_intersect(Ray ray, Plane plane) {
-  F1 result = 0.0f;
+Internal F1 ray_plane_intersect(Ray ray, Plane plane)
+{
+  F1  result        =  0.0f;
+  F4  plane_normal  =  F4_from_V3(plane.normal);
+  F1  denom         =  dot_F4(plane_normal, ray.dir);
 
-  F4 plane_normal = F4_from_V3(plane.normal);
-
-  F1 denom = dot_F4(plane_normal, ray.dir);
-  if (abs_F1(denom) > 0.0001f) {
+  if (abs_F1(denom) > 0.0001f)
+  {
     F1 t = (-plane.d - dot_F4(plane_normal, ray.pos)) / denom;
-    if (t > 0.001f) {
+
+    if (t > 0.001f)
+    {
       result = t;
     }
   }
@@ -311,73 +368,82 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane) {
   return result;
 }
 
-Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere) {
-  F1 result = 0.0f;
+Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
+{
+  F1 result                    =  0.0f;
+  F4 sphere_pos                =  F4_from_V3(sphere.pos);
+  F4  sphere_relative_ray_pos  =  ray.pos - sphere_pos;
+  F1  b                        =  2.0f * dot_F4(ray.dir, sphere_relative_ray_pos);
+  F1  c                        =  dot_F4(sphere_relative_ray_pos, sphere_relative_ray_pos) - Square(sphere.radius);
+  F1  discriminant             =  b * b - 4.0f * c;
 
-  F4 sphere_pos = F4_from_V3(sphere.pos);
-
-  F4 sphere_relative_ray_pos = ray.pos - sphere_pos;
-  F1 b = 2.0f * dot_F4(ray.dir, sphere_relative_ray_pos);
-  F1 c = dot_F4(sphere_relative_ray_pos, sphere_relative_ray_pos) - Square(sphere.radius);
-
-  F1 discriminant = b*b - 4.0f*c;
-  if (discriminant > 0.0f) {
+  if (discriminant > 0.0f)
+  {
     F1 root_term = sqrt_F1(discriminant);
-    if (root_term > 0.0001f) {
-      F1 tp = (-b + root_term) / 2.0f;
-      F1 tn = (-b - root_term) / 2.0f;
+
+    if (root_term > 0.0001f)
+    {
+      F1  tp  =  (-b + root_term) / 2.0f;
+      F1  tn  =  (-b - root_term) / 2.0f;
 
       result = tp;
-      if (tn > 0.001f && tn < tp) result = tn;
+
+      if (tn > 0.001f && tn < tp)
+        result = tn;
     }
   }
 
   return result;
 }
 
-Internal F1 ray_box_intersect(Ray ray, Box box) {
-  F4 aabb_min = F4_from_V3(box.min);
-  F4 aabb_max = F4_from_V3(box.max);
+Internal F1 ray_box_intersect(Ray ray, Box box)
+{
+  F4  aabb_min  =  F4_from_V3(box.min);
+  F4  aabb_max  =  F4_from_V3(box.max);
 
-  F1 t_min = (aabb_min[0] - ray.pos[0]) * ray.inv_dir[0];
-  F1 t_max = (aabb_max[0] - ray.pos[0]) * ray.inv_dir[0];
-  if (t_min > t_max) Swap(t_min, t_max);
+  F1  t_min  =  (aabb_min[0] - ray.pos[0]) * ray.inv_dir[0];
+  F1  t_max  =  (aabb_max[0] - ray.pos[0]) * ray.inv_dir[0];
 
-  F1 ty_min = (aabb_min[1] - ray.pos[1]) * ray.inv_dir[1];
-  F1 ty_max = (aabb_max[1] - ray.pos[1]) * ray.inv_dir[1];
-  if (ty_min > ty_max) Swap(ty_min, ty_max);
+  if (t_min > t_max)
+    Swap(t_min, t_max);
 
-  t_min = Max(t_min, ty_min);
-  t_max = Min(t_max, ty_max);
+  F1  ty_min  =  (aabb_min[1] - ray.pos[1]) * ray.inv_dir[1];
+  F1  ty_max  =  (aabb_max[1] - ray.pos[1]) * ray.inv_dir[1];
 
-  if (t_min > t_max) return 0.0f;
+  if (ty_min > ty_max)
+    Swap(ty_min, ty_max);
 
-  F1 tz_min = (aabb_min[2] - ray.pos[2]) * ray.inv_dir[2];
-  F1 tz_max = (aabb_max[2] - ray.pos[2]) * ray.inv_dir[2];
-  if (tz_min > tz_max) Swap(tz_min, tz_max);
+  t_min  =  Max(t_min, ty_min);
+  t_max  =  Min(t_max, ty_max);
 
-  t_min = Max(t_min, tz_min);
-  t_max = Min(t_max, tz_max);
+  if (t_min > t_max)
+    return 0.0f;
 
-  if (t_min > t_max) return 0.0f;
+  F1  tz_min  =  (aabb_min[2] - ray.pos[2]) * ray.inv_dir[2];
+  F1  tz_max  =  (aabb_max[2] - ray.pos[2]) * ray.inv_dir[2];
+
+  if (tz_min > tz_max)
+    Swap(tz_min, tz_max);
+
+  t_min  =  Max(t_min, tz_min);
+  t_max  =  Min(t_max, tz_max);
+
+  if (t_min > t_max)
+    return 0.0f;
 
   return t_min;
 }
 
-Internal F1 ray_shape_intersect(Ray ray, Shape shape) {
+Internal F1 ray_shape_intersect(Ray ray, Shape shape)
+{
   F1 result = 0.0f;
 
-  switch (shape.kind) {
-  case SHAPE_KIND__SPHERE:
-    result = ray_sphere_intersect(ray, shape.sphere); 
-    break;
-  case SHAPE_KIND__BOX:
-    result = ray_box_intersect(ray, shape.box); 
-    break;
-  case SHAPE_KIND__PLANE:
-    result = ray_plane_intersect(ray, shape.plane); 
-    break;
-  default: break;
+  switch (shape.kind)
+  {
+    case SHAPE_KIND__SPHERE: result  =  ray_sphere_intersect(ray, shape.sphere); break;
+    case SHAPE_KIND__BOX:    result  =  ray_box_intersect(ray, shape.box);       break;
+    case SHAPE_KIND__PLANE:  result  =  ray_plane_intersect(ray, shape.plane);   break;
+    default: break;
   }
 
   return result;
@@ -386,21 +452,26 @@ Internal F1 ray_shape_intersect(Ray ray, Shape shape) {
 ////////////////////////////////
 //~ Random
 
-Inline I1 rand_pcg(Random_State *rng) {
+Inline I1 rand_pcg(Random_State *rng)
+{
   L1 oldstate = rng->state;
-  rng->state = oldstate * 6364136223846793005ULL + (rng->inc|1);
-  I1 xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
-  I1 rot = oldstate >> 59u;
-  I1 result = (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+
+  rng->state = oldstate * 6364136223846793005ULL + (rng->inc | 1);
+
+  I1  xorshifted  =  ((oldstate >> 18u) ^ oldstate) >> 27u;
+  I1  rot         =  oldstate >> 59u;
+  I1  result      =  (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
   return result;
 }
 
-Inline F1 random_unilateral(Random_State *rng) {
+Inline F1 random_unilateral(Random_State *rng)
+{
   F1 result = (F1)rand_pcg(rng) / (F1)I1_MAX;
   return result;
 }
 
-Inline F1 random_bilateral(Random_State *rng) {
+Inline F1 random_bilateral(Random_State *rng)
+{
   F1 result = -1 + 2 * random_unilateral(rng);
   return result;
 }
@@ -408,44 +479,49 @@ Inline F1 random_bilateral(Random_State *rng) {
 ////////////////////////////////
 //~ Rectangle
 
-Inline F4 rect_overlap(F4 a, F4 b) {
+Inline F4 rect_overlap(F4 a, F4 b)
+{
   F4 result = {0};
 
-  result[0] = Max(a[0], b[0]);
-  result[1] = Max(a[1], b[1]);
-  result[2] = Min(a[0]+a[2], b[0]+b[2]) - result[0];
-  result[3] = Min(a[1]+a[3], b[1]+b[3]) - result[1];
+  result[0]  =  Max(a[0], b[0]);
+  result[1]  =  Max(a[1], b[1]);
+  result[2]  =  Min(a[0] + a[2], b[0] + b[2]) - result[0];
+  result[3]  =  Min(a[1] + a[3], b[1] + b[3]) - result[1];
 
   return result;
 }
 
-Inline I1 rect_contains(F4 rect, F2 point) {
+Inline I1 rect_contains(F4 rect, F2 point)
+{
   I1 result = 0;
 
-  if (point[0] >= rect[0] &&
-      point[1] >= rect[1] &&
-      point[0] <= rect[0]+rect[2] &&
-      point[1] <= rect[1]+rect[3]) {
+  if (   point[0] >= rect[0]
+      && point[1] >= rect[1]
+      && point[0] <= rect[0] + rect[2]
+      && point[1] <= rect[1] + rect[3])
+  {
     result = 1;
   }
 
   return result;
 }
 
-Inline F4 rect_pad(F4 rect, F1 amt) {
+Inline F4 rect_pad(F4 rect, F1 amt)
+{
   F4 result = {
     rect[0] - amt,
     rect[1] - amt,
-    rect[2] + amt*2,
-    rect[3] + amt*2,
+    rect[2] + amt * 2,
+    rect[3] + amt * 2,
   };
   return result;
 }
 
-Inline F2 rect_center(F4 rect) {
+Inline F2 rect_center(F4 rect)
+{
   F2 result = {
-    rect[0] + rect[2]*0.5,
-    rect[1] + rect[3]*0.5,
+    rect[0] + rect[2] * 0.5,
+    rect[1] + rect[3] * 0.5,
   };
   return result;
 }
@@ -453,47 +529,53 @@ Inline F2 rect_center(F4 rect) {
 ////////////////////////////////
 //~ kti: Colors
 
-F4 oklch_from_linear_rgba(F4 rgba) {
-  F1 l = 0.4122214708f*rgba[0] + 0.5363325363f*rgba[1] + 0.0514459929f*rgba[2];
-  F1 m = 0.2119034982f*rgba[0] + 0.6806995451f*rgba[1] + 0.1073969566f*rgba[2];
-  F1 s = 0.0883024619f*rgba[0] + 0.2817188376f*rgba[1] + 0.6299787005f*rgba[2];
+F4 oklch_from_linear_rgba(F4 rgba)
+{
+  F1  l  =  0.4122214708f * rgba[0] + 0.5363325363f * rgba[1] + 0.0514459929f * rgba[2];
+  F1  m  =  0.2119034982f * rgba[0] + 0.6806995451f * rgba[1] + 0.1073969566f * rgba[2];
+  F1  s  =  0.0883024619f * rgba[0] + 0.2817188376f * rgba[1] + 0.6299787005f * rgba[2];
 
-  F1 l_ = cbrtf(l);
-  F1 m_ = cbrtf(m);
-  F1 s_ = cbrtf(s);
+  F1  l_  =  cbrtf(l);
+  F1  m_  =  cbrtf(m);
+  F1  s_  =  cbrtf(s);
 
-  F1 ok_l = 0.2104542553f*l_ + 0.7936177850f*m_ - 0.0040720468f*s_;
-  F1 ok_a = 1.9779984951f*l_ - 2.4285922050f*m_ + 0.4505937099f*s_;
-  F1 ok_b = 0.0259040371f*l_ + 0.7827717662f*m_ - 0.8086757660f*s_;
+  F1  ok_l  =  0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720468f * s_;
+  F1  ok_a  =  1.9779984951f * l_ - 2.4285922050f * m_ + 0.4505937099f * s_;
+  F1  ok_b  =  0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_;
 
-  F1 chroma = sqrt_F1(ok_a*ok_a + ok_b*ok_b);
-  F1 hue = atan2f(ok_b, ok_a);
-  if (hue < 0.0f) {
-    hue += PI*2;
+  F1  chroma  =  sqrt_F1(ok_a * ok_a + ok_b * ok_b);
+  F1  hue     =  atan2f(ok_b, ok_a);
+
+  if (hue < 0.0f)
+  {
+    hue += PI * 2;
   }
 
   F4 result = {ok_l, chroma, hue, rgba[3]};
+
   return result;
 }
 
-F4 linear_rgba_from_oklch(F1 l, F1 c, F1 h, F1 alpha) {
-  F1 h_rad = h;
-  F1 a = c*cosf(h_rad);
-  F1 b = c*sinf(h_rad);
+F4 linear_rgba_from_oklch(F1 l, F1 c, F1 h, F1 alpha)
+{
+  F1  h_rad  =  h;
+  F1  a      =  c * cosf(h_rad);
+  F1  b      =  c * sinf(h_rad);
 
-  F1 l_ = l + 0.3963377774f*a + 0.2158037573f*b;
-  F1 m_ = l - 0.1055613458f*a - 0.0638541728f*b;
-  F1 s_ = l - 0.0894841775f*a - 1.2914855480f*b;
+  F1  l_  =  l + 0.3963377774f * a + 0.2158037573f * b;
+  F1  m_  =  l - 0.1055613458f * a - 0.0638541728f * b;
+  F1  s_  =  l - 0.0894841775f * a - 1.2914855480f * b;
 
-  F1 lms_l = l_*l_*l_;
-  F1 lms_m = m_*m_*m_;
-  F1 lms_s = s_*s_*s_;
+  F1  lms_l  =  l_ * l_ * l_;
+  F1  lms_m  =  m_ * m_ * m_;
+  F1  lms_s  =  s_ * s_ * s_;
 
   F4 result = {
-    +4.0767416621f*lms_l - 3.3077115913f*lms_m + 0.2309699292f*lms_s,
-    -1.2684380046f*lms_l + 2.6097574011f*lms_m - 0.3413193965f*lms_s,
-    -0.0041960863f*lms_l - 0.7034186147f*lms_m + 1.7076147010f*lms_s,
+    +4.0767416621f * lms_l - 3.3077115913f * lms_m + 0.2309699292f * lms_s,
+    -1.2684380046f * lms_l + 2.6097574011f * lms_m - 0.3413193965f * lms_s,
+    -0.0041960863f * lms_l - 0.7034186147f * lms_m + 1.7076147010f * lms_s,
     alpha,
   };
+
   return result;
 }

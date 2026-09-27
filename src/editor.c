@@ -7,6 +7,7 @@
 // 3. SIMD
 // 4. Lister Integration
 
+//- kti: Gizmo code is a mess.
 //- kti: Clean up UI.
 //- kti: Camera icon and picking.
 //- kti: Light rays.

@@ -11,103 +11,140 @@ Global UI_Box ui_nil_box = {
 
 Global UI_State *ui_state = 0;
 
-Inline UI_Size ui_px(F1 value, F1 strictness) {
+Inline UI_Size ui_px(F1 value, F1 strictness)
+{
   UI_Size result = {
-    .kind = UI_SIZE_KIND__PIXELS,
-    .value = value,
-    .strictness = strictness,
+    .kind        =  UI_SIZE_KIND__PIXELS,
+    .value       =  value,
+    .strictness  =  strictness,
   };
   return result;
 }
 
-Internal Arena *ui_build_arena(void) {
-  Arena *arena = ui_state->build_arenas[ui_state->build_index%ArrayCount(ui_state->build_arenas)];
+Internal Arena *ui_build_arena(void)
+{
+  Arena *arena = ui_state->build_arenas[ui_state->build_index % ArrayCount(ui_state->build_arenas)];
   return arena;
 }
 
-Internal F4 ui_brighten(F4 color) {
+Internal F4 ui_brighten(F4 color)
+{
   F4 oklch = oklch_from_linear_rgba(color);
+
   oklch[0] = Clamp(0.22f, oklch[0] + 0.1f, 1.0f);
+
   F4 result = linear_rgba_from_oklch(oklch[0], oklch[1], oklch[2], oklch[3]);
+
   return result;
 }
 
-Internal F4 ui_darken(F4 color) {
+Internal F4 ui_darken(F4 color)
+{
   F4 oklch = oklch_from_linear_rgba(color);
+
   oklch[0] = Clamp(0.0f, oklch[0] - 0.1f, 1.0f);
+
   F4 result = linear_rgba_from_oklch(oklch[0], oklch[1], oklch[2], oklch[3]);
+
   return result;
 }
 
 #include "ui.meta.c"
 
-Internal I1 txt_pt_match(Txt_Pt a, Txt_Pt b) {
+Internal I1 txt_pt_match(Txt_Pt a, Txt_Pt b)
+{
   I1 result = (a.line == b.line && a.column == b.column);
   return result;
 }
 
-Internal I1 txt_pt_less_than(Txt_Pt a, Txt_Pt b) {
+Internal I1 txt_pt_less_than(Txt_Pt a, Txt_Pt b)
+{
   I1 result = 0;
-  if (a.line < b.line) {
+
+  if (a.line < b.line)
+  {
     result = 1;
-  } else if (a.line == b.line) {
+  }
+  else if (a.line == b.line)
+  {
     result = a.column < b.column;
   }
+
   return result;
 }
 
-Internal Txt_Pt txt_pt_min(Txt_Pt a, Txt_Pt b) {
+Internal Txt_Pt txt_pt_min(Txt_Pt a, Txt_Pt b)
+{
   Txt_Pt result = b;
-  if (txt_pt_less_than(a, b)) {
+
+  if (txt_pt_less_than(a, b))
+  {
     result = a;
   }
+
   return result;
 }
 
-Internal Txt_Pt txt_pt_max(Txt_Pt a, Txt_Pt b) {
+Internal Txt_Pt txt_pt_max(Txt_Pt a, Txt_Pt b)
+{
   Txt_Pt result = a;
-  if (txt_pt_less_than(a, b)) {
+
+  if (txt_pt_less_than(a, b))
+  {
     result = b;
   }
+
   return result;
 }
 
-Internal Txt_Range txt_range(Txt_Pt a, Txt_Pt b) {
+Internal Txt_Range txt_range(Txt_Pt a, Txt_Pt b)
+{
   Txt_Range result = {txt_pt_min(a, b), txt_pt_max(a, b)};
   return result;
 }
 
-Internal UI_Key ui_key_zero(void) {
+Internal UI_Key ui_key_zero(void)
+{
   UI_Key result = {0};
   return result;
 }
 
-Internal I1 ui_key_match(UI_Key a, UI_Key b) {
+Internal I1 ui_key_match(UI_Key a, UI_Key b)
+{
   I1 result = (a.l1[0] == b.l1[0]);
   return result;
 }
 
-Internal I1 ui_box_is_nil(UI_Box *box) {
+Internal I1 ui_box_is_nil(UI_Box *box)
+{
   I1 result = (box == 0 || box == &ui_nil_box);
   return result;
 }
 
-Internal String8 ui_hash_part_from_key_string(String8 string) {
+Internal String8 ui_hash_part_from_key_string(String8 string)
+{
   String8 result = string;
-  for (L1 idx = 0; idx+2 < string.len; idx += 1) {
-    if (string.str[idx] == '#' && string.str[idx+1] == '#' && string.str[idx+2] == '#') {
+
+  for (L1 idx = 0; idx + 2 < string.len; idx += 1)
+  {
+    if (string.str[idx] == '#' && string.str[idx + 1] == '#' && string.str[idx + 2] == '#')
+    {
       result = str8_substr(string, idx, string.len);
       break;
     }
   }
+
   return result;
 }
 
-Internal String8 ui_display_part_from_key_string(String8 key) {
+Internal String8 ui_display_part_from_key_string(String8 key)
+{
   L1 end = key.len;
 
-  for (L1 i = 0; i+1 < key.len; i += 1) {
-    if (key.str[i] == '#' && key.str[i+1] == '#') {
+  for (L1 i = 0; i + 1 < key.len; i += 1)
+  {
+    if (key.str[i] == '#' && key.str[i + 1] == '#')
+    {
       end = i;
       break;
     }
@@ -116,389 +153,542 @@ Internal String8 ui_display_part_from_key_string(String8 key) {
   return str8_substr(key, 0, end);
 }
 
-Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string) {
+Internal UI_Key ui_key_from_string(UI_Key seed_key, String8 string)
+{
   UI_Key result = {0};
-  if (string.len != 0) {
+
+  if (string.len != 0)
+  {
     String8 hash_part = ui_hash_part_from_key_string(string);
+
     result.l1[0] = hash64_seed(hash_part.str, hash_part.len, seed_key.l1[0]);
   }
+
   return result;
 }
 
-Internal UI_Key ui_top_tags_key(void) {
+Internal UI_Key ui_top_tags_key(void)
+{
   UI_Key result = ui_key_zero();
-  if (ui_state->tags_key_stack_top != 0) {
+
+  if (ui_state->tags_key_stack_top != 0)
+  {
     result = ui_state->tags_key_stack_top->key;
   }
+
   return result;
 }
 
-Internal void ui__push_tags_key_from_appended_string(String8 string) {
+Internal void ui__push_tags_key_from_appended_string(String8 string)
+{
   I1 is_new_root = str8_match(str8("."), string);
 
   UI_Key seed_key = {0};
-  if (!is_new_root && ui_state->tags_key_stack_top != 0) {
+
+  if (!is_new_root && ui_state->tags_key_stack_top != 0)
+  {
     seed_key = ui_state->tags_key_stack_top->key;
   }
+
   UI_Key key = seed_key;
-  if (!is_new_root && string.len > 0) {
+
+  if (!is_new_root && string.len > 0)
+  {
     key = ui_key_from_string(seed_key, string);
   }
 
   {
     UI_Tags_Key_Stack_Node *node = ui_state->tags_key_stack_free;
-    if (node != 0) {
+
+    if (node != 0)
+    {
       SLLStackPop(ui_state->tags_key_stack_free);
-    } else {
+    }
+    else
+    {
       node = push_array(ui_build_arena(), UI_Tags_Key_Stack_Node, 1);
     }
+
     SLLStackPush(ui_state->tags_key_stack_top, node);
+
     node->key = key;
   }
 
-  if (!is_new_root) {
-    L1 slot_idx = key.l1[0] % ui_state->tags_cache_slot_count;
-    UI_Tags_Cache_Slot *slot = &ui_state->tags_cache_slots[slot_idx];
-    UI_Tags_Cache_Node *node = 0;
-    for (UI_Tags_Cache_Node *n = slot->first; n != 0; n = n->next) {
-      if (ui_key_match(n->key, key)) {
+  if (!is_new_root)
+  {
+    L1                  slot_idx  =  key.l1[0] % ui_state->tags_cache_slot_count;
+    UI_Tags_Cache_Slot  *slot     =  &ui_state->tags_cache_slots[slot_idx];
+    UI_Tags_Cache_Node  *node     =  0;
+
+    for (UI_Tags_Cache_Node *n = slot->first; n != 0; n = n->next)
+    {
+      if (ui_key_match(n->key, key))
+      {
         node = n;
         break;
       }
     }
 
-    if (node == 0) {
-      Temp_Arena scratch = scratch_begin(0, 0);
-      String8_List tags = {0};
-      if (string.len != 0) {
+    if (node == 0)
+    {
+      Temp_Arena    scratch  =  scratch_begin(0, 0);
+      String8_List  tags     =  {0};
+
+      if (string.len != 0)
+      {
         str8_list_push(scratch.arena, &tags, push_str8_copy(ui_build_arena(), string));
       }
-      for (UI_Tag_Node *n = ui_state->tag_stack.top; n != 0; n = n->next) {
-        if (str8_match(n->value, str8("."))) {
+
+      for (UI_Tag_Node *n = ui_state->tag_stack.top; n != 0; n = n->next)
+      {
+        if (str8_match(n->value, str8(".")))
+        {
           break;
         }
-        if (n->value.len != 0) {
+
+        if (n->value.len != 0)
+        {
           str8_list_push(scratch.arena, &tags, push_str8_copy(ui_build_arena(), n->value));
         }
       }
-      node = push_array(ui_build_arena(), UI_Tags_Cache_Node, 1);
+
+      node        =  push_array(ui_build_arena(), UI_Tags_Cache_Node, 1);
+      node->key   =  key;
+      node->tags  =  str8_array_from_list(ui_build_arena(), &tags);
+
       SLLQueuePush(slot->first, slot->last, node);
-      node->key = key;
-      node->tags = str8_array_from_list(ui_build_arena(), &tags);
       scratch_end(scratch);
     }
   }
 }
 
-Internal void ui__pop_tags_key(void) {
-  if (ui_state->tags_key_stack_top != 0) {
+Internal void ui__pop_tags_key(void)
+{
+  if (ui_state->tags_key_stack_top != 0)
+  {
     UI_Tags_Key_Stack_Node *popped = ui_state->tags_key_stack_top;
+
     SLLStackPop(ui_state->tags_key_stack_top);
     SLLStackPush(ui_state->tags_key_stack_free, popped);
   }
 }
 
-Internal String8 ui_top_tag(void) {
+Internal String8 ui_top_tag(void)
+{
   String8 result = ui_state->tag_stack.top->value;
   return result;
 }
 
-Internal void ui_push_tag(String8 value) {
+Internal void ui_push_tag(String8 value)
+{
   ui__push_tags_key_from_appended_string(value);
 
-  UI_Tag_Stack *stack = &ui_state->tag_stack;
-  UI_Tag_Node *node = stack->free;
-  if (node == 0) {
+  UI_Tag_Stack  *stack  =  &ui_state->tag_stack;
+  UI_Tag_Node   *node   =  stack->free;
+
+  if (node == 0)
+  {
     node = push_array(ui_build_arena(), UI_Tag_Node, 1);
-  } else {
+  }
+  else
+  {
     SLLStackPop(stack->free);
   }
-  node->value = push_str8_copy(ui_build_arena(), value);
+
+  node->value      =  push_str8_copy(ui_build_arena(), value);
+  stack->auto_pop  =  0;
+
   SLLStackPush(stack->top, node);
-  stack->auto_pop = 0;
 }
 
-Internal String8 ui_pop_tag(void) {
+Internal String8 ui_pop_tag(void)
+{
   ui__pop_tags_key();
 
-  UI_Tag_Stack *stack = &ui_state->tag_stack;
-  UI_Tag_Node *popped_node = stack->top;
-  if (popped_node != &ui_state->nil_tag) {
+  UI_Tag_Stack  *stack        =  &ui_state->tag_stack;
+  UI_Tag_Node   *popped_node  =  stack->top;
+
+  if (popped_node != &ui_state->nil_tag)
+  {
     SLLStackPop(stack->top);
     SLLStackPush(stack->free, popped_node);
+
     stack->auto_pop = 0;
   }
+
   String8 result = popped_node->value;
+
   return result;
 }
 
-Internal void ui_set_next_tag(String8 value) {
+Internal void ui_set_next_tag(String8 value)
+{
   ui__push_tags_key_from_appended_string(value);
 
-  UI_Tag_Stack *stack = &ui_state->tag_stack;
-  UI_Tag_Node *node = stack->free;
-  if (node == 0) {
+  UI_Tag_Stack  *stack  =  &ui_state->tag_stack;
+  UI_Tag_Node   *node   =  stack->free;
+
+  if (node == 0)
+  {
     node = push_array(ui_build_arena(), UI_Tag_Node, 1);
-  } else {
+  }
+  else
+  {
     SLLStackPop(stack->free);
   }
-  node->value = push_str8_copy(ui_build_arena(), value);
+
+  node->value      =  push_str8_copy(ui_build_arena(), value);
+  stack->auto_pop  =  1;
+
   SLLStackPush(stack->top, node);
-  stack->auto_pop = 1;
 }
 
-Internal void ui_push_tagf(CString format, ...) {
+Internal void ui_push_tagf(CString format, ...)
+{
   Temp_Arena scratch = scratch_begin(0, 0);
+
   va_list args;
   va_start(args, format);
+
   String8 string = str8fv(scratch.arena, format, args);
+
   ui_push_tag(string);
   va_end(args);
   scratch_end(scratch);
 }
 
-Internal F4 ui_color_from_tags_key_extras(UI_Key key, String8_Array extras) {
+Internal F4 ui_color_from_tags_key_extras(UI_Key key, String8_Array extras)
+{
   F4 result = {0};
-  if (ui_state->theme_pattern_cache_slot_count && extras.count > 0) {
+
+  if (ui_state->theme_pattern_cache_slot_count && extras.count > 0)
+  {
     UI_Key final_key = key;
-    for (L1 idx = 0; idx < extras.count; idx += 1) {
+
+    for (L1 idx = 0; idx < extras.count; idx += 1)
+    {
       final_key = ui_key_from_string(final_key, extras.v[idx]);
     }
 
-    L1 slot_idx = final_key.l1[0] % ui_state->theme_pattern_cache_slot_count;
-    UI_Theme_Pattern_Cache_Slot *slot = &ui_state->theme_pattern_cache_slots[slot_idx];
-    UI_Theme_Pattern_Cache_Node *node = 0;
-    for (UI_Theme_Pattern_Cache_Node *n = slot->first; n != 0; n = n->slot_next) {
-      if (ui_key_match(n->key, final_key)) {
+    L1                           slot_idx  =  final_key.l1[0] % ui_state->theme_pattern_cache_slot_count;
+    UI_Theme_Pattern_Cache_Slot  *slot     =  &ui_state->theme_pattern_cache_slots[slot_idx];
+    UI_Theme_Pattern_Cache_Node  *node     =  0;
+
+    for (UI_Theme_Pattern_Cache_Node *n = slot->first; n != 0; n = n->slot_next)
+    {
+      if (ui_key_match(n->key, final_key))
+      {
         node = n;
       }
     }
 
-    if (node == 0 || node->last_build_index_accessed < ui_state->theme_build_index) {
+    if (node == 0 || node->last_build_index_accessed < ui_state->theme_build_index)
+    {
       String8_Array tags = {0};
       {
-        L1 tags_cache_slot_idx = key.l1[0] % ui_state->tags_cache_slot_count;
-        UI_Tags_Cache_Slot *tags_cache_slot = &ui_state->tags_cache_slots[tags_cache_slot_idx];
-        for (UI_Tags_Cache_Node *n = tags_cache_slot->first; n != 0; n = n->next) {
-          if (ui_key_match(n->key, key)) {
+        L1                  tags_cache_slot_idx  =  key.l1[0] % ui_state->tags_cache_slot_count;
+        UI_Tags_Cache_Slot  *tags_cache_slot     =  &ui_state->tags_cache_slots[tags_cache_slot_idx];
+
+        for (UI_Tags_Cache_Node *n = tags_cache_slot->first; n != 0; n = n->next)
+        {
+          if (ui_key_match(n->key, key))
+          {
             tags = n->tags;
             break;
           }
         }
       }
 
-      UI_Theme_Pattern *pattern = 0;
-      L1 best_match_count = 0;
-      for (L1 idx = 0; idx < ui_state->theme->pattern_count; idx += 1) {
-        UI_Theme_Pattern *p = &ui_state->theme->patterns[idx];
-        L1 match_count = 0;
-        I1 name_matches = 0;
-        I1 all_p_tags_in_key = 1;
-        for (L1 p_tags_idx = 0; p_tags_idx < p->tags.count; p_tags_idx += 1) {
+      UI_Theme_Pattern  *pattern          =  0;
+      L1                best_match_count  =  0;
+
+      for (L1 idx = 0; idx < ui_state->theme->pattern_count; idx += 1)
+      {
+        UI_Theme_Pattern  *p                 =  &ui_state->theme->patterns[idx];
+        L1                match_count        =  0;
+        I1                name_matches       =  0;
+        I1                all_p_tags_in_key  =  1;
+
+        for (L1 p_tags_idx = 0; p_tags_idx < p->tags.count; p_tags_idx += 1)
+        {
           I1 p_tag_in_key = 0;
-          for (L1 key_tags_idx = 0; key_tags_idx < tags.count + extras.count; key_tags_idx += 1) {
-            String8 key_string = key_tags_idx < tags.count
-              ? tags.v[key_tags_idx]
-              : extras.v[key_tags_idx - tags.count];
-            if (str8_match(p->tags.v[p_tags_idx], key_string)) {
-              if (key_tags_idx == tags.count + extras.count - 1) {
+
+          for (L1 key_tags_idx = 0; key_tags_idx < tags.count + extras.count; key_tags_idx += 1)
+          {
+            String8 key_string = key_tags_idx < tags.count ? tags.v[key_tags_idx] : extras.v[key_tags_idx - tags.count];
+
+            if (str8_match(p->tags.v[p_tags_idx], key_string))
+            {
+              if (key_tags_idx == tags.count + extras.count - 1)
+              {
                 name_matches = 1;
               }
+
               p_tag_in_key = 1;
               match_count += 1;
               break;
             }
           }
-          if (!p_tag_in_key) {
+
+          if (!p_tag_in_key)
+          {
             all_p_tags_in_key = 0;
             break;
           }
         }
-        if (name_matches && all_p_tags_in_key && match_count > best_match_count) {
-          pattern = p;
-          best_match_count = match_count;
+
+        if (name_matches && all_p_tags_in_key && match_count > best_match_count)
+        {
+          pattern           =  p;
+          best_match_count  =  match_count;
         }
-        if (match_count == tags.count + extras.count) {
+
+        if (match_count == tags.count + extras.count)
+        {
           break;
         }
       }
 
       I1 node_is_new = 0;
-      if (node == 0) {
-        node_is_new = 1;
-        node = ui_state->theme_pattern_cache_node_free;
-        if (node != 0) {
+
+      if (node == 0)
+      {
+        node_is_new  =  1;
+        node         =  ui_state->theme_pattern_cache_node_free;
+
+        if (node != 0)
+        {
           SLLStackPop_N(ui_state->theme_pattern_cache_node_free, slot_next);
-        } else {
+        }
+        else
+        {
           node = push_array(ui_state->arena, UI_Theme_Pattern_Cache_Node, 1);
         }
+
         DLLPushBack_NP(slot->first, slot->last, node, slot_next, slot_prev);
-        DLLPushBack_NP(ui_state->lru_theme_pattern_cache_node,
-                       ui_state->mru_theme_pattern_cache_node,
-                       node, lru_next, lru_prev);
+        DLLPushBack_NP(ui_state->lru_theme_pattern_cache_node, ui_state->mru_theme_pattern_cache_node, node, lru_next, lru_prev);
         node->key = final_key;
       }
 
-      if (pattern != 0) {
+      if (pattern != 0)
+      {
         node->target_rgba = pattern->linear;
-        if (node_is_new) {
+
+        if (node_is_new)
+        {
           node->current_rgba = node->target_rgba;
         }
       }
     }
 
-    if (node != 0 && node->last_build_index_accessed < ui_state->theme_build_index) {
+    if (node != 0 && node->last_build_index_accessed < ui_state->theme_build_index)
+    {
       node->last_build_index_accessed = ui_state->theme_build_index;
-      DLLRemove_NP(ui_state->lru_theme_pattern_cache_node,
-                   ui_state->mru_theme_pattern_cache_node,
-                   node, lru_next, lru_prev);
-      DLLPushBack_NP(ui_state->lru_theme_pattern_cache_node,
-                     ui_state->mru_theme_pattern_cache_node,
-                     node, lru_next, lru_prev);
+
+      DLLRemove_NP(ui_state->lru_theme_pattern_cache_node, ui_state->mru_theme_pattern_cache_node, node, lru_next, lru_prev);
+      DLLPushBack_NP(ui_state->lru_theme_pattern_cache_node, ui_state->mru_theme_pattern_cache_node, node, lru_next, lru_prev);
     }
 
-    if (node != 0) {
+    if (node != 0)
+    {
       result = node->current_rgba;
     }
   }
+
   return result;
 }
 
-Internal F4 ui_color_from_tags_key_name(UI_Key tags_key, String8 name) {
-  String8_Array extras = {.v = &name, .count = 1};
-  F4 result = ui_color_from_tags_key_extras(tags_key, extras);
+Internal F4 ui_color_from_tags_key_name(UI_Key tags_key, String8 name)
+{
+  String8_Array  extras  =  {.v = &name, .count = 1};
+  F4             result  =  ui_color_from_tags_key_extras(tags_key, extras);
+
   return result;
 }
 
-Internal F4 ui_color_from_name(String8 name) {
+Internal F4 ui_color_from_name(String8 name)
+{
   F4 result = ui_color_from_tags_key_name(ui_top_tags_key(), name);
   return result;
 }
 
-Internal void ui_box_list_push(Arena *arena, UI_Box_List *list, UI_Box *box) {
+Internal void ui_box_list_push(Arena *arena, UI_Box_List *list, UI_Box *box)
+{
   UI_Box_Node *n = push_array(arena, UI_Box_Node, 1);
+
   n->box = box;
+
   SLLQueuePush(list->first, list->last, n);
   list->count += 1;
 }
 
-Internal UI_State *ui_state_alloc(void) {
-  Arena *arena = arena_alloc(MiB(64));
-  UI_State *prev_state = ui_state;
-  ui_state = push_array(arena, UI_State, 1);
-  ui_state->arena = arena;
-  ui_state->external_key = ui_key_from_string(ui_key_zero(), str8("external_interaction_key"));
-  ui_state->build_arenas[0] = arena_alloc(MiB(64));
-  ui_state->build_arenas[1] = arena_alloc(MiB(64));
-  for (L1 i = 0; i < OS_MOUSE_BUTTON_COUNT; i += 1) {
+Internal UI_State *ui_state_alloc(void)
+{
+  Arena     *arena       =  arena_alloc(MiB(64));
+  UI_State  *prev_state  =  ui_state;
+
+  ui_state                   =  push_array(arena, UI_State, 1);
+  ui_state->arena            =  arena;
+  ui_state->external_key     =  ui_key_from_string(ui_key_zero(), str8("external_interaction_key"));
+  ui_state->build_arenas[0]  =  arena_alloc(MiB(64));
+  ui_state->build_arenas[1]  =  arena_alloc(MiB(64));
+
+  for (L1 i = 0; i < OS_MOUSE_BUTTON_COUNT; i += 1)
+  {
     ui_state->drag_arena[i] = arena_alloc(MiB(64));
   }
-  ui_state->box_table_size = 4096;
-  ui_state->box_table = push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
-  ui_state->theme_pattern_cache_slot_count = 1024;
-  ui_state->theme_pattern_cache_slots = push_array(arena, UI_Theme_Pattern_Cache_Slot,
-                                                    ui_state->theme_pattern_cache_slot_count);
+
+  ui_state->box_table_size                  =  4096;
+  ui_state->box_table                       =  push_array(arena, UI_Box_HT_Slot, ui_state->box_table_size);
+  ui_state->theme_pattern_cache_slot_count  =  1024;
+  ui_state->theme_pattern_cache_slots       =  push_array(arena, UI_Theme_Pattern_Cache_Slot, ui_state->theme_pattern_cache_slot_count);
+
   UIInitStackNils();
 
   UI_State *new_state = ui_state;
+
   ui_state = prev_state;
+
   return new_state;
 }
 
-Internal void ui_state_release(UI_State *state) {
-  if (ui_state == state) {
+Internal void ui_state_release(UI_State *state)
+{
+  if (ui_state == state)
+  {
     ui_state = 0;
   }
 
   arena_release(state->build_arenas[0]);
   arena_release(state->build_arenas[1]);
-  for (L1 i = 0; i < OS_MOUSE_BUTTON_COUNT; i += 1) {
+
+  for (L1 i = 0; i < OS_MOUSE_BUTTON_COUNT; i += 1)
+  {
     arena_release(state->drag_arena[i]);
   }
+
   arena_release(state->arena);
 }
 
-Internal void ui_state_equip(UI_State *state) {
+Internal void ui_state_equip(UI_State *state)
+{
   ui_state = state;
 }
 
 //- kti: Focus tree coloring.
 
-Internal I1 ui_is_focus_active(void) {
+Internal I1 ui_is_focus_active(void)
+{
   I1 result = (ui_top_focus_active() == UI_FOCUS_KIND__ON);
-  if (result) {
-    for (UI_Focus_Active_Node *n = ui_state->focus_active_stack.top; n != 0; n = n->next) {
-      if (n->value == UI_FOCUS_KIND__ROOT) {
+
+  if (result)
+  {
+    for (UI_Focus_Active_Node *n = ui_state->focus_active_stack.top; n != 0; n = n->next)
+    {
+      if (n->value == UI_FOCUS_KIND__ROOT)
+      {
         break;
       }
-      if (n->value == UI_FOCUS_KIND__OFF) {
+
+      if (n->value == UI_FOCUS_KIND__OFF)
+      {
         result = 0;
         break;
       }
     }
   }
+
   return result;
 }
 
-
-Internal I1 ui_is_focus_hot(void) {
+Internal I1 ui_is_focus_hot(void)
+{
   I1 result = (ui_top_focus_hot() == UI_FOCUS_KIND__ON);
-  if (result) {
-    for (UI_Focus_Hot_Node *n = ui_state->focus_hot_stack.top; n != 0; n = n->next) {
-      if (n->value == UI_FOCUS_KIND__ROOT) {
+
+  if (result)
+  {
+    for (UI_Focus_Hot_Node *n = ui_state->focus_hot_stack.top; n != 0; n = n->next)
+    {
+      if (n->value == UI_FOCUS_KIND__ROOT)
+      {
         break;
       }
-      if (n->value == UI_FOCUS_KIND__OFF) {
+
+      if (n->value == UI_FOCUS_KIND__OFF)
+      {
         result = 0;
         break;
       }
     }
   }
+
   return result;
 }
 
 //- kti: Implicit auto-managed tree-based focus state
 
-Internal I1 ui_is_key_auto_focus_active(UI_Key key) {
+Internal I1 ui_is_key_auto_focus_active(UI_Key key)
+{
   I1 result = 0;
-  if (!ui_key_match(ui_key_zero(), key)) {
-    for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
-      if (p->flags & UI_BOX_FLAG__FOCUS_ACTIVE && ui_key_match(key, p->default_nav_focus_active_key)) {
+
+  if (!ui_key_match(ui_key_zero(), key))
+  {
+    for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent)
+    {
+      if (p->flags & UI_BOX_FLAG__FOCUS_ACTIVE && ui_key_match(key, p->default_nav_focus_active_key))
+      {
         result = 1;
         break;
       }
     }
   }
+
   return result;
 }
 
-Internal I1 ui_is_key_auto_focus_hot(UI_Key key) {
+Internal I1 ui_is_key_auto_focus_hot(UI_Key key)
+{
   I1 result = 0;
-  if (!ui_key_match(ui_key_zero(), key)) {
-    for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
-      if (p->flags & UI_BOX_FLAG__FOCUS_HOT &&
-        ((!(p->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED) && ui_key_match(key, p->default_nav_focus_hot_key)) ||
-          ui_key_match(key, p->default_nav_focus_active_key))) {
+
+  if (!ui_key_match(ui_key_zero(), key))
+  {
+    for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent)
+    {
+      I1 parent_has_focus_hot     = !!(p->flags & UI_BOX_FLAG__FOCUS_HOT);
+      I1 parent_hot_disabled      = !!(p->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
+      I1 matches_hot_key          = ui_key_match(key, p->default_nav_focus_hot_key);
+      I1 matches_active_key       = ui_key_match(key, p->default_nav_focus_active_key);
+      I1 matches_enabled_hot_key  = !parent_hot_disabled && matches_hot_key;
+
+      if (parent_has_focus_hot && (matches_enabled_hot_key || matches_active_key))
+      {
         result = 1;
         break;
       }
     }
   }
+
   return result;
 }
 
-Internal void ui_set_auto_focus_active_key(UI_Key key) {
-  for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
-    if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) {
+Internal void ui_set_auto_focus_active_key(UI_Key key)
+{
+  for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent)
+  {
+    if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV)
+    {
       p->default_nav_focus_next_active_key = key;
       break;
     }
   }
 }
 
-Internal void ui_set_auto_focus_hot_key(UI_Key key) {
-  for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
-    if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) {
+Internal void ui_set_auto_focus_hot_key(UI_Key key)
+{
+  for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent)
+  {
+    if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV)
+    {
       p->default_nav_focus_next_hot_key = key;
       break;
     }
@@ -507,13 +697,18 @@ Internal void ui_set_auto_focus_hot_key(UI_Key key) {
 
 //- kti: Box building
 
-Internal UI_Box *ui_box_from_key(UI_Key key) {
+Internal UI_Box *ui_box_from_key(UI_Key key)
+{
   UI_Box *result = &ui_nil_box;
 
-  if (!ui_key_match(key, ui_key_zero())) {
-    UI_Box_HT_Slot *slot = &ui_state->box_table[key.l1[0]%ui_state->box_table_size];
-    for (UI_Box *b = slot->first; !ui_box_is_nil(b); b = b->hash_next) {
-      if (ui_key_match(b->key, key)) {
+  if (!ui_key_match(key, ui_key_zero()))
+  {
+    UI_Box_HT_Slot *slot = &ui_state->box_table[key.l1[0] % ui_state->box_table_size];
+
+    for (UI_Box *b = slot->first; !ui_box_is_nil(b); b = b->hash_next)
+    {
+      if (ui_key_match(b->key, key))
+      {
         result = b;
         break;
       }
@@ -523,152 +718,201 @@ Internal UI_Box *ui_box_from_key(UI_Key key) {
   return result;
 }
 
-Internal UI_Key ui_active_seed_key(void) {
+Internal UI_Key ui_active_seed_key(void)
+{
   UI_Box *keyed_ancestor = &ui_nil_box;
-  for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
-    if (!ui_key_match(p->key, ui_key_zero())) {
+
+  for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent)
+  {
+    if (!ui_key_match(p->key, ui_key_zero()))
+    {
       keyed_ancestor = p;
       break;
     }
   }
+
   return keyed_ancestor->key;
 }
 
-Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
+Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key)
+{
   ui_state->build_box_count += 1;
 
   UI_Box *parent = ui_top_parent();
 
-  UI_Box *box = ui_box_from_key(key);
-  I1 box_first_frame = ui_box_is_nil(box);
-  I1 last_flags = box->flags;
+  UI_Box  *box             =  ui_box_from_key(key);
+  I1      box_first_frame  =  ui_box_is_nil(box);
+  I1      last_flags       =  box->flags;
 
   //- kti: zero key and create new on key duplicate.
-  if (!box_first_frame && box->last_touch_build_index == ui_state->build_index) {
-    box = &ui_nil_box;
-    key = ui_key_zero();
-    box_first_frame = 1;
+  if (!box_first_frame && box->last_touch_build_index == ui_state->build_index)
+  {
+    box              =  &ui_nil_box;
+    key              =  ui_key_zero();
+    box_first_frame  =  1;
   }
 
-  // NOTE(kti): Transient = box lasts for 1 build only.
-  I1 box_is_transient = ui_key_match(key, ui_key_zero());
+  // NOTE(kti): Transient  =  box lasts for 1 build only.
+  I1  box_is_transient           =  ui_key_match(key, ui_key_zero());
 
   //- kti: Allocate box if needed.
-  if (box_first_frame) {
+  if (box_first_frame)
+  {
     box = !box_is_transient ? ui_state->first_free_box : 0;
-    if (ui_box_is_nil(box)) {
+
+    if (ui_box_is_nil(box))
+    {
       box = push_array_no_zero(box_is_transient ? ui_build_arena() : ui_state->arena, UI_Box, 1);
-    } else {
+    }
+    else
+    {
       SLLStackPop(ui_state->first_free_box);
     }
+
     MemoryZeroStruct(box);
   }
 
   //- kti: Zero per frame state.
-  box->first = box->last = box->next = box->prev = box->parent = &ui_nil_box;
-  box->child_count = 0;
-  box->flags = 0;
+  box->first                  =  box->last = box->next = box->prev = box->parent = &ui_nil_box;
+  box->child_count            =  0;
+  box->flags                  =  0;
+  box->custom_draw_kind       =  UI_BOX_CUSTOM_DRAW_KIND__NONE;
+  box->custom_draw_user_data  =  0;
+
   MemoryZeroArray(box->pref_size);
-  box->custom_draw_kind = UI_BOX_CUSTOM_DRAW_KIND__NONE;
-  box->custom_draw_user_data = 0;
 
   //- kti: Add to persistent table.
-  if (box_first_frame && !box_is_transient) {
+
+  if (box_first_frame && !box_is_transient)
+  {
     UI_Box_HT_Slot *slot = &ui_state->box_table[key.l1[0] % ui_state->box_table_size];
+
     DLLInsert_NPZ(&ui_nil_box, slot->first, slot->last, slot->last, box, hash_next, hash_prev);
   }
 
   //- kti: Add to per-frame tree structure.
-  if (!ui_box_is_nil(parent)) {
+  if (!ui_box_is_nil(parent))
+  {
     DLLPushBack_NPZ(&ui_nil_box, parent->first, parent->last, box, next, prev);
-    parent->child_count += 1;
-    box->parent = parent;
+
+    parent->child_count  +=  1;
+    box->parent          =   parent;
   }
 
   //- kti: Fill box
-  box->key = key;
-  box->flags = (flags|ui_top_flags()) & ~ui_top_omit_flags();
-  box->group_key = ui_top_group_key();
-  box->tags_key = ui_top_tags_key();
+  box->key        =  key;
+  box->flags      =  (flags | ui_top_flags()) & ~ui_top_omit_flags();
+  box->group_key  =  ui_top_group_key();
+  box->tags_key   =  ui_top_tags_key();
 
-  if (ui_is_focus_active() && (box->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) && ui_key_match(ui_state->default_nav_root_key, ui_key_zero())) {
+  if (ui_is_focus_active() &&
+      box->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV &&
+      ui_key_match(ui_state->default_nav_root_key, ui_key_zero()))
+  {
     ui_state->default_nav_root_key = box->key;
   }
 
-  if (box_first_frame) {
+  if (box_first_frame)
+  {
     box->first_touch_build_index = ui_state->build_index;
   }
+
   box->last_touch_build_index = ui_state->build_index;
 
-  if (ui_state->fixed_x_stack.top != &ui_state->nil_fixed_x) {
+  if (ui_state->fixed_x_stack.top != &ui_state->nil_fixed_x)
+  {
     box->flags |= UI_BOX_FLAG__FLOATING_X;
     box->fixed_pos[0] = ui_top_fixed_x();
   }
-  if (ui_state->fixed_y_stack.top != &ui_state->nil_fixed_y) {
+
+  if (ui_state->fixed_y_stack.top != &ui_state->nil_fixed_y)
+  {
     box->flags |= UI_BOX_FLAG__FLOATING_Y;
     box->fixed_pos[1] = ui_top_fixed_y();
   }
 
-  if (ui_state->fixed_width_stack.top != &ui_state->nil_fixed_width) {
+  if (ui_state->fixed_width_stack.top != &ui_state->nil_fixed_width)
+  {
     box->flags |= UI_BOX_FLAG__FIXED_WIDTH;
     box->fixed_size[0] = ui_top_fixed_width();
-  } else {
+  }
+  else
+  {
     box->pref_size[AXIS__X] = ui_top_pref_width();
   }
-  if (ui_state->fixed_height_stack.top != &ui_state->nil_fixed_height) {
+
+  if (ui_state->fixed_height_stack.top != &ui_state->nil_fixed_height)
+  {
     box->flags |= UI_BOX_FLAG__FIXED_HEIGHT;
     box->fixed_size[1] = ui_top_fixed_height();
-  } else {
+  }
+  else
+  {
     box->pref_size[AXIS__Y] = ui_top_pref_height();
   }
 
-  box->min_size[0] = ui_top_min_width();
-  box->min_size[1] = ui_top_min_height();
+  box->min_size[0]  =  ui_top_min_width();
+  box->min_size[1]  =  ui_top_min_height();
 
-  I1 is_auto_focus_active = ui_is_key_auto_focus_active(key);
-  I1 is_auto_focus_hot = ui_is_key_auto_focus_hot(key);
-  if (is_auto_focus_active) {
+  I1  is_auto_focus_active  =  ui_is_key_auto_focus_active(key);
+  I1  is_auto_focus_hot     =  ui_is_key_auto_focus_hot(key);
+
+  if (is_auto_focus_active)
+  {
     ui_set_next_focus_active(UI_FOCUS_KIND__ON);
   }
-  if (is_auto_focus_hot) {
+
+  if (is_auto_focus_hot)
+  {
     ui_set_next_focus_hot(UI_FOCUS_KIND__ON);
   }
+
   box->flags |= UI_BOX_FLAG__FOCUS_ACTIVE * (ui_top_focus_active() == UI_FOCUS_KIND__ON);
   box->flags |= UI_BOX_FLAG__FOCUS_HOT * (ui_top_focus_hot() == UI_FOCUS_KIND__ON);
-  if (box->flags & UI_BOX_FLAG__FOCUS_HOT && !ui_is_focus_hot()) {
+
+  if (box->flags & UI_BOX_FLAG__FOCUS_HOT && !ui_is_focus_hot())
+  {
     box->flags |= UI_BOX_FLAG__FOCUS_HOT_DISABLED;
   }
-  if (box->flags & UI_BOX_FLAG__FOCUS_ACTIVE && !ui_is_focus_active()) {
+
+  if (box->flags & UI_BOX_FLAG__FOCUS_ACTIVE && !ui_is_focus_active())
+  {
     box->flags |= UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED;
   }
 
-  box->child_layout_axis = ui_top_child_layout_axis();
-  box->tab_size = ui_top_tab_size();
-  box->text_align = ui_top_text_align();
-  box->text_padding = ui_top_text_padding();
-  box->font = ui_top_font();
-  box->font_size = ui_top_font_size();
-  box->corner_radii[0] = ui_top_tl_corner_radius();
-  box->corner_radii[1] = ui_top_tr_corner_radius();
-  box->corner_radii[2] = ui_top_bl_corner_radius();
-  box->corner_radii[3] = ui_top_br_corner_radius();
-  if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
+  box->child_layout_axis  =  ui_top_child_layout_axis();
+  box->tab_size           =  ui_top_tab_size();
+  box->text_align         =  ui_top_text_align();
+  box->text_padding       =  ui_top_text_padding();
+  box->font               =  ui_top_font();
+  box->font_size          =  ui_top_font_size();
+  box->corner_radii[0]    =  ui_top_tl_corner_radius();
+  box->corner_radii[1]    =  ui_top_tr_corner_radius();
+  box->corner_radii[2]    =  ui_top_bl_corner_radius();
+  box->corner_radii[3]    =  ui_top_br_corner_radius();
+
+  if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND)
+  {
     F4 background_color = ui_state->background_color_stack.top != &ui_state->nil_background_color
-      ? ui_top_background_color()
-      : ui_color_from_name(str8("background"));
-    for (L1 corner_idx = 0; corner_idx < ArrayCount(box->background_colors); corner_idx += 1) {
+                          ? ui_top_background_color()
+                          : ui_color_from_name(str8("background"));
+
+    for (L1 corner_idx = 0; corner_idx < ArrayCount(box->background_colors); corner_idx += 1)
+    {
       box->background_colors[corner_idx] = background_color;
     }
   }
-  if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
-    box->text_color = ui_state->text_color_stack.top != &ui_state->nil_text_color
-      ? ui_top_text_color()
-      : ui_color_from_name(str8("text"));
+
+  if (box->flags & UI_BOX_FLAG__DRAW_TEXT)
+  {
+    box->text_color = ui_state->text_color_stack.top != &ui_state->nil_text_color ? ui_top_text_color() : ui_color_from_name(str8("text"));
   }
-  if (box->flags & (UI_BOX_FLAG__DRAW_BORDER|UI_BOX_FLAG__DRAW_SIDES)) {
+
+  if (box->flags & (UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__DRAW_SIDES))
+  {
     box->border_color = ui_state->border_color_stack.top != &ui_state->nil_border_color
-      ? ui_top_border_color()
-      : ui_color_from_name(str8("border"));
+                          ? ui_top_border_color()
+                          : ui_color_from_name(str8("border"));
   }
 
   UIAutoPopStacks();
@@ -676,72 +920,97 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key) {
   return box;
 }
 
-Internal String8 ui_box_display_string(UI_Box *box) {
+Internal String8 ui_box_display_string(UI_Box *box)
+{
   String8 result = box->string;
-  if (!(box->flags & UI_BOX_FLAG__DISABLE_ID_STRING)) {
+
+  if (!(box->flags & UI_BOX_FLAG__DISABLE_ID_STRING))
+  {
     result = ui_display_part_from_key_string(result);
   }
+
   return result;
 }
 
-Internal void ui_box_equip_custom_draw(UI_Box *box, UI_Box_Custom_Draw_Kind kind, void *user_data) {
-  box->custom_draw_kind = kind;
-  box->custom_draw_user_data = user_data;
+Internal void ui_box_equip_custom_draw(UI_Box *box, UI_Box_Custom_Draw_Kind kind, void *user_data)
+{
+  box->custom_draw_kind       =  kind;
+  box->custom_draw_user_data  =  user_data;
 }
 
-Internal void ui_box_equip_background_colors(UI_Box *box, F4 tl, F4 tr, F4 bl, F4 br) {
-  box->background_colors[0] = tl;
-  box->background_colors[1] = tr;
-  box->background_colors[2] = bl;
-  box->background_colors[3] = br;
+Internal void ui_box_equip_background_colors(UI_Box *box, F4 tl, F4 tr, F4 bl, F4 br)
+{
+  box->background_colors[0]  =  tl;
+  box->background_colors[1]  =  tr;
+  box->background_colors[2]  =  bl;
+  box->background_colors[3]  =  br;
 }
 
-Internal void ui_box_equip_background_color(UI_Box *box, F4 color) {
+Internal void ui_box_equip_background_color(UI_Box *box, F4 color)
+{
   ui_box_equip_background_colors(box, color, color, color, color);
 }
 
-Internal void ui_box_equip_display_string(UI_Box *box, String8 string) {
-  box->string = push_str8_copy(ui_build_arena(), string);
-  box->flags |= UI_BOX_FLAG__HAS_DISPLAY_STRING;
+Internal void ui_box_equip_display_string(UI_Box *box, String8 string)
+{
   F4 text_color = box->text_color;
-  if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
-    String8 display_string = ui_box_display_string(box);
-    DR_FStr_Node fstr_n = {0, {display_string, {box->font, text_color, box->font_size, 0, 0}}};
-    DR_FStr_List fstrs = {&fstr_n, &fstr_n, 1};
-    box->display_fstrs = dr_fstrs_copy(ui_build_arena(), &fstrs);
-    box->display_fruns = dr_fruns_from_fstrs(ui_build_arena(), box->tab_size, (F1)ui_state->window->pixel_ratio, &box->display_fstrs);
+
+  box->string  =   push_str8_copy(ui_build_arena(), string);
+  box->flags   |=  UI_BOX_FLAG__HAS_DISPLAY_STRING;
+
+  if (box->flags & UI_BOX_FLAG__DRAW_TEXT)
+  {
+    String8       display_string  =  ui_box_display_string(box);
+    DR_FStr_Node  fstr_n          =  {0, {display_string, {box->font, text_color, box->font_size, 0, 0}}};
+    DR_FStr_List  fstrs           =  {&fstr_n, &fstr_n, 1};
+
+    box->display_fstrs  =  dr_fstrs_copy(ui_build_arena(), &fstrs);
+    box->display_fruns  =  dr_fruns_from_fstrs(ui_build_arena(), box->tab_size, (F1)ui_state->window->pixel_ratio, &box->display_fstrs);
   }
 }
 
-Internal UI_Box *ui_build_box_from_string(UI_Box_Flags flags, String8 string) {
-  UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
-  UI_Box *box = ui_build_box_from_key(flags, key);
-  if (flags & UI_BOX_FLAG__DRAW_TEXT) {
+Internal UI_Box *ui_build_box_from_string(UI_Box_Flags flags, String8 string)
+{
+  UI_Key  key   =  ui_key_from_string(ui_active_seed_key(), string);
+  UI_Box  *box  =  ui_build_box_from_key(flags, key);
+
+  if (flags & UI_BOX_FLAG__DRAW_TEXT)
+  {
     ui_box_equip_display_string(box, string);
   }
+
   return box;
 }
 
-Internal UI_Box *ui_build_box_from_stringf(UI_Box_Flags flags, CString fmt, ...) {
+Internal UI_Box *ui_build_box_from_stringf(UI_Box_Flags flags, CString fmt, ...)
+{
   Temp_Arena scratch = scratch_begin(0, 0);
-  va_list args;
+  va_list    args;
   va_start(args, fmt);
+
   String8 string = str8fv(scratch.arena, fmt, args);
+
   va_end(args);
+
   UI_Box *box = ui_build_box_from_string(flags, string);
+
   scratch_end(scratch);
   return box;
 }
 
-Internal I1 ui_next_event(OS_Event **ev) {
-  OS_Event_List events = ui_state->events;
-  OS_Event *start_node = events.first;
+Internal I1 ui_next_event(OS_Event **ev)
+{
+  OS_Event_List  events       =  ui_state->events;
+  OS_Event       *start_node  =  events.first;
 
-  if (ev[0] != 0) {
-    start_node = ev[0]->next;
-    ev[0] = 0;
+  if (ev[0] != 0)
+  {
+    start_node  =  ev[0]->next;
+    ev[0]       =  0;
   }
-  if (start_node != 0) {
+
+  if (start_node != 0)
+  {
     // TODO: Permissions?
     // Have permissions stack.
     // Skip events that don't fit permisisons.
@@ -754,31 +1023,43 @@ Internal I1 ui_next_event(OS_Event **ev) {
   return result;
 }
 
-Internal void ui_eat_event(OS_Event *e) {
+Internal void ui_eat_event(OS_Event *e)
+{
   DLLRemove(ui_state->events.first, ui_state->events.last, e);
   ui_state->events.count -= 1;
 }
 
-Internal UI_Cmd *ui_cmd_list_push(Arena *arena, UI_Cmd_List *list, UI_Cmd cmd) {
+Internal UI_Cmd *ui_cmd_list_push(Arena *arena, UI_Cmd_List *list, UI_Cmd cmd)
+{
   UI_Cmd *out_cmd = push_array(arena, UI_Cmd, 1);
+
   memmove(out_cmd, &cmd, sizeof(UI_Cmd));
-  out_cmd->string = push_str8_copy(arena, cmd.string);
+
+  out_cmd->string  =   push_str8_copy(arena, cmd.string);
+  list->count      +=  1;
+
   DLLPushBack(list->first, list->last, out_cmd);
-  list->count += 1;
+
   return out_cmd;
 }
 
-Internal void ui_eat_cmd(UI_Cmd *cmd) {
+Internal void ui_eat_cmd(UI_Cmd *cmd)
+{
   DLLRemove(ui_state->cmds.first, ui_state->cmds.last, cmd);
+
   ui_state->cmds.count -= 1;
 }
 
-Internal I1 ui_key_press(OS_Modifier_Flags modifiers, OS_Key key) {
+Internal I1 ui_key_press(OS_Modifier_Flags modifiers, OS_Key key)
+{
   I1 result = 0;
 
-  for (OS_Event *e = ui_state->events.first; e != 0; e = e->next) {
-    if (e->kind == OS_EVENT_KIND__PRESS && e->key == key && e->modifiers == modifiers) {
+  for (OS_Event *e = ui_state->events.first; e != 0; e = e->next)
+  {
+    if (e->kind == OS_EVENT_KIND__PRESS && e->key == key && e->modifiers == modifiers)
+    {
       result = 1;
+
       ui_eat_event(e);
       break;
     }
@@ -787,12 +1068,16 @@ Internal I1 ui_key_press(OS_Modifier_Flags modifiers, OS_Key key) {
   return result;
 }
 
-Internal I1 ui_key_release(OS_Modifier_Flags modifiers, OS_Key key) {
+Internal I1 ui_key_release(OS_Modifier_Flags modifiers, OS_Key key)
+{
   I1 result = 0;
 
-  for (OS_Event *e = ui_state->events.first; e != 0; e = e->next) {
-    if (e->kind == OS_EVENT_KIND__RELEASE && e->key == key && e->modifiers == modifiers) {
+  for (OS_Event *e = ui_state->events.first; e != 0; e = e->next)
+  {
+    if (e->kind == OS_EVENT_KIND__RELEASE && e->key == key && e->modifiers == modifiers)
+    {
       result = 1;
+
       ui_eat_event(e);
       break;
     }
@@ -801,93 +1086,114 @@ Internal I1 ui_key_release(OS_Modifier_Flags modifiers, OS_Key key) {
   return result;
 }
 
-Internal void box_view_clamp(UI_Box *box) {
-  if (box->flags & UI_BOX_FLAG__VIEW_CLAMP) {
+Internal void box_view_clamp(UI_Box *box)
+{
+  if (box->flags & UI_BOX_FLAG__VIEW_CLAMP)
+  {
     F2 max_view_off_target = {
       Max(0, box->view_bounds[0] - box->fixed_size[0]),
       Max(0, box->view_bounds[1] - box->fixed_size[1]),
     };
-    if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_X) {
+
+    if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_X)
+    {
       box->view_off_target[0] = Clamp(0, box->view_off_target[0], max_view_off_target[0]);
     }
-    if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_Y) {
+
+    if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_Y)
+    {
       box->view_off_target[1] = Clamp(0, box->view_off_target[1], max_view_off_target[1]);
     }
   }
 }
 
-Internal UI_Signal ui_signal_from_box(UI_Box *box) {
+Internal UI_Signal ui_signal_from_box(UI_Box *box)
+{
   // TODO: Get double click time from os.
   L1 double_click_time = 500000000;
 
-  I1 is_focus_hot = box->flags & UI_BOX_FLAG__FOCUS_HOT && !(box->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
-  UI_Signal signal = {0};
+  I1         is_focus_hot  =  box->flags & UI_BOX_FLAG__FOCUS_HOT && !(box->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
+  UI_Signal  signal        =  {0};
+
   signal.box = box;
   signal.modifiers |= os_get_modifiers();
 
   F4 rect = box->rect;
-  for (UI_Box *p = box->parent; !ui_box_is_nil(p); p = p->parent) {
-    if (!ui_key_match(p->key, ui_key_zero()) && p->flags & UI_BOX_FLAG__CLIP) {
+
+  for (UI_Box *p = box->parent; !ui_box_is_nil(p); p = p->parent)
+  {
+    if (!ui_key_match(p->key, ui_key_zero()) && p->flags & UI_BOX_FLAG__CLIP)
+    {
       rect = rect_overlap(p->rect, rect);
     }
   }
 
   I1 view_scrolled = 0;
-  for (OS_Event *e = 0; ui_next_event(&e);) {
+
+  for (OS_Event *e = 0; ui_next_event(&e);)
+  {
     I1 taken = 0;
 
     signal.modifiers |= e->modifiers;
 
-    F2 evt_mouse = {floor_F1(e->x), floor_F1(e->y)};
-    I1 evt_mouse_in_bounds = rect_contains(rect, evt_mouse); 
-    I1 evt_key_is_mouse = (e->key == OS_MOUSE_BUTTON__LEFT ||
-        e->key == OS_MOUSE_BUTTON__MIDDLE ||
-        e->key == OS_MOUSE_BUTTON__RIGHT);
-    I1 evt_mouse_idx = evt_key_is_mouse ? e->key - OS_MOUSE_BUTTON__LEFT : 0;
+    F2  evt_mouse            =  {floor_F1(e->x), floor_F1(e->y)};
+    I1  evt_mouse_in_bounds  =  rect_contains(rect, evt_mouse);
+    I1  evt_key_is_mouse     =  (e->key == OS_MOUSE_BUTTON__LEFT || e->key == OS_MOUSE_BUTTON__MIDDLE || e->key == OS_MOUSE_BUTTON__RIGHT);
+    I1  evt_mouse_idx        =  evt_key_is_mouse ? e->key - OS_MOUSE_BUTTON__LEFT : 0;
 
     //- kti: Mouse down in bounds.
     if (box->flags & UI_BOX_FLAG__CLICKABLE &&
         e->kind == OS_EVENT_KIND__PRESS &&
         evt_mouse_in_bounds &&
-        evt_key_is_mouse) {
-
-      ui_state->hot_box_key = box->key;
-      ui_state->active_box_key[evt_mouse_idx] = box->key;
-      signal.flags |= UI_SIGNAL_FLAG__LEFT_PRESSED << evt_mouse_idx;
-      ui_state->drag_start_mouse[evt_mouse_idx] = evt_mouse;
+        evt_key_is_mouse)
+    {
+      ui_state->hot_box_key                      =   box->key;
+      ui_state->active_box_key[evt_mouse_idx]    =   box->key;
+      signal.flags                               |=  UI_SIGNAL_FLAG__LEFT_PRESSED << evt_mouse_idx;
+      ui_state->drag_start_mouse[evt_mouse_idx]  =   evt_mouse;
 
       if (ui_key_match(box->key, ui_state->press_key_history[evt_mouse_idx][0]) &&
-          e->timestamp_ns-ui_state->press_timestamp_history[evt_mouse_idx][0] <= double_click_time) {
+          e->timestamp_ns - ui_state->press_timestamp_history[evt_mouse_idx][0] <= double_click_time)
+      {
         signal.flags |= UI_SIGNAL_FLAG__LEFT_DOUBLE_CLICKED << evt_mouse_idx;
       }
 
       if (ui_key_match(box->key, ui_state->press_key_history[evt_mouse_idx][0]) &&
           ui_key_match(box->key, ui_state->press_key_history[evt_mouse_idx][1]) &&
-          e->timestamp_ns-ui_state->press_timestamp_history[evt_mouse_idx][0] <= double_click_time &&
-          ui_state->press_timestamp_history[evt_mouse_idx][0]-ui_state->press_timestamp_history[evt_mouse_idx][1] <= double_click_time) {
+          e->timestamp_ns - ui_state->press_timestamp_history[evt_mouse_idx][0] <= double_click_time &&
+          ui_state->press_timestamp_history[evt_mouse_idx][0] - ui_state->press_timestamp_history[evt_mouse_idx][1] <= double_click_time)
+      {
         signal.flags |= UI_SIGNAL_FLAG__LEFT_TRIPPLE_CLICKED << evt_mouse_idx;
       }
 
       // Move history buffers back and fill in latest.
-      memmove(&ui_state->press_key_history[evt_mouse_idx][1], &ui_state->press_key_history[evt_mouse_idx][0],
-              sizeof(ui_state->press_key_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_key_history[evt_mouse_idx])-1));
-      memmove(&ui_state->press_timestamp_history[evt_mouse_idx][1], &ui_state->press_timestamp_history[evt_mouse_idx][0],
-              sizeof(ui_state->press_timestamp_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_timestamp_history[evt_mouse_idx])-1));
-      memmove(&ui_state->press_pos_history[evt_mouse_idx][1], &ui_state->press_pos_history[evt_mouse_idx][0],
-              sizeof(ui_state->press_pos_history[evt_mouse_idx][0])*(ArrayCount(ui_state->press_pos_history[evt_mouse_idx])-1));
-      ui_state->press_key_history[evt_mouse_idx][0] = box->key;
-      ui_state->press_timestamp_history[evt_mouse_idx][0] = e->timestamp_ns;
-      ui_state->press_pos_history[evt_mouse_idx][0] = (F2){e->x, e->y};
+      memmove(&ui_state->press_key_history[evt_mouse_idx][1],
+              &ui_state->press_key_history[evt_mouse_idx][0],
+              sizeof(ui_state->press_key_history[evt_mouse_idx][0]) *
+                (ArrayCount(ui_state->press_key_history[evt_mouse_idx]) - 1));
+      memmove(&ui_state->press_timestamp_history[evt_mouse_idx][1],
+              &ui_state->press_timestamp_history[evt_mouse_idx][0],
+              sizeof(ui_state->press_timestamp_history[evt_mouse_idx][0]) *
+                (ArrayCount(ui_state->press_timestamp_history[evt_mouse_idx]) - 1));
+      memmove(&ui_state->press_pos_history[evt_mouse_idx][1],
+              &ui_state->press_pos_history[evt_mouse_idx][0],
+              sizeof(ui_state->press_pos_history[evt_mouse_idx][0]) *
+                (ArrayCount(ui_state->press_pos_history[evt_mouse_idx]) - 1));
+
+      ui_state->press_key_history[evt_mouse_idx][0]        =  box->key;
+      ui_state->press_timestamp_history[evt_mouse_idx][0]  =  e->timestamp_ns;
+      ui_state->press_pos_history[evt_mouse_idx][0]        =  (F2){e->x, e->y};
 
       taken = 1;
     }
 
     //- kti: Mouse released in bounds. Triggers click.
-    if (box->flags & UI_BOX_FLAG__CLICKABLE &&
-        e->kind == OS_EVENT_KIND__RELEASE &&
-        evt_mouse_in_bounds &&
-        evt_key_is_mouse &&
-        ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key)) {
+    if (box->flags & UI_BOX_FLAG__CLICKABLE
+        && e->kind == OS_EVENT_KIND__RELEASE
+        && evt_mouse_in_bounds
+        && evt_key_is_mouse
+        && ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key))
+    {
       ui_state->active_box_key[evt_mouse_idx] = ui_key_zero();
       signal.flags |= UI_SIGNAL_FLAG__LEFT_RELEASED << evt_mouse_idx;
       signal.flags |= UI_SIGNAL_FLAG__LEFT_CLICKED << evt_mouse_idx;
@@ -895,21 +1201,25 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
     }
 
     //- kti: Mouse released outside of bounds.
-    if (box->flags & UI_BOX_FLAG__CLICKABLE &&
-        e->kind == OS_EVENT_KIND__RELEASE &&
-        evt_key_is_mouse &&
-        !evt_mouse_in_bounds &&
-        ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key)) {
-      ui_state->hot_box_key = ui_key_zero();
-      ui_state->active_box_key[evt_mouse_idx] = ui_key_zero();
-      signal.flags |= UI_SIGNAL_FLAG__LEFT_RELEASED << evt_mouse_idx;
-      taken = 1;
+    if (box->flags & UI_BOX_FLAG__CLICKABLE
+        && e->kind == OS_EVENT_KIND__RELEASE
+        && evt_key_is_mouse
+        && !evt_mouse_in_bounds
+        && ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key))
+    {
+      ui_state->hot_box_key                    =   ui_key_zero();
+      ui_state->active_box_key[evt_mouse_idx]  =   ui_key_zero();
+      signal.flags                             |=  UI_SIGNAL_FLAG__LEFT_RELEASED << evt_mouse_idx;
+      taken                                    =   1;
     }
 
     //- kti: focus is hot & keyboard click -> mark signal
     // TODO: Cmd instead of hard coding enter?
-    if (box->flags & UI_BOX_FLAG__KEYBOARD_CLICKABLE &&
-      is_focus_hot && e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ENTER) {
+    if (   box->flags & UI_BOX_FLAG__KEYBOARD_CLICKABLE
+        && is_focus_hot
+        && e->kind == OS_EVENT_KIND__PRESS
+        && e->key == OS_KEY__ENTER)
+    {
       signal.flags |= UI_SIGNAL_FLAG__KEYBOARD_PRESSED;
       taken = 1;
     }
@@ -917,67 +1227,92 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
     //- kti: Scrolling
     F1 scroll_mult = 4.0f;
 
-    if (box->flags & UI_BOX_FLAG__SCROLL &&
-        e->kind == OS_EVENT_KIND__SCROLL && 
-        (e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT) &&
-        evt_mouse_in_bounds) {
+    if (   box->flags & UI_BOX_FLAG__SCROLL
+        && e->kind == OS_EVENT_KIND__SCROLL
+        && (e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT)
+        && evt_mouse_in_bounds)
+    {
       F2 delta = (F2){e->delta_x, e->delta_y} * scroll_mult;
-      if (e->modifiers == OS_MODIFIER_FLAG__SHIFT) {
+
+      if (e->modifiers == OS_MODIFIER_FLAG__SHIFT)
+      {
         Swap(delta[0], delta[1]);
       }
+
       signal.scroll += delta;
       taken = 1;
     }
 
-    if (box->flags & UI_BOX_FLAG__VIEW_SCROLL &&
-        box->first_touch_build_index != box->last_touch_build_index &&
-        e->kind == OS_EVENT_KIND__SCROLL &&
-        (e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT) &&
-        evt_mouse_in_bounds) {
+    if (box->flags & UI_BOX_FLAG__VIEW_SCROLL
+        && box->first_touch_build_index != box->last_touch_build_index
+        && e->kind == OS_EVENT_KIND__SCROLL
+        && (e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT)
+        && evt_mouse_in_bounds)
+    {
       F2 delta = (F2){e->delta_x, e->delta_y} * scroll_mult;
-      if (e->modifiers == OS_MODIFIER_FLAG__SHIFT) {
+
+      if (e->modifiers == OS_MODIFIER_FLAG__SHIFT)
+      {
         Swap(delta[0], delta[1]);
       }
-      if (!(box->flags & UI_BOX_FLAG__VIEW_SCROLL_X)) {
-        if (delta[1] == 0) {
+
+      if (!(box->flags & UI_BOX_FLAG__VIEW_SCROLL_X))
+      {
+        if (delta[1] == 0)
+        {
           delta[1] = delta[0];
         }
+
         delta[0] = 0;
       }
-      if (!(box->flags & UI_BOX_FLAG__VIEW_SCROLL_Y)) {
-        if (delta[0] == 0) {
+
+      if (!(box->flags & UI_BOX_FLAG__VIEW_SCROLL_Y))
+      {
+        if (delta[0] == 0)
+        {
           delta[0] = delta[1];
         }
+
         delta[1] = 0;
       }
-      box->view_off_target += delta;
-      view_scrolled = 1;
-      taken = 1;
+
+      box->view_off_target  +=  delta;
+      view_scrolled         =   1;
+      taken                 =   1;
     }
 
-    if (taken) {
+    if (taken)
+    {
       ui_eat_event(e);
     }
   }
 
-  if (view_scrolled) { box_view_clamp(box); }
+  if (view_scrolled)
+  {
+    box_view_clamp(box);
+  }
 
   //- kti: Dragging
-  if (box->flags & UI_BOX_FLAG__CLICKABLE) {
-    for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
-      if (ui_key_match(box->key, ui_state->active_box_key[k]) || signal.flags & (UI_SIGNAL_FLAG__LEFT_PRESSED<<k)) {
-        signal.flags |= (UI_SIGNAL_FLAG__LEFT_DRAGGING<<k);
+  if (box->flags & UI_BOX_FLAG__CLICKABLE)
+  {
+    for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1)
+    {
+      if (ui_key_match(box->key, ui_state->active_box_key[k]) || signal.flags & (UI_SIGNAL_FLAG__LEFT_PRESSED << k))
+      {
+        signal.flags |= (UI_SIGNAL_FLAG__LEFT_DRAGGING << k);
 
         if (ui_key_match(box->key, ui_state->press_key_history[k][0]) &&
             ui_key_match(box->key, ui_state->press_key_history[k][1]) &&
             ui_state->press_timestamp_history[k][0] - ui_state->press_timestamp_history[k][1] <= double_click_time &&
-            length_sq_F2(ui_state->press_pos_history[k][0] - ui_state->press_pos_history[k][1]) < 10*10) {
-          signal.flags |= (UI_SIGNAL_FLAG__LEFT_DOUBLE_DRAGGING<<k);
+            length_sq_F2(ui_state->press_pos_history[k][0] - ui_state->press_pos_history[k][1]) < 10 * 10)
+        {
+          signal.flags |= (UI_SIGNAL_FLAG__LEFT_DOUBLE_DRAGGING << k);
 
           if (ui_key_match(box->key, ui_state->press_key_history[k][2]) &&
               ui_state->press_timestamp_history[k][1] - ui_state->press_timestamp_history[k][2] <= double_click_time &&
-              length_sq_F2(ui_state->press_pos_history[k][1] - ui_state->press_pos_history[k][2]) < 10*10) {
-            signal.flags |= (UI_SIGNAL_FLAG__LEFT_TRIPPLE_DRAGGING<<k);
+              length_sq_F2(ui_state->press_pos_history[k][1] - ui_state->press_pos_history[k][2]) < 10 * 10)
+          {
+            signal.flags |= (UI_SIGNAL_FLAG__LEFT_TRIPPLE_DRAGGING << k);
           }
         }
       }
@@ -985,50 +1320,63 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
   }
 
   //- kti: Mouse over.
-  if (rect_contains(rect, ui_state->mouse)) {
+  if (rect_contains(rect, ui_state->mouse))
+  {
     signal.flags |= UI_SIGNAL_FLAG__MOUSE_OVER;
   }
 
   //- kti: Hovering.
   // TODO: The huge check making sure that one mouse button is available (or active for this box) may be unecessary.
-  // This will almost never fail. Maybe at least make it a for loop. 
-  if (box->flags & UI_BOX_FLAG__CLICKABLE &&
-      rect_contains(rect, ui_state->mouse) &&
+  // This will almost never fail. Maybe at least make it a for loop.
+  if (box->flags & UI_BOX_FLAG__CLICKABLE && rect_contains(rect, ui_state->mouse) &&
       (ui_key_match(ui_state->hot_box_key, ui_key_zero()) || ui_key_match(ui_state->hot_box_key, box->key)) &&
       (ui_key_match(ui_state->active_box_key[0], ui_key_zero()) || ui_key_match(ui_state->active_box_key[0], box->key)) &&
       (ui_key_match(ui_state->active_box_key[1], ui_key_zero()) || ui_key_match(ui_state->active_box_key[1], box->key)) &&
-      (ui_key_match(ui_state->active_box_key[2], ui_key_zero()) || ui_key_match(ui_state->active_box_key[2], box->key))) {
+      (ui_key_match(ui_state->active_box_key[2], ui_key_zero()) || ui_key_match(ui_state->active_box_key[2], box->key)))
+  {
     ui_state->hot_box_key = box->key;
     signal.flags |= UI_SIGNAL_FLAG__HOVERING;
   }
 
   //- kti: Group hovering.
-  if (box->flags & UI_BOX_FLAG__CLICKABLE &&
-      rect_contains(rect, ui_state->mouse) &&
-      !ui_key_match(box->group_key, ui_key_zero())) {
-    for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
+  if (box->flags & UI_BOX_FLAG__CLICKABLE
+      && rect_contains(rect, ui_state->mouse)
+      && !ui_key_match(box->group_key, ui_key_zero()))
+  {
+    for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1)
+    {
       UI_Box *active_box = ui_box_from_key(ui_state->active_box_key[k]);
-      if (ui_key_match(active_box->group_key, box->group_key)) {
-        ui_state->hot_box_key = box->key;
-        ui_state->active_box_key[k] = box->key;
-        signal.flags |= UI_SIGNAL_FLAG__HOVERING|(UI_SIGNAL_FLAG__LEFT_DRAGGING<<k);
+
+      if (ui_key_match(active_box->group_key, box->group_key))
+      {
+        ui_state->hot_box_key        =   box->key;
+        ui_state->active_box_key[k]  =   box->key;
+        signal.flags                 |=  UI_SIGNAL_FLAG__HOVERING | (UI_SIGNAL_FLAG__LEFT_DRAGGING << k);
       }
     }
   }
 
   //- kti: get default nav ancestor
   UI_Box *default_nav_parent = &ui_nil_box;
-  for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent) {
-    if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV) {
+
+  for (UI_Box *p = ui_top_parent(); !ui_box_is_nil(p); p = p->parent)
+  {
+    if (p->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV)
+    {
       default_nav_parent = p;
       break;
     }
   }
 
   //- kti: clicking in default nav -> set navigation state to this box
-  if (box->flags & UI_BOX_FLAG__CLICK_TO_FOCUS && signal.flags&UI_SIGNAL_FLAG__PRESSED && !ui_box_is_nil(default_nav_parent)) {
+  if (box->flags & UI_BOX_FLAG__CLICK_TO_FOCUS
+      && signal.flags & UI_SIGNAL_FLAG__PRESSED
+      && !ui_box_is_nil(default_nav_parent))
+  {
     default_nav_parent->default_nav_focus_next_hot_key = box->key;
-    if (!ui_key_match(default_nav_parent->default_nav_focus_active_key, box->key)) {
+
+    if (!ui_key_match(default_nav_parent->default_nav_focus_active_key, box->key))
+    {
       default_nav_parent->default_nav_focus_next_active_key = ui_key_zero();
     }
   }
@@ -1036,177 +1384,248 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box) {
   return signal;
 }
 
-Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_List cmds,
-                             UI_Theme *theme, F1 animation_dt) {
+Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_List cmds, UI_Theme *theme, F1 animation_dt)
+{
   UIResetStacks();
-  ui_state->tags_key_stack_top = ui_state->tags_key_stack_free = 0;
-  ui_state->tags_cache_slot_count = 512;
-  ui_state->tags_cache_slots = push_array(ui_build_arena(), UI_Tags_Cache_Slot, ui_state->tags_cache_slot_count);
-  ui_state->theme = theme;
-  ui_state->theme_build_index += 1;
-  ui_state->animation_dt = animation_dt;
-  ui_state->animation_active = 0;
-  ui_state->root = &ui_nil_box;
-  ui_state->last_build_box_count = ui_state->build_box_count;
-  ui_state->build_box_count = 0;
-  ui_state->window = window;
-  ui_state->events = events;
 
-  ui_state->cmds = cmds;
+  ui_state->tags_key_stack_top     =   ui_state->tags_key_stack_free = 0;
+  ui_state->tags_cache_slot_count  =   512;
+  ui_state->tags_cache_slots       =   push_array(ui_build_arena(), UI_Tags_Cache_Slot, ui_state->tags_cache_slot_count);
+  ui_state->theme                  =   theme;
+  ui_state->theme_build_index      +=  1;
+  ui_state->animation_dt           =   animation_dt;
+  ui_state->animation_active       =   0;
+  ui_state->root                   =   &ui_nil_box;
+  ui_state->last_build_box_count   =   ui_state->build_box_count;
+  ui_state->build_box_count        =   0;
+  ui_state->window                 =   window;
+  ui_state->events                 =   events;
+  ui_state->cmds                   =   cmds;
 
   //- kti: Prune unused theme nodes.
-  for (UI_Theme_Pattern_Cache_Node *node = ui_state->lru_theme_pattern_cache_node, *next = 0; node != 0; node = next) {
+  for (UI_Theme_Pattern_Cache_Node *node = ui_state->lru_theme_pattern_cache_node, *next = 0; node != 0; node = next)
+  {
     next = node->lru_next;
-    if (node->last_build_index_accessed+2 < ui_state->theme_build_index) {
-      L1 slot_idx = node->key.l1[0] % ui_state->theme_pattern_cache_slot_count;
-      UI_Theme_Pattern_Cache_Slot *slot = &ui_state->theme_pattern_cache_slots[slot_idx];
+
+    if (node->last_build_index_accessed + 2 < ui_state->theme_build_index)
+    {
+      L1                           slot_idx  =  node->key.l1[0] % ui_state->theme_pattern_cache_slot_count;
+      UI_Theme_Pattern_Cache_Slot  *slot     =  &ui_state->theme_pattern_cache_slots[slot_idx];
+
       DLLRemove_NP(slot->first, slot->last, node, slot_next, slot_prev);
-      DLLRemove_NP(ui_state->lru_theme_pattern_cache_node,
-                   ui_state->mru_theme_pattern_cache_node,
-                   node, lru_next, lru_prev);
+      DLLRemove_NP(ui_state->lru_theme_pattern_cache_node, ui_state->mru_theme_pattern_cache_node, node, lru_next, lru_prev);
       SLLStackPush_N(ui_state->theme_pattern_cache_node_free, node, slot_next);
-    } else {
+    }
+    else
+    {
       break;
     }
   }
 
   //- kti: Mouse movement.
-  for (OS_Event *e = ui_state->events.last; e != 0; e = e->prev) {
-    if (e->kind == OS_EVENT_KIND__MOUSE_MOVE) {
-      ui_state->mouse[0] = floor_F1(e->x);
-      ui_state->mouse[1] = floor_F1(e->y);
-      ui_state->last_time_mouse_moved = e->timestamp_ns;
+  for (OS_Event *e = ui_state->events.last; e != 0; e = e->prev)
+  {
+    if (e->kind == OS_EVENT_KIND__MOUSE_MOVE)
+    {
+      ui_state->mouse[0]               =  floor_F1(e->x);
+      ui_state->mouse[1]               =  floor_F1(e->y);
+      ui_state->last_time_mouse_moved  =  e->timestamp_ns;
       break;
     }
   }
 
   L1 now = os_clock();
-  if (os_hovered_window() != window && now-ui_state->last_time_mouse_moved > 500000000) {
-    ui_state->mouse[0] = -100.0f;
-    ui_state->mouse[1] = -100.0f;
+
+  if (os_hovered_window() != window && now - ui_state->last_time_mouse_moved > 500000000)
+  {
+    ui_state->mouse[0]  =  -100.0f;
+    ui_state->mouse[1]  =  -100.0f;
   }
 
-  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
-    if (ui_key_match(ui_state->active_box_key[k], ui_key_zero()) && os_key_is_down(OS_MOUSE_BUTTON__LEFT+k)) {
+  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1)
+  {
+    if (ui_key_match(ui_state->active_box_key[k], ui_key_zero())
+        && os_key_is_down(OS_MOUSE_BUTTON__LEFT + k))
+    {
       ui_state->active_box_key[k] = ui_state->external_key;
-    } else if (ui_key_match(ui_state->active_box_key[k], ui_state->external_key) && !os_key_is_down(OS_MOUSE_BUTTON__LEFT+k)) {
+    }
+    else if (ui_key_match(ui_state->active_box_key[k], ui_state->external_key)
+             && !os_key_is_down(OS_MOUSE_BUTTON__LEFT + k))
+    {
       ui_state->active_box_key[k] = ui_key_zero();
     }
   }
 
   //- kti: default navigation
   Temp_Arena scratch = scratch_begin(0, 0);
-  if (!ui_key_match(ui_state->default_nav_root_key, ui_key_zero())) {
+
+  if (!ui_key_match(ui_state->default_nav_root_key, ui_key_zero()))
+  {
     UI_Box *nav_root = ui_box_from_key(ui_state->default_nav_root_key);
-    if (!ui_box_is_nil(nav_root)) {
-      if (ui_key_match(ui_key_zero(), nav_root->default_nav_focus_active_key)) {
-        for (;;) {
-          I1 moved = 0;
-          UI_Box *focus_box = ui_box_from_key(nav_root->default_nav_focus_next_hot_key);
-          UI_Box_List next_focus_box_candidates = {0};
 
-          I1 nav_next = 0;
-          I1 nav_prev = 0;
-          Axis axis_lock = AXIS__INVALID;
+    if (!ui_box_is_nil(nav_root))
+    {
+      if (ui_key_match(ui_key_zero(), nav_root->default_nav_focus_active_key))
+      {
+        for (;;)
+        {
+          I1           moved                      =  0;
+          UI_Box       *focus_box                 =  ui_box_from_key(nav_root->default_nav_focus_next_hot_key);
+          UI_Box_List  next_focus_box_candidates  =  {0};
+          I1           nav_next                   =  0;
+          I1           nav_prev                   =  0;
+          Axis         axis_lock                  =  AXIS__INVALID;
 
-          if (ui_key_press(0, OS_KEY__TAB)) {
+          if (ui_key_press(0, OS_KEY__TAB))
+          {
             nav_next = 1;
           }
-          if (ui_key_press(OS_MODIFIER_FLAG__SHIFT, OS_KEY__TAB)) {
+
+          if (ui_key_press(OS_MODIFIER_FLAG__SHIFT, OS_KEY__TAB))
+          {
             nav_prev = 1;
           }
 
-          for (UI_Cmd *cmd = ui_state->cmds.first, *next = 0; cmd != 0; cmd = next) {
+          for (UI_Cmd *cmd = ui_state->cmds.first, *next = 0; cmd != 0; cmd = next)
+          {
             next = cmd->next;
+
             I1 taken = 0;
-            if (cmd->delta_si2[0] == 0 && cmd->delta_si2[1] == 0) {
+
+            if (cmd->delta_si2[0] == 0 && cmd->delta_si2[1] == 0)
+            {
               continue;
             }
+
             if (((cmd->delta_si2[0] > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X) || cmd->delta_si2[0] == 0) &&
-                ((cmd->delta_si2[1] > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2[1] == 0)) {
-              taken = 1;
-              nav_next = 1;
+                ((cmd->delta_si2[1] > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2[1] == 0))
+            {
+              taken     =  1;
+              nav_next  =  1;
             }
+
             if (((cmd->delta_si2[0] < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X) || cmd->delta_si2[0] == 0) &&
-                ((cmd->delta_si2[1] < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2[1] == 0)) {
-              taken = 1;
-              nav_prev = 1;
+                ((cmd->delta_si2[1] < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2[1] == 0))
+            {
+              taken     =  1;
+              nav_prev  =  1;
             }
-            if (cmd->flags & UI_CMD_FLAG__EXPLICIT_DIRECTIONAL) {
+
+            if (cmd->flags & UI_CMD_FLAG__EXPLICIT_DIRECTIONAL)
+            {
               axis_lock = cmd->delta_si2[0] != 0 ? AXIS__X : AXIS__Y;
             }
-            if (taken) {
+
+            if (taken)
+            {
               ui_eat_cmd(cmd);
             }
           }
 
-          if (nav_next) {
-            UI_Box *search_start = ui_box_is_nil(focus_box) ? nav_root : focus_box;
-            L1 moved_in_axis[AXIS2_COUNT] = {0};
+          if (nav_next)
+          {
+            UI_Box  *search_start               =  ui_box_is_nil(focus_box) ? nav_root : focus_box;
+            L1      moved_in_axis[AXIS2_COUNT]  =  {0};
+
             moved = 1;
-            for (UI_Box *box = search_start;;) {
-              if (box != search_start && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP) &&
-                (box->flags & UI_BOX_FLAG__CLICKABLE || ui_box_is_nil(box)) &&
-                (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 0)) {
+
+            for (UI_Box *box = search_start;;)
+            {
+              if (box != search_start
+                  && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP)
+                  && (box->flags & UI_BOX_FLAG__CLICKABLE || ui_box_is_nil(box))
+                  && (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 0))
+              {
                 ui_box_list_push(scratch.arena, &next_focus_box_candidates, box);
-                if (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 1) {
+
+                if (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 1)
+                {
                   break;
                 }
               }
 
               UI_Box *last_box = box;
-              if (!ui_box_is_nil(box->first)) {
-                moved_in_axis[box->child_layout_axis] += 1;
-                box = box->first;
-              } else for (UI_Box *p = box; !ui_box_is_nil(p) && p != nav_root; p = p->parent) {
-                if (!ui_box_is_nil(p->next)) {
+
+              if (!ui_box_is_nil(box->first))
+              {
+                moved_in_axis[box->child_layout_axis]  +=  1;
+                box                                    =   box->first;
+              }
+              else for (UI_Box *p = box; !ui_box_is_nil(p) && p != nav_root; p = p->parent)
+              {
+                if (!ui_box_is_nil(p->next))
+                {
                   moved_in_axis[p->parent->child_layout_axis] += 1;
                   box = p->next;
                   break;
                 }
               }
-              if (last_box == box) {
+
+              if (last_box == box)
+              {
                 ui_box_list_push(scratch.arena, &next_focus_box_candidates, &ui_nil_box);
                 break;
               }
             }
           }
 
-          if (nav_prev) {
-            UI_Box *search_start = ui_box_is_nil(focus_box) ? nav_root : focus_box;
-            L1 moved_in_axis[AXIS2_COUNT] = {0};
+          if (nav_prev)
+          {
+            UI_Box  *search_start               =  ui_box_is_nil(focus_box) ? nav_root : focus_box;
+            L1      moved_in_axis[AXIS2_COUNT]  =  {0};
+
             moved = 1;
-            for (UI_Box *box = search_start;;) {
-              if (box != search_start && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP) &&
-                (box->flags & UI_BOX_FLAG__CLICKABLE || ui_box_is_nil(box)) &&
-                (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 0)) {
+
+            for (UI_Box *box = search_start;;)
+            {
+              if (box != search_start && !(box->flags & UI_BOX_FLAG__FOCUS_NAV_SKIP)
+                  && (box->flags & UI_BOX_FLAG__CLICKABLE || ui_box_is_nil(box))
+                  && (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 0))
+              {
                 ui_box_list_push(scratch.arena, &next_focus_box_candidates, box);
-                if (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 1) {
+
+                if (axis_lock == AXIS__INVALID || moved_in_axis[axis_lock] > 1)
+                {
                   break;
                 }
               }
-              UI_Box *last_box = box;
-              UI_Box *root_descendant = &ui_nil_box;
-              if (box == nav_root && box == search_start) {
-                for (UI_Box *d = box->last; !ui_box_is_nil(d); d = d->last) {
+
+              UI_Box  *last_box         =  box;
+              UI_Box  *root_descendant  =  &ui_nil_box;
+
+              if (box == nav_root && box == search_start)
+              {
+                for (UI_Box *d = box->last; !ui_box_is_nil(d); d = d->last)
+                {
                   moved_in_axis[d->parent->child_layout_axis] += 1;
                   root_descendant = d;
                 }
               }
+
               UI_Box *prev_descendant = &ui_nil_box;
-              for (UI_Box *d = box->prev; !ui_box_is_nil(d); d = d->last) {
-                moved_in_axis[d->parent->child_layout_axis] += 1;
-                prev_descendant = d;
+
+              for (UI_Box *d = box->prev; !ui_box_is_nil(d); d = d->last)
+              {
+                moved_in_axis[d->parent->child_layout_axis]  +=  1;
+                prev_descendant                              =   d;
               }
-              if (!ui_box_is_nil(root_descendant)) {
+
+              if (!ui_box_is_nil(root_descendant))
+              {
                 box = root_descendant;
-              } else if (!ui_box_is_nil(prev_descendant)) {
-                box = prev_descendant;
-              } else if (box->parent != nav_root) { 
-                moved_in_axis[box->parent->child_layout_axis] += 1;
-                box = box->parent;
               }
-              if (box == last_box) {
+              else if (!ui_box_is_nil(prev_descendant))
+              {
+                box = prev_descendant;
+              }
+              else if (box->parent != nav_root)
+              {
+                moved_in_axis[box->parent->child_layout_axis]  +=  1;
+                box                                            =   box->parent;
+              }
+
+              if (box == last_box)
+              {
                 ui_box_list_push(scratch.arena, &next_focus_box_candidates, &ui_nil_box);
                 break;
               }
@@ -1214,17 +1633,23 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
           }
 
           //- kti: scan candidates and grab next focus box.
-          UI_Box *next_focus_box = focus_box;
-          F1 best_distance_from_start = 1000000;
-          for (UI_Box_Node *n = next_focus_box_candidates.first; n != 0; n = n->next) {
-            UI_Box *box = n->box;
-            F1 distance_from_start = 0;
-            if (axis_lock != AXIS__INVALID) {
+          UI_Box  *next_focus_box           =  focus_box;
+          F1      best_distance_from_start  =  1000000;
+
+          for (UI_Box_Node *n = next_focus_box_candidates.first; n != 0; n = n->next)
+          {
+            UI_Box  *box                 =  n->box;
+            F1      distance_from_start  =  0;
+
+            if (axis_lock != AXIS__INVALID)
+            {
               distance_from_start = abs_F1(rect_center(box->rect)[axis2_flip(axis_lock)] - rect_center(focus_box->rect)[axis2_flip(axis_lock)]);
             }
-            if (distance_from_start < best_distance_from_start && box != focus_box) {
-              next_focus_box = box;
-              best_distance_from_start = distance_from_start;
+
+            if (distance_from_start < best_distance_from_start && box != focus_box)
+            {
+              next_focus_box            =  box;
+              best_distance_from_start  =  distance_from_start;
             }
           }
 
@@ -1232,27 +1657,38 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
           nav_root->default_nav_focus_next_hot_key = next_focus_box->key;
 
           //- kti: no movement -> break.
-          if (moved == 0) {
+          if (moved == 0)
+          {
             break;
           }
         }
       }
 
-      if (!ui_key_match(ui_key_zero(), nav_root->default_nav_focus_active_key)) {
-        for (UI_Cmd *cmd = ui_state->cmds.first, *next = 0; cmd != 0; cmd = next) {
+      if (!ui_key_match(ui_key_zero(), nav_root->default_nav_focus_active_key))
+      {
+        for (UI_Cmd *cmd = ui_state->cmds.first, *next = 0; cmd != 0; cmd = next)
+        {
           next = cmd->next;
-          if (cmd->kind == UI_CMD_KIND__CANCEL) {
+
+          if (cmd->kind == UI_CMD_KIND__CANCEL)
+          {
             ui_eat_cmd(cmd);
-            
+
             UI_Box *prev_focus_root = nav_root;
-            for(UI_Box *focus_root = ui_box_from_key(nav_root->default_nav_focus_active_key); !ui_box_is_nil(focus_root);) {
+
+            for (UI_Box *focus_root = ui_box_from_key(nav_root->default_nav_focus_active_key); !ui_box_is_nil(focus_root);)
+            {
               UI_Box *next_focus_root = ui_box_from_key(focus_root->default_nav_focus_active_key);
-              if(ui_box_is_nil(next_focus_root)) {
+
+              if (ui_box_is_nil(next_focus_root))
+              {
                 prev_focus_root->default_nav_focus_next_active_key = ui_key_zero();
                 break;
-              } else {
-                prev_focus_root = focus_root;
-                focus_root = next_focus_root;
+              }
+              else
+              {
+                prev_focus_root  =  focus_root;
+                focus_root       =  next_focus_root;
               }
             }
           }
@@ -1260,14 +1696,18 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
       }
     }
   }
+
   ui_state->default_nav_root_key = ui_key_zero();
+
   scratch_end(scratch);
 
   //- kti: next-default-nav-focus keys -> current-default-nav-focus-keys
-  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1) {
-    for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next) {
-      box->default_nav_focus_hot_key = box->default_nav_focus_next_hot_key;
-      box->default_nav_focus_active_key = box->default_nav_focus_next_active_key;
+  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1)
+  {
+    for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next)
+    {
+      box->default_nav_focus_hot_key     =  box->default_nav_focus_next_hot_key;
+      box->default_nav_focus_active_key  =  box->default_nav_focus_next_active_key;
     }
   }
 
@@ -1275,17 +1715,24 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
   ui_set_next_fixed_width(window->width);
   ui_set_next_fixed_height(window->height);
   ui_set_next_child_layout_axis(AXIS__X);
+
   UI_Box *root = ui_build_box_from_stringf(0, "%llu", (L1)window);
+
   ui_push_parent(root);
+
   ui_state->root = root;
-  
+
   //- kti: Reset active key when the box is disabled or nil.
-  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
-    if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
+  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1)
+  {
+    if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero()))
+    {
       UI_Box *box = ui_box_from_key(ui_state->active_box_key[k]);
-      if (ui_box_is_nil(box) ||
-          !(box->flags & UI_BOX_FLAG__CLICKABLE) ||
-          box->flags & UI_BOX_FLAG__DISABLED) {
+
+      if (ui_box_is_nil(box)
+          || !(box->flags & UI_BOX_FLAG__CLICKABLE)
+          || box->flags & UI_BOX_FLAG__DISABLED)
+      {
         ui_state->active_box_key[k] = ui_key_zero();
       }
     }
@@ -1293,31 +1740,44 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
   //- kti: Reset hot key if we don't have an active box.
   L1 has_active = 0;
-  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
-    if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero())) {
+
+  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1)
+  {
+    if (!ui_key_match(ui_state->active_box_key[k], ui_key_zero()))
+    {
       has_active = 1;
       break;
     }
   }
-  if (!has_active) {
+
+  if (!has_active)
+  {
     ui_state->hot_box_key = ui_key_zero();
   }
 }
 
-Internal UI_Box_Rec ui_box_rec_df(UI_Box *box, UI_Box *root, L1 sib_member_off, L1 child_member_off) {
+Internal UI_Box_Rec ui_box_rec_df(UI_Box *box, UI_Box *root, L1 sib_member_off, L1 child_member_off)
+{
   UI_Box_Rec result = {0};
+
   result.next = &ui_nil_box;
-  if (!ui_box_is_nil(*MemberFromOffset(UI_Box **, box, child_member_off))) {
-    result.next = *MemberFromOffset(UI_Box **, box, child_member_off);
-    result.push_count = 1;
+
+  if (!ui_box_is_nil(*MemberFromOffset(UI_Box **, box, child_member_off)))
+  {
+    result.next        =  *MemberFromOffset(UI_Box **, box, child_member_off);
+    result.push_count  =  1;
   }
-  else for (UI_Box *p = box; !ui_box_is_nil(p) && p != root; p = p->parent) {
-    if (!ui_box_is_nil(*MemberFromOffset(UI_Box **, p, sib_member_off))) {
-      result.next = *MemberFromOffset(UI_Box **, p, sib_member_off);
-      break;
+  else
+    for (UI_Box *p = box; !ui_box_is_nil(p) && p != root; p = p->parent)
+    {
+      if (!ui_box_is_nil(*MemberFromOffset(UI_Box **, p, sib_member_off)))
+      {
+        result.next = *MemberFromOffset(UI_Box **, p, sib_member_off);
+        break;
+      }
+
+      result.pop_count += 1;
     }
-    result.pop_count += 1;
-  }
 
   return result;
 }
@@ -1325,128 +1785,175 @@ Internal UI_Box_Rec ui_box_rec_df(UI_Box *box, UI_Box *root, L1 sib_member_off, 
 #define ui_box_rec_df_pre(box, root) ui_box_rec_df(box, root, OffsetOf(UI_Box, next), OffsetOf(UI_Box, first))
 #define ui_box_rec_df_post(box, root) ui_box_rec_df(box, root, OffsetOf(UI_Box, prev), OffsetOf(UI_Box, last))
 
-Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, Axis axis) {
-  for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next) {
-    switch (b->pref_size[axis].kind) {
+Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, Axis axis)
+{
+  for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next)
+  {
+    switch (b->pref_size[axis].kind)
+    {
       default: {} break;
-      case UI_SIZE_KIND__PIXELS: {
+
+      case UI_SIZE_KIND__PIXELS:
+      {
         b->fixed_size[axis] = b->pref_size[axis].value;
       } break;
-      case UI_SIZE_KIND__TEXT_CONTENT: {
-        F1 padding = b->pref_size[axis].value;
-        F1 text_size = b->display_fruns.dim[axis];
+
+      case UI_SIZE_KIND__TEXT_CONTENT:
+      {
+        F1  padding    =  b->pref_size[axis].value;
+        F1  text_size  =  b->display_fruns.dim[axis];
+
         b->fixed_size[axis] = padding + text_size + b->text_padding * 2;
       } break;
     }
   }
 }
 
-Internal void ui_calc_sizes_upwards_dependent__in_place(UI_Box *root, Axis axis) {
-  for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next) {
-    switch (b->pref_size[axis].kind) {
+Internal void ui_calc_sizes_upwards_dependent__in_place(UI_Box *root, Axis axis)
+{
+  for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next)
+  {
+    switch (b->pref_size[axis].kind)
+    {
       default: {} break;
-      case UI_SIZE_KIND__PERCENT_OF_PARENT: {
+
+      case UI_SIZE_KIND__PERCENT_OF_PARENT:
+      {
         UI_Box *fixed_parent = &ui_nil_box;
-        for (UI_Box *p = b->parent; !ui_box_is_nil(p); p = p->parent) {
-          if (p->flags & (UI_BOX_FLAG__FIXED_WIDTH<<axis) ||
-              p->pref_size[axis].kind == UI_SIZE_KIND__PIXELS ||
-              p->pref_size[axis].kind == UI_SIZE_KIND__TEXT_CONTENT ||
-              p->pref_size[axis].kind == UI_SIZE_KIND__PERCENT_OF_PARENT) {
+
+        for (UI_Box *p = b->parent; !ui_box_is_nil(p); p = p->parent)
+        {
+          if (p->flags & (UI_BOX_FLAG__FIXED_WIDTH << axis)
+              || p->pref_size[axis].kind == UI_SIZE_KIND__PIXELS
+              || p->pref_size[axis].kind == UI_SIZE_KIND__TEXT_CONTENT
+              || p->pref_size[axis].kind == UI_SIZE_KIND__PERCENT_OF_PARENT)
+          {
             fixed_parent = p;
             break;
           }
         }
 
         F1 size = fixed_parent->fixed_size[axis] * b->pref_size[axis].value;
-        b->fixed_size[axis] = size;
 
+        b->fixed_size[axis] = size;
       } break;
     }
   }
 }
 
-Internal void ui_calc_sizes_downwards_dependent__in_place(UI_Box *root, Axis axis) {
+Internal void ui_calc_sizes_downwards_dependent__in_place(UI_Box *root, Axis axis)
+{
   UI_Box_Rec rec = {0};
-  for (UI_Box *box = root; !ui_box_is_nil(box); box = rec.next) {
+
+  for (UI_Box *box = root; !ui_box_is_nil(box); box = rec.next)
+  {
     rec = ui_box_rec_df_pre(box, root);
 
     L1 pop_idx = 0;
-    for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent, pop_idx += 1) {
-      if (b->pref_size[axis].kind == UI_SIZE_KIND__CHILDREN_SUM) {
+
+    for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent, pop_idx += 1)
+    {
+      if (b->pref_size[axis].kind == UI_SIZE_KIND__CHILDREN_SUM)
+      {
         F1 sum = 0;
-        for (UI_Box *child = b->first; !ui_box_is_nil(child); child = child->next) {
-          if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
-            if (axis == b->child_layout_axis) {
+
+        for (UI_Box *child = b->first; !ui_box_is_nil(child); child = child->next)
+        {
+          if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
+          {
+            if (axis == b->child_layout_axis)
+            {
               sum += child->fixed_size[axis];
-            } else {
+            }
+            else
+            {
               sum = Max(sum, child->fixed_size[axis]);
             }
           }
         }
+
         b->fixed_size[axis] = sum;
       }
     }
   }
 }
 
-Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis) {
+Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis)
+{
   Temp_Arena scratch = scratch_begin(0, 0);
 
-  for (UI_Box *box = root; !ui_box_is_nil(box); box = ui_box_rec_df_pre(box, root).next) {
+  for (UI_Box *box = root; !ui_box_is_nil(box); box = ui_box_rec_df_pre(box, root).next)
+  {
 
     //- kti: Non layout axis
-    if (axis != box->child_layout_axis && !(box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X << axis))) {
+    if (axis != box->child_layout_axis && !(box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X << axis)))
+    {
       F1 allowed_size = box->fixed_size[axis];
-      for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
-        if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
-          F1 child_size = child->fixed_size[axis];
-          F1 violation = child_size - allowed_size;
-          F1 max_fixup = child_size;
-          F1 fixup = Clamp(0, violation, max_fixup);
+
+      for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next)
+      {
+        if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
+        {
+          F1  child_size  =  child->fixed_size[axis];
+          F1  violation   =  child_size - allowed_size;
+          F1  max_fixup   =  child_size;
+          F1  fixup       =  Clamp(0, violation, max_fixup);
+
           child->fixed_size[axis] -= fixup;
         }
       }
     }
 
     //- kti: Layout axis
-    if (axis == box->child_layout_axis && !(box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X<<axis))) {
-      F1 total_allowed_size = box->fixed_size[axis];
-      F1 total_size = 0;
-      F1 total_weighted_size = 0;
-      for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
-        if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
-          total_size += child->fixed_size[axis];
-          total_weighted_size += child->fixed_size[axis] * (1-child->pref_size[axis].strictness);
+    if (axis == box->child_layout_axis && !(box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X << axis)))
+    {
+      F1  total_allowed_size   =  box->fixed_size[axis];
+      F1  total_size           =  0;
+      F1  total_weighted_size  =  0;
+
+      for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next)
+      {
+        if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
+        {
+          total_size           +=  child->fixed_size[axis];
+          total_weighted_size  +=  child->fixed_size[axis] * (1 - child->pref_size[axis].strictness);
         }
       }
 
       F1 violation = total_size - total_allowed_size;
-      if (violation > 0 && total_weighted_size > 0) {
-        for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
-          if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
-            F1 fixup_size_this_child = child->fixed_size[axis] * (1 - child->pref_size[axis].strictness);
-            fixup_size_this_child = Max(0, fixup_size_this_child);
 
-            F1 fixup_pct = (violation / total_weighted_size);
-            fixup_pct = Clamp(0, fixup_pct, 1);
+      if (violation > 0 && total_weighted_size > 0)
+      {
+        for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next)
+        {
+          if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
+          {
+            F1 fixup_size_this_child  =  child->fixed_size[axis] * (1 - child->pref_size[axis].strictness);
+            F1 fixup_pct              =  (violation / total_weighted_size);
 
-            child->fixed_size[axis] -= fixup_size_this_child * fixup_pct;
+            fixup_size_this_child    =   Max(0, fixup_size_this_child);
+            fixup_pct                =   Clamp(0, fixup_pct, 1);
+            child->fixed_size[axis]  -=  fixup_size_this_child * fixup_pct;
           }
         }
       }
     }
 
     //- kti: fixup upwards-relative sizes
-    if (box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X<<axis)) {
-      for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
-        if (child->pref_size[axis].kind == UI_SIZE_KIND__PERCENT_OF_PARENT) {
+    if (box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X << axis))
+    {
+      for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next)
+      {
+        if (child->pref_size[axis].kind == UI_SIZE_KIND__PERCENT_OF_PARENT)
+        {
           child->fixed_size[axis] = box->fixed_size[axis] * child->pref_size[axis].value;
         }
       }
     }
 
     //- kti: enforce clamps
-    for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
+    for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next)
+    {
       child->fixed_size[axis] = Max(child->min_size[axis], child->fixed_size[axis]);
     }
   }
@@ -1454,36 +1961,46 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis) {
   scratch_end(scratch);
 }
 
-Internal void ui_layout_position__in_place(UI_Box *root, Axis axis) {
-  for (UI_Box *box = root; !ui_box_is_nil(box); box = ui_box_rec_df_pre(box, root).next) {
-    F1 layout_position = 0;
+Internal void ui_layout_position__in_place(UI_Box *root, Axis axis)
+{
+  for (UI_Box *box = root; !ui_box_is_nil(box); box = ui_box_rec_df_pre(box, root).next)
+  {
+    F1  layout_position  =  0;
+    F1  bounds           =  0;
 
-    F1 bounds = 0;
-    for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next) {
-      if (!(child->flags & (UI_BOX_FLAG__FLOATING_X<<axis))) {
+    for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next)
+    {
+      if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
+      {
         child->fixed_pos[axis] = layout_position;
-        if (box->child_layout_axis == axis) {
+
+        if (box->child_layout_axis == axis)
+        {
           layout_position += child->fixed_size[axis];
           bounds += child->fixed_size[axis];
-        } else {
+        }
+        else
+        {
           bounds = Max(bounds, child->fixed_size[axis]);
         }
       }
 
-      F1 view_off = !(child->flags & (UI_BOX_FLAG__SKIP_VIEW_OFF_X << axis)) ? floor_F1(box->view_off[axis]) : 0.0f;
-      F1 rect_min = box->rect[axis] + child->fixed_pos[axis] - view_off;
-      F1 rect_max = rect_min + child->fixed_size[axis];
-      F1 rect_min_px = floor_F1(rect_min);
-      F1 rect_max_px = floor_F1(rect_max);
-      child->rect[axis] = rect_min_px;
-      child->rect[2+axis] = rect_max_px - rect_min_px;
+      F1  view_off     =  !(child->flags & (UI_BOX_FLAG__SKIP_VIEW_OFF_X << axis)) ? floor_F1(box->view_off[axis]) : 0.0f;
+      F1  rect_min     =  box->rect[axis] + child->fixed_pos[axis] - view_off;
+      F1  rect_max     =  rect_min + child->fixed_size[axis];
+      F1  rect_min_px  =  floor_F1(rect_min);
+      F1  rect_max_px  =  floor_F1(rect_max);
+
+      child->rect[axis]      =  rect_min_px;
+      child->rect[2 + axis]  =  rect_max_px - rect_min_px;
     }
 
     box->view_bounds[axis] = bounds;
   }
 }
 
-Internal void ui_layout_root(UI_Box *root, Axis axis) {
+Internal void ui_layout_root(UI_Box *root, Axis axis)
+{
   ui_calc_sizes_standalone__in_place(root, axis);
   ui_calc_sizes_upwards_dependent__in_place(root, axis);
   ui_calc_sizes_downwards_dependent__in_place(root, axis);
@@ -1491,84 +2008,115 @@ Internal void ui_layout_root(UI_Box *root, Axis axis) {
   ui_layout_position__in_place(root, axis);
 }
 
-Internal void ui_end_build(void) {
+Internal void ui_end_build(void)
+{
   //- kti: Prune untouched or transient boxes.
-  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1) {
+  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1)
+  {
     UI_Box_HT_Slot *slot = &ui_state->box_table[slot_idx];
-    for (UI_Box *box = slot->first; !ui_box_is_nil(box); box = box->hash_next) {
-      if (box->last_touch_build_index < ui_state->build_index ||
-          ui_key_match(box->key, ui_key_zero())) {
+
+    for (UI_Box *box = slot->first; !ui_box_is_nil(box); box = box->hash_next)
+    {
+      if (box->last_touch_build_index < ui_state->build_index || ui_key_match(box->key, ui_key_zero()))
+      {
         DLLRemove_NPZ(&ui_nil_box, slot->first, slot->last, box, hash_next, hash_prev);
         SLLStackPush(ui_state->first_free_box, box);
       }
     }
   }
 
-  for (L1 axis = 0; axis < AXIS2_COUNT; axis += 1) {
+  for (L1 axis = 0; axis < AXIS2_COUNT; axis += 1)
+  {
     ui_layout_root(ui_state->root, axis);
   }
 
   //- kti: Enforce child rounding.
-  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1) {
-    for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next) {
-      if (box->flags & UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT) {
-        for (UI_Box *b = box; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, box).next) {
-          if (floor_F1(b->rect[0]) <= floor_F1(box->rect[0]) &&
-              floor_F1(b->rect[1]) <= floor_F1(box->rect[1])) {
+  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1)
+  {
+    for (UI_Box *box = ui_state->box_table[slot_idx].first; !ui_box_is_nil(box); box = box->hash_next)
+    {
+      if (box->flags & UI_BOX_FLAG__ROUND_CHILDREN_BY_PARENT)
+      {
+        for (UI_Box *b = box; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, box).next)
+        {
+          if (floor_F1(b->rect[0]) <= floor_F1(box->rect[0]) && floor_F1(b->rect[1]) <= floor_F1(box->rect[1]))
+          {
             b->corner_radii[0] = box->corner_radii[0];
           }
-          if (floor_F1(b->rect[0]+b->rect[2]) >= floor_F1(box->rect[0]+box->rect[2]) &&
-              floor_F1(b->rect[1]) <= floor_F1(box->rect[1])) {
+
+          if (   floor_F1(b->rect[0] + b->rect[2])  >=  floor_F1(box->rect[0] + box->rect[2])
+              && floor_F1(b->rect[1])               <=  floor_F1(box->rect[1]))
+          {
             b->corner_radii[1] = box->corner_radii[1];
           }
-          if (floor_F1(b->rect[0]) <= floor_F1(box->rect[0]) &&
-              floor_F1(b->rect[1]+b->rect[3]) >= floor_F1(box->rect[1]+box->rect[3])) {
+
+          if (   floor_F1(b->rect[0])               <=  floor_F1(box->rect[0])
+              && floor_F1(b->rect[1] + b->rect[3])  >=  floor_F1(box->rect[1] + box->rect[3]))
+          {
             b->corner_radii[2] = box->corner_radii[2];
           }
-          if (floor_F1(b->rect[0]+b->rect[2]) >= floor_F1(box->rect[0]+box->rect[2]) &&
-              floor_F1(b->rect[1]+b->rect[3]) >= floor_F1(box->rect[1]+box->rect[3])) {
+
+          if (   floor_F1(b->rect[0] + b->rect[2]) >= floor_F1(box->rect[0] + box->rect[2])
+              && floor_F1(b->rect[1] + b->rect[3]) >= floor_F1(box->rect[1] + box->rect[3]))
+          {
             b->corner_radii[3] = box->corner_radii[3];
           }
         }
-        box->first->corner_radii[0] = box->corner_radii[0];
-        box->first->corner_radii[1] = box->corner_radii[1];
-        box->last->corner_radii[2] = box->corner_radii[2];
-        box->last->corner_radii[3] = box->corner_radii[3];
+
+        box->first->corner_radii[0]  =  box->corner_radii[0];
+        box->first->corner_radii[1]  =  box->corner_radii[1];
+        box->last->corner_radii[2]   =  box->corner_radii[2];
+        box->last->corner_radii[3]   =  box->corner_radii[3];
       }
     }
   }
 
-
-  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1) {
+  for (L1 slot_idx = 0; slot_idx < ui_state->box_table_size; slot_idx += 1)
+  {
     UI_Box_HT_Slot *slot = &ui_state->box_table[slot_idx];
-    for (UI_Box *b = slot->first; !ui_box_is_nil(b); b = b->hash_next) {
+
+    for (UI_Box *b = slot->first; !ui_box_is_nil(b); b = b->hash_next)
+    {
       box_view_clamp(b);
-    
+
       //- kti: Animate view offset
       F1 scroll_animation_rate = 0.2f;
 
       b->view_off += scroll_animation_rate * (b->view_off_target - b->view_off);
 
-      if (abs_F1(b->view_off_target[0] - b->view_off[0]) < 2.0f) {
+      if (abs_F1(b->view_off_target[0] - b->view_off[0]) < 2.0f)
+      {
         b->view_off[0] = b->view_off_target[0];
       }
-      if (abs_F1(b->view_off_target[1] - b->view_off[1]) < 2.0f) {
+
+      if (abs_F1(b->view_off_target[1] - b->view_off[1]) < 2.0f)
+      {
         b->view_off[1] = b->view_off_target[1];
       }
-      if (b->view_off[0] != b->view_off_target[0] || b->view_off[1] != b->view_off_target[1]) {
+
+      if (b->view_off[0] != b->view_off_target[0] || b->view_off[1] != b->view_off_target[1])
+      {
         ui_state->animation_active = 1;
       }
     }
   }
 
-  F1 slow_rate = 1.0f - powf(2.0f, -30.0f*ui_state->animation_dt);
-  for (L1 slot_idx = 0; slot_idx < ui_state->theme_pattern_cache_slot_count; slot_idx += 1) {
-    for (UI_Theme_Pattern_Cache_Node *node = ui_state->theme_pattern_cache_slots[slot_idx].first; node != 0; node = node->slot_next) {
-      for (L1 idx = 0; idx < 4; idx += 1) {
-        node->current_rgba[idx] += (node->target_rgba[idx] - node->current_rgba[idx])*slow_rate;
-        if (abs_F1(node->target_rgba[idx] - node->current_rgba[idx]) < 0.001f) {
+  F1 slow_rate = 1.0f - powf(2.0f, -30.0f * ui_state->animation_dt);
+
+  for (L1 slot_idx = 0; slot_idx < ui_state->theme_pattern_cache_slot_count; slot_idx += 1)
+  {
+    for (UI_Theme_Pattern_Cache_Node *node = ui_state->theme_pattern_cache_slots[slot_idx].first; node != 0; node = node->slot_next)
+    {
+      for (L1 idx = 0; idx < 4; idx += 1)
+      {
+        node->current_rgba[idx] += (node->target_rgba[idx] - node->current_rgba[idx]) * slow_rate;
+
+        if (abs_F1(node->target_rgba[idx] - node->current_rgba[idx]) < 0.001f)
+        {
           node->current_rgba[idx] = node->target_rgba[idx];
-        } else {
+        }
+        else
+        {
           ui_state->animation_active = 1;
         }
       }
@@ -1576,133 +2124,185 @@ Internal void ui_end_build(void) {
   }
 
   ui_state->build_index += 1;
+
   arena_clear(ui_build_arena());
 }
 
-Internal F2 ui_box_text_pos(UI_Box *box) {
-  F2 result = {0};
-  FC_Tag font = box->font;
-  F1 font_size = box->font_size;
-  FP_Metrics font_metrics = fc_metrics_from_tag_size(font, font_size);
-  result[1] = floor_F1((box->rect[1]+box->rect[3]*0.5f) + font_metrics.ascent*0.5f - font_metrics.descent*0.5f);
-  switch (box->text_align) {
+Internal F2 ui_box_text_pos(UI_Box *box)
+{
+  F2          result        =  {0};
+  FC_Tag      font          =  box->font;
+  F1          font_size     =  box->font_size;
+  FP_Metrics  font_metrics  =  fc_metrics_from_tag_size(font, font_size);
+
+  result[1] = floor_F1((box->rect[1] + box->rect[3] * 0.5f) + font_metrics.ascent * 0.5f - font_metrics.descent * 0.5f);
+
+  switch (box->text_align)
+  {
     default:
-    case UI_TEXT_ALIGN__LEFT: {
+    case UI_TEXT_ALIGN__LEFT:
+    {
       result[0] = box->rect[0] + box->text_padding;
     } break;
-    case UI_TEXT_ALIGN__CENTER: {
+
+    case UI_TEXT_ALIGN__CENTER:
+    {
       F2 text_dim = box->display_fruns.dim;
-      result[0] = round_F1(box->rect[0]+box->rect[2]*0.5f - text_dim[0]*0.5f);
-      result[0] = Max(result[0], box->rect[0]);
+
+      result[0]  =  round_F1(box->rect[0] + box->rect[2] * 0.5f - text_dim[0] * 0.5f);
+      result[0]  =  Max(result[0], box->rect[0]);
     } break;
-    case UI_TEXT_ALIGN__RIGHT: {
+
+    case UI_TEXT_ALIGN__RIGHT:
+    {
       F2 text_dim = box->display_fruns.dim;
-      result[0] = round_F1(box->rect[0]+box->rect[2] - text_dim[0] - box->text_padding);
-      result[0] = Max(result[0], box->rect[0]);
+
+      result[0]  =  round_F1(box->rect[0] + box->rect[2] - text_dim[0] - box->text_padding);
+      result[0]  =  Max(result[0], box->rect[0]);
     } break;
   }
+
   result[0] = floor_F1(result[0]);
+
   return result;
 }
 
-Internal L1 ui_box_char_pos_from_xy(UI_Box *box, F2 pos) {
-  String8 line = ui_box_display_string(box);
-  L1 result = fc_char_pos_from_tag_size_string_p(box->font, box->font_size, (F1)ui_state->window->pixel_ratio, 0, box->tab_size, line, pos[0] - ui_box_text_pos(box)[0]);
+Internal L1 ui_box_char_pos_from_xy(UI_Box *box, F2 pos)
+{
+  String8  line    =  ui_box_display_string(box);
+  L1       result  =  fc_char_pos_from_tag_size_string_p(box->font,
+                                                         box->font_size,
+                                                         (F1)ui_state->window->pixel_ratio,
+                                                         0,
+                                                         box->tab_size,
+                                                         line,
+                                                         pos[0] - ui_box_text_pos(box)[0]);
   return result;
 }
 
-Internal void ui_kill_action(void) {
-  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1) {
+Internal void ui_kill_action(void)
+{
+  for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1)
+  {
     ui_state->active_box_key[k] = ui_key_zero();
   }
 }
 
-Internal F2 ui_mouse(void) {
+Internal F2 ui_mouse(void)
+{
   return ui_state->mouse;
 }
 
-Internal F2 ui_drag_start_mouse(I1 button) {
-  F2 pos = {0};
-  I1 idx = button - OS_MOUSE_BUTTON__LEFT;
-  if (idx < OS_MOUSE_BUTTON_COUNT) {
+Internal F2 ui_drag_start_mouse(I1 button)
+{
+  F2  pos  =  {0};
+  I1  idx  =  button - OS_MOUSE_BUTTON__LEFT;
+
+  if (idx < OS_MOUSE_BUTTON_COUNT)
+  {
     pos = ui_state->drag_start_mouse[idx];
   }
+
   return pos;
 }
 
-Internal F2 ui_drag_delta(I1 button) {
-  F2 delta = {0};
-  I1 idx = button - OS_MOUSE_BUTTON__LEFT;
-  if (idx < OS_MOUSE_BUTTON_COUNT) {
+Internal F2 ui_drag_delta(I1 button)
+{
+  F2  delta  =  {0};
+  I1  idx    =  button - OS_MOUSE_BUTTON__LEFT;
+
+  if (idx < OS_MOUSE_BUTTON_COUNT)
+  {
     delta = ui_mouse() - ui_state->drag_start_mouse[idx];
   }
+
   return delta;
 }
 
-Internal void ui_store_drag_data(I1 button, String8 data) {
+Internal void ui_store_drag_data(I1 button, String8 data)
+{
   I1 idx = button - OS_MOUSE_BUTTON__LEFT;
-  if (idx < OS_MOUSE_BUTTON_COUNT) {
+
+  if (idx < OS_MOUSE_BUTTON_COUNT)
+  {
     arena_clear(ui_state->drag_arena[idx]);
+
     ui_state->drag_data[idx] = push_str8_copy(ui_state->drag_arena[idx], data);
   }
 }
 
-Internal String8 ui_get_drag_data(I1 button, L1 min_required_size) {
+Internal String8 ui_get_drag_data(I1 button, L1 min_required_size)
+{
   String8 result = {0};
 
   I1 idx = button - OS_MOUSE_BUTTON__LEFT;
-  if (idx < OS_MOUSE_BUTTON_COUNT) {
-    if (ui_state->drag_data[idx].len < min_required_size) {
-      Temp_Arena scratch = scratch_begin(0, 0);
-      String8 data = {
-        .str = push_array(scratch.arena, B1, min_required_size),
-        .len = min_required_size,
+
+  if (idx < OS_MOUSE_BUTTON_COUNT)
+  {
+    if (ui_state->drag_data[idx].len < min_required_size)
+    {
+      Temp_Arena  scratch  =  scratch_begin(0, 0);
+      String8     data     =  {
+        .str  =  push_array(scratch.arena, B1, min_required_size),
+        .len  =  min_required_size,
       };
+
       ui_store_drag_data(button, data);
       scratch_end(scratch);
     }
+
     result = ui_state->drag_data[idx];
   }
+
   return result;
 }
 
-#define ui_store_drag_struct(button, ptr) ui_store_drag_data(button, (String8){.str = (B1 *)(ptr), .len = sizeof(*(ptr)) })
+#define ui_store_drag_struct(button, ptr) ui_store_drag_data(button, (String8){.str = (B1 *)(ptr), .len = sizeof(*(ptr))})
 #define ui_get_drag_struct(button, type) ((type *)ui_get_drag_data(button, sizeof(type)).str)
 
-Internal UI_Box *ui_root(void) {
+Internal UI_Box *ui_root(void)
+{
   UI_Box *root = ui_state->root;
   return root;
 }
 
-Internal UI_Key ui_hot_key(void) {
+Internal UI_Key ui_hot_key(void)
+{
   UI_Key result = ui_state->hot_box_key;
   return result;
 }
 
-Internal UI_Key ui_active_key(I1 button) {
-  UI_Key result = ui_key_zero();
-  I1 idx = button-OS_MOUSE_BUTTON__LEFT;
-  if (idx < OS_MOUSE_BUTTON_COUNT) {
+Internal UI_Key ui_active_key(I1 button)
+{
+  UI_Key  result  =  ui_key_zero();
+  I1      idx     =  button - OS_MOUSE_BUTTON__LEFT;
+
+  if (idx < OS_MOUSE_BUTTON_COUNT)
+  {
     result = ui_state->active_box_key[idx];
   }
+
   return result;
 }
 
-Internal void ui_push_corner_radius(F1 v) {
+Internal void ui_push_corner_radius(F1 v)
+{
   ui_push_tl_corner_radius(v);
   ui_push_tr_corner_radius(v);
   ui_push_bl_corner_radius(v);
   ui_push_br_corner_radius(v);
 }
 
-Internal void ui_set_next_corner_radius(F1 v) {
+Internal void ui_set_next_corner_radius(F1 v)
+{
   ui_set_next_tl_corner_radius(v);
   ui_set_next_tr_corner_radius(v);
   ui_set_next_bl_corner_radius(v);
   ui_set_next_br_corner_radius(v);
 }
 
-Internal void ui_pop_corner_radius(void) {
+Internal void ui_pop_corner_radius(void)
+{
   ui_pop_tl_corner_radius();
   ui_pop_tr_corner_radius();
   ui_pop_bl_corner_radius();
@@ -1712,44 +2312,53 @@ Internal void ui_pop_corner_radius(void) {
 #define UI_Corner_Radius(v) DeferLoop(ui_push_corner_radius((v)), ui_pop_corner_radius())
 #define UI_Focus(v) DeferLoop((ui_push_focus_hot(v), ui_push_focus_active(v)), (ui_pop_focus_active(), ui_pop_focus_hot()))
 
-Internal void ui_set_next_fixed_rect(F4 rect) {
+Internal void ui_set_next_fixed_rect(F4 rect)
+{
   ui_set_next_fixed_x(rect[0]);
   ui_set_next_fixed_y(rect[1]);
   ui_set_next_fixed_width(rect[2]);
   ui_set_next_fixed_height(rect[3]);
 }
 
-Internal void ui_push_pref_size(Axis axis, UI_Size size) {
+Internal void ui_push_pref_size(Axis axis, UI_Size size)
+{
   (axis == AXIS__X ? ui_push_pref_width : ui_push_pref_height)(size);
 }
 
-Internal void ui_pop_pref_size(Axis axis) {
+Internal void ui_pop_pref_size(Axis axis)
+{
   (axis == AXIS__X ? ui_pop_pref_width : ui_pop_pref_height)();
 }
 
-Internal void ui_set_next_pref_size(Axis axis, UI_Size size) {
+Internal void ui_set_next_pref_size(Axis axis, UI_Size size)
+{
   (axis == AXIS__X ? ui_set_next_pref_width : ui_set_next_pref_height)(size);
 }
 
-Internal UI_Signal ui_spacer(UI_Size size) {
+Internal UI_Signal ui_spacer(UI_Size size)
+{
   UI_Box *parent = ui_top_parent();
+
   ui_set_next_pref_size(parent->child_layout_axis, size);
-  UI_Box *box = ui_build_box_from_key(0, ui_key_zero());
-  UI_Signal signal = ui_signal_from_box(box);
+
+  UI_Box     *box    =  ui_build_box_from_key(0, ui_key_zero());
+  UI_Signal  signal  =  ui_signal_from_box(box);
+
   return signal;
 }
 
-Internal UI_Size ui_size(UI_Size_Kind kind, F1 value, F1 strictness) {
+Internal UI_Size ui_size(UI_Size_Kind kind, F1 value, F1 strictness)
+{
   UI_Size result = {
-    .kind = kind,
-    .value = value,
-    .strictness = strictness,
+    .kind        =  kind,
+    .value       =  value,
+    .strictness  =  strictness,
   };
   return result;
 }
 
 #define ui_px(value, strictness) ui_size(UI_SIZE_KIND__PIXELS, value, strictness)
-#define ui_em(value, strictness) ui_size(UI_SIZE_KIND__PIXELS, (value)*ui_top_font_size(), strictness)
+#define ui_em(value, strictness) ui_size(UI_SIZE_KIND__PIXELS, (value) * ui_top_font_size(), strictness)
 #define ui_text_dim(padding, strictness) ui_size(UI_SIZE_KIND__TEXT_CONTENT, padding, strictness)
 #define ui_pct(value, strictness) ui_size(UI_SIZE_KIND__PERCENT_OF_PARENT, value, strictness)
 #define ui_children_sum(strictness) ui_size(UI_SIZE_KIND__CHILDREN_SUM, 0.0f, strictness)
@@ -1758,103 +2367,146 @@ Internal UI_Size ui_size(UI_Size_Kind kind, F1 value, F1 strictness) {
 #define UI_Row() DeferLoop(ui_row_begin(), ui_row_end())
 #define UI_Padding(v) DeferLoop(ui_spacer(v), ui_spacer(v))
 
-Internal UI_Box *ui_named_column_begin(String8 name) {
+Internal UI_Box *ui_named_column_begin(String8 name)
+{
   ui_set_next_child_layout_axis(AXIS__Y);
+
   UI_Box *box = ui_build_box_from_string(0, name);
+
   ui_push_parent(box);
+
   return box;
 }
 
-Internal UI_Signal ui_named_column_end(void) {
-  UI_Box *box = ui_pop_parent();
-  UI_Signal signal = ui_signal_from_box(box);
+Internal UI_Signal ui_named_column_end(void)
+{
+  UI_Box     *box    =  ui_pop_parent();
+  UI_Signal  signal  =  ui_signal_from_box(box);
+
   return signal;
 }
 
-Internal UI_Box *ui_named_row_begin(String8 name) {
+Internal UI_Box *ui_named_row_begin(String8 name)
+{
   ui_set_next_child_layout_axis(AXIS__X);
+
   UI_Box *box = ui_build_box_from_string(0, name);
+
   ui_push_parent(box);
+
   return box;
 }
 
-Internal UI_Signal ui_named_row_end(void) {
-  UI_Box *box = ui_pop_parent();
-  UI_Signal signal = ui_signal_from_box(box);
+Internal UI_Signal ui_named_row_end(void)
+{
+  UI_Box     *box    =  ui_pop_parent();
+  UI_Signal  signal  =  ui_signal_from_box(box);
+
   return signal;
 }
 
-Internal UI_Box *ui_column_begin(void) { return ui_named_column_begin(str8("")); }
-Internal UI_Box *ui_row_begin(void) { return ui_named_row_begin(str8("")); }
-Internal UI_Signal ui_column_end(void) { return ui_named_column_end(); }
-Internal UI_Signal ui_row_end(void) { return ui_named_row_end(); }
+Internal UI_Box *ui_column_begin(void)
+{
+  return ui_named_column_begin(str8(""));
+}
 
-Internal UI_Signal ui_button(String8 string) {
-  UI_Box *box = ui_build_box_from_string(
-      UI_BOX_FLAG__CLICKABLE |
-      UI_BOX_FLAG__DRAW_TEXT |
-      UI_BOX_FLAG__DRAW_BORDER |
-      UI_BOX_FLAG__DRAW_BACKGROUND |
-      UI_BOX_FLAG__DRAW_HOT_EFFECTS |
-      UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
-      string);
+Internal UI_Box *ui_row_begin(void)
+{
+  return ui_named_row_begin(str8(""));
+}
+
+Internal UI_Signal ui_column_end(void)
+{
+  return ui_named_column_end();
+}
+
+Internal UI_Signal ui_row_end(void)
+{
+  return ui_named_row_end();
+}
+
+Internal UI_Signal ui_button(String8 string)
+{
+  UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DRAW_BORDER |
+                                         UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+                                         UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
+                                         string);
   UI_Signal signal = ui_signal_from_box(box);
+
   return signal;
 }
 
-Internal UI_Signal ui_buttonf(CString fmt, ...) {
+Internal UI_Signal ui_buttonf(CString fmt, ...)
+{
   Temp_Arena scratch = scratch_begin(0, 0);
-  va_list args;
+  va_list    args;
   va_start(args, fmt);
+
   String8 string = str8fv(scratch.arena, fmt, args);
+
   va_end(args);
+
   UI_Signal result = ui_button(string);
+
   scratch_end(scratch);
+
   return result;
 }
 
-Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
+Internal UI_Signal ui_checkbox(String8 str, I1 *value)
+{
   UI_Signal signal = {0};
 
-  FP_Metrics metrics = fc_metrics_from_tag_size(ui_top_font(), ui_top_font_size());
-  F1 size = metrics.ascent + metrics.descent;
-  F1 check_inset = size * 0.15f;
+  FP_Metrics  metrics      =  fc_metrics_from_tag_size(ui_top_font(), ui_top_font_size());
+  F1          size         =  metrics.ascent + metrics.descent;
+  F1          check_inset  =  size * 0.15f;
 
   ui_set_next_pref_height(ui_px(size, 1.0f));
-  UI_Row() {
+
+  UI_Row()
+  {
     //- kti: Checkbox square. outer is Y-layout so inner check can be centered with padding.
     ui_set_next_fixed_width(size);
     ui_set_next_fixed_height(size);
     ui_set_next_child_layout_axis(AXIS__Y);
+
     UI_Tag(str8("checkbox"))
-    UI_Corner_Radius(check_inset * 0.5f) {
-      UI_Box *outer = ui_build_box_from_stringf(
-          UI_BOX_FLAG__CLICKABLE|
-          UI_BOX_FLAG__DRAW_HOT_EFFECTS|
-          UI_BOX_FLAG__DRAW_BACKGROUND|
-          UI_BOX_FLAG__DRAW_BORDER,
-          "##checkbox_%.*s", (int)str.len, str.str);
+    UI_Corner_Radius(check_inset * 0.5f)
+    {
+      UI_Box *outer = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+                                                UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER,
+                                                "##checkbox_%.*s",
+                                                (int)str.len,
+                                                str.str);
       UI_Box *check = &ui_nil_box;
 
-      if (value[0]) {
+      if (value[0])
+      {
         UI_Parent(outer)
         UI_Tag(str8("check"))
-        UI_Padding(ui_pct(1.0f, 0.0f)) {
-          UI_Pref_Height(ui_px(size-check_inset*2, 1.0f))
+        UI_Padding(ui_pct(1.0f, 0.0f))
+        {
+          UI_Pref_Height(ui_px(size - check_inset * 2, 1.0f))
           UI_Row()
           UI_Padding(ui_pct(1.0f, 0.0f))
-          UI_Pref_Width(ui_px(size-check_inset*2, 1.0f)) {
+          UI_Pref_Width(ui_px(size - check_inset * 2, 1.0f))
+          {
             check = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND, ui_key_zero());
           }
         }
       }
 
       signal = ui_signal_from_box(outer);
-      if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
+
+      if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED)
+      {
         value[0] = !value[0];
       }
-      if (!ui_box_is_nil(check) && signal.flags & UI_SIGNAL_FLAG__HOVERING) {
-        for (L1 corner_idx = 0; corner_idx < ArrayCount(check->background_colors); corner_idx += 1) {
+
+      if (!ui_box_is_nil(check) && signal.flags & UI_SIGNAL_FLAG__HOVERING)
+      {
+        for (L1 corner_idx = 0; corner_idx < ArrayCount(check->background_colors); corner_idx += 1)
+        {
           check->background_colors[corner_idx] = ui_brighten(check->background_colors[corner_idx]);
         }
       }
@@ -1863,7 +2515,8 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
     ui_spacer(ui_px(size * 0.5f, 1.0f));
 
     //- kti: Label. Text is vertically centered by ui_box_text_pos.
-    UI_Pref_Width(ui_text_dim(0.0f, 1.0f)) {
+    UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+    {
       ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
       ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str);
       ui_spacer(ui_em(1.0f, 1.0f));
@@ -1873,302 +2526,418 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value) {
   return signal;
 }
 
-Internal UI_Signal ui_label(String8 string) {
+Internal UI_Signal ui_label(String8 string)
+{
   UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, (String8){0});
+
   ui_box_equip_display_string(box, string);
+
   UI_Signal interact = ui_signal_from_box(box);
+
   return interact;
 }
 
-Internal L1 ui_scanned_column_from_column(String8 string, L1 start_column, Side side) {
-  L1 new_column = start_column;
-  SL1 delta = (!!side)*2 - 1;
-  I1 found_text = 0;
-  I1 found_non_space = 0;
-  SL1 start_off = delta < 0 ? delta : 0;
-  for (SL1 col = (SL1)start_column+start_off; 0 <= col && col <= (SL1)string.len; col += delta) {
-    B1 byte = (col < (SL1)string.len) ? string.str[col] : 0;
-    I1 is_non_space = !char_is_space(byte);
-    I1 is_name = (char_is_alpha(byte) || char_is_digit(byte, 10) || byte == '_' || byte >= 128);
-    if (((side == SIDE__MIN) && (col == 0)) ||
-        ((side == SIDE__MAX) && (col == (SL1)string.len)) ||
-        (found_non_space && !is_non_space) ||
-        (found_text && !is_name)) {
+Internal L1 ui_scanned_column_from_column(String8 string, L1 start_column, Side side)
+{
+  L1   new_column       =  start_column;
+  SL1  delta            =  (!!side) * 2 - 1;
+  I1   found_text       =  0;
+  I1   found_non_space  =  0;
+  SL1  start_off        =  delta < 0 ? delta : 0;
+
+  for (SL1 col = (SL1)start_column + start_off; 0 <= col && col <= (SL1)string.len; col += delta)
+  {
+    B1  byte          =  (col < (SL1)string.len) ? string.str[col] : 0;
+    I1  is_non_space  =  !char_is_space(byte);
+    I1  is_name       =  (char_is_alpha(byte) || char_is_digit(byte, 10) || byte == '_' || byte >= 128);
+
+    if ((side == SIDE__MIN && col == 0)
+        || (side == SIDE__MAX && col == (SL1)string.len)
+        || (found_non_space && !is_non_space)
+        || (found_text && !is_name))
+    {
       new_column = col + (!side && col != 0);
       break;
-    } else if (!found_text && is_name) {
+    }
+    else if (!found_text && is_name)
+    {
       found_text = 1;
-    } else if (!found_non_space && is_non_space) {
+    }
+    else if (!found_non_space && is_non_space)
+    {
       found_non_space = 1;
     }
   }
+
   return new_column;
 }
 
-Internal String8 ui_push_string_replace_range(Arena *arena, String8 string, L1 min, L1 max, String8 replace) {
+Internal String8 ui_push_string_replace_range(Arena *arena, String8 string, L1 min, L1 max, String8 replace)
+{
   min = Clamp(0, min, string.len);
   max = Clamp(0, max, string.len);
-  if (max < min) {
+
+  if (max < min)
+  {
     max = min;
   }
 
-  L1 old_len = string.len;
-  L1 new_len = old_len - (max-min) + replace.len;
+  L1 old_len =  string.len;
+  L1 new_len =  old_len - (max - min) + replace.len;
 
   B1 *push_base = push_array(arena, B1, new_len);
+
   memmove(push_base, string.str, min);
-  memmove(push_base+min+replace.len, string.str+max, string.len-max);
-  if (replace.str != 0) {
-    memmove(push_base+min, replace.str, replace.len);
+  memmove(push_base + min + replace.len, string.str + max, string.len - max);
+
+  if (replace.str != 0)
+  {
+    memmove(push_base + min, replace.str, replace.len);
   }
 
   String8 result = {push_base, new_len};
   return result;
 }
 
-Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, String8 string, Txt_Pt cursor, Txt_Pt mark) {
-  Txt_Pt next_cursor = cursor;
-  Txt_Pt next_mark = mark;
-  Txt_Range range = {0};
-  String8 replace = {0};
-  String8 copy = {0};
-  UI_Txt_Op_Flags flags = 0;
-  SI2 delta = cmd->delta_si2;
-  SI2 original_delta = delta;
+Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, String8 string, Txt_Pt cursor, Txt_Pt mark)
+{
+  Txt_Pt           next_cursor     =  cursor;
+  Txt_Pt           next_mark       =  mark;
+  Txt_Range        range           =  {0};
+  String8          replace         =  {0};
+  String8          copy            =  {0};
+  UI_Txt_Op_Flags  flags           =  0;
+  SI2              delta           =  cmd->delta_si2;
+  SI2              original_delta  =  delta;
 
-  switch (cmd->delta_unit) {
+  switch (cmd->delta_unit)
+  {
     default: {} break;
-    case UI_CMD_DELTA_UNIT__CHAR: {
+
+    case UI_CMD_DELTA_UNIT__CHAR:
+    {
       L1 new_column = cursor.column;
-      if (delta[0] < 0) {
-        for (SL1 step = 0; step > delta[0]; step -= 1) {
+
+      if (delta[0] < 0)
+      {
+        for (SL1 step = 0; step > delta[0]; step -= 1)
+        {
           new_column = utf8_boundary_left_from_column(string, new_column);
         }
-      } else if (delta[0] > 0) {
-        for (SL1 step = 0; step < delta[0]; step += 1) {
+      }
+      else if (delta[0] > 0)
+      {
+        for (SL1 step = 0; step < delta[0]; step += 1)
+        {
           new_column = utf8_boundary_right_from_column(string, new_column);
         }
       }
+
       delta[0] = (SL1)new_column - (SL1)cursor.column;
     } break;
-    case UI_CMD_DELTA_UNIT__WORD: {
+
+    case UI_CMD_DELTA_UNIT__WORD:
+    {
       delta[0] = (SL1)ui_scanned_column_from_column(string, cursor.column, delta[0] > 0 ? SIDE__MAX : SIDE__MIN) - (SL1)cursor.column;
     } break;
     case UI_CMD_DELTA_UNIT__LINE:
     case UI_CMD_DELTA_UNIT__WHOLE:
-    case UI_CMD_DELTA_UNIT__PAGE: {
+    case UI_CMD_DELTA_UNIT__PAGE:
+    {
       L1 first_nonwhitespace_column = 0;
-      for (L1 idx = 0; idx < string.len; idx += 1) {
-        if (!char_is_space(string.str[idx])) {
+
+      for (L1 idx = 0; idx < string.len; idx += 1)
+      {
+        if (!char_is_space(string.str[idx]))
+        {
           first_nonwhitespace_column = idx;
           break;
         }
       }
+
       L1 home_dest_column = (cursor.column == first_nonwhitespace_column) ? 0 : first_nonwhitespace_column;
+
       delta[0] = (SL1)((delta[0] > 0) ? string.len : home_dest_column) - (SL1)cursor.column;
     } break;
   }
 
-  if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__ZERO_DELTA_ON_SELECT) {
+  if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__ZERO_DELTA_ON_SELECT)
+  {
     delta = (SI2){0};
   }
 
-  if (txt_pt_match(cursor, mark) || !(cmd->flags & UI_CMD_FLAG__ZERO_DELTA_ON_SELECT)) {
+  if (txt_pt_match(cursor, mark) || !(cmd->flags & UI_CMD_FLAG__ZERO_DELTA_ON_SELECT))
+  {
     SL1 next_column = (SL1)next_cursor.column + delta[0];
+
     next_cursor.column = (L1)Max(0, next_column);
   }
 
-  if (cmd->flags & UI_CMD_FLAG__CAP_AT_LINE) {
+  if (cmd->flags & UI_CMD_FLAG__CAP_AT_LINE)
+  {
     next_cursor.column = Clamp(0, next_cursor.column, string.len);
   }
 
-  if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__PICK_SELECT_SIDE) {
-    if (original_delta[0] < 0 || original_delta[1] < 0) {
+  if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__PICK_SELECT_SIDE)
+  {
+    if (original_delta[0] < 0 || original_delta[1] < 0)
+    {
       next_cursor = next_mark = txt_pt_min(cursor, mark);
-    } else if (original_delta[0] > 0 || original_delta[1] > 0) {
+    }
+    else if (original_delta[0] > 0 || original_delta[1] > 0)
+    {
       next_cursor = next_mark = txt_pt_max(cursor, mark);
     }
   }
 
-  if (cmd->flags & UI_CMD_FLAG__COPY) {
-    if (cursor.line == mark.line) {
-      copy = str8_substr(string, cursor.column, mark.column);
-      flags |= UI_TXT_OP_FLAG__COPY;
-    } else {
+  if (cmd->flags & UI_CMD_FLAG__COPY)
+  {
+    if (cursor.line == mark.line)
+    {
+      copy   =   str8_substr(string, cursor.column, mark.column);
+      flags  |=  UI_TXT_OP_FLAG__COPY;
+    }
+    else
+    {
       flags |= UI_TXT_OP_FLAG__INVALID;
     }
   }
 
-  if (cmd->flags & UI_CMD_FLAG__PASTE) {
-    range = txt_range(cursor, mark);
-    // TODO: replace = <Get clipboard text>
-    next_cursor = next_mark = (Txt_Pt){range.min.line, range.min.column+replace.len};
+  if (cmd->flags & UI_CMD_FLAG__PASTE)
+  {
+    range             =  txt_range(cursor, mark);
+    // TODO: replace  =  <Get clipboard text>
+    next_cursor       =  next_mark = (Txt_Pt){range.min.line, range.min.column + replace.len};
   }
 
-  if (cmd->flags & UI_CMD_FLAG__DELETE) {
+  if (cmd->flags & UI_CMD_FLAG__DELETE)
+  {
     Txt_Pt new_pos = txt_pt_min(next_cursor, next_mark);
-    range = txt_range(next_cursor, next_mark);
-    replace = str8("");
-    next_cursor = next_mark = new_pos;
+
+    range        =  txt_range(next_cursor, next_mark);
+    replace      =  str8("");
+    next_cursor  =  next_mark = new_pos;
   }
 
-  if (!(cmd->flags & UI_CMD_FLAG__KEEP_MARK)) {
+  if (!(cmd->flags & UI_CMD_FLAG__KEEP_MARK))
+  {
     next_mark = next_cursor;
   }
 
-  if (cmd->string.len != 0) {
-    range = txt_range(cursor, mark);
-    replace = push_str8_copy(arena, cmd->string);
-    next_cursor = next_mark = (Txt_Pt){range.min.line, range.min.column + cmd->string.len};
+  if (cmd->string.len != 0)
+  {
+    range        =  txt_range(cursor, mark);
+    replace      =  push_str8_copy(arena, cmd->string);
+    next_cursor  =  next_mark = (Txt_Pt){range.min.line, range.min.column + cmd->string.len};
   }
 
-  if (next_cursor.column > string.len || cmd->delta_si2[1] != 0) {
+  if (next_cursor.column > string.len || cmd->delta_si2[1] != 0)
+  {
     flags |= UI_TXT_OP_FLAG__INVALID;
   }
-  next_cursor.column = Clamp(0, next_cursor.column, string.len+replace.len);
-  next_mark.column = Clamp(0, next_mark.column, string.len+replace.len);
+
+  next_cursor.column  =  Clamp(0, next_cursor.column, string.len + replace.len);
+  next_mark.column    =  Clamp(0, next_mark.column, string.len + replace.len);
 
   UI_Txt_Op op = {0};
-  op.flags = flags;
-  op.replace = replace;
-  op.copy = copy;
-  op.range = range;
-  op.cursor = next_cursor;
-  op.mark = next_mark;
+
+  op.flags    =  flags;
+  op.replace  =  replace;
+  op.copy     =  copy;
+  op.range    =  range;
+  op.cursor   =  next_cursor;
+  op.mark     =  next_mark;
+
   return op;
 }
 
-Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1 edit_buffer_size, L1 *edit_string_size_out, String8 pre_edit_value, String8 string) {
-  edit_string_size_out[0] = Min(edit_string_size_out[0], edit_buffer_size);
-  cursor->column = Min(cursor->column, edit_string_size_out[0]);
-  mark->column = Min(mark->column, edit_string_size_out[0]);
+Internal UI_Signal ui_textedit(Txt_Pt *cursor,
+                               Txt_Pt *mark,
+                               B1     *edit_buffer,
+                               L1      edit_buffer_size,
+                               L1     *edit_string_size_out,
+                               String8 pre_edit_value,
+                               String8 string)
+{
+  edit_string_size_out[0]  =  Min(edit_string_size_out[0], edit_buffer_size);
+  cursor->column           =  Min(cursor->column, edit_string_size_out[0]);
+  mark->column             =  Min(mark->column, edit_string_size_out[0]);
 
   UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 
   //- kti: Calculate focus.
-  I1 is_auto_focus_hot = ui_is_key_auto_focus_hot(key);
-  I1 is_auto_focus_active = ui_is_key_auto_focus_active(key);
+  I1  is_auto_focus_hot     =  ui_is_key_auto_focus_hot(key);
+  I1  is_auto_focus_active  =  ui_is_key_auto_focus_active(key);
+
   ui_push_focus_hot(is_auto_focus_hot ? UI_FOCUS_KIND__ON : UI_FOCUS_KIND__NULL);
   ui_push_focus_active(is_auto_focus_active ? UI_FOCUS_KIND__ON : UI_FOCUS_KIND__NULL);
-  I1 is_focus_hot = ui_is_focus_hot();
-  I1 is_focus_active = ui_is_focus_active();
-  I1 is_focus_hot_disabled = (!is_focus_hot && ui_top_focus_hot() == UI_FOCUS_KIND__ON);
-  I1 is_focus_active_disabled = (!is_focus_active && ui_top_focus_active() == UI_FOCUS_KIND__ON);
+
+  I1  is_focus_hot              =  ui_is_focus_hot();
+  I1  is_focus_active           =  ui_is_focus_active();
+  I1  is_focus_hot_disabled     =  (!is_focus_hot && ui_top_focus_hot() == UI_FOCUS_KIND__ON);
+  I1  is_focus_active_disabled  =  (!is_focus_active && ui_top_focus_active() == UI_FOCUS_KIND__ON);
 
   //- kti: Build top level box.
-  UI_Box *box = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND |
-                                      UI_BOX_FLAG__DRAW_BORDER |
-                                      UI_BOX_FLAG__INSET_FOCUS_BORDER |
-                                      UI_BOX_FLAG__MOUSE_CLICKABLE |
-                                      UI_BOX_FLAG__CLICK_TO_FOCUS |
-                                      UI_BOX_FLAG__CLIP |
-                                      ((is_auto_focus_hot || is_auto_focus_active)*UI_BOX_FLAG__KEYBOARD_CLICKABLE) |
-                                      UI_BOX_FLAG__DRAW_HOT_EFFECTS |
-                                      (is_focus_active || is_focus_active_disabled)*(UI_BOX_FLAG__ALLOW_OVERFLOW_X | UI_BOX_FLAG__VIEW_CLAMP),
-                                      key);
+  UI_Box *box = ui_build_box_from_key(
+    UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__INSET_FOCUS_BORDER |
+    UI_BOX_FLAG__MOUSE_CLICKABLE | UI_BOX_FLAG__CLICK_TO_FOCUS | UI_BOX_FLAG__CLIP |
+    ((is_auto_focus_hot || is_auto_focus_active) * UI_BOX_FLAG__KEYBOARD_CLICKABLE) | UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+    (is_focus_active || is_focus_active_disabled) * (UI_BOX_FLAG__ALLOW_OVERFLOW_X | UI_BOX_FLAG__VIEW_CLAMP),
+    key);
 
   //- kti: handle text manipulation.
-  if (is_focus_active) {
+  if (is_focus_active)
+  {
     Temp_Arena scratch = scratch_begin(0, 0);
-    for (UI_Cmd *cmd = ui_state->cmds.first, *next; cmd != 0; cmd = next) {
+
+    for (UI_Cmd *cmd = ui_state->cmds.first, *next; cmd != 0; cmd = next)
+    {
       next = cmd->next;
 
       String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
-      cursor->column = Min(cursor->column, edit_string.len);
-      mark->column = Min(mark->column, edit_string.len);
+
+      cursor->column  =  Min(cursor->column, edit_string.len);
+      mark->column    =  Min(mark->column, edit_string.len);
 
       //- kti: Skip non single-line operations.
-      if ((cmd->kind != UI_CMD_KIND__EDIT && cmd->kind != UI_CMD_KIND__NAVIGATE && cmd->kind != UI_CMD_KIND__TEXT) || cmd->delta_si2[1] != 0) {
+      if ((cmd->kind != UI_CMD_KIND__EDIT && cmd->kind != UI_CMD_KIND__NAVIGATE && cmd->kind != UI_CMD_KIND__TEXT)
+          || cmd->delta_si2[1] != 0)
+      {
         continue;
       }
 
       UI_Txt_Op op = ui_single_line_txt_op_from_cmd(scratch.arena, cmd, edit_string, cursor[0], mark[0]);
 
-      if (!txt_pt_match(op.range.min, op.range.max) || op.replace.len != 0) {
+      if (!txt_pt_match(op.range.min, op.range.max) || op.replace.len != 0)
+      {
         String8 new_string = ui_push_string_replace_range(scratch.arena, edit_string, op.range.min.column, op.range.max.column, op.replace);
+
         new_string.len = Min(edit_buffer_size, new_string.len);
+
         memmove(edit_buffer, new_string.str, new_string.len);
+
         edit_string_size_out[0] = new_string.len;
       }
 
-      if (op.flags & UI_TXT_OP_FLAG__COPY) {
+      if (op.flags & UI_TXT_OP_FLAG__COPY)
+      {
         // TODO: Copy
       }
 
-      cursor[0] = op.cursor;
-      mark[0] = op.mark;
-      cursor->column = Min(cursor->column, edit_string_size_out[0]);
-      mark->column = Min(mark->column, edit_string_size_out[0]);
+      cursor[0]       =  op.cursor;
+      mark[0]         =  op.mark;
+      cursor->column  =  Min(cursor->column, edit_string_size_out[0]);
+      mark->column    =  Min(mark->column, edit_string_size_out[0]);
 
       ui_eat_cmd(cmd);
     }
+
     scratch_end(scratch);
   }
 
   //- kti: build contents
-  Txt_Pt mouse_pt = {0};
-  F1 cursor_off = 0;
-  UI_Parent(box) {
+  Txt_Pt  mouse_pt    =  {0};
+  F1      cursor_off  =  0;
+
+  UI_Parent(box)
+  {
     String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
-    if (!is_focus_active || is_focus_active_disabled) {
+
+    if (!is_focus_active || is_focus_active_disabled)
+    {
       ui_set_next_pref_width(ui_text_dim(0.0f, 0.0f));
       ui_label(pre_edit_value);
-    } else {
-      F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), (F1)ui_state->window->pixel_ratio, 0, ui_top_tab_size(), edit_string)[0];
-      ui_set_next_pref_width(ui_px(total_text_width+ui_top_font_size()*5, 1.0f));
-      UI_Box *editstr_box = ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, str8("###editstr"));
-    
-      UI_Line_Edit_Draw_Data *draw_data = push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
-      draw_data->edited_string = push_str8_copy(ui_build_arena(), edit_string);
-      draw_data->cursor = cursor[0];
-      draw_data->mark = mark[0];
+    }
+    else
+    {
+      F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(),
+                                                        ui_top_font_size(),
+                                                        (F1)ui_state->window->pixel_ratio,
+                                                        0,
+                                                        ui_top_tab_size(),
+                                                        edit_string)[0];
+
+      ui_set_next_pref_width(ui_px(total_text_width + ui_top_font_size() * 5, 1.0f));
+
+      UI_Box                  *editstr_box  =  ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, str8("###editstr"));
+      UI_Line_Edit_Draw_Data  *draw_data    =  push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
+
+      draw_data->edited_string  =  push_str8_copy(ui_build_arena(), edit_string);
+      draw_data->cursor         =  cursor[0];
+      draw_data->mark           =  mark[0];
+
       ui_box_equip_display_string(editstr_box, edit_string);
       ui_box_equip_custom_draw(editstr_box, UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT, draw_data);
 
-      mouse_pt = (Txt_Pt){0, ui_box_char_pos_from_xy(editstr_box, ui_mouse())};
-      cursor_off = fc_dim_from_tag_size_string(ui_top_font(), ui_top_font_size(), (F1)ui_state->window->pixel_ratio, 0, ui_top_tab_size(), str8_prefix(edit_string, cursor->column))[0];
+      mouse_pt    =  (Txt_Pt){0, ui_box_char_pos_from_xy(editstr_box, ui_mouse())};
+      cursor_off  =  fc_dim_from_tag_size_string(ui_top_font(),
+                                               ui_top_font_size(),
+                                               (F1)ui_state->window->pixel_ratio,
+                                               0,
+                                               ui_top_tab_size(),
+                                               str8_prefix(edit_string, cursor->column))[0];
     }
   }
 
   //- kti: interact
-  UI_Signal signal = ui_signal_from_box(box);
-  I1 focus_cleared_this_frame = 0;
-  if (!is_focus_active && signal.flags&(UI_SIGNAL_FLAG__LEFT_CLICKED|UI_SIGNAL_FLAG__KEYBOARD_PRESSED)) {
+  UI_Signal  signal                    =  ui_signal_from_box(box);
+  I1         focus_cleared_this_frame  =  0;
+
+  if (!is_focus_active && signal.flags & (UI_SIGNAL_FLAG__LEFT_CLICKED | UI_SIGNAL_FLAG__KEYBOARD_PRESSED))
+  {
     String8 edit_string = pre_edit_value;
+
     edit_string.len = Min(edit_buffer_size, pre_edit_value.len);
+
     memmove(edit_buffer, edit_string.str, edit_string.len);
+
     edit_string_size_out[0] = edit_string.len;
+
     ui_set_auto_focus_active_key(key);
     ui_kill_action();
-    cursor[0] = (Txt_Pt){0, edit_string.len};
-    mark[0] = (Txt_Pt){0, 0};
+
+    cursor[0]  =  (Txt_Pt){0, edit_string.len};
+    mark[0]    =  (Txt_Pt){0, 0};
   }
-  if (is_focus_active && signal.flags&UI_SIGNAL_FLAG__KEYBOARD_PRESSED) {
+
+  if (is_focus_active && signal.flags & UI_SIGNAL_FLAG__KEYBOARD_PRESSED)
+  {
     ui_set_auto_focus_active_key(ui_key_zero());
-    signal.flags |= UI_SIGNAL_FLAG__COMMIT;
-    focus_cleared_this_frame = 1;
+
+    signal.flags              |=  UI_SIGNAL_FLAG__COMMIT;
+    focus_cleared_this_frame  =   1;
   }
-  if (is_focus_active && signal.flags&UI_SIGNAL_FLAG__DRAGGING) {
-    if (signal.flags&UI_SIGNAL_FLAG__PRESSED) {
+
+  if (is_focus_active && signal.flags & UI_SIGNAL_FLAG__DRAGGING)
+  {
+    if (signal.flags & UI_SIGNAL_FLAG__PRESSED)
+    {
       mark[0] = mouse_pt;
     }
+
     cursor[0] = mouse_pt;
   }
 
   //- kti: Focus cursor.
-  if (is_focus_active && !focus_cleared_this_frame && box->rect[0] > 0) {
-    F1 cursor_margin = Min(ui_top_font_size()*2.0f, box->rect[2]*0.5f);
-    F2 cursor_range_px = {cursor_off-cursor_margin, cursor_off+cursor_margin};
-    F2 visible_range_px = {box->view_off_target[0], box->view_off_target[0]+box->rect[2]};
-    cursor_range_px[0] = Max(0, cursor_range_px[0]);
-    cursor_range_px[1] = Max(0, cursor_range_px[1]);
-    F1 min_delta = Min(0, cursor_range_px[0]-visible_range_px[0]);
-    F1 max_delta = Max(0, cursor_range_px[1]-visible_range_px[1]);
+  if (is_focus_active && !focus_cleared_this_frame && box->rect[0] > 0)
+  {
+    F1  cursor_margin     =  Min(ui_top_font_size() * 2.0f, box->rect[2] * 0.5f);
+    F2  cursor_range_px   =  {cursor_off - cursor_margin, cursor_off + cursor_margin};
+    F2  visible_range_px  =  {box->view_off_target[0], box->view_off_target[0] + box->rect[2]};
+
+    cursor_range_px[0]  =  Max(0, cursor_range_px[0]);
+    cursor_range_px[1]  =  Max(0, cursor_range_px[1]);
+
+    F1  min_delta  =  Min(0, cursor_range_px[0] - visible_range_px[0]);
+    F1  max_delta  =  Max(0, cursor_range_px[1] - visible_range_px[1]);
+
     box->view_off_target[0] += min_delta;
     box->view_off_target[0] += max_delta;
-  } else {
-    box->view_off[0] = 0;
-    box->view_off_target[0] = 0;
+  }
+  else
+  {
+    box->view_off[0]         =  0;
+    box->view_off_target[0]  =  0;
   }
 
   ui_pop_focus_hot();
@@ -2177,194 +2946,264 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor, Txt_Pt *mark, B1 *edit_buffer, L1
   return signal;
 }
 
-Internal void ui_draw(void) {
+Internal void ui_draw(void)
+{
   ProfFuncBegin();
 
-  for (UI_Box *box = ui_root(); !ui_box_is_nil(box);) {
-    UI_Box_Rec rec = ui_box_rec_df_post(box, &ui_nil_box);
-    UI_Box *hot_box = ui_box_from_key(ui_hot_key());
-    UI_Box *active_box = ui_box_from_key(ui_active_key(OS_MOUSE_BUTTON__LEFT));
+  for (UI_Box *box = ui_root(); !ui_box_is_nil(box);)
+  {
+    UI_Box_Rec  rec          =  ui_box_rec_df_post(box, &ui_nil_box);
+    UI_Box      *hot_box     =  ui_box_from_key(ui_hot_key());
+    UI_Box      *active_box  =  ui_box_from_key(ui_active_key(OS_MOUSE_BUTTON__LEFT));
 
     F1 softness = 0.0f;
 
-    I1 hot_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_hot_key());
-    I1 active_by_key = !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT));
-    I1 hot_by_group = (!ui_key_match(box->group_key, ui_key_zero()) && !ui_box_is_nil(hot_box) && ui_key_match(box->group_key, hot_box->group_key));
-    I1 active_by_group = (!ui_key_match(box->group_key, ui_key_zero()) && !ui_box_is_nil(active_box) && ui_key_match(box->group_key, active_box->group_key));
-    I1 draw_active_effect = (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS && (active_by_key || active_by_group));
-    I1 draw_hot_effect = (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS && (hot_by_key || hot_by_group));
+    I1  hot_by_key           =  !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_hot_key());
+    I1  active_by_key        =  !ui_key_match(box->key, ui_key_zero()) && ui_key_match(box->key, ui_active_key(OS_MOUSE_BUTTON__LEFT));
+    I1  hot_by_group         =  (!ui_key_match(box->group_key, ui_key_zero())
+                                 && !ui_box_is_nil(hot_box)
+                                 && ui_key_match(box->group_key, hot_box->group_key));
+    I1  active_by_group      =  (!ui_key_match(box->group_key, ui_key_zero()) 
+                                 && !ui_box_is_nil(active_box)
+                                 && ui_key_match(box->group_key, active_box->group_key));
+    I1  draw_active_effect   =  (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS && (active_by_key || active_by_group));
+    I1  draw_hot_effect      =  (box->flags & UI_BOX_FLAG__DRAW_HOT_EFFECTS && (hot_by_key || hot_by_group));
 
-    if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW) {
+    if (box->flags & UI_BOX_FLAG__DRAW_DROP_SHADOW)
+    {
       F4 shadow = rect_pad(box->rect, 4.0f);
+
       shadow[1] += 4.0f;
-      F4 shadow_color = ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
-      GFX_Rect_Instance *shadow_inst = dr_rect(shadow, shadow_color, 0.0f, 8.0f);
+
+      F4                 shadow_color  =  ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
+      GFX_Rect_Instance  *shadow_inst  =  dr_rect(shadow, shadow_color, 0.0f, 8.0f);
+
       shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
     }
 
-    if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND) {
-      if (draw_hot_effect && !draw_active_effect) {
-        F4 shadow = rect_pad(box->rect, 4.0f);
-        F4 shadow_color = ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
+    if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND)
+    {
+      if (draw_hot_effect && !draw_active_effect)
+      {
+        F4  shadow        =  rect_pad(box->rect, 4.0f);
+        F4  shadow_color  =  ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
+
         shadow_color[3] *= 0.8f;
+
         GFX_Rect_Instance *shadow_inst = dr_rect(shadow, shadow_color, 0.0f, 8.0f);
+
         shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
       }
 
       GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_colors[0], 0.0f, softness);
-      for (L1 corner_idx = 0; corner_idx < ArrayCount(box->background_colors); corner_idx += 1) {
+
+      for (L1 corner_idx = 0; corner_idx < ArrayCount(box->background_colors); corner_idx += 1)
+      {
         inst->colors[corner_idx] = box->background_colors[corner_idx];
       }
+
       inst->corner_radii = box->corner_radii;
 
-      if (draw_active_effect) {
-        inst->colors[0] = ui_darken(inst->colors[0]);
-        inst->colors[1] = ui_darken(inst->colors[1]);
-        inst->colors[2] = ui_brighten(inst->colors[2]);
-        inst->colors[3] = ui_brighten(inst->colors[3]);
-      } else if (draw_hot_effect) {
-        inst->colors[0] = ui_brighten(inst->colors[0]);
-        inst->colors[1] = ui_brighten(inst->colors[1]);
+      if (draw_active_effect)
+      {
+        inst->colors[0]  =  ui_darken(inst->colors[0]);
+        inst->colors[1]  =  ui_darken(inst->colors[1]);
+        inst->colors[2]  =  ui_brighten(inst->colors[2]);
+        inst->colors[3]  =  ui_brighten(inst->colors[3]);
+      }
+      else if (draw_hot_effect)
+      {
+        inst->colors[0]  =  ui_brighten(inst->colors[0]);
+        inst->colors[1]  =  ui_brighten(inst->colors[1]);
       }
     }
 
-    if (box->flags & UI_BOX_FLAG__DRAW_TEXT) {
+    if (box->flags & UI_BOX_FLAG__DRAW_TEXT)
+    {
       I1 truncate_text = !(box->flags & UI_BOX_FLAG__DISABLE_TEXT_TRUNC);
-      if (truncate_text) {
-        F4 text_clip = box->rect;
-        F4 top_clip = dr_top_clip();
-        if (top_clip[2] != 0 || top_clip[3] != 0) {
+
+      if (truncate_text)
+      {
+        F4  text_clip  =  box->rect;
+        F4  top_clip   =  dr_top_clip();
+
+        if (top_clip[2] != 0 || top_clip[3] != 0)
+        {
           text_clip = rect_overlap(text_clip, top_clip);
         }
+
         dr_push_clip(text_clip);
       }
-      for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next) {
-        F2 pos = ui_box_text_pos(box);
-        F4 color = box->text_color;
-        if (draw_active_effect) {
+
+      for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next)
+      {
+        F2  pos    =  ui_box_text_pos(box);
+        F4  color  =  box->text_color;
+
+        if (draw_active_effect)
+        {
           color = ui_darken(color);
-        } else if (draw_hot_effect) {
+        }
+        else if (draw_hot_effect)
+        {
           color = ui_brighten(color);
         }
+
         dr_text_run(n->value.run, pos, color);
       }
-      if (truncate_text) {
+
+      if (truncate_text)
+      {
         dr_pop_clip();
       }
     }
 
-    if (box->flags & UI_BOX_FLAG__CLIP) {
-      F4 top_clip = dr_top_clip();
-      F4 new_clip = (F4){box->rect[0]+1, box->rect[1]+1, box->rect[2]-2, box->rect[3]-2};
-      if (top_clip[2] != 0 || top_clip[3] != 0) {
+    if (box->flags & UI_BOX_FLAG__CLIP)
+    {
+      F4  top_clip  =  dr_top_clip();
+      F4  new_clip  =  (F4){box->rect[0] + 1, box->rect[1] + 1, box->rect[2] - 2, box->rect[3] - 2};
+
+      if (top_clip[2] != 0 || top_clip[3] != 0)
+      {
         new_clip = rect_overlap(new_clip, top_clip);
       }
+
       dr_push_clip(new_clip);
     }
 
     //- kti: Custom draw.
-    switch (box->custom_draw_kind) {
-      case UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT: {
-        UI_Line_Edit_Draw_Data *draw_data = box->custom_draw_user_data;
-        FC_Tag font = box->font;
-        F1 font_size = box->font_size;
-        F1 tab_size = box->tab_size;
-        F2 text_pos = ui_box_text_pos(box);
-        String8 edited_string = draw_data->edited_string;
-        Txt_Pt cursor = draw_data->cursor;
-        Txt_Pt mark = draw_data->mark;
-        F1 cursor_pixel_off = fc_dim_from_tag_size_string(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, str8_prefix(edited_string, cursor.column))[0];
-        F1 mark_pixel_off = fc_dim_from_tag_size_string(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, str8_prefix(edited_string, mark.column))[0];
-        F1 cursor_thickness = Max(1.0f, floor_F1(font_size/10.0f));
-        UI_Box *edit_box = box->parent;
-        F1 cursor_top = edit_box->rect[1] + font_size*0.5f;
-        F1 cursor_height = edit_box->rect[3] - font_size;
-        F1 cursor_x = text_pos[0] + cursor_pixel_off;
-        F1 mark_x = text_pos[0] + mark_pixel_off - cursor_thickness;
-        F4 cursor_color = ui_color_from_tags_key_name(box->tags_key, str8("cursor"));
-        F4 select_color = ui_color_from_tags_key_name(box->tags_key, str8("selection"));
+    switch (box->custom_draw_kind)
+    {
+      case UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT:
+      {
+        UI_Line_Edit_Draw_Data  *draw_data        =  box->custom_draw_user_data;
+        FC_Tag                  font              =  box->font;
+        F1                      font_size         =  box->font_size;
+        F1                      tab_size          =  box->tab_size;
+        F2                      text_pos          =  ui_box_text_pos(box);
+        String8                 edited_string     =  draw_data->edited_string;
+        Txt_Pt                  cursor            =  draw_data->cursor;
+        Txt_Pt                  mark              =  draw_data->mark;
+        F1                      cursor_pixel_off  =  fc_dim_from_tag_size_string(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, str8_prefix(edited_string, cursor.column))[0];
+        F1                      mark_pixel_off    =  fc_dim_from_tag_size_string(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, str8_prefix(edited_string, mark.column))[0];
+        F1                      cursor_thickness  =  Max(1.0f, floor_F1(font_size / 10.0f));
+        UI_Box                  *edit_box         =  box->parent;
+        F1                      cursor_top        =  edit_box->rect[1] + font_size * 0.5f;
+        F1                      cursor_height     =  edit_box->rect[3] - font_size;
+        F1                      cursor_x          =  text_pos[0] + cursor_pixel_off;
+        F1                      mark_x            =  text_pos[0] + mark_pixel_off - cursor_thickness;
+        F4                      cursor_color      =  ui_color_from_tags_key_name(box->tags_key, str8("cursor"));
+        F4                      select_color      =  ui_color_from_tags_key_name(box->tags_key, str8("selection"));
+
         F4 cursor_rect = {
-          cursor_x, cursor_top,
-          cursor_thickness, cursor_height,
+          cursor_x,
+          cursor_top,
+          cursor_thickness,
+          cursor_height,
         };
         F4 select_rect = {
-          Min(cursor_x, mark_x), cursor_top,
-          Max(cursor_x+cursor_thickness, mark_x+cursor_thickness*2.0f) - Min(cursor_x, mark_x), cursor_height,
+          Min(cursor_x, mark_x),
+          cursor_top,
+          Max(cursor_x + cursor_thickness, mark_x + cursor_thickness * 2.0f) - Min(cursor_x, mark_x),
+          cursor_height,
         };
-        dr_rect(select_rect, select_color, font_size*0.25f, 1.0f);
+
+        dr_rect(select_rect, select_color, font_size * 0.25f, 1.0f);
         dr_rect(cursor_rect, cursor_color, 0.0f, 0.0f);
       } break;
     }
 
     //- kti: Pop.
     L1 pop_idx = 0;
-    for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent) {
+
+    for (UI_Box *b = box; !ui_box_is_nil(b) && pop_idx <= rec.pop_count; b = b->parent)
+    {
       pop_idx += 1;
-      if (b == box && rec.push_count != 0) {
+      if (b == box && rec.push_count != 0)
+      {
         continue;
       }
 
-      if (b->flags & UI_BOX_FLAG__CLIP) {
+      if (b->flags & UI_BOX_FLAG__CLIP)
+      {
         dr_pop_clip();
       }
 
-      I1 is_focus_hot = !!(b->flags & UI_BOX_FLAG__FOCUS_HOT) && !(b->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
-      I1 is_focus_active = !!(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE) && !(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED);
-      I1 draw_focus_border = b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_BORDER) && is_focus_active;
+      I1  is_focus_hot       =  !!(b->flags & UI_BOX_FLAG__FOCUS_HOT) && !(b->flags & UI_BOX_FLAG__FOCUS_HOT_DISABLED);
+      I1  is_focus_active    =  !!(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE) && !(b->flags & UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED);
+      I1  draw_focus_border  =  b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_BORDER) && is_focus_active;
 
       F1 b_softness = 0.0f;
 
       //- kti: Focus Overlay
-      if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot) {
-        String8 focus_overlay_tags[] = {str8("focus"), str8("overlay")};
-        F4 focus_overlay_color = ui_color_from_tags_key_extras(
-          b->tags_key,
-          (String8_Array){.v = focus_overlay_tags, .count = ArrayCount(focus_overlay_tags)});
-        GFX_Rect_Instance *inst = dr_rect(b->rect, focus_overlay_color, 0.0f, b_softness);
+      if (b->flags & UI_BOX_FLAG__CLICKABLE && !(b->flags & UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY) && is_focus_hot)
+      {
+        String8           focus_overlay_tags[]  =  {str8("focus"), str8("overlay")};
+        F4                focus_overlay_color   =  ui_color_from_tags_key_extras(b->tags_key, (String8_Array){.v = focus_overlay_tags, .count = ArrayCount(focus_overlay_tags)});
+        GFX_Rect_Instance *inst                 =  dr_rect(b->rect, focus_overlay_color, 0.0f, b_softness);
+
         inst->corner_radii = b->corner_radii;
       }
 
       //- kti: Border
-      if (b->flags & UI_BOX_FLAG__DRAW_BORDER || draw_focus_border) {
-        F1 border_pad = (draw_focus_border && b->flags & UI_BOX_FLAG__INSET_FOCUS_BORDER) ? -2.0f : 1.0f;
-        F4 border_rect = rect_pad(b->rect, border_pad);
-        GFX_Rect_Instance *inst = dr_rect(border_rect, (F4){0.0f}, 0.0f, b_softness);
+      if (b->flags & UI_BOX_FLAG__DRAW_BORDER || draw_focus_border)
+      {
+        F1                 border_pad   =  (draw_focus_border && b->flags & UI_BOX_FLAG__INSET_FOCUS_BORDER) ? -2.0f : 1.0f;
+        F4                 border_rect  =  rect_pad(b->rect, border_pad);
+        GFX_Rect_Instance  *inst        =  dr_rect(border_rect, (F4){0.0f}, 0.0f, b_softness);
+
         inst->corner_radii = b->corner_radii;
-        for (L1 corner_idx = 0; corner_idx < 4; corner_idx += 1) {
-          if (inst->corner_radii[corner_idx] > 0.0f) {
+
+        for (L1 corner_idx = 0; corner_idx < 4; corner_idx += 1)
+        {
+          if (inst->corner_radii[corner_idx] > 0.0f)
+          {
             inst->corner_radii[corner_idx] += 1.0f;
           }
         }
+
         inst->border_width = 1.0f;
-        if (draw_focus_border) {
-          String8 focus_border_tags[] = {str8("focus"), str8("border")};
-          inst->border_color = ui_color_from_tags_key_extras(
-            b->tags_key,
-            (String8_Array){.v = focus_border_tags, .count = ArrayCount(focus_border_tags)});
-        } else {
+
+        if (draw_focus_border)
+        {
+          String8 focus_border_tags[] =  {str8("focus"), str8("border")};
+
+          inst->border_color = ui_color_from_tags_key_extras(b->tags_key, (String8_Array){.v = focus_border_tags, .count = ArrayCount(focus_border_tags)});
+        }
+        else
+        {
           inst->border_color = b->border_color;
         }
       }
 
       //- kti: Individual sides for tiled boxes and dividers. DRAW_BORDER
       // remains the complete four-sided SDF border.
-      if (b->flags & UI_BOX_FLAG__DRAW_SIDES) {
-        F4 r = b->rect;
-        F4 color = b->border_color;
-        F1 thickness = 1.0f;
+      if (b->flags & UI_BOX_FLAG__DRAW_SIDES)
+      {
+        F4  r          =  b->rect;
+        F4  color      =  b->border_color;
+        F1  thickness  =  1.0f;
 
-        if (r[2] > 0.0f && r[3] > 0.0f) {
-          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_TOP) {
+        if (r[2] > 0.0f && r[3] > 0.0f)
+        {
+          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_TOP)
+          {
             dr_rect((F4){r[0], r[1], r[2], thickness}, color, 0.0f, 0.0f);
           }
-          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_BOTTOM) {
-            dr_rect((F4){r[0], r[1]+r[3]-thickness, r[2], thickness}, color, 0.0f, 0.0f);
+
+          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_BOTTOM)
+          {
+            dr_rect((F4){r[0], r[1] + r[3] - thickness, r[2], thickness}, color, 0.0f, 0.0f);
           }
-          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_LEFT) {
+
+          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_LEFT)
+          {
             dr_rect((F4){r[0], r[1], thickness, r[3]}, color, 0.0f, 0.0f);
           }
-          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_RIGHT) {
-            dr_rect((F4){r[0]+r[2]-thickness, r[1], thickness, r[3]}, color, 0.0f, 0.0f);
+
+          if (b->flags & UI_BOX_FLAG__DRAW_SIDE_RIGHT)
+          {
+            dr_rect((F4){r[0] + r[2] - thickness, r[1], thickness, r[3]}, color, 0.0f, 0.0f);
           }
         }
       }

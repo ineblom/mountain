@@ -1,8 +1,8 @@
 #ifndef DEV_
-# define DEV_ 0
+#define DEV_ 0
 #endif
 
-# include "base.h"
+#include "base.h"
 
 ////////////////////////////////
 // kti: Modules
@@ -41,7 +41,10 @@
 #endif
 
 //- kti: Sources
-NoInline void WrmBas(void) { Crash(0); }
+NoInline void WrmBas(void)
+{
+  Crash(0);
+}
 
 #include "arena.c"
 #include "strings.c"
@@ -72,4 +75,7 @@ NoInline void WrmBas(void) { Crash(0); }
 
 #endif
 
-NoInline void WrmEnd(void) { Crash(1); }
+NoInline void WrmEnd(void)
+{
+  Crash(1);
+}

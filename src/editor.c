@@ -23,22 +23,23 @@
 //- kti: See gizmo value in tooltip while dragging.
 
 Global String8 view_kind_names[VIEW_KIND_COUNT] = {
-  [VIEW_KIND__LISTER] = str8("Lister"),
-  [VIEW_KIND__VIEWPORT] = str8("Viewport"),
-  [VIEW_KIND__RT_RENDER] = str8("RT Render"),
-  [VIEW_KIND__USER_RENDER] = str8("User Render"),
+  [VIEW_KIND__LISTER]       =  str8("Lister"),
+  [VIEW_KIND__VIEWPORT]     =  str8("Viewport"),
+  [VIEW_KIND__RT_RENDER]    =  str8("RT Render"),
+  [VIEW_KIND__USER_RENDER]  =  str8("User Render"),
 };
 
-Global State *state = 0;
-Global Async_State async = {0};
+Global State        *state  =  0;
+Global Async_State  async   =  {0};
 
-#define UI_THEME_COLOR(r, g, b, a, ...) \
-  { \
-    .tags = { \
-      .v = (String8[]){__VA_ARGS__}, \
-      .count = ArrayCount(((String8[]){__VA_ARGS__})), \
-    }, \
-    .linear = (F4){(r), (g), (b), (a)}, \
+#define UI_THEME_COLOR(r, g, b, a, ...)                              \
+  {                                                                  \
+    .tags =                                                          \
+      {                                                              \
+        .v      =  (String8[]){__VA_ARGS__},                         \
+        .count  =  ArrayCount(((String8[]){__VA_ARGS__})),           \
+      },                                                             \
+    .linear = (F4){(r), (g), (b), (a)},                              \
   }
 
 Global UI_Theme_Pattern default_theme_patterns[] = {
@@ -66,62 +67,78 @@ Global UI_Theme_Pattern default_theme_patterns[] = {
 };
 
 Global UI_Theme default_theme = {
-  .patterns = default_theme_patterns,
-  .pattern_count = ArrayCount(default_theme_patterns),
+  .patterns       =  default_theme_patterns,
+  .pattern_count  =  ArrayCount(default_theme_patterns),
 };
 
 #undef UI_THEME_COLOR
 
-Internal void editor_request_frame(void) {
+Internal void editor_request_frame(void)
+{
   state->frames_requested = 4;
 }
 
 ////////////////////////////////
 //~ kti: Async
 
-Internal L1 async_request_id_alloc(void) {
-  return atomic_add_L1(&async.next_request_id, 1) + 1;
+Internal L1 async_request_id_alloc(void)
+{
+  L1 id = atomic_add_L1(&async.next_request_id, 1) + 1;
+
+  return id;
 }
 
-Internal void async_signal(void) {
-  MutexScope(async.mutex) {
+Internal void async_signal(void)
+{
+  MutexScope(async.mutex)
+  {
     async.loop_again = 1;
   }
 
   os_cond_var_broadcast(async.cond_var);
 }
 
-Internal I1 async_request_push(Async_Request request) {
-  I1 result = 0;
-  Async_Request_Queue *queue = &async.request_queue;
+Internal I1 async_request_push(Async_Request request)
+{
+  I1                   result  =  0;
+  Async_Request_Queue  *queue  =  &async.request_queue;
 
-  MutexScope(queue->mutex) {
+  MutexScope(queue->mutex)
+  {
     L1 used = queue->write_pos - queue->read_pos;
-    if (used < ArrayCount(queue->requests)) {
+
+    if (used < ArrayCount(queue->requests))
+    {
       L1 idx = queue->write_pos % ArrayCount(queue->requests);
-      queue->requests[idx] = request;
-      queue->write_pos += 1;
-      result = 1;
+
+      queue->requests[idx]  =   request;
+      queue->write_pos      +=  1;
+      result                =   1;
     }
   }
 
-  if (result) {
+  if (result)
+  {
     async_signal();
   }
+
   return result;
 }
 
-Internal I1 async_request_pop(Async_Request *out) {
-  I1 result = 0;
+Internal I1 async_request_pop(Async_Request *out)
+{
+  I1                   result  =  0;
+  Async_Request_Queue  *queue  =  &async.request_queue;
 
-  Async_Request_Queue *queue = &async.request_queue;
-  MutexScope(queue->mutex) {
-    if (queue->read_pos != queue->write_pos) {
+  MutexScope(queue->mutex)
+  {
+    if (queue->read_pos != queue->write_pos)
+    {
       L1 idx = queue->read_pos % ArrayCount(queue->requests);
 
-      out[0] = queue->requests[idx];
-      queue->read_pos += 1;
-      result = 1;
+      out[0]           =   queue->requests[idx];
+      queue->read_pos  +=  1;
+      result           =   1;
     }
   }
 
@@ -135,11 +152,12 @@ Internal void async_event_push(Async_Event event)
   MutexScope(queue->mutex)
   {
     L1 used = queue->write_pos - queue->read_pos;
+
     if (used < ArrayCount(queue->events))
     {
       L1 idx = queue->write_pos % ArrayCount(queue->events);
 
-      queue->events[idx]   =  event;
+      queue->events[idx]  =   event;
       queue->write_pos    +=  1;
     }
   }
@@ -158,9 +176,9 @@ Internal I1 async_event_pop(Async_Event *out)
     {
       L1 idx = queue->read_pos % ArrayCount(queue->events);
 
-      out[0]            =  queue->events[idx];
+      out[0]           =   queue->events[idx];
       queue->read_pos  +=  1;
-      result            =  1;
+      result           =   1;
     }
   }
 
@@ -177,7 +195,7 @@ Internal void async_lane(void *)
 
     if (lane_idx() == 0)
     {
-      os_mutex_take( async.mutex );
+      os_mutex_take(async.mutex);
 
       while (async.loop_again == 0 && async.exit == 0)
       {
@@ -185,17 +203,17 @@ Internal void async_lane(void *)
       }
 
       async.loop_again = 0;
-      
-      os_mutex_drop( async.mutex );
+
+      os_mutex_drop(async.mutex);
     }
-    
+
     lane_sync();
 
     if (atomic_load_I1(&async.exit) == 1)
     {
       break;
     }
-    
+
     //- kti: Do async ticks.
 
     if (lane_idx() == 0)
@@ -204,8 +222,8 @@ Internal void async_lane(void *)
     }
 
     lane_sync();
-    
-    if (async.request_valid) 
+
+    if (async.request_valid)
     {
       Async_Request req = async.active_request;
 
@@ -224,9 +242,9 @@ Internal void async_lane(void *)
 
             async.active_request.hdr = image_alloc(req.arena, width, height);
 
-            atomic_swap_L1(&req.render_progress->next_pixel,       0);
+            atomic_swap_L1(&req.render_progress->next_pixel, 0);
             atomic_swap_L1(&req.render_progress->pixels_completed, 0);
-            atomic_swap_L1(&req.render_progress->pixels_total,     pixels_total);
+            atomic_swap_L1(&req.render_progress->pixels_total, pixels_total);
           }
 
           lane_sync();
@@ -239,9 +257,10 @@ Internal void async_lane(void *)
           {
             L1     first_pixel  =  atomic_add_L1(&req.render_progress->next_pixel, pixels_per_chunk);
             L1     last_pixel   =  Min(first_pixel + pixels_per_chunk, pixels_total);
-            Range  range        =  { first_pixel, last_pixel };
+            Range  range        =  {first_pixel, last_pixel};
 
-            if (first_pixel >= pixels_total) break;
+            if (first_pixel >= pixels_total)
+              break;
 
             rt_trace_scene(req.scene, hdr, range);
 
@@ -278,15 +297,11 @@ Internal void async_lane(void *)
             L1  width   =  req.hdr.width;
             L1  height  =  req.hdr.height;
 
-            while (work.level_count < params.pass_count
-                   &&
-                   width  >= 2
-                   &&
-                   height >=  2)
+            while (work.level_count < params.pass_count && width >= 2 && height >= 2)
             {
-              width             /=  2;
-              height            /=  2;
-              work.level_count  +=  1;
+              width /= 2;
+              height /= 2;
+              work.level_count += 1;
             }
 
             // NOTE(kti): add lowest level (final result)
@@ -297,35 +312,35 @@ Internal void async_lane(void *)
             arena_clear(req.arena);
 
             work.levels     =  push_array(scratch.arena, Image, work.level_count);
-            work.upsampled  =  push_array(scratch.arena, Image, work.level_count-1);
+            work.upsampled  =  push_array(scratch.arena, Image, work.level_count - 1);
 
             //- kti: Alloc images.
 
             width   =  req.hdr.width;
             height  =  req.hdr.height;
 
-            for (L1 i=0;  i<work.level_count;  i+=1)
+            for (L1 i = 0; i < work.level_count; i += 1)
             {
               work.levels[i] = image_alloc(scratch.arena, width, height);
 
-              width   /=  2;
-              height  /=  2;
+              width /= 2;
+              height /= 2;
             }
 
             if (work.level_count > 1)
             {
-              Image high = work.levels[0];
-              Image low  = work.levels[1];
-              L1 horizontal_count = Max((L1)low.width  * high.height,
-                                        (L1)high.width * low.height);
+              Image  high              =  work.levels[0];
+              Image  low               =  work.levels[1];
+              L1     horizontal_count  =  Max((L1)low.width * high.height, (L1)high.width * low.height);
 
               work.horizontal_pixels = push_array_no_zero(scratch.arena, F4, horizontal_count);
             }
 
-            for (L1 i=0;  i+1<work.level_count;  i+=1)
+            for (L1 i = 0; i + 1 < work.level_count; i += 1)
             {
-              Image  high               =  work.levels[i];
-                     work.upsampled[i]  =  image_alloc(scratch.arena, high.width, high.height);
+              Image high = work.levels[i];
+
+              work.upsampled[i] = image_alloc(scratch.arena, high.width, high.height);
             }
 
             async.active_request.bloom_work = work;
@@ -345,10 +360,10 @@ Internal void async_lane(void *)
 
           //- kti: Downsample
 
-          for (L1 i=0;  i<work.level_count-1;  i+=1)
+          for (L1 i = 0; i < work.level_count - 1; i += 1)
           {
-            Image  in          =  work.levels[i];
-            Image  out         =  work.levels[i+1];
+            Image  in   =  work.levels[i];
+            Image  out  =  work.levels[i + 1];
 
             Image horizontal = {
               .width       =  out.width,
@@ -375,11 +390,11 @@ Internal void async_lane(void *)
 
           //- kti: Upsample
 
-          for (L1 i=work.level_count-1; i>=1; i-=1)
+          for (L1 i = work.level_count - 1; i >= 1; i -= 1)
           {
-            Image  in          =  work.levels[i];
-            Image  upsampled   =  work.upsampled[i-1];
-            Image  out         =  work.levels[i-1];
+            Image  in         =  work.levels[i];
+            Image  upsampled  =  work.upsampled[i - 1];
+            Image  out        =  work.levels[i - 1];
 
             Image horizontal = {
               .width       =  out.width,
@@ -410,10 +425,10 @@ Internal void async_lane(void *)
 
           if (lane_idx() == 0)
           {
-            Image_RGBA8  result  =  image_tonemap(req.arena, work.levels[0], TONEMAP_KIND__LOTTES);
-            Async_Event  event   =  {
-              .kind         =  ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
-              .image_rgba8  =  result,
+            Image_RGBA8  result                       =  image_tonemap(req.arena, work.levels[0], TONEMAP_KIND__LOTTES);
+            Async_Event event  =  {
+               .kind         =  ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
+               .image_rgba8  =  result,
             };
 
             async_event_push(event);
@@ -428,153 +443,208 @@ Internal void async_lane(void *)
   }
 }
 
-
 ////////////////////////////////
 //~ kti: Meshes
 
-Internal Mesh mesh_alloc(GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count) {
-  Mesh result = {0};
-  result.vertex_buffer = gfx_buffer_alloc(GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__VERTEX, vertex_count*sizeof(vertices[0]), vertices);
-  result.index_buffer = gfx_buffer_alloc( GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__INDEX, index_count*sizeof(indices[0]), indices);
-  result.vertex_count = vertex_count;
-  result.index_count = index_count;
+Internal Mesh mesh_alloc(GFX_Mesh_Vertex *vertices, L1 vertex_count, I1 *indices, L1 index_count)
+{
+  Mesh  result = {0};
+
+  result.vertex_buffer  =  gfx_buffer_alloc(GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__VERTEX, vertex_count * sizeof(vertices[0]), vertices);
+  result.index_buffer   =  gfx_buffer_alloc(GFX_BUFFER_USAGE__STATIC, GFX_BUFFER_KIND__INDEX, index_count * sizeof(indices[0]), indices);
+  result.vertex_count   =  vertex_count;
+  result.index_count    =  index_count;
+
   return result;
 }
 
-Internal Mesh mesh_alloc_sphere(I1 latitude_segments, I1 longitude_segments) {
-  Temp_Arena scratch = scratch_begin(0, 0);
+Internal Mesh mesh_alloc_sphere(I1 latitude_segments, I1 longitude_segments)
+{
+  latitude_segments   =  Max(latitude_segments, 2);
+  longitude_segments  =  Max(longitude_segments, 3);
 
-  latitude_segments = Max(latitude_segments, 2);
-  longitude_segments = Max(longitude_segments, 3);
+  Temp_Arena       scratch       =  scratch_begin(0, 0);
+  L1               vertex_count  =  (L1)(latitude_segments + 1) * (longitude_segments + 1);
+  L1               index_count   =  (L1)latitude_segments * longitude_segments * 6;
+  GFX_Mesh_Vertex  *vertices     =  push_array_no_zero(scratch.arena, GFX_Mesh_Vertex, vertex_count);
+  I1               *indices      =  push_array_no_zero(scratch.arena, I1, index_count);
+  L1               vertex_idx    =  0;
 
-  L1 vertex_count = (L1)(latitude_segments + 1)*(longitude_segments + 1);
-  L1 index_count = (L1)latitude_segments*longitude_segments*6;
-  GFX_Mesh_Vertex *vertices = push_array_no_zero(scratch.arena, GFX_Mesh_Vertex, vertex_count);
-  I1 *indices = push_array_no_zero(scratch.arena, I1, index_count);
+  for (I1 lat = 0; lat <= latitude_segments; lat += 1)
+  {
+    F1  v            =  (F1)lat / (F1)latitude_segments;
+    F1  latitude     =  PI * (v - 0.5f);
+    F1  y            =  sinf(latitude);
+    F1  ring_radius  =  cosf(latitude);
 
-  L1 vertex_idx = 0;
-  for (I1 lat = 0; lat <= latitude_segments; lat += 1) {
-    F1 v = (F1)lat/(F1)latitude_segments;
-    F1 latitude = PI*(v - 0.5f);
-    F1 y = sinf(latitude);
-    F1 ring_radius = cosf(latitude);
-    for (I1 lon = 0; lon <= longitude_segments; lon += 1) {
-      F1 u = (F1)lon/(F1)longitude_segments;
-      F1 longitude = 2.0f*PI*u;
-      F1 x = ring_radius*cosf(longitude);
-      F1 z = ring_radius*sinf(longitude);
-      vertices[vertex_idx++] = (GFX_Mesh_Vertex){
-        .pos = {0.5f*x, 0.5f*y, 0.5f*z, 1.0f},
-        .normal = {x, y, z, 0.0f},
+    for (I1 lon = 0; lon <= longitude_segments; lon += 1)
+    {
+      F1  u          =  (F1)lon / (F1)longitude_segments;
+      F1  longitude  =  2.0f * PI * u;
+      F1  x          =  ring_radius * cosf(longitude);
+      F1  z          =  ring_radius * sinf(longitude);
+
+      vertices[vertex_idx] = (GFX_Mesh_Vertex){
+        .pos     =  {0.5f * x, 0.5f * y, 0.5f * z, 1.0f},
+        .normal  =  {x, y, z, 0.0f},
       };
+
+      vertex_idx += 1;
     }
   }
 
-  L1 index_idx = 0;
-  I1 row_size = longitude_segments + 1;
-  for (I1 lat = 0; lat < latitude_segments; lat += 1) {
-    for (I1 lon = 0; lon < longitude_segments; lon += 1) {
-      I1 a = lat*row_size + lon;
+  L1  index_idx  =  0;
+  I1  row_size   =  longitude_segments + 1;
+
+  for (I1 lat = 0; lat < latitude_segments; lat += 1)
+  {
+    for (I1 lon = 0; lon < longitude_segments; lon += 1)
+    {
+      I1 a = lat * row_size + lon;
       I1 b = a + row_size;
-      indices[index_idx++] = a;
-      indices[index_idx++] = b;
-      indices[index_idx++] = a + 1;
-      indices[index_idx++] = a + 1;
-      indices[index_idx++] = b;
-      indices[index_idx++] = b + 1;
+
+      indices[index_idx++]  =  a;
+      indices[index_idx++]  =  b;
+      indices[index_idx++]  =  a + 1;
+      indices[index_idx++]  =  a + 1;
+      indices[index_idx++]  =  b;
+      indices[index_idx++]  =  b + 1;
     }
   }
 
   Mesh mesh = mesh_alloc(vertices, vertex_count, indices, index_count);
+
   scratch_end(scratch);
 
   return mesh;
 }
 
-Internal Mesh mesh_alloc_box(void) {
-#define BV(px, py, pz, nx, ny, nz) \
-  {{px, py, pz, 1.0f}, {nx, ny, nz, 0.0f}}
+Internal Mesh mesh_alloc_box(void)
+{
+#define BV(px, py, pz, nx, ny, nz)               \
+  {                                              \
+    {px, py, pz, 1.0f}, {nx, ny, nz, 0.0f}       \
+  }
+
   GFX_Mesh_Vertex vertices[] = {
-    BV(-.5f,-.5f, .5f, 0, 0, 1), BV( .5f,-.5f, .5f, 0, 0, 1), BV( .5f, .5f, .5f, 0, 0, 1), BV(-.5f, .5f, .5f, 0, 0, 1),
-    BV( .5f,-.5f,-.5f, 0, 0,-1), BV(-.5f,-.5f,-.5f, 0, 0,-1), BV(-.5f, .5f,-.5f, 0, 0,-1), BV( .5f, .5f,-.5f, 0, 0,-1),
-    BV(-.5f,-.5f,-.5f,-1, 0, 0), BV(-.5f,-.5f, .5f,-1, 0, 0), BV(-.5f, .5f, .5f,-1, 0, 0), BV(-.5f, .5f,-.5f,-1, 0, 0),
-    BV( .5f,-.5f, .5f, 1, 0, 0), BV( .5f,-.5f,-.5f, 1, 0, 0), BV( .5f, .5f,-.5f, 1, 0, 0), BV( .5f, .5f, .5f, 1, 0, 0),
-    BV(-.5f, .5f, .5f, 0, 1, 0), BV( .5f, .5f, .5f, 0, 1, 0), BV( .5f, .5f,-.5f, 0, 1, 0), BV(-.5f, .5f,-.5f, 0, 1, 0),
-    BV(-.5f,-.5f,-.5f, 0,-1, 0), BV( .5f,-.5f,-.5f, 0,-1, 0), BV( .5f,-.5f, .5f, 0,-1, 0), BV(-.5f,-.5f, .5f, 0,-1, 0),
+    BV(-.5f, -.5f, .5f, 0, 0, 1),  BV(.5f, -.5f, .5f, 0, 0, 1),   BV(.5f, .5f, .5f, 0, 0, 1),
+    BV(-.5f, .5f, .5f, 0, 0, 1),   BV(.5f, -.5f, -.5f, 0, 0, -1), BV(-.5f, -.5f, -.5f, 0, 0, -1),
+    BV(-.5f, .5f, -.5f, 0, 0, -1), BV(.5f, .5f, -.5f, 0, 0, -1),  BV(-.5f, -.5f, -.5f, -1, 0, 0),
+    BV(-.5f, -.5f, .5f, -1, 0, 0), BV(-.5f, .5f, .5f, -1, 0, 0),  BV(-.5f, .5f, -.5f, -1, 0, 0),
+    BV(.5f, -.5f, .5f, 1, 0, 0),   BV(.5f, -.5f, -.5f, 1, 0, 0),  BV(.5f, .5f, -.5f, 1, 0, 0),
+    BV(.5f, .5f, .5f, 1, 0, 0),    BV(-.5f, .5f, .5f, 0, 1, 0),   BV(.5f, .5f, .5f, 0, 1, 0),
+    BV(.5f, .5f, -.5f, 0, 1, 0),   BV(-.5f, .5f, -.5f, 0, 1, 0),  BV(-.5f, -.5f, -.5f, 0, -1, 0),
+    BV(.5f, -.5f, -.5f, 0, -1, 0), BV(.5f, -.5f, .5f, 0, -1, 0),  BV(-.5f, -.5f, .5f, 0, -1, 0),
   };
+
 #undef BV
+
   I1 indices[] = {
-    0, 1, 2,  0, 2, 3,  4, 5, 6,  4, 6, 7,
-    8, 9,10,  8,10,11, 12,13,14, 12,14,15,
-    16,17,18, 16,18,19, 20,21,22, 20,22,23,
+    0,  1,  2,  0,  2,  3,  4,  5,  6,  4,  6,  7,  8,  9,  10, 8,  10, 11,
+    12, 13, 14, 12, 14, 15, 16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23,
   };
-  return mesh_alloc(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
+
+  Mesh mesh = mesh_alloc(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
+
+  return mesh;
 }
 
-Internal Mesh mesh_alloc_plane(void) {
+Internal Mesh mesh_alloc_plane(void)
+{
   GFX_Mesh_Vertex vertices[] = {
     {{-0.5f, 0.0f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
-    {{ 0.5f, 0.0f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
-    {{ 0.5f, 0.0f,  0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
-    {{-0.5f, 0.0f,  0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.0f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.0f, 0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
+    {{-0.5f, 0.0f, 0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
   };
+
   I1 indices[] = {
-    0, 2, 1,
-    0, 3, 2,
+    0,
+    2,
+    1,
+    0,
+    3,
+    2,
   };
-  return mesh_alloc(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
+
+  Mesh mesh = mesh_alloc(vertices, ArrayCount(vertices), indices, ArrayCount(indices));
+
+  return mesh;
 }
 
 ////////////////////////////////
 //~ kti: Panel
 
-Internal Panel_Rec panel_rec_depth_first_pre_order(Panel *panel) {
+Internal Panel_Rec panel_rec_depth_first_pre_order(Panel *panel)
+{
   Panel_Rec rec = {0};
 
-  if (panel->first) {
-    rec.next = panel->first;
-    rec.push_count = 1;
-  } else
-  for (Panel *p = panel; p != 0; p = p->parent) {
-    if (p->next) {
-      rec.next = p->next;
-      break;
+  if (panel->first)
+  {
+    rec.next        =  panel->first;
+    rec.push_count  =  1;
+  }
+  else
+  {
+    for (Panel *p = panel; p != 0; p = p->parent)
+    {
+      if (p->next)
+      {
+        rec.next = p->next;
+        break;
+      }
+
+      rec.pop_count += 1;
     }
-    rec.pop_count += 1;
   }
 
   return rec;
 }
 
-Internal F4 panel_rect_from_parent_rect(Panel *child, F4 parent_rect) {
-  F4 result = parent_rect;
-  Panel *parent = child->parent;
-  if (parent) {
-    for (Panel *p = parent->first; p != child && p != 0; p = p->next) {
+Internal F4 panel_rect_from_parent_rect(Panel *child, F4 parent_rect)
+{
+  F4     result   =  parent_rect;
+  Panel  *parent  =  child->parent;
+
+  if (parent)
+  {
+    for (Panel *p = parent->first; p != child && p != 0; p = p->next)
+    {
       result[parent->split_axis] += p->pct_of_parent * parent_rect[2 + parent->split_axis];
     }
+
     result[2 + parent->split_axis] = child->pct_of_parent * parent_rect[2 + parent->split_axis];
   }
+
   return result;
 }
 
-Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect) {
+Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect)
+{
   Temp_Arena scratch = scratch_begin(0, 0);
 
   typedef struct Walk_Node Walk_Node;
-  struct Walk_Node {
+  struct Walk_Node
+  {
     Walk_Node *next;
-    Panel *child;
+    Panel     *child;
   };
+
   Walk_Node *top_walk_node = 0;
-  for (Panel *p = panel; p != 0 && p->parent != 0; p = p->parent) {
+
+  for (Panel *p = panel; p != 0 && p->parent != 0; p = p->parent)
+  {
     Walk_Node *node = push_array(scratch.arena, Walk_Node, 1);
+
     node->child = p;
+
     SLLStackPush(top_walk_node, node);
   }
 
   F4 result = root_rect;
-  for (Walk_Node *n = top_walk_node; n != 0; n = n->next) {
+
+  for (Walk_Node *n = top_walk_node; n != 0; n = n->next)
+  {
     result = panel_rect_from_parent_rect(n->child, result);
   }
 
@@ -583,77 +653,105 @@ Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect) {
   return result;
 }
 
-Internal Panel *panel_alloc() {
+Internal Panel *panel_alloc()
+{
   Panel *result = state->free_panel;
-  if (result != 0) {
+
+  if (result != 0)
+  {
     SLLStackPop(state->free_panel);
     MemoryZeroStruct(result);
-  } else {
+  }
+  else
+  {
     result = push_array(state->arena, Panel, 1);
   }
+
   return result;
 }
 
-Internal void panel_insert(Panel *panel, Panel *at, Dir dir) {
-  Axis split_axis = (dir == DIR__RIGHT || dir == DIR__LEFT) ? AXIS__X : AXIS__Y;
-  Panel *parent = at->parent;
-  if (parent == 0) {
-    panel->parent = at;
-    panel->pct_of_parent = 1.0f;
+Internal void panel_insert(Panel *panel, Panel *at, Dir dir)
+{
+  Axis   split_axis  =  (dir == DIR__RIGHT || dir == DIR__LEFT) ? AXIS__X : AXIS__Y;
+  Panel  *parent     =  at->parent;
+
+  if (parent == 0)
+  {
+    panel->parent         =  at;
+    panel->pct_of_parent  =  1.0f;
+
     DLLPushBack(at->first, at->last, panel);
-  } else if (parent->split_axis == split_axis || parent->first == parent->last) {
-    parent->split_axis = split_axis;
-    panel->parent = parent;
-    panel->pct_of_parent = at->pct_of_parent = at->pct_of_parent * 0.5f;
+  }
+  else if (parent->split_axis == split_axis || parent->first == parent->last)
+  {
+    parent->split_axis    =  split_axis;
+    panel->parent         =  parent;
+    panel->pct_of_parent  =  at->pct_of_parent = at->pct_of_parent * 0.5f;
+
     DLLInsert(parent->first, parent->last, at, panel);
-  } else {
+  }
+  else
+  {
     Panel *container = panel_alloc();
-    container->split_axis = split_axis;
-    container->parent = parent;
-    container->pct_of_parent = at->pct_of_parent;
+
+    container->split_axis     =  split_axis;
+    container->parent         =  parent;
+    container->pct_of_parent  =  at->pct_of_parent;
 
     DLLInsert(parent->first, parent->last, at, container);
     DLLRemove(parent->first, parent->last, at);
 
-    Panel *first = at;
-    Panel *second = panel;
-    if (dir == DIR__LEFT || dir == DIR__UP) {
-      first = panel;
-      second = at;
+    Panel  *first   =  at;
+    Panel  *second  =  panel;
+
+    if (dir == DIR__LEFT || dir == DIR__UP)
+    {
+      first   =  panel;
+      second  =  at;
     }
+
     DLLPushBack(container->first, container->last, first);
     DLLPushBack(container->first, container->last, second);
 
-    at->parent = container;
-    panel->parent = container;
-    at->pct_of_parent = panel->pct_of_parent = 0.5f;
+    at->parent         =  container;
+    panel->parent      =  container;
+    at->pct_of_parent  =  panel->pct_of_parent = 0.5f;
   }
 }
 
-Internal void panel_close(Panel *root, Panel *panel) {
-  if (panel->first != 0) {
+Internal void panel_close(Panel *root, Panel *panel)
+{
+  if (panel->first != 0)
+  {
     return;
   }
 
-  if (state->focused_panel == panel) {
+  if (state->focused_panel == panel)
+  {
     state->focused_panel = 0;
   }
 
   Panel *parent = panel->parent;
 
-  if (panel->prev) {
+  if (panel->prev)
+  {
     panel->prev->pct_of_parent += panel->pct_of_parent;
-  } else if (panel->next) {
+  }
+  else if (panel->next)
+  {
     panel->next->pct_of_parent += panel->pct_of_parent;
   }
 
   DLLRemove(parent->first, parent->last, panel);
 
-  if (parent->first && parent->first == parent->last && parent != root) {
-    Panel *grandparent = parent->parent;
-    Panel *survivor = parent->first;
-    survivor->parent = grandparent;
-    survivor->pct_of_parent = parent->pct_of_parent;
+  if (parent->first && parent->first == parent->last && parent != root)
+  {
+    Panel  *grandparent  =  parent->parent;
+    Panel  *survivor     =  parent->first;
+
+    survivor->parent         =  grandparent;
+    survivor->pct_of_parent  =  parent->pct_of_parent;
+
     DLLInsert(grandparent->first, grandparent->last, parent, survivor);
     DLLRemove(grandparent->first, grandparent->last, parent);
     SLLStackPush(state->free_panel, parent);
@@ -662,54 +760,64 @@ Internal void panel_close(Panel *root, Panel *panel) {
   SLLStackPush(state->free_panel, panel);
 }
 
-Internal void panel_push_view(Panel *panel, View_Kind kind) {
-  View *view = &panel->views[panel->view_count];
-  panel->view_count += 1;
+Internal void panel_push_view(Panel *panel, View_Kind kind)
+{
+  String8  default_name  =  str8("View");
+  View     *view         =  &panel->views[panel->view_count];
 
-  view->kind = kind;
-  view->title = view_kind_names[kind];
-  String8 default_name = str8("Theodor");
-  view->name_len = Min(sizeof(view->name), default_name.len);
+  panel->view_count  +=  1;
+  view->kind         =   kind;
+  view->title        =   view_kind_names[kind];
+  view->name_len     =   Min(sizeof(view->name), default_name.len);
+
   memmove(view->name, default_name.str, view->name_len);
 
-  if (kind == VIEW_KIND__VIEWPORT) {
+  if (kind == VIEW_KIND__VIEWPORT)
+  {
     view->camera = (Camera){
-      .pos = (F4){0.0f, 1.0f, -7.0f},
-      .fov = 70.0f * PI/180.0f,
-      .near_z = 0.1f,
-      .far_z = 100.0f,
+      .pos     =  (F4){0.0f, 1.0f, -7.0f},
+      .fov     =  70.0f * PI / 180.0f,
+      .near_z  =  0.1f,
+      .far_z   =  100.0f,
     };
-    view->target_camera = view->camera;
-    view->gizmo_hot_axis = AXIS__INVALID;
-    view->gizmo_active_axis = AXIS__INVALID;
+    view->target_camera      =  view->camera;
+    view->gizmo_hot_axis     =  AXIS__INVALID;
+    view->gizmo_active_axis  =  AXIS__INVALID;
   }
 }
 
 ////////////////////////////////
 //~ kti: Window
 
-Internal Window *window_open(void) {
+Internal Window *window_open(void)
+{
   Window *window = state->free_window;
-  if (window != 0) {
+
+  if (window != 0)
+  {
     SLLStackPop(state->free_window);
     MemoryZeroStruct(window);
-  } else {
+  }
+  else
+  {
     window = push_array(state->arena, Window, 1);
   }
 
-  window->os = os_window_open(str8("Testing"), 1280, 720);
-  window->gfx = gfx_window_equip(window->os);
-  window->ui = ui_state_alloc();
-  window->arena = arena_alloc(MiB(32));
-  window->root_panel.split_axis = AXIS__X;
+  window->os                     =  os_window_open(str8("Testing"), 1280, 720);
+  window->gfx                    =  gfx_window_equip(window->os);
+  window->ui                     =  ui_state_alloc();
+  window->arena                  =  arena_alloc(MiB(32));
+  window->root_panel.split_axis  =  AXIS__X;
 
   DLLPushBack(state->first_window, state->last_window, window);
 
   return window;
 }
 
-Internal void window_close(Window *window) {
-  if (window != 0) {
+Internal void window_close(Window *window)
+{
+  if (window != 0)
+  {
     DLLRemove(state->first_window, state->last_window, window);
     SLLStackPush(state->free_window, window);
     ui_state_release(window->ui);
@@ -718,11 +826,14 @@ Internal void window_close(Window *window) {
   }
 }
 
-Internal Window *window_from_os_window(OS_Window *os) {
+Internal Window *window_from_os_window(OS_Window *os)
+{
   Window *result = 0;
 
-  for (Window *w = state->first_window; w != 0; w = w->next) {
-    if (w->os == os) {
+  for (Window *w = state->first_window; w != 0; w = w->next)
+  {
+    if (w->os == os)
+    {
       result = w;
     }
   }
@@ -733,9 +844,12 @@ Internal Window *window_from_os_window(OS_Window *os) {
 ////////////////////////////////
 //~ kti: Cmd
 
-Internal void cmd_push(Cmd cmd) {
+Internal void cmd_push(Cmd cmd)
+{
   L1 idx = state->cmd_count++;
-  if (idx < ArrayCount(state->cmds)) {
+
+  if (idx < ArrayCount(state->cmds))
+  {
     state->cmds[idx] = cmd;
   }
 }
@@ -743,80 +857,112 @@ Internal void cmd_push(Cmd cmd) {
 ////////////////////////////////
 //~ kti: Entity
 
-Internal Entity_Handle entity_handle_zero() {
+Internal Entity_Handle entity_handle_zero()
+{
   Entity_Handle result = {0};
+
   return result;
 }
 
-Internal I1 entity_handle_match(Entity_Handle a, Entity_Handle b) {
+Internal I1 entity_handle_match(Entity_Handle a, Entity_Handle b)
+{
   I1 result = (a.gen == b.gen && a.ptr == b.ptr);
+
   return result;
 }
 
-Internal I1 entity_is_nil(Entity *entity) {
+Internal I1 entity_is_nil(Entity *entity)
+{
   I1 result = (entity == 0 || entity == &state->nil_entity);
+
   return result;
 }
 
-Internal Entity *entity_from_handle(Entity_Handle handle) {
+Internal Entity *entity_from_handle(Entity_Handle handle)
+{
   Entity *result = &state->nil_entity;
 
-  if (!entity_is_nil(handle.ptr) && handle.gen == handle.ptr->gen) {
+  if (!entity_is_nil(handle.ptr)
+      &&
+      handle.gen == handle.ptr->gen)
+  {
     result = handle.ptr;
   }
 
   return result;
 }
 
-Internal Entity_Handle entity_handle(Entity *entity) {
+Internal Entity_Handle entity_handle(Entity *entity)
+{
   Entity_Handle result = {0};
-  if (!entity_is_nil(entity)) {
-    result.ptr = entity;
-    result.gen = entity->gen;
+
+  if (!entity_is_nil(entity))
+  {
+    result.ptr  =  entity;
+    result.gen  =  entity->gen;
   }
+
   return result;
 }
 
-Internal void entity_select(Entity_Handle handle, I1 additive) {
+Internal void entity_select(Entity_Handle handle, I1 additive)
+{
   Entity *entity = entity_from_handle(handle);
+
   //- kti: Clear selection if not additiv.
-  if (!additive) {
-    for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+
+  if (!additive)
+  {
+    for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+    {
       entity->flags &= ~ENTITY_FLAG__SELECTED;
     }
   }
-  if (!entity_is_nil(entity)) {
-    if (additive) {
+
+  if (!entity_is_nil(entity))
+  {
+    if (additive)
+    {
       entity->flags ^= ENTITY_FLAG__SELECTED;
-    } else {
+    }
+    else
+    {
       entity->flags |= ENTITY_FLAG__SELECTED;
     }
   }
 }
 
-Internal Entity *entity_create(L1 flags, String8 name) {
+Internal Entity *entity_create(L1 flags, String8 name)
+{
   Entity *entity = state->first_free_entity;
-  if (entity == 0) {
-    entity = push_array(state->arena, Entity, 1);
-    entity->gen = 1;
-  } else {
+
+  if (entity == 0)
+  {
+    entity       =  push_array(state->arena, Entity, 1);
+    entity->gen  =  1;
+  }
+  else
+  {
     SLLStackPop(state->first_free_entity);
+
     L1 gen = entity->gen;
+
     MemoryZeroStruct(entity);
+
     entity->gen = gen;
   }
 
   DLLPushBack(state->first_entity, state->last_entity, entity);
 
-  entity->flags = flags;
-  entity->size = (F4){1.0f, 1.0f, 1.0f};
-  entity->direction = (F4){0.0f, 1.0f, 0.0f, 0.0f};
-  entity->sphere_diameter = 1.0f;
-  entity->name_len = Min(name.len, sizeof(entity->name));
-  entity->material.base_color = (F4){0.9f, 0.9f, 0.9f, 1.0f};
-  entity->material.emissive = (F4){0.0f, 0.0f, 0.0f, 1.0f};
-  entity->camera_vertical_fov = 1.22f;
-  entity->camera_focal_distance = 2.0f;
+  entity->flags                  =  flags;
+  entity->size                   =  (F4){1.0f, 1.0f, 1.0f};
+  entity->direction              =  (F4){0.0f, 1.0f, 0.0f, 0.0f};
+  entity->sphere_diameter        =  1.0f;
+  entity->name_len               =  Min(name.len, sizeof(entity->name));
+  entity->material.base_color    =  (F4){0.9f, 0.9f, 0.9f, 1.0f};
+  entity->material.emissive      =  (F4){0.0f, 0.0f, 0.0f, 1.0f};
+  entity->camera_vertical_fov    =  1.22f;
+  entity->camera_focal_distance  =  2.0f;
 
   memmove(entity->name, name.str, entity->name_len);
 
@@ -825,42 +971,58 @@ Internal Entity *entity_create(L1 flags, String8 name) {
   return entity;
 }
 
-Internal void entity_delete(Entity_Handle handle) {
+Internal void entity_delete(Entity_Handle handle)
+{
   Entity *entity = entity_from_handle(handle);
-  if (!entity_is_nil(entity)) {
-    entity->gen += 1;
+
+  if (!entity_is_nil(entity))
+  {
+    entity->gen         +=  1;
+    state->entity_count -=  1;
+
     DLLRemove(state->first_entity, state->last_entity, entity);
     SLLStackPush(state->first_free_entity, entity);
-    state->entity_count -= 1;
   }
 }
 
-Internal Shape shape_from_entity(Entity *entity) {
+Internal Shape shape_from_entity(Entity *entity)
+{
   Shape result = {.kind = entity->shape_kind};
 
-  switch (result.kind) {
-  case SHAPE_KIND__SPHERE:
-    result.sphere.pos = V3_from_F4(entity->pos);
-    result.sphere.radius = entity->sphere_diameter*0.5f;
-    break;
-  case SHAPE_KIND__BOX:
-    result.box.min = V3_from_F4(entity->pos - entity->size*0.5f);
-    result.box.max = V3_from_F4(entity->pos + entity->size*0.5f);
-    break;
-  case SHAPE_KIND__PLANE: {
-    F4 normal = normalize_F4(entity->direction);
-    result.plane.normal = V3_from_F4(normal);
-    result.plane.d = -dot_F4(normal, entity->pos);
-  } break;
-  default: break;
+  switch (result.kind)
+  {
+    case SHAPE_KIND__SPHERE:
+    {
+      result.sphere.pos     =  V3_from_F4(entity->pos);
+      result.sphere.radius  =  entity->sphere_diameter * 0.5f;
+    } break;
+
+    case SHAPE_KIND__BOX:
+    {
+      result.box.min  =  V3_from_F4(entity->pos - entity->size * 0.5f);
+      result.box.max  =  V3_from_F4(entity->pos + entity->size * 0.5f);
+    } break;
+
+    case SHAPE_KIND__PLANE:
+    {
+      F4 normal = normalize_F4(entity->direction);
+
+      result.plane.normal  =  V3_from_F4(normal);
+      result.plane.d       =  -dot_F4(normal, entity->pos);
+    } break;
+
+    default: break;
   }
 
   return result;
 }
 
-Internal F4 entity_mesh_size(Entity *entity) {
+Internal F4 entity_mesh_size(Entity *entity)
+{
   F4 result = entity->size;
-  if (entity->shape_kind == SHAPE_KIND__SPHERE) {
+
+  if (entity->shape_kind == SHAPE_KIND__SPHERE)
+  {
     result = (F4){
       entity->sphere_diameter,
       entity->sphere_diameter,
@@ -868,116 +1030,138 @@ Internal F4 entity_mesh_size(Entity *entity) {
       1.0f,
     };
   }
+
   return result;
 }
 
-Internal Entity *user_code_entity(String8 name) {
+Internal Entity *user_code_entity(String8 name)
+{
   Entity *result = 0;
 
-  if (name.len != 0) {
-    for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+  if (name.len != 0)
+  {
+    for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+    {
       String8 entity_key = {entity->name, entity->name_len};
-      if (str8_match(entity_key, name)) {
+
+      if (str8_match(entity_key, name))
+      {
         result = entity;
         break;
       }
     }
   }
 
-  if (result == 0) {
+  if (result == 0)
+  {
     result = entity_create(0, name);
   }
 
   result->last_touch_frame = state->scene_frame_index;
+
   return result;
 }
 
 ////////////////////////////////
 //~ kti: Camera
 
-Internal F4x4 camera_view_projection(Camera camera, F1 width, F1 height) {
-  F1 aspect = width / height;
-  F4x4 projection = perspective_fov_F4x4(camera.fov, aspect, camera.near_z, camera.far_z);
-  F4x4 view = translate_F4x4(-camera.pos);
-  view = mul_F4x4(view, rotate_y_F4x4(-camera.yaw));
-  view = mul_F4x4(view, rotate_x_F4x4(-camera.pitch));
+Internal F4x4 camera_view_projection(Camera camera, F1 width, F1 height)
+{
+  F1    aspect      =  width / height;
+  F4x4  projection  =  perspective_fov_F4x4(camera.fov, aspect, camera.near_z, camera.far_z);
+  F4x4  view        =  translate_F4x4(-camera.pos);
+
+  view  =  mul_F4x4(view, rotate_y_F4x4(-camera.yaw));
+  view  =  mul_F4x4(view, rotate_x_F4x4(-camera.pitch));
+
   F4x4 view_projection = mul_F4x4(view, projection);
+
   return view_projection;
 }
 
-Internal F4x4 line_transform_F4x4(F4 begin, F4 direction, F1 thickness) {
-  F4 line_axis = F4_with_w(direction, 0.0f);
-  F4 line_direction = normalize_F4(line_axis);
-  F4 reference_axis = abs_F1(line_direction[1]) < 0.99f
-    ? (F4){0.0f, 1.0f, 0.0f, 0.0f}
-    : (F4){1.0f, 0.0f, 0.0f, 0.0f};
-  F4 side_axis = normalize_F4(cross_F4(line_direction, reference_axis));
-  F4 up_axis = normalize_F4(cross_F4(side_axis, line_direction));
+Internal F4x4 line_transform_F4x4(F4 begin, F4 direction, F1 thickness)
+{
+  F4x4  result          =  identity_F4x4();
+  F4    line_axis       =  F4_with_w(direction, 0.0f);
+  F4    line_direction  =  normalize_F4(line_axis);
+  F4    up              =  (F4){0.0f, 1.0f, 0.0f, 0.0f};
+  F4    right           =  (F4){0.0f, 1.0f, 0.0f, 0.0f};
+  F4    reference_axis  =  (abs_F1(line_direction[1]) < 0.99f) ? up : right;
+  F4    side_axis       =  normalize_F4(cross_F4(line_direction, reference_axis));
+  F4    up_axis         =  normalize_F4(cross_F4(side_axis, line_direction));
 
-  F4x4 result = identity_F4x4();
-  result.r[0] = line_axis;
-  result.r[1] = thickness*side_axis;
-  result.r[2] = thickness*up_axis;
-  result.r[3] = F4_with_w(begin + 0.5f*line_axis, 1.0f);
+  result.r[0]  =  line_axis;
+  result.r[1]  =  thickness * side_axis;
+  result.r[2]  =  thickness * up_axis;
+  result.r[3]  =  F4_with_w(begin + 0.5f * line_axis, 1.0f);
+
   return result;
 }
 
-Internal void plane_axes_from_normal(F4 normal, F4 *tangent_out, F4 *bitangent_out) {
-  F4 reference_axis = abs_F1(normal[1]) < 0.99f ? (F4){0.0f, 1.0f, 0.0f, 0.0f} : (F4){0.0f, 0.0f, 1.0f, 0.0f};
-  F4 tangent = normalize_F4(cross_F4(normal, reference_axis));
-  F4 bitangent = cross_F4(tangent, normal);
+Internal void plane_axes_from_normal(F4 normal, F4 *tangent_out, F4 *bitangent_out)
+{
+  F4  reference_axis  =  abs_F1(normal[1]) < 0.99f ? (F4){0.0f, 1.0f, 0.0f, 0.0f} : (F4){0.0f, 0.0f, 1.0f, 0.0f};
+  F4  tangent         =  normalize_F4(cross_F4(normal, reference_axis));
+  F4  bitangent       =  cross_F4(tangent, normal);
 
-  tangent_out[0] = tangent;
-  bitangent_out[0] = bitangent;
+  tangent_out[0]    =  tangent;
+  bitangent_out[0]  =  bitangent;
 }
 
-Internal F4x4 plane_transform_F4x4(Entity *entity, Camera camera) {
-  F4 normal = normalize_F4(entity->direction);
+Internal F4x4 plane_transform_F4x4(Entity *entity, Camera camera)
+{
+  F4x4  result           =  identity_F4x4();
+  F4    normal           =  normalize_F4(entity->direction);
+  F4    camera_to_plane  =  camera.pos - entity->pos;
+  F4    preview_center   =  camera.pos - dot_F4(normal, camera_to_plane) * normal;
+  F1    preview_size     =  2.0f * camera.far_z;
+
   F4 tangent;
   F4 bitangent;
   plane_axes_from_normal(normal, &tangent, &bitangent);
 
-  // Keep the editor proxy centered under the viewport camera and large enough
-  // to cover the full visible range. The ray-traced plane itself is infinite.
-  F4 camera_to_plane = camera.pos - entity->pos;
-  F4 preview_center = camera.pos - dot_F4(normal, camera_to_plane)*normal;
-  F1 preview_size = 2.0f*camera.far_z;
+  result.r[0]  =  preview_size * tangent;
+  result.r[1]  =  normal;
+  result.r[2]  =  preview_size * bitangent;
+  result.r[3]  =  F4_with_w(preview_center, 1.0f);
 
-  F4x4 result = identity_F4x4();
-  result.r[0] = preview_size*tangent;
-  result.r[1] = normal;
-  result.r[2] = preview_size*bitangent;
-  result.r[3] = F4_with_w(preview_center, 1.0f);
   return result;
 }
 
 ////////////////////////////////
 //~ kti: User Code
 
-Internal void user_code_reload(void) {
+Internal void user_code_reload(void)
+{
   //- kti: Compile code.
   CString command = "gcc -O2 -iquote ./src/ -fPIC -shared -o user.so ./user/user.c -lm";
+
   system(command);
 
   //- kti: Load Proc.
   Local_Persist void *lib = 0;
-  if (lib) os_library_close(lib);
-  lib = os_library_open(str8("./user.so"));
-  state->user_render_func = (User_Render_Func)os_library_load_proc(lib, str8("render"));
-  state->user_code_dirty = state->user_render_func != 0;
+
+  if (lib) {
+    os_library_close(lib);
+  }
+
+  lib                      =  os_library_open(str8("./user.so"));
+  state->user_render_func  =  (User_Render_Func)os_library_load_proc(lib, str8("render"));
+  state->user_code_dirty   =  state->user_render_func != 0;
 }
 
 ////////////////////////////////
 //~ kti: Main
 
-Internal void lane(void *user_data) {
+Internal void lane(void *user_data)
+{
   Arena *arena = lane_arena();
 
-  L1 frame_count = 0;
-  L1 total_frame_time = 0;
-  L1 min_frame_time = L1_MAX;
-  L1 max_frame_time = 0;
-  F1 fps = 0.0f;
+  L1  frame_count       =  0;
+  L1  total_frame_time  =  0;
+  L1  min_frame_time    =  L1_MAX;
+  L1  max_frame_time    =  0;
+  F1  fps               =  0.0f;
 
   ////////////////////////////////
   //~ kti: Initialization.
@@ -987,55 +1171,60 @@ Internal void lane(void *user_data) {
   fp_init();
   fc_init();
 
-  state = push_array(arena, State, 1);
-  state->arena = arena;
-  state->frames_requested = 2;
+  state                    =  push_array(arena, State, 1);
+  state->arena             =  arena;
+  state->frames_requested  =  2;
 
-  state->meshes[SHAPE_KIND__SPHERE] = mesh_alloc_sphere(16, 32);
-  state->meshes[SHAPE_KIND__BOX] = mesh_alloc_box();
-  state->meshes[SHAPE_KIND__PLANE] = mesh_alloc_plane();
+  state->meshes[SHAPE_KIND__SPHERE]  =  mesh_alloc_sphere(16, 32);
+  state->meshes[SHAPE_KIND__BOX]     =  mesh_alloc_box();
+  state->meshes[SHAPE_KIND__PLANE]   =  mesh_alloc_plane();
 
   Window *window = window_open();
 
   //- kti: Create initial state.
 
-  Panel *lister_panel = panel_alloc();
-  panel_push_view(lister_panel, VIEW_KIND__LISTER);
-  panel_insert(lister_panel, &window->root_panel, 0);
+  Panel  *lister_panel    =  panel_alloc();
+  Panel  *viewport_panel  =  panel_alloc();
 
-  Panel *viewport_panel = panel_alloc();
+  panel_push_view(lister_panel,   VIEW_KIND__LISTER);
   panel_push_view(viewport_panel, VIEW_KIND__VIEWPORT);
+  panel_insert(lister_panel, &window->root_panel, 0);
   panel_insert(viewport_panel, lister_panel, DIR__RIGHT);
 
-  lister_panel->pct_of_parent = 0.3f;
-  viewport_panel->pct_of_parent = 0.7f;
+  lister_panel->pct_of_parent    =  0.3f;
+  viewport_panel->pct_of_parent  =  0.7f;
 
-  state->render_settings.width = 1280;
-  state->render_settings.height = 720;
-  state->render_settings.rays_per_pixel = 64;
-  state->render_settings.max_num_bounces = 8;
+  state->render_settings.width            =  1280;
+  state->render_settings.height           =  720;
+  state->render_settings.rays_per_pixel   =  64;
+  state->render_settings.max_num_bounces  =  8;
 
-  state->postprocess_settings.bloom.pass_count = 8;
-  state->postprocess_settings.bloom.threshold = 0.5f;
-  state->postprocess_settings.bloom.strength = 0.4f;
-  state->postprocess_settings.bloom.knee = 0.5f;
+  state->postprocess_settings.bloom.pass_count  =  8;
+  state->postprocess_settings.bloom.threshold   =  0.5f;
+  state->postprocess_settings.bloom.strength    =  0.4f;
+  state->postprocess_settings.bloom.knee        =  0.5f;
 
   user_code_reload();
 
   ////////////////////////////////
   //~ kti: Main loop
 
-  L1 running = 1;
-  L1 last_frame_begin_time = 0;
-  while (running) {
+  L1  running                =  1;
+  L1  last_frame_begin_time  =  0;
+
+  while (running)
+  {
     ProfBegin("Frame");
 
-    L1 frame_begin_time = os_clock();
-    F1 time = (F1)(frame_begin_time / 1000000ULL) / 1000.0f;
-    F1 animation_dt = 1.0f/60.0f;
-    if (last_frame_begin_time != 0) {
-      animation_dt = (F1)(frame_begin_time - last_frame_begin_time)/1000000000.0f;
+    L1  frame_begin_time  =  os_clock();
+    F1  time              =  (F1)(frame_begin_time / 1000000ULL) / 1000.0f;
+    F1  animation_dt      =  1.0f / 60.0f;
+
+    if (last_frame_begin_time != 0)
+    {
+      animation_dt = (F1)(frame_begin_time - last_frame_begin_time) / 1000000000.0f;
     }
+
     last_frame_begin_time = frame_begin_time;
 
     Temp_Arena scratch = scratch_begin(0, 0);
@@ -1043,111 +1232,168 @@ Internal void lane(void *user_data) {
     ////////////////////////////////
     //~ kti: OS Events
 
-    UI_Cmd_List ui_cmds = {0};
-    OS_Event_List events = {0};
+    UI_Cmd_List    ui_cmds  =  {0};
+    OS_Event_List  events   =  {0};
+
     events = os_poll_events(scratch.arena, state->frames_requested == 0 ? -1 : 0);
-    for (OS_Event *e = events.first; e != 0; e = e->next) {
+
+    for (OS_Event *e = events.first; e != 0; e = e->next)
+    {
       //- kti: Window Close
-      if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE) {
+      if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE)
+      {
         Window *window = window_from_os_window(e->window);
         window_close(window);
       }
+
       //- kti: Escape
-      if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ESC) {
-        ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
+      if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ESC)
+      {
+        UI_Cmd cmd = {
           .kind = UI_CMD_KIND__CANCEL,
-          .timestamp_ns = e->timestamp_ns
-        });
+          .timestamp_ns = e->timestamp_ns,
+        };
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
       }
+
       //- kti: Text
-      if (e->kind == OS_EVENT_KIND__TEXT) {
-        ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
+      if (e->kind == OS_EVENT_KIND__TEXT)
+      {
+        UI_Cmd cmd = {
           .kind = UI_CMD_KIND__TEXT,
-          .string = {e->text, e->text_len},
+          .string = {e->text, e->text_len}, 
           .timestamp_ns = e->timestamp_ns
-        });
+        };
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
       }
+
       //- kti: Left & Right
-      if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__LEFT || e->key == OS_KEY__RIGHT)) {
-        UI_Cmd_Delta_Unit delta_unit = (e->modifiers&OS_MODIFIER_FLAG__CTRL) ? UI_CMD_DELTA_UNIT__WORD : UI_CMD_DELTA_UNIT__CHAR;
-        UI_Cmd_Flags flags = UI_CMD_FLAG__CAP_AT_LINE;
-        if (e->modifiers&OS_MODIFIER_FLAG__SHIFT) {
+      if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__LEFT || e->key == OS_KEY__RIGHT))
+      {
+        UI_Cmd_Delta_Unit  delta_unit  =  UI_CMD_DELTA_UNIT__CHAR;
+        UI_Cmd_Flags       flags       =  UI_CMD_FLAG__CAP_AT_LINE;
+        
+        if (e->modifiers & OS_MODIFIER_FLAG__CTRL)
+        {
+          delta_unit = UI_CMD_DELTA_UNIT__WORD;
+        }
+
+        if (e->modifiers & OS_MODIFIER_FLAG__SHIFT)
+        {
           flags |= UI_CMD_FLAG__KEEP_MARK;
-        } else {
+        }
+        else
+        {
           flags |= UI_CMD_FLAG__PICK_SELECT_SIDE;
         }
-        ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
-            .kind = UI_CMD_KIND__NAVIGATE,
-            .delta_unit = delta_unit,
-            .flags = flags,
-            .delta_si2 = {(e->key == OS_KEY__LEFT) ? -1 : 1, 0},
-            .timestamp_ns = e->timestamp_ns,
-          });
+
+        UI_Cmd cmd = {
+          .kind          =  UI_CMD_KIND__NAVIGATE,
+          .delta_unit    =  delta_unit,
+          .flags         =  flags,
+          .delta_si2     =  {(e->key == OS_KEY__LEFT) ? -1 : 1, 0},
+          .timestamp_ns  =  e->timestamp_ns,
+        };
+
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
       }
+
       //- kti: Home & End
-      if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__HOME || e->key == OS_KEY__END)) {
+      if (e->kind == OS_EVENT_KIND__PRESS
+          &&
+          (e->key == OS_KEY__HOME || e->key == OS_KEY__END))
+      {
         UI_Cmd_Flags flags = UI_CMD_FLAG__CAP_AT_LINE;
-        if (e->modifiers&OS_MODIFIER_FLAG__SHIFT) {
+
+        if (e->modifiers & OS_MODIFIER_FLAG__SHIFT)
+        {
           flags |= UI_CMD_FLAG__KEEP_MARK;
         }
-        ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
-          .kind = UI_CMD_KIND__NAVIGATE,
-          .delta_unit = UI_CMD_DELTA_UNIT__LINE,
-          .flags = flags,
-          .delta_si2 = {(e->key == OS_KEY__HOME) ? -1 : 1, 0},
-          .timestamp_ns = e->timestamp_ns,
-        });
+
+        UI_Cmd cmd = {
+          .kind          =  UI_CMD_KIND__NAVIGATE,
+          .delta_unit    =  UI_CMD_DELTA_UNIT__LINE,
+          .flags         =  flags,
+          .delta_si2     =  {(e->key == OS_KEY__HOME) ? -1 : 1, 0},
+          .timestamp_ns  =  e->timestamp_ns,
+        };
+
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
       }
+
       //- kti: Backspace & Delete
-      if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__BACKSPACE || e->key == OS_KEY__DELETE)) {
-        UI_Cmd_Delta_Unit delta_unit = (e->modifiers&OS_MODIFIER_FLAG__CTRL) ? UI_CMD_DELTA_UNIT__WORD : UI_CMD_DELTA_UNIT__CHAR;
-        ui_cmd_list_push(scratch.arena, &ui_cmds, (UI_Cmd){
-          .kind = UI_CMD_KIND__EDIT,
-          .delta_unit = delta_unit,
-          .flags = UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__ZERO_DELTA_ON_SELECT | UI_CMD_FLAG__DELETE,
-          .delta_si2 = {(e->key == OS_KEY__BACKSPACE) ? -1 : 1, 0},
-          .timestamp_ns = e->timestamp_ns,
-        });
+      if (e->kind == OS_EVENT_KIND__PRESS
+          &&
+          (e->key == OS_KEY__BACKSPACE || e->key == OS_KEY__DELETE))
+      {
+        UI_Cmd_Delta_Unit delta_unit = UI_CMD_DELTA_UNIT__CHAR;
+
+        if (e->modifiers & OS_MODIFIER_FLAG__CTRL)
+        {
+          delta_unit = UI_CMD_DELTA_UNIT__WORD ;
+        }
+
+        UI_Cmd cmd = {
+          .kind          =  UI_CMD_KIND__EDIT,
+          .delta_unit    =  delta_unit,
+          .flags         =  UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__ZERO_DELTA_ON_SELECT | UI_CMD_FLAG__DELETE,
+          .delta_si2     =  {(e->key == OS_KEY__BACKSPACE) ? -1 : 1, 0},
+          .timestamp_ns  =  e->timestamp_ns,
+        };
+
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
       }
     }
 
     //- kti: Check if last window is closed.
-    if (state->first_window == 0) {
+    if (state->first_window == 0)
+    {
       running = 0;
     }
 
-    //////////////////////////////// 
+    ////////////////////////////////
     //~ kti: Async Events
 
-    for (Async_Event e = {0}; async_event_pop(&e);) {
-      switch (e.kind) {
+    for (Async_Event e = {0}; async_event_pop(&e);)
+    {
+      switch (e.kind)
+      {
         case ASYNC_EVENT_KIND__NONE: {} break;
-        case ASYNC_EVENT_KIND__RENDER_COMPLETE: {
-          if (e.request_id == state->render_request_id) {
+
+        case ASYNC_EVENT_KIND__RENDER_COMPLETE:
+        {
+          if (e.request_id == state->render_request_id)
+          {
             state->render_request_id = 0;
 
-            if (atomic_load_I1(&state->render_progress.cancel_requested) || image_is_nil(e.image)) {
+            if (atomic_load_I1(&state->render_progress.cancel_requested) || image_is_nil(e.image))
+            {
               arena_release(e.arena);
-            } else {
+            }
+            else
+            {
               //- kti: Release previous hdr arena.
               arena_release(state->hdr_arena);
 
               //- kti: Take ownership of arena containing HDR image.
-              state->hdr_arena = e.arena;
-              state->hdr = e.image;
+              state->hdr_arena  =  e.arena;
+              state->hdr        =  e.image;
 
-              //- kti: Trigger postprocess. 
+              //- kti: Trigger postprocess.
               state->postprocess_displayed_hash = 0;
             }
           }
         } break;
-        case ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE: {
-          state->postprocess_in_flight = 0;
+
+        case ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE:
+        {
+          Image_RGBA8  image         =  e.image_rgba8;
+          GFX_Texture  *new_texture  =  gfx_tex2d_from_image(image, GFX_TEXTURE_USAGE__STATIC);
 
           gfx_tex2d_free(state->render_result_texture);
 
-          Image_RGBA8 image = e.image_rgba8;
-          state->render_result_texture = gfx_tex2d_alloc(GFX_TEXTURE_USAGE__STATIC, image.width, image.height, image.pixels);
+          state->render_result_texture = new_texture;
+          state->postprocess_in_flight = 0;
         } break;
       }
     }
@@ -1156,14 +1402,16 @@ Internal void lane(void *user_data) {
 
     //- kti: Build the code-defined scene.
     I1 user_code_ran = 0;
-    if (state->user_render_func && state->user_code_dirty) {
-      state->user_code_dirty = 0;
-      state->scene_frame_index += 1;
-      user_code_ran = 1;
+
+    if (state->user_render_func && state->user_code_dirty)
+    {
+      state->user_code_dirty    =   0;
+      state->scene_frame_index  +=  1;
+      user_code_ran             =   1;
 
       User_API api = {
-        .entity = user_code_entity,
-        .image_alloc = image_alloc,
+        .entity       =  user_code_entity,
+        .image_alloc  =  image_alloc,
       };
       Image user_image = state->user_render_func(api, scratch.arena, state->scene_frame_index, time);
 
@@ -1173,24 +1421,29 @@ Internal void lane(void *user_data) {
       GFX_Texture *texture = state->user_render_texture;
 
       //- kti: Delete previous texture if necessary.
-      if (texture != 0 && (texture->width != upload_image.width || texture->height != upload_image.height)) {
+      if (texture != 0 && (
+          texture->width  != upload_image.width ||
+          texture->height != upload_image.height))
+      {
         gfx_tex2d_free(texture);
+
         texture = 0;
       }
 
       //- kti: Create or fill texture.
-      if (texture == 0) {
-        texture = gfx_tex2d_alloc(
-            GFX_TEXTURE_USAGE__DYNAMIC,
-            upload_image.width,
-            upload_image.height,
-            upload_image.pixels);
-      } else {
-        gfx_fill_tex2d_region(texture, (SI4){0, 0, upload_image.width, upload_image.height}, upload_image.pixels);
+      if (texture == 0)
+      {
+        texture = gfx_tex2d_from_image(upload_image, GFX_TEXTURE_USAGE__DYNAMIC);
       }
-      texture->filter = GFX_TEXTURE_FILTER__NEAREST;
+      else
+      {
+        SI4 region = {0, 0, upload_image.width, upload_image.height};
 
-      state->user_render_texture = texture;
+        gfx_fill_tex2d_region(texture, region, upload_image.pixels);
+      }
+
+      texture->filter             =  GFX_TEXTURE_FILTER__NEAREST;
+      state->user_render_texture  =  texture;
     }
 
     //- kti: Build lister.
@@ -1198,156 +1451,161 @@ Internal void lane(void *user_data) {
 
     {
       String8 *shape_names = push_array(scratch.arena, String8, SHAPE_KIND_COUNT);
-      for (L1 i = 0; i < SHAPE_KIND_COUNT; i += 1) {
+
+      for (L1 i = 0; i < SHAPE_KIND_COUNT; i += 1)
+      {
         shape_names[i] = shape_kind_name(i);
       }
 
-      I1 has_camera = 0;
-      L1 selected_count = 0;
-      for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+      I1  has_camera      =  0;
+      L1  selected_count  =  0;
+
+      for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+      {
         has_camera |= !!(entity->flags & ENTITY_FLAG__CAMERA);
-        if (entity->flags & ENTITY_FLAG__SELECTED) {
+
+        if (entity->flags & ENTITY_FLAG__SELECTED)
+        {
           selected_count += 1;
-          
-          String8 entity_name = (String8){entity->name, entity->name_len};
-          I1 is_shape = !!(entity->flags & ENTITY_FLAG__SHAPE);
-          I1 is_camera = !!(entity->flags & ENTITY_FLAG__CAMERA);
+
+          String8  entity_name  =  (String8){entity->name, entity->name_len};
+          I1       is_shape     =  !!(entity->flags & ENTITY_FLAG__SHAPE);
+          I1       is_camera    =  !!(entity->flags & ENTITY_FLAG__CAMERA);
 
           //- kti: Common entries.
 
           lister_header(entity_name.len != 0 ? entity_name : str8("Anonymous Entity"));
-
-          lister_xyz( str8("Pos"), &entity->pos,.pixels_per_unit = 50.0f);
-
+          lister_xyz(str8("Pos"), &entity->pos, .pixels_per_unit = 50.0f);
           lister_enum(str8("Shape"), is_shape ? &entity->shape_kind : 0, shape_names, SHAPE_KIND_COUNT);
 
           //- kti: Shape specific entries.
 
           lister_xyz(str8("Size"),
-            (is_shape && entity->shape_kind == SHAPE_KIND__BOX) ? &entity->size : 0,
-            .default_value = 1.0f,
-            .min = 0.01f);
+                     (is_shape && entity->shape_kind == SHAPE_KIND__BOX) ? &entity->size : 0,
+                     .default_value  =  1.0f,
+                     .min            =  0.01f);
 
           lister_F1(str8("Diameter"),
-            (is_shape && entity->shape_kind == SHAPE_KIND__SPHERE) ? &entity->sphere_diameter : 0,
-            .default_value = 1.0f,
-            .min = 0.01f);
+                    (is_shape && entity->shape_kind == SHAPE_KIND__SPHERE) ? &entity->sphere_diameter : 0,
+                    .default_value  =  1.0f,
+                    .min            =  0.01f);
 
-          lister_xyz(str8("Normal"), 
-            (is_shape && entity->shape_kind == SHAPE_KIND__PLANE) ? &entity->direction : 0,
-            .pixels_per_unit = 50.0f,
-            .min = -1.0f,
-            .max = 1.0f,
-            .flags = LISTER_ENTRY_FLAG__NORMALIZE_F4);
+          lister_xyz(str8("Normal"),
+                     (is_shape && entity->shape_kind == SHAPE_KIND__PLANE) ? &entity->direction : 0,
+                     .pixels_per_unit  =  50.0f,
+                     .min              =  -1.0f,
+                     .max              =  1.0f,
+                     .flags            =  LISTER_ENTRY_FLAG__NORMALIZE_F4);
 
           //- kti: For all shapes.
 
-          if (is_shape) {
+          if (is_shape)
+          {
             lister_header(str8("Material"));
-            lister_color(str8("Base"), &entity->material.base_color,
-              .max = 1.0f);
-            lister_F1(str8("Metallic"), &entity->material.metallic,
-              .default_value = 0.3f,
-              .max = 1.0f);
-            lister_F1(str8("Roughness"), &entity->material.roughness,
-              .default_value = 0.3f,
-              .max = 1.0f);
+            lister_color(str8("Base"), &entity->material.base_color, .max             =  1.0f);
+            lister_F1(str8("Metallic"), &entity->material.metallic, .default_value    =  0.3f, .max = 1.0f);
+            lister_F1(str8("Roughness"), &entity->material.roughness, .default_value  =  0.3f, .max = 1.0f);
             lister_color(str8("Emissive"), &entity->material.emissive);
           }
 
           //- kti: Camera entries.
 
-          if (is_camera) {
+          if (is_camera)
+          {
             lister_header(str8("Camera"));
             lister_xyz(str8("Forward"),
-              &entity->direction,
-              .pixels_per_unit = 50.0f,
-              .min = -1.0f,
-              .max = 1.0f,
-              .flags = LISTER_ENTRY_FLAG__NORMALIZE_F4);
+                       &entity->direction,
+                       .pixels_per_unit  =  50.0f,
+                       .min              =  -1.0f,
+                       .max              =  1.0f,
+                       .flags            =  LISTER_ENTRY_FLAG__NORMALIZE_F4);
             lister_F1(str8("Vertical FOV"),
-              &entity->camera_vertical_fov,
-              .default_value = 70.0f*PI/180.0f,
-              .min = PI/180.0f,
-              .max = 179.0f*PI/180.0f);
+                      &entity->camera_vertical_fov,
+                      .default_value  =  70.0f * PI / 180.0f,
+                      .min            =  PI / 180.0f,
+                      .max            =  179.0f * PI / 180.0f);
             lister_F1(str8("Aperture Radius"), &entity->camera_aperture_radius);
             lister_F1(str8("Focal Distance"), &entity->camera_focal_distance, .default_value = 5.0f, .min = 0.001f);
           }
         }
       }
 
-      if (selected_count == 0) {
+      if (selected_count == 0)
+      {
         //- kti: List out entities
         lister_header(str8("Entities"));
-        for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
+
+        for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+        {
           String8 entity_name = {
-            .str = entity->name,
-            .len = entity->name_len,
+            .str  =  entity->name,
+            .len  =  entity->name_len,
           };
-          lister_cmd(entity_name.len != 0 ? entity_name : str8("Anonymous Entity"), (Cmd){
-            .kind = CMD_KIND__SELECT_ENTITY,
-            .entity = entity_handle(entity),
-          });
+          Cmd cmd = {
+            .kind    =  CMD_KIND__SELECT_ENTITY,
+            .entity  =  entity_handle(entity),
+          };
+
+          if (entity_name.len == 0)
+          {
+            entity_name = str8("Anonymous Entity");
+          }
+
+          lister_cmd(entity_name, cmd);
         }
 
         //- kti: Render Settings
         lister_header(str8("Render Settings"));
-        lister_L1(str8("Width"), &state->render_settings.width,
-          .default_value = 1280,
-          .min = 320);
-        lister_L1(str8("Height"), &state->render_settings.height,
-          .default_value = 720,
-          .min = 160);
-        lister_L1(str8("Rays Per Pixel"), &state->render_settings.rays_per_pixel,
-          .default_value = 64);
-        lister_L1(str8("Max Bounces"), &state->render_settings.max_num_bounces,
-          .default_value = 8);
+
+        lister_L1(str8("Width"), &state->render_settings.width, .default_value = 1280, .min = 320);
+        lister_L1(str8("Height"), &state->render_settings.height, .default_value = 720, .min = 160);
+        lister_L1(str8("Rays Per Pixel"), &state->render_settings.rays_per_pixel, .default_value = 64);
+        lister_L1(str8("Max Bounces"), &state->render_settings.max_num_bounces, .default_value = 8);
 
         lister_header(str8("Postprocessing"));
 
-        lister_L1(str8("Passes"), &state->postprocess_settings.bloom.pass_count,
-          .default_value = 8);
+        lister_L1(str8("Passes"), &state->postprocess_settings.bloom.pass_count, .default_value = 8);
 
-        lister_F1(str8("Threshold"), &state->postprocess_settings.bloom.threshold,
-          .default_value = 0.5f,
-          .pixels_per_unit = 50.0f,
-          .max = F1_MAX);
+        lister_F1(str8("Threshold"),
+                  &state->postprocess_settings.bloom.threshold,
+                  .default_value    =  0.5f,
+                  .pixels_per_unit  =  50.0f,
+                  .max              =  F1_MAX);
 
-        lister_F1(str8("Strength"), &state->postprocess_settings.bloom.strength,
-          .default_value = 0.4f,
-          .min = 0.0f,
-          .max = 1.0f);
+        lister_F1(str8("Strength"),
+                  &state->postprocess_settings.bloom.strength,
+                  .default_value  =  0.4f,
+                  .min            =  0.0f,
+                  .max            =  1.0f);
 
-        lister_F1(str8("Knee"), &state->postprocess_settings.bloom.knee,
-          .default_value = 0.5f,
-          .pixels_per_unit = 50.0f,
-          .max = F1_MAX);
+        lister_F1(str8("Knee"),
+                  &state->postprocess_settings.bloom.knee,
+                  .default_value    =  0.5f,
+                  .pixels_per_unit  =  50.0f,
+                  .max              =  F1_MAX);
       }
 
       //- kti: Actions.
       lister_header(str8("Actions"));
 
-      lister_cmd(str8("Reload User Code"), (Cmd){
-        .kind = CMD_KIND__USER_CODE_RELOAD,
-      });
+      lister_cmd(str8("Reload User Code"), (Cmd){ .kind = CMD_KIND__USER_CODE_RELOAD });
 
-      if (has_camera && state->entity_count >= 2) {
+      if (has_camera && state->entity_count >= 2)
+      {
         // only allow 1 render at a time
-        if (state->render_request_id == 0) {
-          lister_cmd(str8("Render"), (Cmd){
-            .kind = CMD_KIND__RENDER,
-          });
-        } else {
+        if (state->render_request_id == 0)
+        {
+          lister_cmd(str8("Render"), (Cmd){ .kind = CMD_KIND__RENDER });
+        }
+        else
+        {
           // grab progress values
-          L1 completed = atomic_load_L1(&state->render_progress.pixels_completed);
-          L1 total = atomic_load_L1(&state->render_progress.pixels_total);
-          F1 pct = (total > 0) ? (F1)completed/(F1)total : 0.0f;
+          L1  completed  =  atomic_load_L1(&state->render_progress.pixels_completed);
+          L1  total      =  atomic_load_L1(&state->render_progress.pixels_total);
+          F1  pct        =  (total > 0) ? (F1)completed / (F1)total : 0.0f;
 
           lister_progress(str8("Tracing"), pct);
-
-          lister_cmd(str8("Cancel"), (Cmd){
-            .kind = CMD_KIND__CANCEL_RENDER,
-          });
+          lister_cmd(str8("Cancel"), (Cmd){ .kind = CMD_KIND__CANCEL_RENDER });
         }
       }
     }
@@ -1360,145 +1618,187 @@ Internal void lane(void *user_data) {
     fc_frame();
 
     CString user_home = getenv("HOME");
+    
 #if defined(__APPLE__)
-    String8 prop_fnt_path = str8f(scratch.arena, "%s/Library/Fonts/Bloomberg-PropU_N.ttf", user_home);
-    String8 fixed_fnt_path = str8f(scratch.arena, "%s/Library/Fonts/Bloomberg-FixedU_N.ttf", user_home);
+    String8  prop_fnt_path   =  str8f(scratch.arena, "%s/Library/Fonts/Bloomberg-PropU_N.ttf", user_home);
+    String8  fixed_fnt_path  =  str8f(scratch.arena, "%s/Library/Fonts/Bloomberg-FixedU_N.ttf", user_home);
 #else
-    String8 prop_fnt_path = str8f(scratch.arena, "%s/.local/share/fonts/Bloomberg-PropU_N.ttf", user_home);
-    String8 fixed_fnt_path = str8f(scratch.arena, "%s/.local/share/fonts/Bloomberg-FixedU_N.ttf", user_home);
+    String8  prop_fnt_path   =  str8f(scratch.arena, "%s/.local/share/fonts/Bloomberg-PropU_N.ttf", user_home);
+    String8  fixed_fnt_path  =  str8f(scratch.arena, "%s/.local/share/fonts/Bloomberg-FixedU_N.ttf", user_home);
 #endif
-    FC_Tag prop_fnt = fc_tag_from_path(prop_fnt_path);
-    FC_Tag fixed_fnt = fc_tag_from_path(fixed_fnt_path);
 
-    for (Window *w = state->first_window; w != 0; w = w->next) {
+    FC_Tag  prop_fnt   =  fc_tag_from_path(prop_fnt_path);
+    FC_Tag  fixed_fnt  =  fc_tag_from_path(fixed_fnt_path);
+
+    for (Window *w = state->first_window; w != 0; w = w->next)
+    {
+      F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
+
       ui_state_equip(w->ui);
       ui_begin_build(w->os, events, ui_cmds, &default_theme, animation_dt);
-
       ui_push_font(prop_fnt);
-
-      F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
       ui_set_next_fixed_rect(root_plane_rect);
-      UI_Box *overlay = ui_build_box_from_stringf(
-          UI_BOX_FLAG__FLOATING |
-          UI_BOX_FLAG__ALLOW_OVERFLOW_X |
-          UI_BOX_FLAG__ALLOW_OVERFLOW_Y,
-          "##overlay_%p", w);
+
+      UI_Box *overlay = ui_build_box_from_stringf(UI_BOX_FLAG__FLOATING |
+                                                  UI_BOX_FLAG__ALLOW_OVERFLOW_X |
+                                                  UI_BOX_FLAG__ALLOW_OVERFLOW_Y,
+                                                  "##overlay_%p",
+                                                  w);
 
       //- kti: Non leaf panel ui
       F1 resize_box_w = 8;
 
-      for (Panel *panel = &w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
+      for (Panel *panel = &w->root_panel; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next)
+      {
         F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
 
-        for (Panel *child = panel->first; child != 0 && child->next != 0; child = child->next) {
-          F4 child_rect = panel_rect_from_parent_rect(child, panel_rect);
+        for (Panel *child = panel->first; child != 0 && child->next != 0; child = child->next)
+        {
+          F4  child_rect     =  panel_rect_from_parent_rect(child, panel_rect);
+          F4  boundary_rect  =  child_rect;
 
-          //- kti: Build separator box.
-          F4 boundary_rect = child_rect;
-          boundary_rect[panel->split_axis] += child_rect[2 + panel->split_axis] - resize_box_w * 0.5f;
-          boundary_rect[2 + panel->split_axis] = resize_box_w;
+          //- kti: Boundray box.
+
+          boundary_rect[panel->split_axis]      +=  child_rect[2 + panel->split_axis] - resize_box_w * 0.5f;
+          boundary_rect[2 + panel->split_axis]  =   resize_box_w;
+
           ui_set_next_fixed_rect(boundary_rect);
-          UI_Box *boundary_box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__FLOATING, "##panel_boundary_%p", child);
+
+          UI_Box *boundary_box = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
+                                                           UI_BOX_FLAG__FLOATING,
+                                                           "##panel_boundary_%p",
+                                                           child);
 
           //- kti: Handle resize.
+
           UI_Signal sig = ui_signal_from_box(boundary_box);
-          if (sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-            Panel *min_child = child;
-            Panel *max_child = child->next;
-            if (sig.flags & UI_SIGNAL_FLAG__PRESSED) {
+
+          if (sig.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING)
+          {
+            Panel  *min_child  =  child;
+            Panel  *max_child  =  child->next;
+
+            if (sig.flags & UI_SIGNAL_FLAG__PRESSED)
+            {
               F2 drag_data = {min_child->pct_of_parent, max_child->pct_of_parent};
+
               ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &drag_data);
             }
-            F2 drag_data = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F2)[0];
-            F2 drag_delta = ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
-            F1 min_child_pct__pre_drag = drag_data[0];
-            F1 max_child_pct__pre_drag = drag_data[1];
-            F1 min_child_px__pre_drag = min_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
-            F1 max_child_px__pre_drag = max_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
-            F1 min_child_px__post_drag = min_child_px__pre_drag + drag_delta[panel->split_axis];
-            F1 max_child_px__post_drag = max_child_px__pre_drag - drag_delta[panel->split_axis];
-            min_child->pct_of_parent = min_child_px__post_drag / panel_rect[2 + panel->split_axis];
-            max_child->pct_of_parent = max_child_px__post_drag / panel_rect[2 + panel->split_axis];
+
+            F2  drag_data                =  ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F2)[0];
+            F2  drag_delta               =  ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
+            F1  min_child_pct__pre_drag  =  drag_data[0];
+            F1  max_child_pct__pre_drag  =  drag_data[1];
+            F1  min_child_px__pre_drag   =  min_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
+            F1  max_child_px__pre_drag   =  max_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
+            F1  min_child_px__post_drag  =  min_child_px__pre_drag + drag_delta[panel->split_axis];
+            F1  max_child_px__post_drag  =  max_child_px__pre_drag - drag_delta[panel->split_axis];
+
+            min_child->pct_of_parent  =  min_child_px__post_drag / panel_rect[2 + panel->split_axis];
+            max_child->pct_of_parent  =  max_child_px__post_drag / panel_rect[2 + panel->split_axis];
           }
         }
       }
 
       //- kti: build all leaf panel ui
-      for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
-        F4 panel_rect = panel_rect_from_root_rect(panel, root_plane_rect);
-        I1 panel_is_focused = state->focused_panel == panel;
+
+      for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next)
+      {
+        F4  panel_rect        =  panel_rect_from_root_rect(panel, root_plane_rect);
+        I1  panel_is_focused  =  state->focused_panel == panel;
 
         //- kti: Build ui
         if (panel->first == 0)
-        UI_Focus(panel_is_focused ? UI_FOCUS_KIND__NULL : UI_FOCUS_KIND__OFF) {
-          UI_Box *panel_box = 0;
+        {
+          UI_Focus(panel_is_focused ? UI_FOCUS_KIND__NULL : UI_FOCUS_KIND__OFF)
+          {
+            UI_Box *panel_box = 0;
 
-          UI_Focus(UI_FOCUS_KIND__ON) {
-            ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
-            ui_set_next_child_layout_axis(AXIS__Y);
-            panel_box = ui_build_box_from_stringf(
-              UI_BOX_FLAG__MOUSE_CLICKABLE |
-              UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY |
-              UI_BOX_FLAG__DRAW_BACKGROUND |
-              UI_BOX_FLAG__DRAW_BORDER |
-              UI_BOX_FLAG__FLOATING |
-              UI_BOX_FLAG__CLIP |
-              UI_BOX_FLAG__DEFAULT_FOCUS_NAV |
-              UI_BOX_FLAG__CLICK_TO_FOCUS,
-              "##panel_box_%p", panel);
-          }
-
-          UI_Parent(panel_box)
-          UI_Pref_Width(ui_pct(1.0f, 0.0f)) {
-            UI_Child_Layout_Axis(AXIS__X);
-            UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER, ui_key_zero());
-
-            UI_Parent((title_bar))
-            UI_Font_Size(10.0f) {
-              UI_Padding(ui_px(10.0f, 1.0f))
-              UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
-              if (panel->view_count == 0) {
-                ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("<no view>"));
-              } else for (L1 i = 0; i < panel->view_count; i += 1) {
-                ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
-              }
-
-              ui_spacer(ui_pct(1.0f, 0.0f));
-
-              UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-              UI_Pref_Height(ui_pct(1.0f, 1.0f))
-              UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-              UI_Tag(str8("subtle")) {
-                if (ui_button(str8("Split X")).flags & UI_SIGNAL_FLAG__CLICKED) {
-                  cmd_push((Cmd){
-                    .kind = CMD_KIND__OPEN_PANEL,
-                    .window = w,
-                    .panel = panel,
-                    .dir = DIR__RIGHT,
-                  });
-                }
-                if (ui_button(str8("Split Y")).flags & UI_SIGNAL_FLAG__CLICKED) {
-                  cmd_push((Cmd){
-                    .kind = CMD_KIND__OPEN_PANEL,
-                    .window = w,
-                    .panel = panel,
-                    .dir = DIR__DOWN,
-                  });
-                }
-                if (ui_button(str8("Close")).flags & UI_SIGNAL_FLAG__CLICKED) {
-                  cmd_push((Cmd){
-                    .kind = CMD_KIND__CLOSE_PANEL,
-                    .window = w,
-                    .panel = panel,
-                  });
-                }
-              }
+            UI_Focus(UI_FOCUS_KIND__ON)
+            {
+              ui_set_next_fixed_rect(rect_pad(panel_rect, -2.0f));
+              ui_set_next_child_layout_axis(AXIS__Y);
+              panel_box = ui_build_box_from_stringf(UI_BOX_FLAG__MOUSE_CLICKABLE       |
+                                                    UI_BOX_FLAG__DISABLE_FOCUS_OVERLAY |
+                                                    UI_BOX_FLAG__DRAW_BACKGROUND       |
+                                                    UI_BOX_FLAG__DRAW_BORDER           |
+                                                    UI_BOX_FLAG__FLOATING              |
+                                                    UI_BOX_FLAG__CLIP                  |
+                                                    UI_BOX_FLAG__DEFAULT_FOCUS_NAV     |
+                                                    UI_BOX_FLAG__CLICK_TO_FOCUS,
+                                                    "##panel_box_%p",
+                                                    panel);
             }
 
-            if (panel->view_count == 0) {
-              UI_Row()
-              UI_Padding(ui_px(10.0f, 1.0f)) {
-                UI_Column() {
+            UI_Parent(panel_box)
+            UI_Pref_Width(ui_pct(1.0f, 0.0f))
+            {
+              UI_Child_Layout_Axis(AXIS__X);
+
+              UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND |
+                                                        UI_BOX_FLAG__DRAW_BORDER,
+                                                        ui_key_zero());
+
+              UI_Parent((title_bar))
+              UI_Font_Size(10.0f)
+              {
+                UI_Padding(ui_px(10.0f, 1.0f))
+                UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+                {
+                  if (panel->view_count == 0)
+                  {
+                    ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("<no view>"));
+                  }
+                  else for (L1 i = 0; i < panel->view_count; i += 1)
+                  {
+                    ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
+                  }
+                }
+
+                ui_spacer(ui_pct(1.0f, 0.0f));
+
+                UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+                UI_Pref_Height(ui_pct(1.0f, 1.0f))
+                UI_Text_Align((UI_TEXT_ALIGN__CENTER))
+                UI_Tag(str8("subtle"))
+                {
+                  if (ui_button(str8("Split X")).flags & UI_SIGNAL_FLAG__CLICKED)
+                  {
+                    cmd_push((Cmd){
+                      .kind    =  CMD_KIND__OPEN_PANEL,
+                      .window  =  w,
+                      .panel   =  panel,
+                      .dir     =  DIR__RIGHT,
+                    });
+                  }
+
+                  if (ui_button(str8("Split Y")).flags & UI_SIGNAL_FLAG__CLICKED)
+                  {
+                    cmd_push((Cmd){
+                      .kind    =  CMD_KIND__OPEN_PANEL,
+                      .window  =  w,
+                      .panel   =  panel,
+                      .dir     =  DIR__DOWN,
+                    });
+                  }
+
+                  if (ui_button(str8("Close")).flags & UI_SIGNAL_FLAG__CLICKED)
+                  {
+                    cmd_push((Cmd){
+                      .kind    =  CMD_KIND__CLOSE_PANEL,
+                      .window  =  w,
+                      .panel   =  panel,
+                    });
+                  }
+                }
+              }
+
+              if (panel->view_count == 0)
+              {
+                UI_Row()
+                UI_Padding(ui_px(10.0f, 1.0f))
+                UI_Column()
+                {
                   UI_Tag(str8("accent"))
                   ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Choose view kind."));
 
@@ -1507,456 +1807,607 @@ Internal void lane(void *user_data) {
                   UI_Text_Align((UI_TEXT_ALIGN__CENTER))
                   UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
                   UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                  for (L1 i = 0; i < VIEW_KIND_COUNT; i += 1) {
-                    if (ui_button(view_kind_names [i]) .flags & UI_SIGNAL_FLAG__PRESSED) {
+                  for (L1 i = 0; i < VIEW_KIND_COUNT; i += 1)
+                  {
+                    if (ui_button(view_kind_names[i]).flags & UI_SIGNAL_FLAG__PRESSED)
+                    {
                       panel_push_view(panel, i);
                     }
                   }
                 }
               }
-            } else {
+              else
+              {
 
-              ////////////////////////////////
-              //~ Views.
+                ////////////////////////////////
+                //~ Views.
 
-              View *view = &panel->views[panel->selected_view_idx];
-              switch (view->kind) {
-                //- kti: Lister
-                case VIEW_KIND__LISTER: {
-                  ui_set_next_child_layout_axis(AXIS__Y);
-                  ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
-                  UI_Box *lister = ui_build_box_from_stringf(
-                    UI_BOX_FLAG__CLIP|
-                    UI_BOX_FLAG__ALLOW_OVERFLOW_Y|
-                    UI_BOX_FLAG__VIEW_SCROLL_Y|
-                    UI_BOX_FLAG__VIEW_CLAMP_Y,
-                    "lister%p", view);
-                  ui_signal_from_box(lister);
+                View *view = &panel->views[panel->selected_view_idx];
 
-                  UI_Parent(lister) {
-                    lister_ui();
-                  }
-                } break;
+                switch (view->kind)
+                {
+                  //- kti: Lister
+                  case VIEW_KIND__LISTER:
+                  {
+                    ui_set_next_child_layout_axis(AXIS__Y);
+                    ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
 
-                //- kti: Rendered image result.
-                case VIEW_KIND__RT_RENDER:
-                case VIEW_KIND__USER_RENDER: {
-                  ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
-                  ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
-                  ui_set_next_tag(str8("viewport"));
-                  view->render_result_box = ui_build_box_from_stringf(
-                    UI_BOX_FLAG__DRAW_BACKGROUND|
-                    UI_BOX_FLAG__CLIP|
-                    UI_BOX_FLAG__CLICKABLE,
-                    "##render_result_%p_%d", panel, view->kind);
+                    UI_Box *lister = ui_build_box_from_stringf(UI_BOX_FLAG__CLIP             |
+                                                               UI_BOX_FLAG__ALLOW_OVERFLOW_Y |
+                                                               UI_BOX_FLAG__VIEW_SCROLL_Y    |
+                                                               UI_BOX_FLAG__VIEW_CLAMP_Y,
+                                                               "lister%p",
+                                                               view);
+                    ui_signal_from_box(lister);
 
-                  UI_Signal signal = ui_signal_from_box(view->render_result_box);
-                  if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-                    cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                  }
-                } break;
-
-                //- kti: 3D viewport.
-                case VIEW_KIND__VIEWPORT: {
-                  //- kti: Animate camera.
-                  view->camera.pos = lerp_snap_F4(view->camera.pos, 0.2f, view->target_camera.pos, 0.001f);
-                  view->camera.pitch = lerp_snap_F1(view->camera.pitch, 0.3f, view->target_camera.pitch, 0.001f);
-                  view->camera.yaw = lerp_snap_F1(view->camera.yaw, 0.3f, view->target_camera.yaw, 0.001f);
-                  view->camera.fov = lerp_snap_F1(view->camera.fov, 0.15f, view->target_camera.fov, 0.001f);
-                  view->camera.near_z = lerp_snap_F1(view->camera.near_z, 0.15f, view->target_camera.near_z, 0.001f);
-                  view->camera.far_z = lerp_snap_F1(view->camera.far_z, 0.15f, view->target_camera.far_z, 0.001f);
-                  if (length_sq_F4(view->camera.pos - view->target_camera.pos) != 0.0f ||
-                      view->camera.pitch != view->target_camera.pitch ||
-                      view->camera.yaw != view->target_camera.yaw ||
-                      view->camera.fov != view->target_camera.fov ||
-                      view->camera.near_z != view->target_camera.near_z ||
-                      view->camera.far_z != view->target_camera.far_z) {
-                    state->animation_active = 1;
-                  }
-
-                  //- kti: Build box.
-                  
-                  ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
-                  ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
-                  ui_set_next_tag(str8("viewport"));
-                  view->viewport_box = ui_build_box_from_stringf(
-                    UI_BOX_FLAG__DRAW_BACKGROUND|
-                    UI_BOX_FLAG__CLIP|
-                    UI_BOX_FLAG__CLICKABLE|
-                    UI_BOX_FLAG__SCROLL,
-                    "##viewport_%p", panel);
-
-                  UI_Signal viewport_signal = ui_signal_from_box(view->viewport_box);
-                  F2 left_drag_delta = ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
-                  F2 right_drag_delta = ui_drag_delta(OS_MOUSE_BUTTON__RIGHT);
-                  F4 rect = view->viewport_box->rect;
-
-                  //- kti: Hit test last frame's gizmo.
-                  view->gizmo_hot_kind = GIZMO_KIND__NONE;
-                  view->gizmo_hot_axis = AXIS__INVALID;
-                  if (view->gizmo_visible && view->gizmo_active_kind == GIZMO_KIND__NONE) {
-                    Axis hot_knob = AXIS__INVALID;
-                    Axis hot_shaft = AXIS__INVALID;
-                    F1 knob_dist = 9.0f;
-                    F1 shaft_dist = 7.0f;
-                    for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
-                      F2 screen_axis = view->gizmo_axes_screen[axis];
-                      F1 screen_length = length_F2(screen_axis);
-                      if (screen_length > 1.0f) {
-                        F2 end = view->gizmo_screen_pos + screen_axis;
-                        F1 dist = length_F2(ui_mouse() - end);
-                        if (dist < knob_dist) {
-                          knob_dist = dist;
-                          hot_knob = axis;
-                        }
-                        F2 dir = screen_axis/screen_length;
-                        dist = distance_to_segment_F2(ui_mouse(), view->gizmo_screen_pos + 2.0f*dir, end - 8.0f*dir);
-                        if (dist < shaft_dist) {
-                          shaft_dist = dist;
-                          hot_shaft = axis;
-                        }
-                      }
+                    UI_Parent(lister)
+                    {
+                      lister_ui();
                     }
-                    view->gizmo_hot_axis = hot_knob != AXIS__INVALID ? hot_knob : hot_shaft;
-                    view->gizmo_hot_kind = hot_knob != AXIS__INVALID ? GIZMO_KIND__SCALE : hot_shaft != AXIS__INVALID ? GIZMO_KIND__TRANSLATE : GIZMO_KIND__NONE;
+                  } break;
 
-                    if (view->gizmo_hot_kind == GIZMO_KIND__NONE && view->gizmo_rotation_visible) {
-                      F1 ring_dist = 7.0f;
-                      for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
-                        for (L1 i = 0; i < GIZMO_ROTATION_SEGMENT_COUNT; i += 1) {
-                          L1 next = (i + 1)%GIZMO_ROTATION_SEGMENT_COUNT;
-                          if (view->gizmo_rotation_points_visible[axis][i] &&
-                              view->gizmo_rotation_points_visible[axis][next]) {
-                            F1 dist = distance_to_segment_F2(ui_mouse(),
-                              view->gizmo_rotation_points_screen[axis][i],
-                              view->gizmo_rotation_points_screen[axis][next]);
-                            if (dist < ring_dist) {
-                              ring_dist = dist;
-                              view->gizmo_hot_axis = axis;
-                              view->gizmo_hot_kind = GIZMO_KIND__ROTATE;
-                            }
-                          }
-                        }
-                      }
-                    }
-                  } else if (view->gizmo_active_kind != GIZMO_KIND__NONE) {
-                    view->gizmo_hot_kind = view->gizmo_active_kind;
-                    view->gizmo_hot_axis = view->gizmo_active_axis;
-                  }
+                  //- kti: Rendered image result.
+                  case VIEW_KIND__RT_RENDER:
+                  case VIEW_KIND__USER_RENDER:
+                  {
+                    ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+                    ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
+                    ui_set_next_tag(str8("viewport"));
 
-                  I1 mouse_captured = view->gizmo_active_kind != GIZMO_KIND__NONE;
-                  if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED &&
-                      view->gizmo_hot_kind != GIZMO_KIND__NONE) {
-                    view->gizmo_active_kind = view->gizmo_hot_kind;
-                    view->gizmo_active_axis = view->gizmo_hot_axis;
+                    view->render_result_box = ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_BACKGROUND |
+                                                                        UI_BOX_FLAG__CLIP            |
+                                                                        UI_BOX_FLAG__CLICKABLE,
+                                                                        "##render_result_%p_%d",
+                                                                        panel,
+                                                                        view->kind);
 
-                    Gizmo_Drag drag = {0};
-                    if (view->gizmo_active_kind == GIZMO_KIND__ROTATE) {
-                      F2 mouse = ui_mouse();
-                      F1 aspect = rect[2]/rect[3];
-                      F1 u = (mouse[0] - rect[0])/rect[2];
-                      F1 v = (mouse[1] - rect[1])/rect[3];
-                      F1 tan_half_fov = tan_F1(0.5f*view->camera.fov);
-                      F4 ray_dir_camera = normalize_F4((F4){
-                        (2.0f*u - 1.0f)*aspect*tan_half_fov,
-                        (1.0f - 2.0f*v)*tan_half_fov,
-                        1.0f,
-                        0.0f,
-                      });
-                      F4x4 camera_rotation = mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
-                      Ray ray = {
-                        .pos = view->camera.pos,
-                        .dir = mul_F4x4_F4(camera_rotation, ray_dir_camera),
-                      };
+                    UI_Signal signal = ui_signal_from_box(view->render_result_box);
 
-                      drag.rotation_axis[view->gizmo_active_axis] = 1.0f;
-                      Plane rotation_plane = {
-                        .normal = V3_from_F4(drag.rotation_axis),
-                        .d = -dot_F4(drag.rotation_axis, view->gizmo_pos),
-                      };
-                      F1 t = ray_plane_intersect(ray, rotation_plane);
-                      if (t > 0.0f) {
-                        drag.rotation_direction = normalize_F4(ray.pos + t*ray.dir - view->gizmo_pos);
-                      } else {
-                        view->gizmo_active_kind = GIZMO_KIND__NONE;
-                        view->gizmo_active_axis = AXIS__INVALID;
-                      }
-                    } else {
-                      Axis axis = view->gizmo_active_axis;
-                      drag.axis_screen = view->gizmo_axes_screen[axis]/(GIZMO_AXIS_LENGTH_PX*view->gizmo_world_per_pixel);
-                    }
-                    if (view->gizmo_active_kind != GIZMO_KIND__NONE) {
-                      ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &drag);
-                      mouse_captured = 1;
+                    if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED)
+                    {
                       cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
                     }
-                  }
+                  } break;
 
-                  //- kti: Reset axis to 0 on middle mouse press.
-                  if (!mouse_captured && viewport_signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED && view->gizmo_hot_kind == GIZMO_KIND__TRANSLATE) {
-                    Axis axis = view->gizmo_hot_axis;
-                    for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-                      if (entity->flags & ENTITY_FLAG__SELECTED) {
-                        entity->pos[axis] -= view->gizmo_pos[axis];
+                  //- kti: 3D viewport.
+                  case VIEW_KIND__VIEWPORT:
+                  {
+                    //- kti: Animate camera.
+                    view->camera.pos     =  lerp_snap_F4(view->camera.pos, 0.2f, view->target_camera.pos, 0.001f);
+                    view->camera.pitch   =  lerp_snap_F1(view->camera.pitch, 0.3f, view->target_camera.pitch, 0.001f);
+                    view->camera.yaw     =  lerp_snap_F1(view->camera.yaw, 0.3f, view->target_camera.yaw, 0.001f);
+                    view->camera.fov     =  lerp_snap_F1(view->camera.fov, 0.15f, view->target_camera.fov, 0.001f);
+                    view->camera.near_z  =  lerp_snap_F1(view->camera.near_z, 0.15f, view->target_camera.near_z, 0.001f);
+                    view->camera.far_z   =  lerp_snap_F1(view->camera.far_z, 0.15f, view->target_camera.far_z, 0.001f);
+
+                    if (length_sq_F4(view->camera.pos - view->target_camera.pos) != 0.0f
+                        || view->camera.pitch   !=  view->target_camera.pitch
+                        || view->camera.yaw     !=  view->target_camera.yaw
+                        || view->camera.fov     !=  view->target_camera.fov
+                        || view->camera.near_z  !=  view->target_camera.near_z
+                        || view->camera.far_z   !=  view->target_camera.far_z)
+                    {
+                      state->animation_active = 1;
+                    }
+
+                    //- kti: Build box.
+
+                    ui_set_next_pref_width(ui_pct(1.0f, 0.0f));
+                    ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
+                    ui_set_next_tag(str8("viewport"));
+
+                    view->viewport_box = ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_BACKGROUND |
+                                                                   UI_BOX_FLAG__CLIP            |
+                                                                   UI_BOX_FLAG__CLICKABLE       |
+                                                                   UI_BOX_FLAG__SCROLL,
+                                                                   "##viewport_%p",
+                                                                   panel);
+
+                    UI_Signal  viewport_signal   =  ui_signal_from_box(view->viewport_box);
+                    F2         left_drag_delta   =  ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
+                    F2         right_drag_delta  =  ui_drag_delta(OS_MOUSE_BUTTON__RIGHT);
+                    F4         rect              =  view->viewport_box->rect;
+
+                    //- kti: Hit test last frame's gizmo.
+                    view->gizmo_hot_kind  =  GIZMO_KIND__NONE;
+                    view->gizmo_hot_axis  =  AXIS__INVALID;
+
+                    if (view->gizmo_visible && view->gizmo_active_kind == GIZMO_KIND__NONE)
+                    {
+                      Axis  hot_knob    =  AXIS__INVALID;
+                      Axis  hot_shaft   =  AXIS__INVALID;
+                      F1    knob_dist   =  9.0f;
+                      F1    shaft_dist  =  7.0f;
+
+                      for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
+                      {
+                        F2  screen_axis    =  view->gizmo_axes_screen[axis];
+                        F1  screen_length  =  length_F2(screen_axis);
+
+                        if (screen_length > 1.0f)
+                        {
+                          F2  end   =  view->gizmo_screen_pos + screen_axis;
+                          F1  dist  =  length_F2(ui_mouse() - end);
+
+                          if (dist < knob_dist)
+                          {
+                            knob_dist  =  dist;
+                            hot_knob   =  axis;
+                          }
+
+                          F2  dir = screen_axis / screen_length;
+
+                          dist = distance_to_segment_F2(ui_mouse(), view->gizmo_screen_pos + 2.0f * dir, end - 8.0f * dir);
+
+                          if (dist < shaft_dist)
+                          {
+                            shaft_dist  =  dist;
+                            hot_shaft   =  axis;
+                          }
+                        }
+                      }
+    
+                      view->gizmo_hot_axis  =  hot_knob != AXIS__INVALID ? hot_knob : hot_shaft;
+                      view->gizmo_hot_kind  =  hot_knob != AXIS__INVALID  ? GIZMO_KIND__SCALE
+                                             : hot_shaft != AXIS__INVALID ? GIZMO_KIND__TRANSLATE
+                                                                          : GIZMO_KIND__NONE;
+
+                      if (view->gizmo_hot_kind == GIZMO_KIND__NONE && view->gizmo_rotation_visible)
+                      {
+                        F1 ring_dist = 7.0f;
+
+                        for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
+                        {
+                          for (L1 i = 0; i < GIZMO_ROTATION_SEGMENT_COUNT; i += 1)
+                          {
+                            L1 next = (i + 1) % GIZMO_ROTATION_SEGMENT_COUNT;
+
+                            if (view->gizmo_rotation_points_visible[axis][i]
+                                &&
+                                view->gizmo_rotation_points_visible[axis][next])
+                            {
+                              F1 dist = distance_to_segment_F2(ui_mouse(),
+                                                               view->gizmo_rotation_points_screen[axis][i],
+                                                               view->gizmo_rotation_points_screen[axis][next]);
+                              if (dist < ring_dist)
+                              {
+                                ring_dist             =  dist;
+                                view->gizmo_hot_axis  =  axis;
+                                view->gizmo_hot_kind  =  GIZMO_KIND__ROTATE;
+                              }
+                            }
+                          }
+                        }
                       }
                     }
-                    cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                  }
+                    else if (view->gizmo_active_kind != GIZMO_KIND__NONE)
+                    {
+                      view->gizmo_hot_kind  =  view->gizmo_active_kind;
+                      view->gizmo_hot_axis  =  view->gizmo_active_axis;
+                    }
 
-                  if (mouse_captured && viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING) {
-                    Gizmo_Drag *drag = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, Gizmo_Drag);
-                    if (view->gizmo_active_kind == GIZMO_KIND__ROTATE) {
-                      F2 mouse = ui_mouse();
-                      F1 aspect = rect[2]/rect[3];
-                      F1 u = (mouse[0] - rect[0])/rect[2];
-                      F1 v = (mouse[1] - rect[1])/rect[3];
-                      F1 tan_half_fov = tan_F1(0.5f*view->camera.fov);
-                      F4 ray_dir_camera = normalize_F4((F4){
-                        (2.0f*u - 1.0f)*aspect*tan_half_fov,
-                        (1.0f - 2.0f*v)*tan_half_fov,
+                    I1 mouse_captured = view->gizmo_active_kind != GIZMO_KIND__NONE;
+
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED
+                        &&
+                        view->gizmo_hot_kind != GIZMO_KIND__NONE)
+                    {
+                      view->gizmo_active_kind  =  view->gizmo_hot_kind;
+                      view->gizmo_active_axis  =  view->gizmo_hot_axis;
+
+                      Gizmo_Drag drag = {0};
+
+                      if (view->gizmo_active_kind == GIZMO_KIND__ROTATE)
+                      {
+                        F2    mouse            =  ui_mouse();
+                        F1    aspect           =  rect[2] / rect[3];
+                        F1    u                =  (mouse[0] - rect[0]) / rect[2];
+                        F1    v                =  (mouse[1] - rect[1]) / rect[3];
+                        F1    tan_half_fov     =  tan_F1(0.5f * view->camera.fov);
+                        F4x4  camera_rotation  =  mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
+                        F4    ray_dir_camera   =  normalize_F4((F4){
+                          (2.0f * u - 1.0f) * aspect * tan_half_fov,
+                          (1.0f - 2.0f * v) * tan_half_fov,
+                          1.0f, 0.0f,
+                        });
+                        Ray ray = {
+                          .pos = view->camera.pos,
+                          .dir = mul_F4x4_F4(camera_rotation, ray_dir_camera),
+                        };
+
+                        drag.rotation_axis[view->gizmo_active_axis] = 1.0f;
+
+                        Plane rotation_plane = {
+                          .normal  =  V3_from_F4(drag.rotation_axis),
+                          .d       =  -dot_F4(drag.rotation_axis, view->gizmo_pos),
+                        };
+
+                        F1 t = ray_plane_intersect(ray, rotation_plane);
+
+                        if (t > 0.0f)
+                        {
+                          drag.rotation_direction = normalize_F4(ray.pos + t * ray.dir - view->gizmo_pos);
+                        }
+                        else
+                        {
+                          view->gizmo_active_kind  =  GIZMO_KIND__NONE;
+                          view->gizmo_active_axis  =  AXIS__INVALID;
+                        }
+                      }
+                      else
+                      {
+                        Axis axis = view->gizmo_active_axis;
+
+                        drag.axis_screen = view->gizmo_axes_screen[axis] / (GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel);
+                      }
+
+                      if (view->gizmo_active_kind != GIZMO_KIND__NONE)
+                      {
+                        ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &drag);
+
+                        mouse_captured        =  1;
+                        cmd_push((Cmd){.kind  =  CMD_KIND__FOCUS_PANEL, .panel = panel});
+                      }
+                    }
+
+                    //- kti: Reset axis to 0 on middle mouse press.
+                    if (!mouse_captured
+                        && viewport_signal.flags & UI_SIGNAL_FLAG__MIDDLE_PRESSED
+                        && view->gizmo_hot_kind == GIZMO_KIND__TRANSLATE)
+                    {
+                      Axis axis = view->gizmo_hot_axis;
+
+                      for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+                      {
+                        if (entity->flags & ENTITY_FLAG__SELECTED)
+                        {
+                          entity->pos[axis] -= view->gizmo_pos[axis];
+                        }
+                      }
+
+                      cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                    }
+
+                    if (mouse_captured
+                        && viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING)
+                    {
+                      Gizmo_Drag *drag = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, Gizmo_Drag);
+
+                      if (view->gizmo_active_kind == GIZMO_KIND__ROTATE)
+                      {
+                        F2    mouse            =  ui_mouse();
+                        F1    aspect           =  rect[2] / rect[3];
+                        F1    u                =  (mouse[0] - rect[0]) / rect[2];
+                        F1    v                =  (mouse[1] - rect[1]) / rect[3];
+                        F1    tan_half_fov     =  tan_F1(0.5f * view->camera.fov);
+                        F4x4  camera_rotation  =  mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
+                        F4    ray_dir_camera   =  normalize_F4((F4){
+                          (2.0f * u - 1.0f) * aspect * tan_half_fov,
+                          (1.0f - 2.0f * v) * tan_half_fov,
+                          1.0f,
+                          0.0f,
+                        });
+                        Ray ray = {
+                          .pos = view->camera.pos,
+                          .dir = mul_F4x4_F4(camera_rotation, ray_dir_camera),
+                        };
+                        Plane rotation_plane = {
+                          .normal  =  V3_from_F4(drag[0].rotation_axis),
+                          .d       =  -dot_F4(drag[0].rotation_axis, view->gizmo_pos),
+                        };
+
+                        F1 t = ray_plane_intersect(ray, rotation_plane);
+
+                        if (t > 0.0f)
+                        {
+                          F4  direction  =  normalize_F4(ray.pos + t * ray.dir - view->gizmo_pos);
+                          F1  a          =  dot_F4(drag[0].rotation_axis, cross_F4(drag[0].rotation_direction, direction));
+                          F1  b          =  dot_F4(drag[0].rotation_direction, direction);
+                          F1  angle      =  atan2f(a, b);
+
+                          F4x4 rotation = view->gizmo_active_axis == AXIS__X   ? rotate_x_F4x4(angle)
+                                          : view->gizmo_active_axis == AXIS__Y ? rotate_y_F4x4(angle)
+                                                                               : rotate_z_F4x4(angle);
+
+                          for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+                          {
+                            if (entity->flags & ENTITY_FLAG__SELECTED)
+                            {
+                              I1 has_direction = (entity->flags & ENTITY_FLAG__CAMERA) || ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__PLANE);
+                              if (has_direction)
+                              {
+                                entity->direction = normalize_F4(mul_F4x4_F4(rotation, entity->direction));
+                              }
+                            }
+                          }
+
+                          drag[0].rotation_direction = direction;
+                        }
+                      }
+                      else
+                      {
+                        F1 axis_len_sq = dot_F2(drag[0].axis_screen, drag[0].axis_screen);
+
+                        if (axis_len_sq > 0.0001f)
+                        {
+                          F1  amount  =  dot_F2(left_drag_delta, drag[0].axis_screen) / axis_len_sq;
+                          F1  change  =  amount - drag[0].applied_amount;
+
+                          for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+                          {
+                            if (entity->flags & ENTITY_FLAG__SELECTED)
+                            {
+                              Axis axis = view->gizmo_active_axis;
+
+                              if (view->gizmo_active_kind == GIZMO_KIND__TRANSLATE)
+                              {
+                                entity->pos[axis] += change;
+                              }
+                              else if (entity->shape_kind == SHAPE_KIND__BOX)
+                              {
+                                entity->size[axis] = Max(0.01f, entity->size[axis] + change);
+                              }
+                              else if (entity->shape_kind == SHAPE_KIND__SPHERE)
+                              {
+                                entity->sphere_diameter = Max(0.01f, entity->sphere_diameter + change);
+                              }
+                            }
+                          }
+
+                          drag[0].applied_amount = amount;
+                        }
+                      }
+                    }
+
+                    //- kti: Update the gizmo after applying the transform.
+                    F4  position_sum     =  {0};
+                    L1  selected_count   =  0;
+                    L1  direction_count  =  0;
+
+                    for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+                    {
+                      if (entity->flags & ENTITY_FLAG__SELECTED)
+                      {
+                        position_sum    +=  entity->pos;
+                        selected_count  +=  1;
+
+                        I1 has_direction = (entity->flags & ENTITY_FLAG__CAMERA) || ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__PLANE);
+                        if (has_direction)
+                        {
+                          direction_count += 1;
+                        }
+                      }
+                    }
+
+                    view->gizmo_visible           =  selected_count != 0 && rect[2] > 0.0f && rect[3] > 0.0f;
+                    view->gizmo_rotation_visible  =  direction_count != 0;
+
+                    if (view->gizmo_visible)
+                    {
+                      view->gizmo_pos = position_sum / (F1)selected_count;
+
+                      F4x4  view_projection  =  camera_view_projection(view->camera, rect[2], rect[3]);
+                      F4    pivot_clip       =  mul_F4x4_F4(view_projection, F4_with_w(view->gizmo_pos, 1.0f));
+
+                      view->gizmo_visible = pivot_clip[3] > view->camera.near_z;
+
+                      if (view->gizmo_visible)
+                      {
+                        F2 pivot_ndc = F2_from_F4(pivot_clip / pivot_clip[3]);
+
+                        view->gizmo_world_per_pixel  =  2.0f * pivot_clip[3] * tan_F1(0.5f * view->camera.fov) / rect[3];
+                        view->gizmo_screen_pos       =  (F2){
+                          rect[0] + (pivot_ndc[0] * 0.5f + 0.5f) * rect[2],
+                          rect[1] + (0.5f - pivot_ndc[1] * 0.5f) * rect[3],
+                        };
+
+                        for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
+                        {
+                          F4 end = view->gizmo_pos;
+
+                          end[axis] += GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel;
+
+                          F4 end_clip = mul_F4x4_F4(view_projection, F4_with_w(end, 1.0f));
+
+                          view->gizmo_axes_screen[axis] = (F2){0};
+
+                          if (end_clip[3] > view->camera.near_z)
+                          {
+                            F2  end_ndc     =  F2_from_F4(end_clip / end_clip[3]);
+                            F2  end_screen  =  {
+                              rect[0] + (end_ndc[0] * 0.5f + 0.5f) * rect[2],
+                              rect[1] + (0.5f - end_ndc[1] * 0.5f) * rect[3],
+                            };
+                            view->gizmo_axes_screen[axis] = end_screen - view->gizmo_screen_pos;
+                          }
+                        }
+
+                        if (view->gizmo_rotation_visible)
+                        {
+                          F1 radius = GIZMO_ROTATION_RADIUS_PX * view->gizmo_world_per_pixel;
+
+                          for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
+                          {
+                            F4  basis_a  =  {0};
+                            F4  basis_b  =  {0};
+
+                            if (axis == AXIS__X)
+                            {
+                              basis_a[AXIS__Y]  =  1.0f;
+                              basis_b[AXIS__Z]  =  1.0f;
+                            }
+                            else if (axis == AXIS__Y)
+                            {
+                              basis_a[AXIS__Z]  =  1.0f;
+                              basis_b[AXIS__X]  =  1.0f;
+                            }
+                            else
+                            {
+                              basis_a[AXIS__X]  =  1.0f;
+                              basis_b[AXIS__Y]  =  1.0f;
+                            }
+
+                            for (L1 i = 0; i < GIZMO_ROTATION_SEGMENT_COUNT; i += 1)
+                            {
+                              F1  angle       =  2.0f * PI * (F1)i / (F1)GIZMO_ROTATION_SEGMENT_COUNT;
+                              F4  point       =  view->gizmo_pos + radius * (cos_F1(angle) * basis_a + sin_F1(angle) * basis_b);
+                              F4  point_clip  =  mul_F4x4_F4(view_projection, F4_with_w(point, 1.0f));
+
+                              view->gizmo_rotation_points_visible[axis][i] = point_clip[3] > view->camera.near_z;
+
+                              if (view->gizmo_rotation_points_visible[axis][i])
+                              {
+                                F2 point_ndc = F2_from_F4(point_clip / point_clip[3]);
+
+                                view->gizmo_rotation_points_screen[axis][i] = (F2){
+                                  rect[0] + (point_ndc[0] * 0.5f + 0.5f) * rect[2],
+                                  rect[1] + (0.5f - point_ndc[1] * 0.5f) * rect[3],
+                                };
+                              }
+                            }
+                          }
+                        }
+                      }
+                      else
+                      {
+                        view->gizmo_rotation_visible = 0;
+                      }
+                    }
+                    else
+                    {
+                      view->gizmo_rotation_visible = 0;
+                    }
+
+                    //- kti: Dolly.
+                    if (viewport_signal.scroll[1] != 0.0f)
+                    {
+                      F4x4  camera_rotation  =  mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
+                      F4    camera_forward   =  mul_F4x4_F4(camera_rotation, (F4){0.0f, 0.0f, 1.0f, 0.0f});
+                      F1    dolly_speed      =  0.025f;
+
+                      view->target_camera.pos -= viewport_signal.scroll[1] * dolly_speed * camera_forward;
+                    }
+
+                    I1 left_is_click = dot_F2(left_drag_delta, left_drag_delta) <= Square(4.0f);
+
+                    //- kti: Panning
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED && !mouse_captured)
+                    {
+                      F4 camera_drag_start_pos = view->camera.pos;
+
+                      ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &camera_drag_start_pos);
+
+                      cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+                    }
+
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !left_is_click && !mouse_captured)
+                    {
+                      F4    camera_drag_start_pos  =  ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F4)[0];
+                      F4x4  camera_rotation        =  mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
+                      F4    camera_right           =  mul_F4x4_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
+                      F4    camera_up              =  mul_F4x4_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
+                      F1    pan_speed              =  0.01f;
+
+                      view->target_camera.pos = camera_drag_start_pos - left_drag_delta[0] * pan_speed * camera_right + left_drag_delta[1] * pan_speed * camera_up;
+                    }
+
+                    //- kti: Rotating
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_PRESSED)
+                    {
+                      view->camera_drag_start_yaw    =  view->camera.yaw;
+                      view->camera_drag_start_pitch  =  view->camera.pitch;
+                      cmd_push((Cmd){.kind           =  CMD_KIND__FOCUS_PANEL, .panel = panel});
+                    }
+
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_DRAGGING)
+                    {
+                      F1 rotate_speed = 0.003f;
+
+                      view->target_camera.yaw    =  view->camera_drag_start_yaw + right_drag_delta[0] * rotate_speed;
+                      view->target_camera.pitch  =  Clamp(-0.49f * PI, view->camera_drag_start_pitch + right_drag_delta[1] * rotate_speed, 0.49f * PI);
+                    }
+
+                    //- kti: Entity Selecting / Selection
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && left_is_click && !mouse_captured)
+                    {
+                      F2    mouse            =  ui_mouse();
+                      F4    rect             =  view->viewport_box->rect;
+                      F1    aspect           =  rect[2] / rect[3];
+                      F1    u                =  (mouse[0] - rect[0]) / rect[2];
+                      F1    v                =  (mouse[1] - rect[1]) / rect[3];
+                      F1    tan_half_fov     =  tanf(0.5f * view->camera.fov);
+                      F4x4  camera_rotation  =  mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
+                      F4    ray_dir_camera   =  normalize_F4((F4){
+                        (2.0f * u - 1) * aspect * tan_half_fov,
+                        (1.0f - 2.0f * v) * tan_half_fov,
                         1.0f,
                         0.0f,
                       });
-                      F4x4 camera_rotation = mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
+
                       Ray ray = {
-                        .pos = view->camera.pos,
-                        .dir = mul_F4x4_F4(camera_rotation, ray_dir_camera),
+                        .pos  =  view->camera.pos,
+                        .dir  =  mul_F4x4_F4(camera_rotation, ray_dir_camera),
                       };
-                      Plane rotation_plane = {
-                        .normal = V3_from_F4(drag[0].rotation_axis),
-                        .d = -dot_F4(drag[0].rotation_axis, view->gizmo_pos),
-                      };
-                      F1 t = ray_plane_intersect(ray, rotation_plane);
-                      if (t > 0.0f) {
-                        F4 direction = normalize_F4(ray.pos + t*ray.dir - view->gizmo_pos);
-                        F1 angle = atan2f(dot_F4(drag[0].rotation_axis, cross_F4(drag[0].rotation_direction, direction)), dot_F4(drag[0].rotation_direction, direction));
-                        F4x4 rotation = view->gizmo_active_axis == AXIS__X ? rotate_x_F4x4(angle) : view->gizmo_active_axis == AXIS__Y ? rotate_y_F4x4(angle) : rotate_z_F4x4(angle);
+                      ray.inv_dir = 1.0f / ray.dir;
 
-                        for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-                          if (entity->flags & ENTITY_FLAG__SELECTED) {
-                            I1 has_direction = (entity->flags & ENTITY_FLAG__CAMERA) ||
-                              ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__PLANE);
-                            if (has_direction) {
-                              entity->direction = normalize_F4(mul_F4x4_F4(rotation, entity->direction));
-                            }
-                          }
+                      F1             min_hit_distance  =  0.001f;
+                      F1             closest_t         =  F1_MAX;
+                      Entity_Handle  picked_entity     =  entity_handle_zero();
+
+                      for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next)
+                      {
+                        if (!(e->flags & ENTITY_FLAG__SHAPE))
+                        {
+                          continue;
                         }
-                        drag[0].rotation_direction = direction;
-                      }
-                    } else {
-                      F1 axis_len_sq = dot_F2(drag[0].axis_screen, drag[0].axis_screen);
-                      if (axis_len_sq > 0.0001f) {
-                        F1 amount = dot_F2(left_drag_delta, drag[0].axis_screen)/axis_len_sq;
-                        F1 change = amount - drag[0].applied_amount;
-                        for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-                          if (entity->flags & ENTITY_FLAG__SELECTED) {
-                            Axis axis = view->gizmo_active_axis;
-                            if (view->gizmo_active_kind == GIZMO_KIND__TRANSLATE) {
-                              entity->pos[axis] += change;
-                            } else if (entity->shape_kind == SHAPE_KIND__BOX) {
-                              entity->size[axis] = Max(0.01f, entity->size[axis] + change);
-                            } else if (entity->shape_kind == SHAPE_KIND__SPHERE) {
-                              entity->sphere_diameter = Max(0.01f, entity->sphere_diameter + change);
-                            }
-                          }
-                        }
-                        drag[0].applied_amount = amount;
-                      }
-                    }
-                  }
 
-                  //- kti: Update the gizmo after applying the transform.
-                  F4 position_sum = {0};
-                  L1 selected_count = 0;
-                  L1 direction_count = 0;
-                  for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-                    if (entity->flags & ENTITY_FLAG__SELECTED) {
-                      position_sum += entity->pos;
-                      selected_count += 1;
+                        Shape  shape  =  shape_from_entity(e);
+                        F1     t      =  ray_shape_intersect(ray, shape);
 
-                      I1 has_direction = (entity->flags & ENTITY_FLAG__CAMERA) ||
-                        ((entity->flags & ENTITY_FLAG__SHAPE) && entity->shape_kind == SHAPE_KIND__PLANE);
-                      if (has_direction) {
-                        direction_count += 1;
-                      }
-                    }
-                  }
-
-                  view->gizmo_visible = selected_count != 0 && rect[2] > 0.0f && rect[3] > 0.0f;
-                  view->gizmo_rotation_visible = direction_count != 0;
-                  if (view->gizmo_visible) {
-                    view->gizmo_pos = position_sum/(F1)selected_count;
-
-                    F4x4 view_projection = camera_view_projection(view->camera, rect[2], rect[3]);
-                    F4 pivot_clip = mul_F4x4_F4(view_projection, F4_with_w(view->gizmo_pos, 1.0f));
-                    view->gizmo_visible = pivot_clip[3] > view->camera.near_z;
-                    if (view->gizmo_visible) {
-                      F2 pivot_ndc = F2_from_F4(pivot_clip/pivot_clip[3]);
-                      view->gizmo_screen_pos = (F2){
-                        rect[0] + (pivot_ndc[0]*0.5f + 0.5f)*rect[2],
-                        rect[1] + (0.5f - pivot_ndc[1]*0.5f)*rect[3],
-                      };
-                      view->gizmo_world_per_pixel = 2.0f*pivot_clip[3]*tan_F1(0.5f*view->camera.fov)/rect[3];
-                      for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
-                        F4 end = view->gizmo_pos;
-                        end[axis] += GIZMO_AXIS_LENGTH_PX*view->gizmo_world_per_pixel;
-                        F4 end_clip = mul_F4x4_F4(view_projection, F4_with_w(end, 1.0f));
-                        view->gizmo_axes_screen[axis] = (F2){0};
-                        if (end_clip[3] > view->camera.near_z) {
-                          F2 end_ndc = F2_from_F4(end_clip/end_clip[3]);
-                          F2 end_screen = {
-                            rect[0] + (end_ndc[0]*0.5f + 0.5f)*rect[2],
-                            rect[1] + (0.5f - end_ndc[1]*0.5f)*rect[3],
-                          };
-                          view->gizmo_axes_screen[axis] = end_screen - view->gizmo_screen_pos;
+                        if (t > min_hit_distance && t < closest_t)
+                        {
+                          closest_t      =  t;
+                          picked_entity  =  entity_handle(e);
                         }
                       }
 
-                      if (view->gizmo_rotation_visible) {
-                        F1 radius = GIZMO_ROTATION_RADIUS_PX*view->gizmo_world_per_pixel;
-                        for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
-                          F4 basis_a = {0};
-                          F4 basis_b = {0};
-                          if (axis == AXIS__X) {
-                            basis_a[AXIS__Y] = 1.0f;
-                            basis_b[AXIS__Z] = 1.0f;
-                          } else if (axis == AXIS__Y) {
-                            basis_a[AXIS__Z] = 1.0f;
-                            basis_b[AXIS__X] = 1.0f;
-                          } else {
-                            basis_a[AXIS__X] = 1.0f;
-                            basis_b[AXIS__Y] = 1.0f;
-                          }
+                      I1 additive = !!(viewport_signal.modifiers & OS_MODIFIER_FLAG__SHIFT);
 
-                          for (L1 i = 0; i < GIZMO_ROTATION_SEGMENT_COUNT; i += 1) {
-                            F1 angle = 2.0f*PI*(F1)i/(F1)GIZMO_ROTATION_SEGMENT_COUNT;
-                            F4 point = view->gizmo_pos + radius*(cos_F1(angle)*basis_a + sin_F1(angle)*basis_b);
-                            F4 point_clip = mul_F4x4_F4(view_projection, F4_with_w(point, 1.0f));
-                            view->gizmo_rotation_points_visible[axis][i] = point_clip[3] > view->camera.near_z;
-                            if (view->gizmo_rotation_points_visible[axis][i]) {
-                              F2 point_ndc = F2_from_F4(point_clip/point_clip[3]);
-                              view->gizmo_rotation_points_screen[axis][i] = (F2){
-                                rect[0] + (point_ndc[0]*0.5f + 0.5f)*rect[2],
-                                rect[1] + (0.5f - point_ndc[1]*0.5f)*rect[3],
-                              };
-                            }
-                          }
-                        }
-                      }
-                    } else {
-                      view->gizmo_rotation_visible = 0;
-                    }
-                  } else {
-                    view->gizmo_rotation_visible = 0;
-                  }
-
-                  //- kti: Dolly.
-                  if (viewport_signal.scroll[1] != 0.0f) {
-                    F4x4 camera_rotation = mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
-                    F4 camera_forward = mul_F4x4_F4(camera_rotation, (F4){0.0f, 0.0f, 1.0f, 0.0f});
-                    F1 dolly_speed = 0.025f;
-                    view->target_camera.pos -= viewport_signal.scroll[1]*dolly_speed*camera_forward;
-                  }
-
-                  I1 left_is_click = dot_F2(left_drag_delta, left_drag_delta) <= Square(4.0f);
-
-                  //- kti: Panning
-                  if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED && !mouse_captured) {
-                    F4 camera_drag_start_pos = view->camera.pos;
-                    ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &camera_drag_start_pos);
-                    cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                  }
-                  if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !left_is_click && !mouse_captured) {
-                    F4 camera_drag_start_pos = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F4)[0];
-                    F4x4 camera_rotation = mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
-                    F4 camera_right = mul_F4x4_F4(camera_rotation, (F4){1.0f, 0.0f, 0.0f, 0.0f});
-                    F4 camera_up = mul_F4x4_F4(camera_rotation, (F4){0.0f, 1.0f, 0.0f, 0.0f});
-                    F1 pan_speed = 0.01f;
-                    view->target_camera.pos = camera_drag_start_pos - left_drag_delta[0]*pan_speed*camera_right + left_drag_delta[1]*pan_speed*camera_up;
-                  }
-
-                  //- kti: Rotating
-                  if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_PRESSED) {
-                    view->camera_drag_start_yaw = view->camera.yaw;
-                    view->camera_drag_start_pitch = view->camera.pitch;
-                    cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
-                  }
-                  if (viewport_signal.flags & UI_SIGNAL_FLAG__RIGHT_DRAGGING) {
-                    F1 rotate_speed = 0.003f;
-                    view->target_camera.yaw = view->camera_drag_start_yaw + right_drag_delta[0]*rotate_speed;
-                    view->target_camera.pitch = Clamp(-0.49f*PI,
-                        view->camera_drag_start_pitch + right_drag_delta[1]*rotate_speed,
-                        0.49f*PI);
-                  }
-
-                  //- kti: Entity Selecting / Selection
-                  if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && left_is_click && !mouse_captured) {
-                    F2 mouse = ui_mouse();
-                    F4 rect = view->viewport_box->rect;
-                    F1 aspect = rect[2] / rect[3];
-                    F1 u = (mouse[0] - rect[0]) / rect[2];
-                    F1 v = (mouse[1] - rect[1]) / rect[3];
-
-                    F1 tan_half_fov = tanf(0.5f * view->camera.fov);
-                    F4 ray_dir_camera = normalize_F4((F4){
-                      (2.0f*u-1) * aspect * tan_half_fov,
-                      (1.0f - 2.0f*v) * tan_half_fov,
-                      1.0f,
-                      0.0f,
-                    });
-
-                    F4x4 camera_rotation = mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
-                    Ray ray = {
-                      .pos = view->camera.pos,
-                      .dir = mul_F4x4_F4(camera_rotation, ray_dir_camera),
-                    };
-                    ray.inv_dir = 1.0f/ray.dir;
-
-                    F1 min_hit_distance = 0.001f;
-                    F1 closest_t = F1_MAX;
-                    Entity_Handle picked_entity = entity_handle_zero();
-                    for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
-                      if (!(e->flags & ENTITY_FLAG__SHAPE)) {
-                        continue;
-                      }
-
-                      Shape shape = shape_from_entity(e);
-                      F1 t = ray_shape_intersect(ray, shape);
-
-                      if (t > min_hit_distance && t < closest_t) {
-                        closest_t = t;
-                        picked_entity = entity_handle(e);
+                      if (!additive || !entity_is_nil(entity_from_handle(picked_entity)))
+                      {
+                        entity_select(picked_entity, additive);
                       }
                     }
 
-                    I1 additive = !!(viewport_signal.modifiers & OS_MODIFIER_FLAG__SHIFT);
-                    if (!additive || !entity_is_nil(entity_from_handle(picked_entity))) {
-                      entity_select(picked_entity, additive);
+                    //- kti: Reset active gizmo part on mouse release.
+                    if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_RELEASED)
+                    {
+                      view->gizmo_active_kind  =  GIZMO_KIND__NONE;
+                      view->gizmo_active_axis  =  AXIS__INVALID;
                     }
-                  }
-
-                  //- kti: Reset active gizmo part on mouse release.
-                  if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_RELEASED) {
-                    view->gizmo_active_kind = GIZMO_KIND__NONE;
-                    view->gizmo_active_axis = AXIS__INVALID;
-                  }
-                } break;
+                  } break;
+                }
               }
-            }
 
-            UI_Signal signal = ui_signal_from_box(panel_box);
-            if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED) {
-              cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+              UI_Signal signal = ui_signal_from_box(panel_box);
+
+              if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED)
+              {
+                cmd_push((Cmd){.kind = CMD_KIND__FOCUS_PANEL, .panel = panel});
+              }
             }
           }
         }
       }
 
-      if (w->root_panel.first == 0) {
-        UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-        UI_Pref_Width(ui_text_dim(20.0f, 1.0f)) {
+      if (w->root_panel.first == 0)
+      {
+        UI_Text_Align((UI_TEXT_ALIGN__CENTER)) UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+        {
           ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Last panel closed."));
-          if (ui_button(str8("Open Panel")).flags & UI_SIGNAL_FLAG__CLICKED) {
+
+          if (ui_button(str8("Open Panel")).flags & UI_SIGNAL_FLAG__CLICKED)
+          {
             panel_insert(panel_alloc(), &w->root_panel, 0);
           }
         }
@@ -1971,168 +2422,270 @@ Internal void lane(void *user_data) {
 
       dr_begin_frame();
       gfx_window_begin_frame(w->os, w->gfx);
+
       DR_Bucket *bucket = dr_bucket_make();
+
       dr_push_bucket(bucket);
 
       ui_draw();
 
       ProfBegin("3D draw");
-      for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next) {
-        if (panel->first == 0 && panel->view_count != 0) {
+
+      for (Panel *panel = w->root_panel.first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next)
+      {
+        if (panel->first == 0 && panel->view_count != 0)
+        {
           View *view = &panel->views[panel->selected_view_idx];
 
           ////////////////////////////////
           //~ Render Result Draw
 
           GFX_Texture *rendered_texture = 0;
-          if (view->kind == VIEW_KIND__RT_RENDER) {
+
+          if (view->kind == VIEW_KIND__RT_RENDER)
+          {
             rendered_texture = state->render_result_texture;
-          } else if (view->kind == VIEW_KIND__USER_RENDER) {
+          }
+          else if (view->kind == VIEW_KIND__USER_RENDER)
+          {
             rendered_texture = state->user_render_texture;
           }
 
-          if (view->render_result_box != 0 && rendered_texture != 0) {
-            F4 bounds = view->render_result_box->rect;
-            GFX_Texture *texture = rendered_texture;
-            if (bounds[2] > 0.0f && bounds[3] > 0.0f && texture->width > 0 && texture->height > 0) {
-              F1 scale = Min(bounds[2]/(F1)texture->width, bounds[3]/(F1)texture->height);
-              F2 fitted_size = {
-                scale*(F1)texture->width,
-                scale*(F1)texture->height,
+          if (view->render_result_box != 0 && rendered_texture != 0)
+          {
+            F4           bounds    =  view->render_result_box->rect;
+            GFX_Texture  *texture  =  rendered_texture;
+
+            if (bounds[2] > 0.0f && bounds[3] > 0.0f && texture->width > 0 && texture->height > 0)
+            {
+              F1  scale        =  Min(bounds[2] / (F1)texture->width, bounds[3] / (F1)texture->height);
+              F2  fitted_size  =  {
+                scale * (F1)texture->width,
+                scale * (F1)texture->height,
               };
               F4 dst = {
-                bounds[0] + 0.5f*(bounds[2] - fitted_size[0]),
-                bounds[1] + 0.5f*(bounds[3] - fitted_size[1]),
+                bounds[0] + 0.5f * (bounds[2] - fitted_size[0]),
+                bounds[1] + 0.5f * (bounds[3] - fitted_size[1]),
                 fitted_size[0],
                 fitted_size[1],
               };
+              F4 src = {
+                0.0f,
+                (F1)texture->height,
+                (F1)texture->width,
+                -(F1)texture->height,
+              };
 
-              F4 src = { 0.0f, (F1)texture->height, (F1)texture->width, -(F1)texture->height, };
               dr_push_clip(bounds);
               dr_img(dst, src, texture, (F4){1.0f, 1.0f, 1.0f, 1.0f}, 0.0f, 0.0f);
               dr_pop_clip();
             }
           }
 
-
           ////////////////////////////////
           //~ 3D Draw
 
-
-          if (view->kind == VIEW_KIND__VIEWPORT && view->viewport_box != 0) {
+          if (view->kind == VIEW_KIND__VIEWPORT && view->viewport_box != 0)
+          {
             F4 viewport_rect = view->viewport_box->rect;
-            if (viewport_rect[2] > 0.0f && viewport_rect[3] > 0.0f) {
+
+            if (viewport_rect[2] > 0.0f && viewport_rect[3] > 0.0f)
+            {
               dr_mesh_viewport(viewport_rect);
 
               //- kti: Projection
               F4x4 view_projection = camera_view_projection(view->camera, viewport_rect[2], viewport_rect[3]);
+
               dr_mesh_view_projection(view_projection);
 
               //- kti: Draw scene.
-              for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next) {
-                if (e->flags & ENTITY_FLAG__SHAPE) {
-                  Mesh *mesh = &state->meshes[e->shape_kind];
-                  F4x4 transform = e->shape_kind == SHAPE_KIND__PLANE ? plane_transform_F4x4(e, view->camera) : mul_F4x4(scale_F4x4(entity_mesh_size(e)), translate_F4x4(e->pos));
-                  F4 color = e->material.base_color;
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__NONE);
+              for (Entity *e = state->first_entity; !entity_is_nil(e); e = e->next)
+              {
+                if (e->flags & ENTITY_FLAG__SHAPE)
+                {
+                  Mesh  *mesh      =  &state->meshes[e->shape_kind];
+                  F4    color      =  e->material.base_color;
+                  F4x4  transform  =  (e->shape_kind == SHAPE_KIND__PLANE)
+                                      ? plane_transform_F4x4(e, view->camera)
+                                      : mul_F4x4(scale_F4x4(entity_mesh_size(e)), translate_F4x4(e->pos));
+
+                  dr_mesh(mesh->vertex_buffer,
+                          0,
+                          mesh->vertex_count,
+                          mesh->index_buffer,
+                          0,
+                          mesh->index_count,
+                          transform,
+                          color,
+                          GFX_MESH_FEATURE__NONE);
                 }
               }
 
               //- kti: Draw extra stuff for selected entities.
-              for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-                if (entity->flags & ENTITY_FLAG__SELECTED && entity->flags & ENTITY_FLAG__SHAPE) {
-                  Mesh *mesh = &state->meshes[entity->shape_kind];
-                  F4x4 transform = entity->shape_kind == SHAPE_KIND__PLANE
-                    ? plane_transform_F4x4(entity, view->camera)
-                    : mul_F4x4(scale_F4x4(entity_mesh_size(entity)), translate_F4x4(entity->pos));
-                  F4 color = {0.9f, 0.0f, 0.9f, 1.0f};
-                  dr_mesh_outline(mesh->vertex_buffer, 0, mesh->vertex_count,
-                                  mesh->index_buffer, 0, mesh->index_count,
-                                  transform, color, 3.0f);
+              for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+              {
+                if (entity->flags & ENTITY_FLAG__SELECTED && entity->flags & ENTITY_FLAG__SHAPE)
+                {
+                  Mesh  *mesh      =  &state->meshes[entity->shape_kind];
+                  F4    color      =  {0.9f, 0.0f, 0.9f, 1.0f};
+                  F4x4  transform  =  entity->shape_kind == SHAPE_KIND__PLANE
+                                      ? plane_transform_F4x4(entity, view->camera)
+                                      : mul_F4x4(scale_F4x4(entity_mesh_size(entity)), translate_F4x4(entity->pos));
+
+                  dr_mesh_outline(mesh->vertex_buffer,
+                                  0,
+                                  mesh->vertex_count,
+                                  mesh->index_buffer,
+                                  0,
+                                  mesh->index_count,
+                                  transform,
+                                  color,
+                                  3.0f);
                 }
               }
 
               //- kti: Camera forward markers.
               dr_clear_depth();
-              for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next) {
-                if (entity->flags & ENTITY_FLAG__CAMERA) {
-                  Mesh *mesh = &state->meshes[SHAPE_KIND__BOX];
-                  F1 thickness = 0.025f;
-                  F4x4 transform = line_transform_F4x4(entity->pos, entity->direction, thickness);
-                  F4 color = {0.9f, 0.75f, 0.15f, 1.0f};
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__UNLIT);
+
+              for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
+              {
+                if (entity->flags & ENTITY_FLAG__CAMERA)
+                {
+                  Mesh  *mesh      =  &state->meshes[SHAPE_KIND__BOX];
+                  F1    thickness  =  0.025f;
+                  F4x4  transform  =  line_transform_F4x4(entity->pos, entity->direction, thickness);
+                  F4    color      =  {0.9f, 0.75f, 0.15f, 1.0f};
+
+                  dr_mesh(mesh->vertex_buffer,
+                          0,
+                          mesh->vertex_count,
+                          mesh->index_buffer,
+                          0,
+                          mesh->index_count,
+                          transform,
+                          color,
+                          GFX_MESH_FEATURE__UNLIT);
                 }
               }
 
               //- kti: Gizmo.
-              if (view->gizmo_visible) {
+              if (view->gizmo_visible)
+              {
                 dr_clear_depth();
+
                 Mesh *mesh = &state->meshes[SHAPE_KIND__BOX];
 
-                for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
-                  if (length_F2(view->gizmo_axes_screen[axis]) <= 1.0f) {
+                for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
+                {
+                  if (length_F2(view->gizmo_axes_screen[axis]) <= 1.0f)
+                  {
                     continue;
                   }
 
-                  I1 hot = view->gizmo_hot_axis == axis && view->gizmo_hot_kind == GIZMO_KIND__TRANSLATE;
-                  I1 active = view->gizmo_active_axis == axis && view->gizmo_active_kind == GIZMO_KIND__TRANSLATE;
-                  F1 base = active ? 0.35f : hot ? 0.15f : 0.0f;
-                  F4 color = (F4){base, base, base, 1.0f};
+                  I1  hot     =  view->gizmo_hot_axis == axis && view->gizmo_hot_kind == GIZMO_KIND__TRANSLATE;
+                  I1  active  =  view->gizmo_active_axis == axis && view->gizmo_active_kind == GIZMO_KIND__TRANSLATE;
+                  F1  base    =  active ? 0.35f : hot ? 0.15f : 0.0f;
+                  F4  color   =  (F4){base, base, base, 1.0f};
+
                   color[axis] = active || hot ? 1.0f : 0.8f;
 
                   //- kti: Axis
-                  F4 direction = {0};
-                  direction[axis] = (GIZMO_AXIS_LENGTH_PX - 0.5f*GIZMO_SIZE_HANDLE_SIZE_PX) * view->gizmo_world_per_pixel;
-                  F1 thickness = GIZMO_SHAFT_THICKNESS_PX*view->gizmo_world_per_pixel * (hot ? 1.45f : 1.0f);
-                  F4x4 transform = line_transform_F4x4(view->gizmo_pos, direction, thickness);
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__UNLIT);
+                  F4  direction = {0};
+
+                  direction[axis] = (GIZMO_AXIS_LENGTH_PX - 0.5f * GIZMO_SIZE_HANDLE_SIZE_PX) * view->gizmo_world_per_pixel;
+
+                  F1    thickness  =  GIZMO_SHAFT_THICKNESS_PX * view->gizmo_world_per_pixel * (hot ? 1.45f : 1.0f);
+                  F4x4  transform  =  line_transform_F4x4(view->gizmo_pos, direction, thickness);
+
+                  dr_mesh(mesh->vertex_buffer,
+                          0,
+                          mesh->vertex_count,
+                          mesh->index_buffer,
+                          0,
+                          mesh->index_count,
+                          transform,
+                          color,
+                          GFX_MESH_FEATURE__UNLIT);
 
                   //- kti: knob
-                  hot = view->gizmo_hot_axis == axis && view->gizmo_hot_kind == GIZMO_KIND__SCALE;
-                  active = view->gizmo_active_axis == axis && view->gizmo_active_kind == GIZMO_KIND__SCALE;
-                  base = active ? 0.35f : hot ? 0.15f : 0.0f;
-                  color = (F4){base, base, base, 1.0f};
-                  color[axis] = active || hot ? 1.0f : 0.8f;
-                  F1 size = GIZMO_SIZE_HANDLE_SIZE_PX*view->gizmo_world_per_pixel * (hot ? 1.25f : 1.0f);
-                  F4 scale = (F4){size, size, size, 1.0f};
-                  F4 pos = view->gizmo_pos;
-                  pos[axis] += GIZMO_AXIS_LENGTH_PX*view->gizmo_world_per_pixel;
-                  transform = mul_F4x4(scale_F4x4(scale), translate_F4x4(pos));
-                  dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__UNLIT);
+                  hot          =  view->gizmo_hot_axis == axis && view->gizmo_hot_kind == GIZMO_KIND__SCALE;
+                  active       =  view->gizmo_active_axis == axis && view->gizmo_active_kind == GIZMO_KIND__SCALE;
+                  base         =  active ? 0.35f : hot ? 0.15f : 0.0f;
+                  color        =  (F4){base, base, base, 1.0f};
+                  color[axis]  =  active || hot ? 1.0f : 0.8f;
+
+                  F1  size   =  GIZMO_SIZE_HANDLE_SIZE_PX * view->gizmo_world_per_pixel * (hot ? 1.25f : 1.0f);
+                  F4  scale  =  (F4){size, size, size, 1.0f};
+                  F4  pos    =  view->gizmo_pos;
+
+                  pos[axis]  +=  GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel;
+                  transform  =   mul_F4x4(scale_F4x4(scale), translate_F4x4(pos));
+
+                  dr_mesh(mesh->vertex_buffer,
+                          0,
+                          mesh->vertex_count,
+                          mesh->index_buffer,
+                          0,
+                          mesh->index_count,
+                          transform,
+                          color,
+                          GFX_MESH_FEATURE__UNLIT);
                 }
 
-                if (view->gizmo_rotation_visible) {
-                  F1 radius = GIZMO_ROTATION_RADIUS_PX*view->gizmo_world_per_pixel;
-                  for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1) {
-                    I1 hot = view->gizmo_hot_axis == axis && view->gizmo_hot_kind == GIZMO_KIND__ROTATE;
-                    I1 active = view->gizmo_active_axis == axis && view->gizmo_active_kind == GIZMO_KIND__ROTATE;
-                    F1 base = active ? 0.35f : hot ? 0.15f : 0.0f;
-                    F4 color = {base, base, base, 1.0f};
-                    color[axis] = active || hot ? 1.0f : 0.8f;
-                    F1 thickness = 3.0f*view->gizmo_world_per_pixel*(hot ? 1.45f : 1.0f);
+                if (view->gizmo_rotation_visible)
+                {
+                  F1 radius = GIZMO_ROTATION_RADIUS_PX * view->gizmo_world_per_pixel;
 
-                    F4 basis_a = {0};
-                    F4 basis_b = {0};
-                    if (axis == AXIS__X) {
-                      basis_a[AXIS__Y] = 1.0f;
-                      basis_b[AXIS__Z] = 1.0f;
-                    } else if (axis == AXIS__Y) {
-                      basis_a[AXIS__Z] = 1.0f;
-                      basis_b[AXIS__X] = 1.0f;
-                    } else {
-                      basis_a[AXIS__X] = 1.0f;
-                      basis_b[AXIS__Y] = 1.0f;
+                  for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
+                  {
+                    I1  hot        =  view->gizmo_hot_axis == axis && view->gizmo_hot_kind == GIZMO_KIND__ROTATE;
+                    I1  active     =  view->gizmo_active_axis == axis && view->gizmo_active_kind == GIZMO_KIND__ROTATE;
+                    F1  base       =  active ? 0.35f : hot ? 0.15f : 0.0f;
+                    F4  color      =  {base, base, base, 1.0f};
+                    F1  thickness  =  3.0f * view->gizmo_world_per_pixel * (hot ? 1.45f : 1.0f);
+                    F4  basis_a    =  {0};
+                    F4  basis_b    =  {0};
+
+                    color[axis] = active || hot ? 1.0f : 0.8f;
+
+                    if (axis == AXIS__X)
+                    {
+                      basis_a[AXIS__Y]  =  1.0f;
+                      basis_b[AXIS__Z]  =  1.0f;
+                    }
+                    else if (axis == AXIS__Y)
+                    {
+                      basis_a[AXIS__Z]  =  1.0f;
+                      basis_b[AXIS__X]  =  1.0f;
+                    }
+                    else
+                    {
+                      basis_a[AXIS__X]  =  1.0f;
+                      basis_b[AXIS__Y]  =  1.0f;
                     }
 
-                    for (L1 i = 0; i < GIZMO_ROTATION_SEGMENT_COUNT; i += 1) {
-                      L1 next = (i + 1)%GIZMO_ROTATION_SEGMENT_COUNT;
-                      if (view->gizmo_rotation_points_visible[axis][i] && view->gizmo_rotation_points_visible[axis][next]) {
-                        F1 angle_a = 2.0f*PI*(F1)i/(F1)GIZMO_ROTATION_SEGMENT_COUNT;
-                        F1 angle_b = 2.0f*PI*(F1)next/(F1)GIZMO_ROTATION_SEGMENT_COUNT;
-                        F4 a = view->gizmo_pos + radius*(cos_F1(angle_a)*basis_a + sin_F1(angle_a)*basis_b);
-                        F4 b = view->gizmo_pos + radius*(cos_F1(angle_b)*basis_a + sin_F1(angle_b)*basis_b);
-                        F4x4 transform = line_transform_F4x4(a, b-a, thickness);
-                        dr_mesh(mesh->vertex_buffer, 0, mesh->vertex_count, mesh->index_buffer, 0, mesh->index_count, transform, color, GFX_MESH_FEATURE__UNLIT);
+                    for (L1 i = 0; i < GIZMO_ROTATION_SEGMENT_COUNT; i += 1)
+                    {
+                      L1 next = (i + 1) % GIZMO_ROTATION_SEGMENT_COUNT;
+
+                      if (view->gizmo_rotation_points_visible[axis][i] &&
+                          view->gizmo_rotation_points_visible[axis][next])
+                      {
+                        F1    angle_a    =  2.0f * PI * (F1)i / (F1)GIZMO_ROTATION_SEGMENT_COUNT;
+                        F1    angle_b    =  2.0f * PI * (F1)next / (F1)GIZMO_ROTATION_SEGMENT_COUNT;
+                        F4    a          =  view->gizmo_pos + radius * (cos_F1(angle_a) * basis_a + sin_F1(angle_a) * basis_b);
+                        F4    b          =  view->gizmo_pos + radius * (cos_F1(angle_b) * basis_a + sin_F1(angle_b) * basis_b);
+                        F4x4  transform  =  line_transform_F4x4(a, b - a, thickness);
+
+                        dr_mesh(mesh->vertex_buffer,
+                                0,
+                                mesh->vertex_count,
+                                mesh->index_buffer,
+                                0,
+                                mesh->index_count,
+                                transform,
+                                color,
+                                GFX_MESH_FEATURE__UNLIT);
                       }
                     }
                   }
@@ -2142,6 +2695,7 @@ Internal void lane(void *user_data) {
           }
         }
       }
+
       ProfEnd();
 
       //- kti: Submit to render.
@@ -2155,66 +2709,86 @@ Internal void lane(void *user_data) {
     ////////////////////////////////
     //~ kti: Execute Cmds
 
-    for (L1 i = 0; i < state->cmd_count && i < ArrayCount(state->cmds); i += 1) {
+    for (L1 i = 0; i < state->cmd_count && i < ArrayCount(state->cmds); i += 1)
+    {
       Cmd cmd = state->cmds[i];
-      switch (cmd.kind) {
-        case CMD_KIND__OPEN_PANEL: {
+
+      switch (cmd.kind)
+      {
+        case CMD_KIND__OPEN_PANEL:
+        {
           panel_insert(panel_alloc(), cmd.panel, cmd.dir);
         } break;
-        case CMD_KIND__CLOSE_PANEL: {
+
+        case CMD_KIND__CLOSE_PANEL:
+        {
           panel_close(&cmd.window->root_panel, cmd.panel);
         } break;
-        case CMD_KIND__FOCUS_PANEL: {
+
+        case CMD_KIND__FOCUS_PANEL:
+        {
           state->focused_panel = cmd.panel;
         } break;
 
-        case CMD_KIND__SELECT_ENTITY: {
-          if (!entity_is_nil(entity_from_handle(cmd.entity))) {
+        case CMD_KIND__SELECT_ENTITY:
+        {
+          if (!entity_is_nil(entity_from_handle(cmd.entity)))
+          {
             entity_select(cmd.entity, 0);
           }
         } break;
-        case CMD_KIND__RENDER: {
-          if (state->render_request_id == 0) {
-            Arena *render_arena = arena_alloc(GiB(1));
-            Entity *camera_entity = &state->nil_entity; 
+
+        case CMD_KIND__RENDER:
+        {
+          if (state->render_request_id == 0)
+          {
+            Arena   *render_arena   =  arena_alloc(GiB(1));
+            Entity  *camera_entity  =  &state->nil_entity;
 
             L1 shape_count = 0;
-            for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
-              if (it->flags & ENTITY_FLAG__CAMERA) {
+
+            for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next)
+            {
+              if (it->flags & ENTITY_FLAG__CAMERA)
+              {
                 camera_entity = it;
               }
-              if (it->flags & ENTITY_FLAG__SHAPE) {
+
+              if (it->flags & ENTITY_FLAG__SHAPE)
+              {
                 shape_count += 1;
               }
             }
 
-            L1 shape_idx = 0;
-            Shape *shapes = push_array(render_arena, Shape, shape_count);
-            RT_Material *materials = push_array(render_arena, RT_Material, shape_count);
+            L1           shape_idx   =  0;
+            Shape        *shapes     =  push_array(render_arena, Shape, shape_count);
+            RT_Material  *materials  =  push_array(render_arena, RT_Material, shape_count);
 
-            for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next) {
-              if (it->flags & ENTITY_FLAG__SHAPE) {
-                shapes[shape_idx] = shape_from_entity(it);
-                materials[shape_idx] = it->material;
-                shape_idx += 1;
+            for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next)
+            {
+              if (it->flags & ENTITY_FLAG__SHAPE)
+              {
+                shapes[shape_idx]     =   shape_from_entity(it);
+                materials[shape_idx]  =   it->material;
+                shape_idx             +=  1;
               }
             }
 
             RT_Scene scene = {
-              .rays_per_pixel = state->render_settings.rays_per_pixel,
-              .max_num_bounces = state->render_settings.max_num_bounces,
+              .rays_per_pixel   =  state->render_settings.rays_per_pixel,
+              .max_num_bounces  =  state->render_settings.max_num_bounces,
 
               .camera = {
-                .pos = camera_entity->pos,  
-                .forward = camera_entity->direction,
-                .vertical_fov = camera_entity->camera_vertical_fov,
-                .aperture_radius = camera_entity->camera_aperture_radius,
-                .focal_distance = camera_entity->camera_focal_distance,
-              },
+                  .pos              =  camera_entity->pos,
+                  .forward          =  camera_entity->direction,
+                  .vertical_fov     =  camera_entity->camera_vertical_fov,
+                  .aperture_radius  =  camera_entity->camera_aperture_radius,
+                  .focal_distance   =  camera_entity->camera_focal_distance,
+                },
 
-              .shape_count = shape_count,
-              .shapes = shapes,
-              .materials = materials,
+              .shape_count  =  shape_count,
+              .shapes       =  shapes,
+              .materials    =  materials,
             };
 
             atomic_swap_L1(&state->render_progress.next_pixel, 0);
@@ -2223,63 +2797,82 @@ Internal void lane(void *user_data) {
             atomic_swap_I1(&state->render_progress.cancel_requested, 0);
 
             Async_Request request = {
-              .kind = ASYNC_REQUEST_KIND__RENDER,
-              .id = async_request_id_alloc(),
-              .arena = render_arena,
-              .render_settings = state->render_settings,
-              .scene = scene,
-              .render_progress = &state->render_progress,
+              .kind             =  ASYNC_REQUEST_KIND__RENDER,
+              .id               =  async_request_id_alloc(),
+              .arena            =  render_arena,
+              .render_settings  =  state->render_settings,
+              .scene            =  scene,
+              .render_progress  =  &state->render_progress,
             };
 
-            if (async_request_push(request)) {
+            if (async_request_push(request))
+            {
               state->render_request_id = request.id;
-            } else {
+            }
+            else
+            {
               arena_release(render_arena);
               editor_request_frame();
             }
           }
         } break;
-        case CMD_KIND__CANCEL_RENDER: {
-          if (state->render_request_id != 0) {
+
+        case CMD_KIND__CANCEL_RENDER:
+        {
+          if (state->render_request_id != 0)
+          {
             atomic_swap_I1(&state->render_progress.cancel_requested, 1);
           }
         } break;
-        case CMD_KIND__USER_CODE_RELOAD: {
+
+        case CMD_KIND__USER_CODE_RELOAD:
+        {
           user_code_reload();
         } break;
       }
     }
+
     state->cmd_count = 0;
 
     L1 postprocess_settings_hash = hash64_seed(&state->postprocess_settings, sizeof(state->postprocess_settings), 0);
+
     if (!state->postprocess_in_flight &&
         state->postprocess_displayed_hash != postprocess_settings_hash &&
         state->render_request_id == 0 &&
-        !image_is_nil(state->hdr)) {
-      if (state->display_arena == 0) {
+        !image_is_nil(state->hdr))
+    {
+      if (state->display_arena == 0)
+      {
         state->display_arena = arena_alloc(GiB(1));
       }
 
       Async_Request request = {
-        .kind = ASYNC_REQUEST_KIND__POSTPROCESS,
-        .arena = state->display_arena,
-        .hdr = state->hdr,
-        .postprocess_settings = state->postprocess_settings,
+        .kind                  =  ASYNC_REQUEST_KIND__POSTPROCESS,
+        .arena                 =  state->display_arena,
+        .hdr                   =  state->hdr,
+        .postprocess_settings  =  state->postprocess_settings,
       };
 
-      if (async_request_push(request)) {
-        state->postprocess_displayed_hash = postprocess_settings_hash;
-        state->postprocess_in_flight = 1;
-      } else {
+      if (async_request_push(request))
+      {
+        state->postprocess_displayed_hash  =  postprocess_settings_hash;
+        state->postprocess_in_flight       =  1;
+      }
+      else
+      {
         editor_request_frame();
       }
     }
 
     // Reconcile code-defined entities only when user code actually ran.
-    if (user_code_ran) {
-      for (Entity *entity = state->first_entity, *next = 0; !entity_is_nil(entity); entity = next) {
+    if (user_code_ran)
+    {
+      for (Entity *entity = state->first_entity, *next = 0; !entity_is_nil(entity); entity = next)
+      {
         next = entity->next;
-        if (entity->name_len == 0 || entity->last_touch_frame != state->scene_frame_index) {
+
+        if (entity->name_len == 0 || entity->last_touch_frame != state->scene_frame_index)
+        {
           entity_delete(entity_handle(entity));
         }
       }
@@ -2291,30 +2884,34 @@ Internal void lane(void *user_data) {
     ProfFlush();
 
     //- kti: Calculate time spent. Frame pacing comes from FIFO present.
-    L1 frame_end_time = os_clock();
-    L1 frame_time = frame_end_time - frame_begin_time;
+    L1  frame_end_time  =  os_clock();
+    L1  frame_time      =  frame_end_time - frame_begin_time;
 
     frame_count += 1;
     total_frame_time += frame_time;
-    min_frame_time = Min(min_frame_time, frame_time);
-    max_frame_time = Max(max_frame_time, frame_time);
+    min_frame_time  =  Min(min_frame_time, frame_time);
+    max_frame_time  =  Max(max_frame_time, frame_time);
 
-    if (frame_count % 60 == 0) {
-      F1 avg_ms = (total_frame_time / 60) / 1000000.0f;
-      F1 min_ms = min_frame_time / 1000000.0f;
-      F1 max_ms = max_frame_time / 1000000.0f;
+    if (frame_count % 60 == 0)
+    {
+      F1  avg_ms  =  (total_frame_time / 60) / 1000000.0f;
+      F1  min_ms  =  min_frame_time / 1000000.0f;
+      F1  max_ms  =  max_frame_time / 1000000.0f;
+
       // fps = 1000.0f / avg_ms;
       // printf("Avg: %.2fms  Min: %.2fms  Max: %.2fms  (%.1f fps)\n", avg_ms, min_ms, max_ms, fps);
-      total_frame_time = 0;
-      min_frame_time = L1_MAX;
-      max_frame_time = 0;
+      total_frame_time  =  0;
+      min_frame_time    =  L1_MAX;
+      max_frame_time    =  0;
     }
 
-    if (events.count != 0 || state->animation_active || state->user_code_dirty || state->render_request_id != 0) {
+    if (events.count != 0 || state->animation_active || state->user_code_dirty || state->render_request_id != 0)
+    {
       editor_request_frame();
     }
 
-    if (state->frames_requested > 0) {
+    if (state->frames_requested > 0)
+    {
       state->frames_requested -= 1;
     }
   }
@@ -2322,7 +2919,8 @@ Internal void lane(void *user_data) {
   ////////////////////////////////
   //~ kti: Shutdown
 
-  while (state->first_window != 0) {
+  while (state->first_window != 0)
+  {
     window_close(state->first_window);
   }
 
@@ -2332,30 +2930,32 @@ Internal void lane(void *user_data) {
   ProfShutdown();
 }
 
-SI1 main(void) {
-  async.mutex = os_mutex_alloc();
-  async.cond_var = os_cond_var_alloc();
-  async.request_queue.mutex = os_mutex_alloc();
-  async.event_queue.mutex = os_mutex_alloc();
+SI1 main(void)
+{
+  async.mutex                =  os_mutex_alloc();
+  async.cond_var             =  os_cond_var_alloc();
+  async.request_queue.mutex  =  os_mutex_alloc();
+  async.event_queue.mutex    =  os_mutex_alloc();
 
   Lane_Group_Params async_group_params = {
-    .count = Max(1, os_core_count() - 1),
-    .proc = async_lane,
+    .count  =  Max(1, os_core_count() - 1),
+    .proc   =  async_lane,
 
-    .arena_size = MiB(64),
-    .scratch_size = MiB(64),
+    .arena_size    =  MiB(64),
+    .scratch_size  =  MiB(64),
   };
-  lane_group_launch(async_group_params);
 
   Lane_Group_Params main_group_params = {
-    .count = 1,
-    .proc = lane,
+    .count  =  1,
+    .proc   =  lane,
 
-    .arena_size = GiB(1),
-    .scratch_size = MiB(64),
+    .arena_size    =  GiB(1),
+    .scratch_size  =  MiB(64),
 
     .lane_zero_on_caller = 1,
   };
+
+  lane_group_launch(async_group_params);
   lane_group_launch(main_group_params);
 
   return 0;

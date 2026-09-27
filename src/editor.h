@@ -5,7 +5,8 @@
 #include "user_api.h"
 
 typedef struct Camera Camera;
-struct Camera {
+struct Camera
+{
   F4 pos;
   F1 yaw;
   F1 pitch;
@@ -18,7 +19,8 @@ struct Camera {
 //~ kti: UI
 
 typedef I1 View_Kind;
-enum {
+enum
+{
   VIEW_KIND__LISTER = 0,
   VIEW_KIND__VIEWPORT,
   VIEW_KIND__RT_RENDER,
@@ -27,16 +29,18 @@ enum {
   VIEW_KIND_COUNT,
 };
 
-enum {
-  GIZMO_AXIS_LENGTH_PX = 82,
-  GIZMO_SHAFT_THICKNESS_PX = 4,
-  GIZMO_SIZE_HANDLE_SIZE_PX = 11,
-  GIZMO_ROTATION_RADIUS_PX = 62,
-  GIZMO_ROTATION_SEGMENT_COUNT = 48,
+enum
+{
+  GIZMO_AXIS_LENGTH_PX          =  82,
+  GIZMO_SHAFT_THICKNESS_PX      =  4,
+  GIZMO_SIZE_HANDLE_SIZE_PX     =  11,
+  GIZMO_ROTATION_RADIUS_PX      =  62,
+  GIZMO_ROTATION_SEGMENT_COUNT  =  48,
 };
 
 typedef I1 Gizmo_Kind;
-enum {
+enum
+{
   GIZMO_KIND__NONE = 0,
   GIZMO_KIND__TRANSLATE,
   GIZMO_KIND__SCALE,
@@ -44,7 +48,8 @@ enum {
 };
 
 typedef struct Gizmo_Drag Gizmo_Drag;
-struct Gizmo_Drag {
+struct Gizmo_Drag
+{
   F1 applied_amount;
   F2 axis_screen;
   F4 rotation_axis;
@@ -52,86 +57,92 @@ struct Gizmo_Drag {
 };
 
 typedef struct View View;
-struct View {
+struct View
+{
   View_Kind kind;
-  String8 title;
-  L1 name_len;
-  B1 name[512];
+  String8   title;
+  L1        name_len;
+  B1        name[512];
 
   //- kti: Viewport
   UI_Box *viewport_box;
-  Camera camera;
-  Camera target_camera;
-  F1 camera_drag_start_yaw;
-  F1 camera_drag_start_pitch;
+  Camera  camera;
+  Camera  target_camera;
+  F1      camera_drag_start_yaw;
+  F1      camera_drag_start_pitch;
 
   //- kti: Transform gizmo.
   Gizmo_Kind gizmo_hot_kind;
   Gizmo_Kind gizmo_active_kind;
-  Axis gizmo_hot_axis;
-  Axis gizmo_active_axis;
-  F4 gizmo_pos;
-  F2 gizmo_screen_pos;
-  F2 gizmo_axes_screen[AXIS3_COUNT];
-  F2 gizmo_rotation_points_screen[AXIS3_COUNT][GIZMO_ROTATION_SEGMENT_COUNT];
-  I1 gizmo_rotation_points_visible[AXIS3_COUNT][GIZMO_ROTATION_SEGMENT_COUNT];
-  I1 gizmo_rotation_visible;
-  F1 gizmo_world_per_pixel;
-  I1 gizmo_visible;
+  Axis       gizmo_hot_axis;
+  Axis       gizmo_active_axis;
+  F4         gizmo_pos;
+  F2         gizmo_screen_pos;
+  F2         gizmo_axes_screen[AXIS3_COUNT];
+  F2         gizmo_rotation_points_screen[AXIS3_COUNT][GIZMO_ROTATION_SEGMENT_COUNT];
+  I1         gizmo_rotation_points_visible[AXIS3_COUNT][GIZMO_ROTATION_SEGMENT_COUNT];
+  I1         gizmo_rotation_visible;
+  F1         gizmo_world_per_pixel;
+  I1         gizmo_visible;
 
   //- kti: Image result
   UI_Box *render_result_box;
 };
 
 typedef struct Panel Panel;
-struct Panel {
+struct Panel
+{
   Panel *first;
   Panel *last;
   Panel *next;
   Panel *prev;
   Panel *parent;
-  F1 pct_of_parent;
-  Axis split_axis;
+  F1     pct_of_parent;
+  Axis   split_axis;
 
   View views[64];
-  L1 view_count;
-  L1 selected_view_idx;
+  L1   view_count;
+  L1   selected_view_idx;
 };
 
 typedef struct Panel_Rec Panel_Rec;
-struct Panel_Rec {
+struct Panel_Rec
+{
   Panel *next;
-  I1 push_count;
-  I1 pop_count;
+  I1     push_count;
+  I1     pop_count;
 };
 
 typedef struct Window Window;
-struct Window {
+struct Window
+{
   Window *next;
   Window *prev;
 
   Arena *arena;
 
-  OS_Window *os;
+  OS_Window  *os;
   GFX_Window *gfx;
 
   UI_State *ui;
-  Panel root_panel;
+  Panel     root_panel;
 };
 
 typedef struct Mesh Mesh;
-struct Mesh {
+struct Mesh
+{
   GFX_Buffer *vertex_buffer;
   GFX_Buffer *index_buffer;
-  L1 vertex_count;
-  L1 index_count;
+  L1          vertex_count;
+  L1          index_count;
 };
 
 ////////////////////////////////
 //~ kti: Cmds
 
 typedef I1 Cmd_Kind;
-enum {
+enum
+{
   CMD_KIND__NONE = 0,
 
   CMD_KIND__OPEN_PANEL,
@@ -149,11 +160,12 @@ enum {
 };
 
 typedef struct Cmd Cmd;
-struct Cmd {
+struct Cmd
+{
   Cmd_Kind kind;
 
-  Window *window;
-  Panel *panel;
+  Window       *window;
+  Panel        *panel;
   Entity_Handle entity;
 
   Dir dir;
@@ -163,7 +175,8 @@ struct Cmd {
 //~ kti: Render
 
 typedef struct Render_Settings Render_Settings;
-struct Render_Settings {
+struct Render_Settings
+{
   L1 width;
   L1 height;
   L1 rays_per_pixel;
@@ -171,7 +184,8 @@ struct Render_Settings {
 };
 
 typedef struct Render_Progress Render_Progress;
-struct Render_Progress {
+struct Render_Progress
+{
   L1 pixels_completed;
   L1 pixels_total;
   L1 next_pixel;
@@ -179,136 +193,146 @@ struct Render_Progress {
 };
 
 typedef struct Postprocess_Settings Postprocess_Settings;
-struct Postprocess_Settings {
+struct Postprocess_Settings
+{
   Image_Bloom_Params bloom;
 };
 
 ////////////////////////////////
 //~ kti: Async
 
-typedef enum Async_Request_Kind {
+typedef enum Async_Request_Kind
+{
   ASYNC_REQUEST_KIND__NONE,
   ASYNC_REQUEST_KIND__RENDER,
   ASYNC_REQUEST_KIND__POSTPROCESS,
 } Async_Request_Kind;
 
 typedef struct Image_Bloom_Work Image_Bloom_Work;
-struct Image_Bloom_Work {
-  L1 level_count;
+struct Image_Bloom_Work
+{
+  L1     level_count;
   Image *levels;
-  F4 *horizontal_pixels;
+  F4    *horizontal_pixels;
   Image *upsampled;
 };
 
 typedef struct Async_Request Async_Request;
-struct Async_Request {
+struct Async_Request
+{
   Async_Request_Kind kind;
-  L1 id;
+  L1                 id;
 
-  Arena *arena;
-  Render_Settings render_settings;
-  RT_Scene scene;
-  Image hdr;
-  Render_Progress *render_progress;
+  Arena               *arena;
+  Render_Settings      render_settings;
+  RT_Scene             scene;
+  Image                hdr;
+  Render_Progress     *render_progress;
   Postprocess_Settings postprocess_settings;
-  Image_Bloom_Work bloom_work;
+  Image_Bloom_Work     bloom_work;
 };
 
 typedef struct Async_Request_Queue Async_Request_Queue;
-struct Async_Request_Queue {
+struct Async_Request_Queue
+{
   OS_Mutex mutex;
 
-  L1 write_pos;
-  L1 read_pos;
+  L1            write_pos;
+  L1            read_pos;
   Async_Request requests[256];
 };
 
-typedef enum Async_Event_Kind {
+typedef enum Async_Event_Kind
+{
   ASYNC_EVENT_KIND__NONE,
   ASYNC_EVENT_KIND__RENDER_COMPLETE,
   ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
 } Async_Event_Kind;
 
 typedef struct Async_Event Async_Event;
-struct Async_Event {
+struct Async_Event
+{
   Async_Event_Kind kind;
-  L1 request_id;
+  L1               request_id;
 
-  Arena *arena;
-  Image image;
+  Arena      *arena;
+  Image       image;
   Image_RGBA8 image_rgba8;
 };
 
 typedef struct Async_Event_Queue Async_Event_Queue;
-struct Async_Event_Queue {
+struct Async_Event_Queue
+{
   OS_Mutex mutex;
 
-  L1 write_pos;
-  L1 read_pos;
+  L1          write_pos;
+  L1          read_pos;
   Async_Event events[256];
 };
 
 typedef struct Async_State Async_State;
-struct Async_State {
-  OS_Mutex mutex;
+struct Async_State
+{
+  OS_Mutex    mutex;
   OS_Cond_Var cond_var;
-  I1 loop_again;
-  I1 exit;
+  I1          loop_again;
+  I1          exit;
 
   L1 next_request_id;
 
   Async_Request_Queue request_queue;
-  Async_Event_Queue event_queue;
+  Async_Event_Queue   event_queue;
 
   Async_Request active_request;
-  I1 request_valid;
+  I1            request_valid;
 };
 
 ////////////////////////////////
 //~ kti: State
 
 typedef struct State State;
-struct State {
-  Arena *arena;
+struct State
+{
+  Arena  *arena;
   Window *first_window;
   Window *last_window;
   Window *free_window;
-  Panel *free_panel;
+  Panel  *free_panel;
 
   Panel *focused_panel;
 
   Cmd cmds[512];
-  L1 cmd_count;
+  L1  cmd_count;
 
   //- kti: Entities.
-  L1 entity_count;
-  L1 scene_frame_index;
+  L1      entity_count;
+  L1      scene_frame_index;
   Entity *first_entity;
   Entity *last_entity;
   Entity *first_free_entity;
-  Entity nil_entity;
+  Entity  nil_entity;
 
   //- kti: Graphics.
   Mesh meshes[SHAPE_KIND_COUNT];
 
   //- kti: Render.
-  Render_Settings render_settings;
+  Render_Settings      render_settings;
   Postprocess_Settings postprocess_settings;
-  L1 render_request_id;
-  Render_Progress render_progress;
-  Arena *hdr_arena;
-  Image hdr;
-  L1 postprocess_displayed_hash;
-  I1 postprocess_in_flight;
-  Arena *display_arena;
-  GFX_Texture *render_result_texture;
-  GFX_Texture *user_render_texture;
+  L1                   render_request_id;
+  Render_Progress      render_progress;
+  Arena               *hdr_arena;
+  Image                hdr;
+  L1                   postprocess_displayed_hash;
+  I1                   postprocess_in_flight;
+  Arena               *display_arena;
+  GFX_Texture         *render_result_texture;
+  GFX_Texture         *user_render_texture;
 
   //- kti: User Code
   User_Render_Func user_render_func;
-  I1 user_code_dirty;
-  I1 animation_active;
-  L1 frames_requested;
+  I1               user_code_dirty;
+  I1               animation_active;
+  L1               frames_requested;
 };
 
 #endif

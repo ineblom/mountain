@@ -765,6 +765,7 @@ Internal void panel_push_view(Panel *panel, View_Kind kind)
   String8  default_name  =  str8("View");
   View     *view         =  &panel->views[panel->view_count];
 
+  MemoryZeroStruct(view);
   panel->view_count  +=  1;
   view->kind         =   kind;
   view->title        =   view_kind_names[kind];
@@ -1751,7 +1752,16 @@ Internal void lane(void *user_data)
                   }
                   else for (L1 i = 0; i < panel->view_count; i += 1)
                   {
-                    ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, panel->views[i].title);
+                    UI_Box *view_name = ui_build_box_from_string(UI_BOX_FLAG__MOUSE_CLICKABLE |
+                                                                 UI_BOX_FLAG__DRAW_TEXT |
+                                                                 UI_BOX_FLAG__DRAW_HOT_EFFECTS,
+                                                                 panel->views[i].title);
+
+                    if (ui_signal_from_box(view_name).flags & UI_SIGNAL_FLAG__LEFT_CLICKED)
+                    {
+                      panel->view_count        =  0;
+                      panel->selected_view_idx =  0;
+                    }
                   }
                 }
 

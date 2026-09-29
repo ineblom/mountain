@@ -35,8 +35,7 @@ Global Async_State  async   =  {0};
 
 #define UI_THEME_COLOR(r, g, b, a, ...)                              \
   {                                                                  \
-    .tags =                                                          \
-      {                                                              \
+    .tags = {                                                        \
         .v      =  (String8[]){__VA_ARGS__},                         \
         .count  =  ArrayCount(((String8[]){__VA_ARGS__})),           \
       },                                                             \
@@ -2888,10 +2887,10 @@ Internal void lane(void *user_data)
     L1  frame_end_time  =  os_clock();
     L1  frame_time      =  frame_end_time - frame_begin_time;
 
-    frame_count += 1;
-    total_frame_time += frame_time;
-    min_frame_time  =  Min(min_frame_time, frame_time);
-    max_frame_time  =  Max(max_frame_time, frame_time);
+    frame_count       +=  1;
+    total_frame_time  +=  frame_time;
+    min_frame_time    =   Min(min_frame_time, frame_time);
+    max_frame_time    =   Max(max_frame_time, frame_time);
 
     if (frame_count % 60 == 0)
     {

@@ -160,7 +160,7 @@ Internal OS_Mutex os_mutex_alloc(void)
 
 Internal void os_mutex_release(OS_Mutex mutex)
 {
-  if (MemoryIsZeroStruct(&mutex) == 0)
+  if (!MemoryIsZeroStruct(&mutex))
   {
     pthread_mutex_destroy(&mutex->handle);
     os_mutex_entity_release(mutex);
@@ -169,7 +169,7 @@ Internal void os_mutex_release(OS_Mutex mutex)
 
 Internal void os_mutex_take(OS_Mutex mutex)
 {
-  if (MemoryIsZeroStruct(&mutex) == 0)
+  if (!MemoryIsZeroStruct(&mutex))
   {
     pthread_mutex_lock(&mutex->handle);
   }
@@ -177,7 +177,7 @@ Internal void os_mutex_take(OS_Mutex mutex)
 
 Internal void os_mutex_drop(OS_Mutex mutex)
 {
-  if (MemoryIsZeroStruct(&mutex) == 0)
+  if (!MemoryIsZeroStruct(&mutex))
   {
     pthread_mutex_unlock(&mutex->handle);
   }
@@ -224,7 +224,7 @@ Internal OS_Cond_Var os_cond_var_alloc(void)
 
 Internal void os_cond_var_release(OS_Cond_Var cond_var)
 {
-  if (MemoryIsZeroStruct(&cond_var) == 0)
+  if (!MemoryIsZeroStruct(&cond_var))
   {
     pthread_cond_destroy(&cond_var->handle);
     os_cond_var_entity_release(cond_var);
@@ -235,8 +235,8 @@ Internal I1 os_cond_var_wait(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt)
 {
   I1 result = 0;
 
-  if (   MemoryIsZeroStruct(&cond_var)  ==  0
-      && MemoryIsZeroStruct(&mutex)     ==  0)
+  if (   !MemoryIsZeroStruct(&cond_var)
+      && !MemoryIsZeroStruct(&mutex))
   {
     os_cond_var_wait_platform(cond_var, mutex, endt);
   }
@@ -246,7 +246,7 @@ Internal I1 os_cond_var_wait(OS_Cond_Var cond_var, OS_Mutex mutex, L1 endt)
 
 Internal void os_cond_var_signal(OS_Cond_Var cond_var)
 {
-  if (MemoryIsZeroStruct(&cond_var) == 0)
+  if (!MemoryIsZeroStruct(&cond_var))
   {
     pthread_cond_signal(&cond_var->handle);
   }
@@ -254,7 +254,7 @@ Internal void os_cond_var_signal(OS_Cond_Var cond_var)
 
 Internal void os_cond_var_broadcast(OS_Cond_Var cond_var)
 {
-  if (MemoryIsZeroStruct(&cond_var))
+  if (!MemoryIsZeroStruct(&cond_var))
   {
     pthread_cond_broadcast(&cond_var->handle);
   }

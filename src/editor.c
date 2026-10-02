@@ -2074,13 +2074,13 @@ Internal void lane(void *user_data)
 
                     UI_Parent(tab_box)
                     {
-                      UI_Pref_Width(ui_text_dim(12.0f, 1.0f))
+                      UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
                       UI_Pref_Height(ui_pct(1.0f, 1.0f))
                       {
-                        UI_Box *name = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
-                                                                  UI_BOX_FLAG__DRAW_TEXT |
-                                                                  UI_BOX_FLAG__DRAW_HOT_EFFECTS |
-                                                                  UI_BOX_FLAG__DRAW_BACKGROUND,
+                        UI_Box *name = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE
+                                                                 | UI_BOX_FLAG__DRAW_TEXT
+                                                                 | UI_BOX_FLAG__DRAW_HOT_EFFECTS
+                                                                 | UI_BOX_FLAG__DRAW_BACKGROUND,
                                                                   "%.*s###view_tab_%llu",
                                                                   (int)tab_view->title.len, tab_view->title.str,
                                                                   tab_view->id);
@@ -2129,7 +2129,7 @@ Internal void lane(void *user_data)
                         }
                       }
 
-                      UI_Pref_Width(ui_px(23.0f, 1.0f))
+                      UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
                       UI_Pref_Height(ui_pct(1.0f, 1.0f))
                       {
                         UI_Box *close = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
@@ -2152,8 +2152,8 @@ Internal void lane(void *user_data)
                 }
 
                 if (panel->view_count < ArrayCount(panel->views))
+                UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
                 UI_Pref_Height(ui_pct(1.0f, 1.0f))
-                UI_Pref_Width(ui_px(23.0f, 1.0f))
                 {
                   UI_Box *add_view = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
                                                                UI_BOX_FLAG__DRAW_TEXT |

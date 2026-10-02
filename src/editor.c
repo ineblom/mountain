@@ -2129,12 +2129,13 @@ Internal void lane(void *user_data)
                         }
                       }
 
-                      UI_Pref_Width(ui_px(22.0f, 1.0f))
+                      UI_Pref_Width(ui_px(23.0f, 1.0f))
                       UI_Pref_Height(ui_pct(1.0f, 1.0f))
                       {
                         UI_Box *close = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
                                                                   UI_BOX_FLAG__DRAW_TEXT |
                                                                   UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+                                                                  UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS |
                                                                   UI_BOX_FLAG__DRAW_BACKGROUND,
                                                                   "x###close_view_%llu", tab_view->id);
 
@@ -2152,12 +2153,14 @@ Internal void lane(void *user_data)
 
                 if (panel->view_count < ArrayCount(panel->views))
                 UI_Pref_Height(ui_pct(1.0f, 1.0f))
-                UI_Pref_Width(ui_px(22.0f, 1.0f))
-                UI_Tag(str8("subtle"))
+                UI_Pref_Width(ui_px(23.0f, 1.0f))
                 {
                   UI_Box *add_view = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
                                                                UI_BOX_FLAG__DRAW_TEXT |
-                                                               UI_BOX_FLAG__DRAW_HOT_EFFECTS,
+                                                               UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+                                                               UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS |
+                                                               UI_BOX_FLAG__DRAW_SIDE_RIGHT |
+                                                               UI_BOX_FLAG__DRAW_BACKGROUND,
                                                                "+###add_view_%p", panel);
                   if (ui_signal_from_box(add_view).flags & UI_SIGNAL_FLAG__CLICKED)
                   {

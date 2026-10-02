@@ -21,7 +21,8 @@ struct Camera
 typedef I1 View_Kind;
 enum
 {
-  VIEW_KIND__LISTER = 0,
+  VIEW_KIND__NONE = 0,
+  VIEW_KIND__LISTER,
   VIEW_KIND__VIEWPORT,
   VIEW_KIND__RT_RENDER,
   VIEW_KIND__USER_RENDER,
@@ -59,6 +60,7 @@ struct Gizmo_Drag
 typedef struct View View;
 struct View
 {
+  L1        id;
   View_Kind kind;
   String8   title;
   L1        name_len;
@@ -103,6 +105,8 @@ struct Panel
   View views[64];
   L1   view_count;
   L1   selected_view_idx;
+  UI_Box *tab_bar_box;
+  UI_Box *tab_boxes[64];
 };
 
 typedef struct Panel_Rec Panel_Rec;
@@ -126,6 +130,13 @@ struct Window
 
   UI_State *ui;
   Panel     root_panel;
+
+  Panel *drag_view_panel;
+  L1     drag_view_idx;
+  I1     drag_view_active;
+  Panel *drop_view_panel;
+  L1     drop_view_id;
+  I1     drop_view_pending;
 };
 
 typedef struct Mesh Mesh;
@@ -145,7 +156,9 @@ enum
 {
   CMD_KIND__NONE = 0,
 
-  CMD_KIND__OPEN_PANEL,
+  CMD_KIND__MOVE_VIEW,
+  CMD_KIND__DOCK_VIEW,
+  CMD_KIND__CLOSE_VIEW,
   CMD_KIND__CLOSE_PANEL,
   CMD_KIND__FOCUS_PANEL,
 
@@ -169,6 +182,9 @@ struct Cmd
   Entity_Handle entity;
 
   Dir dir;
+  Panel *source_panel;
+  L1     view_id;
+  L1     target_view_idx;
 };
 
 ////////////////////////////////
@@ -300,6 +316,7 @@ struct State
   Panel  *free_panel;
 
   Panel *focused_panel;
+  L1     next_view_id;
 
   Cmd cmds[512];
   L1  cmd_count;

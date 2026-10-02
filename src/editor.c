@@ -24,6 +24,7 @@
 //- kti: See gizmo value in tooltip while dragging.
 
 Global String8 view_kind_names[VIEW_KIND_COUNT] = {
+  [VIEW_KIND__NONE]         =  str8("New View"),
   [VIEW_KIND__LISTER]       =  str8("Lister"),
   [VIEW_KIND__VIEWPORT]     =  str8("Viewport"),
   [VIEW_KIND__RT_RENDER]    =  str8("RT Render"),
@@ -653,6 +654,190 @@ Internal F4 panel_rect_from_root_rect(Panel *panel, F4 root_rect)
   return result;
 }
 
+typedef struct Panel_Drop_Zone Panel_Drop_Zone;
+struct Panel_Drop_Zone
+{
+  Panel_Drop_Zone *next;
+  Panel *panel;
+  Dir dir;
+  F4 rect;
+};
+
+typedef struct Panel_Drop_Zone_List Panel_Drop_Zone_List;
+struct Panel_Drop_Zone_List
+{
+  Panel_Drop_Zone *first;
+  Panel_Drop_Zone *last;
+};
+
+Internal F4 panel_drop_zone_rect(F4 panel_rect, Dir dir, F1 start, F1 end, I1 shared)
+{
+  F4  rect    =  {0};
+  F1  center  =  0.5f * (start + end);
+  F1  length  =  Min(44.0f, end - start);
+  F1  depth   =  16.0f;
+
+  switch (dir)
+  {
+    case DIR__LEFT:
+    {
+      rect = (F4){panel_rect[0] - (shared ? depth * 0.5f : 0.0f), center - length * 0.5f, depth, length};
+    } break;
+    case DIR__RIGHT:
+    {
+      rect = (F4){panel_rect[0] + panel_rect[2] - (shared ? depth * 0.5f : depth), center - length * 0.5f, depth, length};
+    } break;
+    case DIR__UP:
+    {
+      rect = (F4){center - length * 0.5f, panel_rect[1] - (shared ? depth * 0.5f : 0.0f), length, depth};
+    } break;
+    case DIR__DOWN:
+    {
+      rect = (F4){center - length * 0.5f, panel_rect[1] + panel_rect[3] - (shared ? depth * 0.5f : depth), length, depth};
+    } break;
+  }
+
+  return rect;
+}
+
+Internal void panel_drop_zone_push(Arena *arena, Panel_Drop_Zone_List *list, Panel *panel, Dir dir, F4 rect, F4 root_rect)
+{
+  I1  vertical  =  dir == DIR__LEFT || dir == DIR__RIGHT;
+  F1  start     =  rect[vertical ? 1 : 0];
+  F1  end       =  start + rect[vertical ? 3 : 2];
+
+  if (end - start >= 16.0f)
+  {
+    F1 edge = (dir == DIR__LEFT || dir == DIR__UP)
+              ? rect[vertical ? 0 : 1]
+              : rect[vertical ? 0 : 1] + rect[vertical ? 2 : 3];
+
+    F1 root_edge = (dir == DIR__LEFT || dir == DIR__UP)
+                    ? root_rect[vertical ? 0 : 1]
+                    : root_rect[vertical ? 0 : 1] + root_rect[vertical ? 2 : 3];
+
+    I1               shared  =  fabsf(edge - root_edge) > 1.0f;
+    Panel_Drop_Zone  *zone   =  push_array(arena, Panel_Drop_Zone, 1);
+
+    zone->panel  =  panel;
+    zone->dir    =  dir;
+    zone->rect   =  panel_drop_zone_rect(rect, dir, start, end, shared);
+
+    SLLQueuePush(list->first, list->last, zone);
+  }
+}
+
+Internal Panel_Drop_Zone_List panel_drop_zones(Arena *arena, Panel *root, F4 root_rect)
+{
+  Panel_Drop_Zone_List result = {0};
+
+  // A sibling boundary belongs to its parent split, including when a child is a panel group.
+  for (Panel *panel = root; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next)
+  {
+    if (panel->first == 0) continue;
+
+    Dir  min_dir  =  panel->split_axis == AXIS__X ? DIR__LEFT : DIR__UP;
+    Dir  max_dir  =  panel->split_axis == AXIS__X ? DIR__RIGHT : DIR__DOWN;
+
+    for (Panel *child = panel->first; child != 0; child = child->next)
+    {
+      F4 child_rect = panel_rect_from_root_rect(child, root_rect);
+
+      panel_drop_zone_push(arena, &result, child, min_dir, child_rect, root_rect);
+
+      if (child->next == 0)
+      {
+        panel_drop_zone_push(arena, &result, child, max_dir, child_rect, root_rect);
+      }
+    }
+  }
+
+  // The root's other axis has no sibling boundaries to visit.
+  if (root->first != 0)
+  {
+    Panel  *only_child  =  root->first == root->last ? root->first : 0;
+    Axis   other_axis   =  root->split_axis == AXIS__X ? AXIS__Y : AXIS__X;
+
+    if (only_child == 0 || only_child->first == 0 || only_child->split_axis != other_axis)
+    {
+      Panel  *target  =  only_child != 0 ? only_child : root;
+      Dir    min_dir  =  other_axis == AXIS__X ? DIR__LEFT : DIR__UP;
+      Dir    max_dir  =  other_axis == AXIS__X ? DIR__RIGHT : DIR__DOWN;
+
+      panel_drop_zone_push(arena, &result, target, min_dir, root_rect, root_rect);
+      panel_drop_zone_push(arena, &result, target, max_dir, root_rect, root_rect);
+    }
+  }
+
+  return result;
+}
+
+Internal Panel_Drop_Zone *panel_drop_zone_at(Panel_Drop_Zone_List zones, F2 mouse, Panel **out_panel, Dir *out_dir)
+{
+  Panel_Drop_Zone  *result        =  0;
+  F1               best_distance  =  F1_MAX;
+
+  for (Panel_Drop_Zone *zone = zones.first; zone != 0; zone = zone->next)
+  {
+    if (rect_contains(zone->rect, mouse))
+    {
+      F2  center    =  (F2){zone->rect[0] + zone->rect[2] * 0.5f, zone->rect[1] + zone->rect[3] * 0.5f};
+      F1  distance  =  length_sq_F2(mouse - center);
+
+      if (distance < best_distance)
+      {
+        best_distance  =  distance;
+        result         =  zone;
+      }
+    }
+  }
+
+  if (result != 0)
+  {
+    if (out_panel != 0)
+    {
+      out_panel[0] = result->panel;
+    }
+    if (out_dir != 0)
+    {
+      out_dir[0] = result->dir;
+    }
+  }
+
+  return result;
+}
+
+Internal Panel *panel_leaf_at(Panel *root, F4 root_rect, F2 mouse)
+{
+  for (Panel *panel = root->first; panel != 0; panel = panel_rec_depth_first_pre_order(panel).next)
+  {
+    if (panel->first == 0 && rect_contains(panel_rect_from_root_rect(panel, root_rect), mouse))
+    {
+      return panel;
+    }
+  }
+
+  return 0;
+}
+
+Internal L1 panel_tab_insert_idx(Panel *panel, F2 mouse)
+{
+  if (panel->tab_bar_box != 0 && rect_contains(panel->tab_bar_box->rect, mouse))
+  {
+    for (L1 i = 0; i < panel->view_count; i += 1)
+    {
+      UI_Box *tab = panel->tab_boxes[i];
+
+      if (tab != 0 && mouse[0] < tab->rect[0] + tab->rect[2] * 0.5f)
+      {
+        return i;
+      }
+    }
+  }
+
+  return panel->view_count;
+}
+
 Internal Panel *panel_alloc()
 {
   Panel *result = state->free_panel;
@@ -677,10 +862,58 @@ Internal void panel_insert(Panel *panel, Panel *at, Dir dir)
 
   if (parent == 0)
   {
-    panel->parent         =  at;
-    panel->pct_of_parent  =  1.0f;
+    if (at->first == 0)
+    {
+      panel->parent         =  at;
+      panel->pct_of_parent  =  1.0f;
 
-    DLLPushBack(at->first, at->last, panel);
+      DLLPushBack(at->first, at->last, panel);
+    }
+    else if (at->first == at->last)
+    {
+      Panel *existing = at->first;
+
+      at->split_axis           =  split_axis;
+      existing->pct_of_parent  =  0.5f;
+      panel->parent            =  at;
+      panel->pct_of_parent     =  0.5f;
+
+      Panel *insert_after = (dir == DIR__LEFT || dir == DIR__UP) ? 0 : existing;
+
+      DLLInsert(at->first, at->last, insert_after, panel);
+    }
+    else
+    {
+      Panel *container = panel_alloc();
+
+      container->split_axis     =  at->split_axis;
+      container->parent         =  at;
+      container->pct_of_parent  =  0.5f;
+      container->first          =  at->first;
+      container->last           =  at->last;
+
+      for (Panel *child = container->first; child != 0; child = child->next)
+      {
+        child->parent = container;
+      }
+
+      at->first            =  0;
+      at->last             =  0;
+      at->split_axis       =  split_axis;
+      panel->parent        =  at;
+      panel->pct_of_parent =  0.5f;
+
+      if (dir == DIR__LEFT || dir == DIR__UP)
+      {
+        DLLPushBack(at->first, at->last, panel);
+        DLLPushBack(at->first, at->last, container);
+      }
+      else
+      {
+        DLLPushBack(at->first, at->last, container);
+        DLLPushBack(at->first, at->last, panel);
+      }
+    }
   }
   else if (parent->split_axis == split_axis || parent->first == parent->last)
   {
@@ -688,7 +921,9 @@ Internal void panel_insert(Panel *panel, Panel *at, Dir dir)
     panel->parent         =  parent;
     panel->pct_of_parent  =  at->pct_of_parent = at->pct_of_parent * 0.5f;
 
-    DLLInsert(parent->first, parent->last, at, panel);
+    Panel *insert_after = (dir == DIR__LEFT || dir == DIR__UP) ? at->prev : at;
+
+    DLLInsert(parent->first, parent->last, insert_after, panel);
   }
   else
   {
@@ -758,15 +993,21 @@ Internal void panel_close(Panel *root, Panel *panel)
   }
 
   SLLStackPush(state->free_panel, panel);
+
+  if (parent != root && parent->first == 0)
+  {
+    panel_close(root, parent);
+  }
 }
 
-Internal void panel_push_view(Panel *panel, View_Kind kind)
+Internal void view_set_kind(View *view, View_Kind kind)
 {
+  L1       id            =  view->id;
   String8  default_name  =  str8("View");
-  View     *view         =  &panel->views[panel->view_count];
 
   MemoryZeroStruct(view);
-  panel->view_count  +=  1;
+
+  view->id           =   id;
   view->kind         =   kind;
   view->title        =   view_kind_names[kind];
   view->name_len     =   Min(sizeof(view->name), default_name.len);
@@ -785,6 +1026,75 @@ Internal void panel_push_view(Panel *panel, View_Kind kind)
     view->gizmo_hot_axis     =  AXIS__INVALID;
     view->gizmo_active_axis  =  AXIS__INVALID;
   }
+}
+
+Internal void panel_push_view(Panel *panel, View_Kind kind)
+{
+  if (panel->view_count < ArrayCount(panel->views))
+  {
+    View *view = &panel->views[panel->view_count];
+
+    MemoryZeroStruct(view);
+
+    state->next_view_id  +=  1;
+    view->id             =   state->next_view_id;
+
+    view_set_kind(view, kind);
+
+    panel->view_count         +=  1;
+    panel->selected_view_idx  =   panel->view_count - 1;
+  }
+}
+
+Internal L1 panel_view_idx_from_id(Panel *panel, L1 id)
+{
+  for (L1 i = 0; i < panel->view_count; i += 1)
+  {
+    if (panel->views[i].id == id) return i;
+  }
+
+  return L1_MAX;
+}
+
+Internal View panel_remove_view(Panel *panel, L1 idx)
+{
+  View  result          =  panel->views[idx];
+  L1    trailing_count  =  panel->view_count - idx - 1;
+
+  if (trailing_count != 0)
+  {
+    memmove(&panel->views[idx], &panel->views[idx + 1], trailing_count * sizeof(View));
+  }
+
+  panel->view_count -= 1;
+
+  if (panel->view_count == 0)
+  {
+    panel->selected_view_idx = 0;
+  }
+  else if (panel->selected_view_idx > idx)
+  {
+    panel->selected_view_idx -= 1;
+  }
+  else if (panel->selected_view_idx >= panel->view_count)
+  {
+    panel->selected_view_idx = panel->view_count - 1;
+  }
+
+  return result;
+}
+
+Internal void panel_insert_view(Panel *panel, L1 idx, View view)
+{
+  if (panel->view_count >= ArrayCount(panel->views)) return;
+
+  idx = Min(idx, panel->view_count);
+
+  memmove(&panel->views[idx + 1], &panel->views[idx], (panel->view_count - idx) * sizeof(View));
+  
+  panel->views[idx]         =   view;
+  panel->view_count         +=  1;
+  panel->selected_view_idx  =   idx;
 }
 
 ////////////////////////////////
@@ -1633,7 +1943,8 @@ Internal void lane(void *user_data)
 
     for (Window *w = state->first_window; w != 0; w = w->next)
     {
-      F4 root_plane_rect = {0, 0, w->os->width, w->os->height};
+      F4                    root_plane_rect  =  {0, 0, w->os->width, w->os->height};
+      Panel_Drop_Zone_List  drop_zones       =  panel_drop_zones(scratch.arena, &w->root_panel, root_plane_rect);
 
       ui_state_equip(w->ui);
       ui_begin_build(w->os, events, ui_cmds, &default_theme, animation_dt);
@@ -1735,70 +2046,122 @@ Internal void lane(void *user_data)
             UI_Pref_Width(ui_pct(1.0f, 0.0f))
             {
               UI_Child_Layout_Axis(AXIS__X);
-
+              ui_set_next_pref_height(ui_px(26.0f, 1.0f));
               UI_Box *title_bar = ui_build_box_from_key(UI_BOX_FLAG__DRAW_BACKGROUND |
                                                         UI_BOX_FLAG__DRAW_BORDER,
                                                         ui_key_zero());
+              panel->tab_bar_box = title_bar;
 
-              UI_Parent((title_bar))
+              UI_Parent(title_bar)
               UI_Font_Size(10.0f)
+              UI_Text_Align(UI_TEXT_ALIGN__CENTER)
               {
-                UI_Padding(ui_px(10.0f, 1.0f))
-                UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
+                for (L1 i = 0; i < panel->view_count; i += 1)
                 {
-                  if (panel->view_count == 0)
-                  {
-                    ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("<no view>"));
-                  }
-                  else for (L1 i = 0; i < panel->view_count; i += 1)
-                  {
-                    UI_Box *view_name = ui_build_box_from_string(UI_BOX_FLAG__MOUSE_CLICKABLE |
-                                                                 UI_BOX_FLAG__DRAW_TEXT |
-                                                                 UI_BOX_FLAG__DRAW_HOT_EFFECTS,
-                                                                 panel->views[i].title);
+                  View  *tab_view    =  &panel->views[i];
+                  I1    is_selected  =  i == panel->selected_view_idx;
 
-                    if (ui_signal_from_box(view_name).flags & UI_SIGNAL_FLAG__LEFT_CLICKED)
+                  {
+                    String8 tab_tag = is_selected ? str8("selected") : str8("subtle");
+                    ui_set_next_child_layout_axis(AXIS__X);
+                    ui_set_next_pref_width(ui_children_sum(1.0f));
+                    ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
+
+                    ui_set_next_tag(tab_tag);
+                    UI_Box *tab_box = ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_SIDE_RIGHT, "##view_tab_box_%llu", tab_view->id);
+
+                    panel->tab_boxes[i] = tab_box;
+
+                    UI_Parent(tab_box)
                     {
-                      panel->view_count        =  0;
-                      panel->selected_view_idx =  0;
+                      UI_Pref_Width(ui_text_dim(12.0f, 1.0f))
+                      UI_Pref_Height(ui_pct(1.0f, 1.0f))
+                      {
+                        UI_Box *name = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
+                                                                  UI_BOX_FLAG__DRAW_TEXT |
+                                                                  UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+                                                                  UI_BOX_FLAG__DRAW_BACKGROUND,
+                                                                  "%.*s###view_tab_%llu",
+                                                                  (int)tab_view->title.len, tab_view->title.str,
+                                                                  tab_view->id);
+                        UI_Signal signal = ui_signal_from_box(name);
+
+                        if (signal.flags & UI_SIGNAL_FLAG__PRESSED)
+                        {
+                          panel->selected_view_idx = i;
+                          state->focused_panel = panel;
+
+                          if (signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED)
+                          {
+                            w->drag_view_panel = panel;
+                            w->drag_view_idx = i;
+                            w->drag_view_active = 0;
+                          }
+                        }
+
+                        if (w->drag_view_panel == panel && w->drag_view_idx == i)
+                        {
+                          if (signal.flags & (UI_SIGNAL_FLAG__LEFT_DRAGGING | UI_SIGNAL_FLAG__LEFT_RELEASED)
+                              &&
+                              length_sq_F2(ui_drag_delta(OS_MOUSE_BUTTON__LEFT)) > 8.0f * 8.0f)
+                          {
+                            w->drag_view_active = 1;
+                          }
+
+                          if (signal.flags & UI_SIGNAL_FLAG__LEFT_RELEASED)
+                          {
+                            if (w->drag_view_active)
+                            {
+                              w->drop_view_panel    =  panel;
+                              w->drop_view_id       =  tab_view->id;
+                              w->drop_view_pending  =  1;
+                            }
+
+                            w->drag_view_panel = 0;
+                            w->drag_view_active = 0;
+                          }
+                        }
+
+                        if (signal.flags & UI_SIGNAL_FLAG__MIDDLE_CLICKED)
+                        {
+                          Cmd cmd = {.kind = CMD_KIND__CLOSE_VIEW, .panel = panel, .view_id = tab_view->id};
+                          cmd_push(cmd);
+                        }
+                      }
+
+                      UI_Pref_Width(ui_px(22.0f, 1.0f))
+                      UI_Pref_Height(ui_pct(1.0f, 1.0f))
+                      {
+                        UI_Box *close = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
+                                                                  UI_BOX_FLAG__DRAW_TEXT |
+                                                                  UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+                                                                  UI_BOX_FLAG__DRAW_BACKGROUND,
+                                                                  "x###close_view_%llu", tab_view->id);
+
+                        if (ui_signal_from_box(close).flags & UI_SIGNAL_FLAG__CLICKED)
+                        {
+                          Cmd cmd = {.kind = CMD_KIND__CLOSE_VIEW, .panel = panel, .view_id = tab_view->id};
+
+                          cmd_push(cmd);
+                        }
+                      }
                     }
                   }
+
                 }
 
-                ui_spacer(ui_pct(1.0f, 0.0f));
-
-                UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+                if (panel->view_count < ArrayCount(panel->views))
                 UI_Pref_Height(ui_pct(1.0f, 1.0f))
-                UI_Text_Align((UI_TEXT_ALIGN__CENTER))
+                UI_Pref_Width(ui_px(22.0f, 1.0f))
                 UI_Tag(str8("subtle"))
                 {
-                  if (ui_button(str8("Split X")).flags & UI_SIGNAL_FLAG__CLICKED)
+                  UI_Box *add_view = ui_build_box_from_stringf(UI_BOX_FLAG__CLICKABLE |
+                                                               UI_BOX_FLAG__DRAW_TEXT |
+                                                               UI_BOX_FLAG__DRAW_HOT_EFFECTS,
+                                                               "+###add_view_%p", panel);
+                  if (ui_signal_from_box(add_view).flags & UI_SIGNAL_FLAG__CLICKED)
                   {
-                    cmd_push((Cmd){
-                      .kind    =  CMD_KIND__OPEN_PANEL,
-                      .window  =  w,
-                      .panel   =  panel,
-                      .dir     =  DIR__RIGHT,
-                    });
-                  }
-
-                  if (ui_button(str8("Split Y")).flags & UI_SIGNAL_FLAG__CLICKED)
-                  {
-                    cmd_push((Cmd){
-                      .kind    =  CMD_KIND__OPEN_PANEL,
-                      .window  =  w,
-                      .panel   =  panel,
-                      .dir     =  DIR__DOWN,
-                    });
-                  }
-
-                  if (ui_button(str8("Close")).flags & UI_SIGNAL_FLAG__CLICKED)
-                  {
-                    cmd_push((Cmd){
-                      .kind    =  CMD_KIND__CLOSE_PANEL,
-                      .window  =  w,
-                      .panel   =  panel,
-                    });
+                    panel_push_view(panel, VIEW_KIND__NONE);
                   }
                 }
               }
@@ -1807,26 +2170,16 @@ Internal void lane(void *user_data)
               {
                 UI_Row()
                 UI_Padding(ui_px(10.0f, 1.0f))
-                UI_Column()
                 {
-                  UI_Tag(str8("accent"))
-                  ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Choose view kind."));
-
-                  UI_Row()
-                  UI_Tag(str8("subtle"))
-                  UI_Text_Align((UI_TEXT_ALIGN__CENTER))
-                  UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
-                  UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
-                  for (L1 i = 0; i < VIEW_KIND_COUNT; i += 1)
+                  ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("No views in this panel."));
+                  ui_spacer(ui_px(10.0f, 1.0f));
+                  if (ui_button(str8("Close Panel")).flags & UI_SIGNAL_FLAG__CLICKED)
                   {
-                    if (ui_button(view_kind_names[i]).flags & UI_SIGNAL_FLAG__PRESSED)
-                    {
-                      panel_push_view(panel, i);
-                    }
+                    cmd_push((Cmd){.kind = CMD_KIND__CLOSE_PANEL, .window = w, .panel = panel});
                   }
                 }
               }
-              else
+              if (panel->view_count != 0)
               {
 
                 ////////////////////////////////
@@ -1836,6 +2189,31 @@ Internal void lane(void *user_data)
 
                 switch (view->kind)
                 {
+                  case VIEW_KIND__NONE:
+                  {
+                    UI_Row()
+                    UI_Padding(ui_px(10.0f, 1.0f))
+                    UI_Column()
+                    {
+                      UI_Tag(str8("accent"))
+                      ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, str8("Choose view kind."));
+
+                      UI_Row()
+                      UI_Tag(str8("subtle"))
+                      UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+                      UI_Pref_Width(ui_text_dim(10.0f, 1.0f))
+                      UI_Pref_Height(ui_text_dim(5.0f, 1.0f))
+                      for (L1 i = VIEW_KIND__LISTER; i < VIEW_KIND_COUNT; i += 1)
+                      {
+                        if (ui_button(view_kind_names[i]).flags & UI_SIGNAL_FLAG__PRESSED)
+                        {
+                          view_set_kind(view, i);
+                          editor_request_frame();
+                        }
+                      }
+                    }
+                  } break;
+
                   //- kti: Lister
                   case VIEW_KIND__LISTER:
                   {
@@ -1846,8 +2224,8 @@ Internal void lane(void *user_data)
                                                                UI_BOX_FLAG__ALLOW_OVERFLOW_Y |
                                                                UI_BOX_FLAG__VIEW_SCROLL_Y    |
                                                                UI_BOX_FLAG__VIEW_CLAMP_Y,
-                                                               "lister%p",
-                                                               view);
+                                                               "lister%llu",
+                                                               view->id);
                     ui_signal_from_box(lister);
 
                     UI_Parent(lister)
@@ -1867,9 +2245,8 @@ Internal void lane(void *user_data)
                     view->render_result_box = ui_build_box_from_stringf(UI_BOX_FLAG__DRAW_BACKGROUND |
                                                                         UI_BOX_FLAG__CLIP            |
                                                                         UI_BOX_FLAG__CLICKABLE,
-                                                                        "##render_result_%p_%d",
-                                                                        panel,
-                                                                        view->kind);
+                                                                        "##render_result_%llu",
+                                                                        view->id);
 
                     UI_Signal signal = ui_signal_from_box(view->render_result_box);
 
@@ -1910,8 +2287,8 @@ Internal void lane(void *user_data)
                                                                    UI_BOX_FLAG__CLIP            |
                                                                    UI_BOX_FLAG__CLICKABLE       |
                                                                    UI_BOX_FLAG__SCROLL,
-                                                                   "##viewport_%p",
-                                                                   panel);
+                                                                   "##viewport_%llu",
+                                                                   view->id);
 
                     UI_Signal  viewport_signal   =  ui_signal_from_box(view->viewport_box);
                     F2         left_drag_delta   =  ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
@@ -2426,6 +2803,34 @@ Internal void lane(void *user_data)
       ui_end_build();
       state->animation_active |= w->ui->animation_active;
 
+      if (w->drop_view_pending)
+      {
+        Panel *source = w->drop_view_panel;
+        Panel *target = 0;
+        Dir drop_dir = DIR__RIGHT;
+
+        if (panel_drop_zone_at(drop_zones, ui_mouse(), &target, &drop_dir) != 0)
+        {
+          cmd_push((Cmd){.kind = CMD_KIND__MOVE_VIEW, .window = w, .panel = target,
+                         .dir = drop_dir, .source_panel = source,
+                         .view_id = w->drop_view_id});
+        }
+        else
+        {
+          target = panel_leaf_at(&w->root_panel, root_plane_rect, ui_mouse());
+
+          if (target != 0 && (target == source || target->view_count < ArrayCount(target->views)))
+          {
+            cmd_push((Cmd){.kind = CMD_KIND__DOCK_VIEW, .window = w, .panel = target,
+                           .source_panel = source, .view_id = w->drop_view_id,
+                           .target_view_idx = panel_tab_insert_idx(target, ui_mouse())});
+          }
+        }
+
+        w->drop_view_pending = 0;
+        w->drop_view_panel = 0;
+      }
+
       ProfEnd();
 
       ProfBegin("Draw");
@@ -2706,6 +3111,75 @@ Internal void lane(void *user_data)
         }
       }
 
+      if (w->drag_view_active && w->drag_view_panel != 0)
+      {
+        Panel_Drop_Zone *hot_zone = panel_drop_zone_at(drop_zones, ui_mouse(), 0, 0);
+
+        if (hot_zone == 0)
+        {
+          Panel *dock_target = panel_leaf_at(&w->root_panel, root_plane_rect, ui_mouse());
+
+          if (dock_target != 0 && (dock_target == w->drag_view_panel ||
+                                   dock_target->view_count < ArrayCount(dock_target->views)))
+          {
+            F4 target_rect = rect_pad(panel_rect_from_root_rect(dock_target, root_plane_rect), -6.0f);
+            GFX_Rect_Instance *footprint = dr_rect(target_rect,
+                                                   (F4){0.25f, 0.58f, 0.95f, 0.10f}, 6.0f, 1.0f);
+            footprint->border_width = 2.0f;
+            footprint->border_color = (F4){0.40f, 0.72f, 1.0f, 0.65f};
+
+            if (dock_target->tab_bar_box != 0 && rect_contains(dock_target->tab_bar_box->rect, ui_mouse()))
+            {
+              L1 insert_idx = panel_tab_insert_idx(dock_target, ui_mouse());
+              F4 bar_rect = dock_target->tab_bar_box->rect;
+              F1 x = bar_rect[0] + 6.0f;
+
+              if (insert_idx < dock_target->view_count && dock_target->tab_boxes[insert_idx] != 0)
+              {
+                x = dock_target->tab_boxes[insert_idx]->rect[0];
+              }
+              else if (dock_target->view_count != 0 && dock_target->tab_boxes[dock_target->view_count - 1] != 0)
+              {
+                UI_Box *last_tab = dock_target->tab_boxes[dock_target->view_count - 1];
+                x = last_tab->rect[0] + last_tab->rect[2];
+              }
+
+              dr_rect((F4){x - 2.0f, bar_rect[1] + 3.0f, 4.0f, Max(0.0f, bar_rect[3] - 6.0f)},
+                      (F4){0.40f, 0.72f, 1.0f, 0.95f}, 1.0f, 0.0f);
+            }
+          }
+        }
+
+        if (hot_zone != 0)
+        {
+          F4 preview = panel_rect_from_root_rect(hot_zone->panel, root_plane_rect);
+          Axis axis = (hot_zone->dir == DIR__LEFT || hot_zone->dir == DIR__RIGHT) ? AXIS__X : AXIS__Y;
+          preview[2 + axis] *= 0.5f;
+
+          if (hot_zone->dir == DIR__RIGHT || hot_zone->dir == DIR__DOWN)
+          {
+            preview[axis] += preview[2 + axis];
+          }
+
+          GFX_Rect_Instance *footprint = dr_rect(rect_pad(preview, -4.0f),
+                                                 (F4){0.25f, 0.58f, 0.95f, 0.20f},
+                                                 6.0f, 1.0f);
+          footprint->border_width = 2.0f;
+          footprint->border_color = (F4){0.40f, 0.72f, 1.0f, 0.75f};
+        }
+
+        for (Panel_Drop_Zone *zone = drop_zones.first; zone != 0; zone = zone->next)
+        {
+          I1 hot = zone == hot_zone;
+          GFX_Rect_Instance *highlight = dr_rect(zone->rect,
+                                                  hot ? (F4){0.25f, 0.58f, 0.95f, 0.48f}
+                                                      : (F4){0.25f, 0.58f, 0.95f, 0.16f},
+                                                  4.0f, 1.0f);
+          highlight->border_width = hot ? 2.0f : 1.0f;
+          highlight->border_color = (F4){0.40f, 0.72f, 1.0f, hot ? 0.95f : 0.50f};
+        }
+      }
+
       ProfEnd();
 
       //- kti: Submit to render.
@@ -2725,14 +3199,75 @@ Internal void lane(void *user_data)
 
       switch (cmd.kind)
       {
-        case CMD_KIND__OPEN_PANEL:
+        case CMD_KIND__MOVE_VIEW:
         {
-          panel_insert(panel_alloc(), cmd.panel, cmd.dir);
+          Panel *source = cmd.source_panel;
+          L1 source_idx = source != 0 ? panel_view_idx_from_id(source, cmd.view_id) : L1_MAX;
+
+          if (source != 0 && source_idx < source->view_count && cmd.panel != 0)
+          {
+            View moved_view = source->views[source_idx];
+            Panel *destination = panel_alloc();
+
+            destination->views[0]  = moved_view;
+            destination->view_count = 1;
+            panel_insert(destination, cmd.panel, cmd.dir);
+            panel_remove_view(source, source_idx);
+
+            // A self-split leaves the original panel empty, as in Rad Debugger.
+            if (source->view_count == 0 && source != cmd.panel)
+            {
+              panel_close(&cmd.window->root_panel, source);
+            }
+
+            state->focused_panel = destination;
+          }
+        } break;
+
+        case CMD_KIND__DOCK_VIEW:
+        {
+          Panel *source = cmd.source_panel;
+          Panel *target = cmd.panel;
+          L1 source_idx = source != 0 ? panel_view_idx_from_id(source, cmd.view_id) : L1_MAX;
+
+          if (source != 0 && target != 0 && source_idx < source->view_count &&
+              (source == target || target->view_count < ArrayCount(target->views)))
+          {
+            L1 insert_idx = cmd.target_view_idx;
+            View moved_view = panel_remove_view(source, source_idx);
+
+            if (source == target && insert_idx > source_idx)
+            {
+              insert_idx -= 1;
+            }
+
+            panel_insert_view(target, insert_idx, moved_view);
+
+            if (source != target && source->view_count == 0)
+            {
+              panel_close(&cmd.window->root_panel, source);
+            }
+
+            state->focused_panel = target;
+          }
+        } break;
+
+        case CMD_KIND__CLOSE_VIEW:
+        {
+          L1 idx = cmd.panel != 0 ? panel_view_idx_from_id(cmd.panel, cmd.view_id) : L1_MAX;
+
+          if (cmd.panel != 0 && idx < cmd.panel->view_count)
+          {
+            panel_remove_view(cmd.panel, idx);
+          }
         } break;
 
         case CMD_KIND__CLOSE_PANEL:
         {
-          panel_close(&cmd.window->root_panel, cmd.panel);
+          if (cmd.panel != 0 && cmd.panel->view_count == 0)
+          {
+            panel_close(&cmd.window->root_panel, cmd.panel);
+          }
         } break;
 
         case CMD_KIND__FOCUS_PANEL:

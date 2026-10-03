@@ -2,13 +2,12 @@
 //~ kti: TODO
 
 //- kti: CODE DRIVEN EDITOR
-// 1. Get RT working in there.
-// 2. Multithread
-// 3. SIMD
-// 4. Lister Integration
 
+//- kti. Make profiler use rdtsc.
+//- kti: Image Cache.
+//- kti: SIMD.
 //- kti: Gizmo code is a mess.
-//- kti: Clean up UI.
+//- kti: Should user code be a compute shader?
 //- kti: Camera icon and picking.
 //- kti: Light rays.
 //- kti: Remote Rendering on GPU.

@@ -18,7 +18,7 @@ Internal void prof_begin(const char *str, L1 length);
 #define ProfInit()
 #define ProfShutdown()
 #define ProfBegin(x)
-#define ProfFuncBegin(x)
+#define ProfBeginFunc()
 #define ProfEnd(x)
 #define ProfScope(x)
 #define ProfFlush()

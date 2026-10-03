@@ -4,18 +4,21 @@
 Internal I1 image_is_nil(Image image)
 {
   I1 result = image.width == 0 || image.height == 0 || image.pixels == 0;
+
   return result;
 }
 
 Internal F4 *image_row(Image image, L1 y)
 {
   F4 *result = image.pixels + image.row_stride * y;
+
   return result;
 }
 
 Internal RGBA8 *image_rgba8_row(Image_RGBA8 image, L1 y)
 {
   RGBA8 *result = image.pixels + image.row_stride * y;
+
   return result;
 }
 
@@ -24,6 +27,7 @@ Internal RGBA8 *image_rgba8_row(Image_RGBA8 image, L1 y)
 
 Internal Image image_alloc(Arena *arena, I1 width, I1 height)
 {
+  ProfBeginFunc();
   Image image = {0};
 
   if (width > 0 && height > 0)
@@ -36,11 +40,14 @@ Internal Image image_alloc(Arena *arena, I1 width, I1 height)
     image.pixels      =  push_array_no_zero(arena, F4, pixel_count);
   }
 
+  ProfEnd();
+
   return image;
 }
 
 Internal Image_RGBA8 image_rgba8_alloc(Arena *arena, I1 width, I1 height)
 {
+  ProfBeginFunc();
   Image_RGBA8 image = {0};
 
   if (width > 0 && height > 0)
@@ -53,11 +60,14 @@ Internal Image_RGBA8 image_rgba8_alloc(Arena *arena, I1 width, I1 height)
     image.pixels      =  push_array_no_zero(arena, RGBA8, pixel_count);
   }
 
+  ProfEnd();
+
   return image;
 }
 
 Internal Image_RGBA8 image_read_from_file(Arena *arena, String8 filename)
 {
+  ProfBeginFunc();
   Temp_Arena     scratch   =  scratch_begin(&arena, 1);
   Image_RGBA8    result    =  {0};
   String8        contents  =  os_read_entire_file(scratch.arena, filename);
@@ -119,6 +129,8 @@ Internal Image_RGBA8 image_read_from_file(Arena *arena, String8 filename)
 
   scratch_end(scratch);
 
+  ProfEnd();
+
   return result;
 }
 
@@ -127,6 +139,7 @@ Internal Image_RGBA8 image_read_from_file(Arena *arena, String8 filename)
 
 Internal void image_write_to_file(Image_RGBA8 image, String8 filename)
 {
+  ProfBeginFunc();
   if (   image.width       >   0
       && image.height      >   0
       && image.row_stride  >=  image.width
@@ -183,6 +196,7 @@ Internal void image_write_to_file(Image_RGBA8 image, String8 filename)
       scratch_end(scratch);
     }
   }
+  ProfEnd();
 }
 
 ////////////////////////////////
@@ -226,6 +240,7 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v)
 
 Internal void image_bloom_threshold(Image dst, Image src, Image_Bloom_Params params, Range rows)
 {
+  ProfBeginFunc();
   //- kti: Equal dimensions.
   if (src.width == dst.width && src.height == dst.height)
   {
@@ -269,10 +284,12 @@ Internal void image_bloom_threshold(Image dst, Image src, Image_Bloom_Params par
       }
     }
   }
+  ProfEnd();
 }
 
 Internal void image_resample_x(Image dst, Image src, Range rows)
 {
+  ProfBeginFunc();
   if (src.height == dst.height)
   {
     L1  src_dim  =  src.width;
@@ -296,11 +313,8 @@ Internal void image_resample_x(Image dst, Image src, Range rows)
           dst_row[x] = (0.25f * a + 0.75f * b + 0.75f * c + 0.25f * d) * 0.5f;
         }
       }
-
-      return;
     }
-
-    if (src_dim > 0 && dst_dim == 2 * src_dim)
+    else if (src_dim > 0 && dst_dim == 2 * src_dim)
     {
       for (L1 y = rows.min; y < rows.max; y += 1)
       {
@@ -317,57 +331,59 @@ Internal void image_resample_x(Image dst, Image src, Range rows)
           dst_row[2 * x + 1]  =  0.75f * curr + 0.25f * next;
         }
       }
-
-      return;
     }
-
-    F1  scale          =  (F1)src_dim / (F1)dst_dim;
-    F1  filter_scale   =  Max(1, scale);
-    F1  filter_radius  =  1.0f;
-    F1  support        =  filter_radius * filter_scale;
-
-    for (L1 y = rows.min; y < rows.max; y += 1)
+    else
     {
-      F4  *src_row  =  image_row(src, y);
-      F4  *dst_row  =  image_row(dst, y);
+      F1  scale          =  (F1)src_dim / (F1)dst_dim;
+      F1  filter_scale   =  Max(1, scale);
+      F1  filter_radius  =  1.0f;
+      F1  support        =  filter_radius * filter_scale;
 
-      for (L1 dst_x = 0; dst_x < dst_dim; dst_x += 1)
+      for (L1 y = rows.min; y < rows.max; y += 1)
       {
-        F1  center         =  ((F1)dst_x + 0.5f) * scale - 0.5f;
-        F1  first_src_pos  =  ceil_F1(center - support);
-        F1  last_src_pos   =  floor_F1(center + support);
-        L1  src_pos_count  =  (L1)(last_src_pos - first_src_pos) + 1;
-        F4  sum            =  {0};
-        F1  weight_sum     =  0;
+        F4  *src_row  =  image_row(src, y);
+        F4  *dst_row  =  image_row(dst, y);
 
-        for (L1 src_pos_idx = 0; src_pos_idx < src_pos_count; src_pos_idx += 1)
+        for (L1 dst_x = 0; dst_x < dst_dim; dst_x += 1)
         {
-          F1  src_pos   =  first_src_pos + (F1)src_pos_idx;
-          F1  distance  =  (src_pos - center) / filter_scale;
-          F1  weight    =  Max(0, 1.0f - abs_F1(distance));
-          L1  sample_x  =  (L1)Clamp(0.0f, src_pos, (F1)src_dim - 1.0f);
+          F1  center         =  ((F1)dst_x + 0.5f) * scale - 0.5f;
+          F1  first_src_pos  =  ceil_F1(center - support);
+          F1  last_src_pos   =  floor_F1(center + support);
+          L1  src_pos_count  =  (L1)(last_src_pos - first_src_pos) + 1;
+          F4  sum            =  {0};
+          F1  weight_sum     =  0;
 
-          sum         +=  src_row[sample_x] * weight;
-          weight_sum  +=  weight;
-        }
+          for (L1 src_pos_idx = 0; src_pos_idx < src_pos_count; src_pos_idx += 1)
+          {
+            F1  src_pos   =  first_src_pos + (F1)src_pos_idx;
+            F1  distance  =  (src_pos - center) / filter_scale;
+            F1  weight    =  Max(0, 1.0f - abs_F1(distance));
+            L1  sample_x  =  (L1)Clamp(0.0f, src_pos, (F1)src_dim - 1.0f);
 
-        if (weight_sum > 0.0f)
-        {
-          dst_row[dst_x] = sum / weight_sum;
-        }
-        else
-        {
-          L1 nearest_x = (L1)Clamp(0.0f, floor_F1(center + 0.5f), (F1)src_dim - 1.0f);
+            sum         +=  src_row[sample_x] * weight;
+            weight_sum  +=  weight;
+          }
 
-          dst_row[dst_x] = src_row[nearest_x];
+          if (weight_sum > 0.0f)
+          {
+            dst_row[dst_x] = sum / weight_sum;
+          }
+          else
+          {
+            L1 nearest_x = (L1)Clamp(0.0f, floor_F1(center + 0.5f), (F1)src_dim - 1.0f);
+
+            dst_row[dst_x] = src_row[nearest_x];
+          }
         }
       }
     }
   }
+  ProfEnd();
 }
 
 Internal void image_resample_y(Image dst, Image src, Range rows)
 {
+  ProfBeginFunc();
   if (src.width == dst.width)
   {
     L1  src_dim  =  src.height;
@@ -389,11 +405,8 @@ Internal void image_resample_y(Image dst, Image src, Range rows)
           dst_row[x] = (0.25f * a[x] + 0.75f * b[x] + 0.75f * c[x] + 0.25f * d[x]) * 0.5f;
         }
       }
-
-      return;
     }
-
-    if (src_dim > 0 && dst_dim == 2 * src_dim)
+    else if (src_dim > 0 && dst_dim == 2 * src_dim)
     {
       for (L1 y = rows.min; y < rows.max; y += 1)
       {
@@ -421,69 +434,71 @@ Internal void image_resample_y(Image dst, Image src, Range rows)
           }
         }
       }
-
-      return;
     }
-
-    F1  scale          =  (F1)src_dim / (F1)dst_dim;
-    F1  filter_scale   =  Max(1, scale);
-    F1  filter_radius  =  1.0f;
-    F1  support        =  filter_radius * filter_scale;
-
-    for (L1 dst_y = rows.min; dst_y < rows.max; dst_y += 1)
+    else
     {
-      F1  weight_sum     =  0;
-      F1  center         =  ((F1)dst_y + 0.5f) * scale - 0.5f;
-      F1  first_src_pos  =  ceil_F1(center - support);
-      F1  last_src_pos   =  floor_F1(center + support);
-      L1  src_pos_count  =  (L1)(last_src_pos - first_src_pos) + 1;
-      F4  *dst_row       =  image_row(dst, dst_y);
+      F1  scale          =  (F1)src_dim / (F1)dst_dim;
+      F1  filter_scale   =  Max(1, scale);
+      F1  filter_radius  =  1.0f;
+      F1  support        =  filter_radius * filter_scale;
 
-      //- kti: Clear dst row.
-      for (L1 x = 0; x < dst.width; x += 1)
+      for (L1 dst_y = rows.min; dst_y < rows.max; dst_y += 1)
       {
-        dst_row[x] = (F4){0};
-      }
+        F1  weight_sum     =  0;
+        F1  center         =  ((F1)dst_y + 0.5f) * scale - 0.5f;
+        F1  first_src_pos  =  ceil_F1(center - support);
+        F1  last_src_pos   =  floor_F1(center + support);
+        L1  src_pos_count  =  (L1)(last_src_pos - first_src_pos) + 1;
+        F4  *dst_row       =  image_row(dst, dst_y);
 
-      for (L1 src_pos_idx = 0; src_pos_idx < src_pos_count; src_pos_idx += 1)
-      {
-        F1  src_pos   =  first_src_pos + (F1)src_pos_idx;
-        F1  distance  =  (src_pos - center) / filter_scale;
-        F1  weight    =  Max(0, 1.0f - abs_F1(distance));
-        L1  sample_y  =  (L1)Clamp(0.0f, src_pos, (F1)src_dim - 1.0f);
-        F4  *src_row  =  image_row(src, sample_y);
-
+        //- kti: Clear dst row.
         for (L1 x = 0; x < dst.width; x += 1)
         {
-          dst_row[x] += src_row[x] * weight;
+          dst_row[x] = (F4){0};
         }
 
-        weight_sum += weight;
-      }
-
-      if (weight_sum > 0.0f)
-      {
-        for (L1 x = 0; x < dst.width; x += 1)
+        for (L1 src_pos_idx = 0; src_pos_idx < src_pos_count; src_pos_idx += 1)
         {
-          dst_row[x] /= weight_sum;
+          F1  src_pos   =  first_src_pos + (F1)src_pos_idx;
+          F1  distance  =  (src_pos - center) / filter_scale;
+          F1  weight    =  Max(0, 1.0f - abs_F1(distance));
+          L1  sample_y  =  (L1)Clamp(0.0f, src_pos, (F1)src_dim - 1.0f);
+          F4  *src_row  =  image_row(src, sample_y);
+
+          for (L1 x = 0; x < dst.width; x += 1)
+          {
+            dst_row[x] += src_row[x] * weight;
+          }
+
+          weight_sum += weight;
         }
-      }
-      else
-      {
-        L1  nearest_y  =  (L1)Clamp(0.0f, floor_F1(center + 0.5f), (F1)src_dim - 1.0f);
-        F4  *src_row   =  image_row(src, nearest_y);
 
-        for (L1 x = 0; x < dst.width; x += 1)
+        if (weight_sum > 0.0f)
         {
-          dst_row[x] = src_row[x];
+          for (L1 x = 0; x < dst.width; x += 1)
+          {
+            dst_row[x] /= weight_sum;
+          }
+        }
+        else
+        {
+          L1  nearest_y  =  (L1)Clamp(0.0f, floor_F1(center + 0.5f), (F1)src_dim - 1.0f);
+          F4  *src_row   =  image_row(src, nearest_y);
+
+          for (L1 x = 0; x < dst.width; x += 1)
+          {
+            dst_row[x] = src_row[x];
+          }
         }
       }
     }
   }
+  ProfEnd();
 }
 
 Internal void image_apply_karis(Image image, Range rows)
 {
+  ProfBeginFunc();
   for (L1 y = rows.min; y < rows.max; y += 1)
   {
     F4 *row = image_row(image, y);
@@ -495,10 +510,12 @@ Internal void image_apply_karis(Image image, Range rows)
       row[x] = color / (1.0f + luminance_F4(color));
     }
   }
+  ProfEnd();
 }
 
 Internal void image_add(Image dst, Image src, Range rows)
 {
+  ProfBeginFunc();
   if (src.width == dst.width && src.height == dst.height)
   {
     for (L1 y = rows.min; y < rows.max; y += 1)
@@ -512,10 +529,12 @@ Internal void image_add(Image dst, Image src, Range rows)
       }
     }
   }
+  ProfEnd();
 }
 
 Internal void image_bloom_combine(Image dst, Image hdr, Image bloom, Image_Bloom_Params params, Range rows)
 {
+  ProfBeginFunc();
   if (   dst.width == hdr.width
       && dst.height == hdr.height
       && bloom.width == hdr.width
@@ -539,6 +558,7 @@ Internal void image_bloom_combine(Image dst, Image hdr, Image bloom, Image_Bloom
       }
     }
   }
+  ProfEnd();
 }
 
 Inline F4 tonemap_aces(F4 v)
@@ -609,6 +629,7 @@ Inline F1 srgb_from_linear(F1 l)
 
 Internal Image_RGBA8 image_tonemap(Arena *arena, Image input, Tonemap_Kind tonemap_kind)
 {
+  ProfBeginFunc();
   Image_RGBA8 result = image_rgba8_alloc(arena, input.width, input.height);
 
   for (L1 y = 0; y < input.height; y += 1)
@@ -635,6 +656,8 @@ Internal Image_RGBA8 image_tonemap(Arena *arena, Image input, Tonemap_Kind tonem
       out_px->a  =  (B1)out_color[3];
     }
   }
+
+  ProfEnd();
 
   return result;
 }

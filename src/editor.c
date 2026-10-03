@@ -371,6 +371,7 @@ Internal void async_lane(void *)
 
           //- kti: Downsample
 
+          ProfBegin("Downsample");
           for (L1 i = 0; i < work.level_count - 1; i += 1)
           {
             Image  in   =  work.levels[i];
@@ -398,9 +399,11 @@ Internal void async_lane(void *)
               lane_sync();
             }
           }
+          ProfEnd();
 
           //- kti: Upsample
 
+          ProfBegin("Upsample");
           for (L1 i = work.level_count - 1; i >= 1; i -= 1)
           {
             Image  in         =  work.levels[i];
@@ -424,18 +427,22 @@ Internal void async_lane(void *)
             image_add(out, upsampled, y_range);
             lane_sync();
           }
+          ProfEnd();
 
           //- kti: Combine HDR input and reconstructed bloom.
 
+          ProfBegin("Bloom Combine");
           Range combine_range = lane_range(work.levels[0].height);
 
           image_bloom_combine(work.levels[0], req.hdr, work.levels[0], params, combine_range);
           lane_sync();
+          ProfEnd();
 
           //- kti: Push complete event
 
           if (lane_idx() == 0)
           {
+            ProfBegin("Tonemap and Publish");
             Image_RGBA8  result                       =  image_tonemap(req.arena, work.levels[0], TONEMAP_KIND__LOTTES);
             Async_Event event  =  {
                .kind         =  ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
@@ -443,6 +450,7 @@ Internal void async_lane(void *)
             };
 
             async_event_push(event);
+            ProfEnd();
           }
 
           scratch_end(scratch);

@@ -32,10 +32,10 @@ enum
 
 enum
 {
-  GIZMO_AXIS_LENGTH_PX          =  82,
-  GIZMO_SHAFT_THICKNESS_PX      =  4,
-  GIZMO_SIZE_HANDLE_SIZE_PX     =  11,
-  GIZMO_ROTATION_RADIUS_PX      =  62,
+  GIZMO_AXIS_LENGTH_PX          =  60,
+  GIZMO_SHAFT_THICKNESS_PX      =  3,
+  GIZMO_SIZE_HANDLE_SIZE_PX     =  10,
+  GIZMO_ROTATION_RADIUS_PX      =  84,
   GIZMO_ROTATION_SEGMENT_COUNT  =  48,
 };
 
@@ -46,6 +46,14 @@ enum
   GIZMO_KIND__TRANSLATE,
   GIZMO_KIND__SCALE,
   GIZMO_KIND__ROTATE,
+  GIZMO_KIND_COUNT,
+};
+
+typedef struct Gizmo_Handle Gizmo_Handle;
+struct Gizmo_Handle
+{
+  Gizmo_Kind kind;
+  Axis       axis;
 };
 
 typedef struct Gizmo_Drag Gizmo_Drag;
@@ -54,21 +62,6 @@ struct Gizmo_Drag
   F1 applied_amount;
   F2 axis_screen;
   F4 rotation_direction;
-};
-
-typedef struct Gizmo_Value Gizmo_Value;
-struct Gizmo_Value
-{
-  Gizmo_Value *next;
-  void *ptr;
-};
-
-typedef struct Gizmo_Value_List Gizmo_Value_List;
-struct Gizmo_Value_List
-{
-  Gizmo_Value *first;
-  Gizmo_Value *last;
-  L1 count;
 };
 
 typedef struct View View;
@@ -88,19 +81,13 @@ struct View
   F1      camera_drag_start_pitch;
 
   //- kti: Transform gizmo.
-  Gizmo_Kind gizmo_hot_kind;
-  Gizmo_Kind gizmo_active_kind;
-  Gizmo_Drag gizmo_drag;
-  Gizmo_Value_List gizmo_values[GIZMO_KIND__ROTATE + 1][AXIS3_COUNT];
-  Axis       gizmo_hot_axis;
-  Axis       gizmo_active_axis;
-  F4         gizmo_pos;
-  F2         gizmo_screen_pos;
-  F2         gizmo_axes_screen[AXIS3_COUNT];
-  F2         gizmo_rotation_points_screen[AXIS3_COUNT][GIZMO_ROTATION_SEGMENT_COUNT];
-  I1         gizmo_rotation_points_visible[AXIS3_COUNT][GIZMO_ROTATION_SEGMENT_COUNT];
-  F1         gizmo_world_per_pixel;
-  I1         gizmo_visible;
+  Gizmo_Handle gizmo_hot;
+  Gizmo_Handle gizmo_active;
+  Gizmo_Drag   gizmo_drag;
+  I1           gizmo_has_kind[GIZMO_KIND_COUNT];
+  I1           gizmo_visible;
+  F4           gizmo_pos;
+  F1           gizmo_world_per_pixel;
 
   //- kti: Image result
   UI_Box *render_result_box;

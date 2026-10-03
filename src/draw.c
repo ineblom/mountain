@@ -66,8 +66,6 @@ Internal void dr_pop_bucket(void)
 
 Internal void dr_begin_frame(void)
 {
-  ProfFuncBegin();
-
   if (dr_state == 0)
   {
     Arena *arena = arena_alloc(MiB(64));
@@ -78,8 +76,6 @@ Internal void dr_begin_frame(void)
   }
 
   arena_pop_to(dr_state->arena, dr_state->arena_frame_start_pos);
-
-  ProfEnd();
 }
 
 Internal GFX_Pass *dr_pass_from_kind(DR_Bucket *bucket, GFX_Pass_Kind kind)
@@ -152,8 +148,6 @@ Internal GFX_Rect_Instance *dr_rect_instance(GFX_Texture *texture)
 
 Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_softness)
 {
-  ProfFuncBegin();
-
   GFX_Rect_Instance *result = dr_rect_instance(0);
 
   if (result != 0)
@@ -168,15 +162,11 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
     };
   }
 
-  ProfEnd();
-
   return result;
 }
 
 Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 color, F1 corner_radius, F1 edge_softness)
 {
-  ProfFuncBegin();
-
   GFX_Rect_Instance *result = dr_rect_instance(texture);
 
   if (result != 0)
@@ -189,8 +179,6 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
       .softness      =  edge_softness,
     };
   }
-
-  ProfEnd();
 
   return result;
 }
@@ -247,8 +235,6 @@ Internal GFX_Mesh_Instance *dr_mesh_ex(GFX_Pass_Kind pass_kind,
                                        GFX_Mesh_Feature_Flags feature_flags,
                                        F1 outline_width)
 {
-  ProfFuncBegin();
-
   GFX_Mesh_Instance  *result  =  0;
   DR_Bucket          *bucket  =  dr_state->top_bucket;
   
@@ -303,7 +289,6 @@ Internal GFX_Mesh_Instance *dr_mesh_ex(GFX_Pass_Kind pass_kind,
     };
   }
 
-  ProfEnd();
   return result;
 }
 
@@ -398,9 +383,7 @@ Internal void dr_text_run(FC_Run run, F2 pos, F4 color)
 
 Internal void dr_submit_bucket(OS_Window *window, GFX_Window *gfx_window, DR_Bucket *bucket)
 {
-  ProfFuncBegin();
   gfx_window_submit(window, gfx_window, bucket->passes);
-  ProfEnd();
 }
 
 Internal void dr_fstrs_push(Arena *arena, DR_FStr_List *list, DR_FStr *fstr)

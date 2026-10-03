@@ -110,19 +110,15 @@ Inline void BarW(void)
   __atomic_thread_fence(__ATOMIC_RELEASE);
 } // Write Barrier
 
-// TODO(kti): Use rdtsc for faster clock query.
-// https://github.com/colrdavidson/spall-web/blob/master/examples/manual_tracing/advanced_threads_example_linux.c
-/*Inline I1 ClockI1(void) {
-  I1 aa, dd;
-  asm volatile("rdtsc":" = a"(aa),"=d"(dd));
-  return aa;
+#if defined(__x86_64__) || defined(__i386__)
+Inline L1 clock_L1(void)
+{
+  I1 lo, hi;
+  asm volatile("lfence\n\trdtsc" : "=a"(lo), "=d"(hi) :: "memory");
+  return ((L1)hi << 32) | lo;
 }
+#endif
 
-Inline L1 ClockL1(void) {
-  I1 aa, dd;
-  asm volatile("rdtsc":" = a"(aa),"=d"(dd));
-  return (L1_(dd) << 32) | L1_(aa);
-}*/
 Inline void Pause(void)
 {
 #if defined(__aarch64__)
@@ -193,9 +189,9 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v)
 #define Swap(a, b)                                                                                                     \
   do                                                                                                                   \
   {                                                                                                                    \
-    typeof(a) temp  =  a;                                                                                                \
-    a               =  b;                                                                                                \
-    b               =  temp;                                                                                             \
+    typeof(a) temp  =  a;                                                                                              \
+    a               =  b;                                                                                              \
+    b               =  temp;                                                                                           \
   } while (0)
 
 #define AlignOf(T)       __alignof(T)

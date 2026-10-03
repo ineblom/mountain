@@ -534,7 +534,7 @@ Internal VkSemaphore gfx_vk_take_semaphore(void)
 
 Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 height, void *pixels)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
 
   GFX_Texture  *texture    =  gfx_state->first_free_texture;
   L1           image_size  =  (L1)width * height * 4;
@@ -685,7 +685,7 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels)
       && region[2]  >   0
       && region[3]  >   0)
   {
-    ProfFuncBegin();
+    ProfBeginFunc();
 
     //- kti: Use persistent staging buffer if available, otherwise create temporary.
     L1             region_size       =  (L1)region[2] * region[3] * 4;
@@ -1843,7 +1843,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw)
 
 Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
   Assert(vkw->image_idx == I1_MAX);
   gfx_collect_resources(0);
 
@@ -2017,7 +2017,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw)
 
 Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_List passes)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
 
   I1 image_idx = vkw->image_idx;
 
@@ -2325,7 +2325,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
 Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
 
   I1 image_idx = vkw->image_idx;
 

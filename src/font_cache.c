@@ -80,7 +80,7 @@ Internal FC_Piece_Array fc_piece_array_from_chunk_list(Arena *arena, FC_Piece_Ch
 
 Internal FC_Tag fc_tag_from_path(String8 path)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
 
   FC_Tag result = {0};
 
@@ -157,7 +157,7 @@ Internal FP_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size)
 
 Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 size, F1 raster_scale)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
 
   raster_scale = Max(1.0f, raster_scale);
 
@@ -251,7 +251,7 @@ Internal SI2 fc_vertex_from_corner(I1 corner)
 
 Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_size)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
 
   SW2                   region_p     =  {0};
   SW2                   region_s     =  {0};
@@ -359,7 +359,7 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
 
 Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base_align_px, F1 tab_size_px, String8 string)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
 
   FC_Style_Raster_HT_Node *style_raster_node = fc_style_raster_from_tag_size(tag, size, raster_scale);
 

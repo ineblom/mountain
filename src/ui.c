@@ -2948,7 +2948,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
 
 Internal void ui_draw(void)
 {
-  ProfFuncBegin();
+  ProfBeginFunc();
 
   for (UI_Box *box = ui_root(); !ui_box_is_nil(box);)
   {

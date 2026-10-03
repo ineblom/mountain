@@ -3,7 +3,6 @@
 
 //- kti: CODE DRIVEN EDITOR
 
-//- kti. Make profiler use rdtsc.
 //- kti: Image Cache.
 //- kti: SIMD.
 //- kti: Gizmo code is a mess.
@@ -233,6 +232,8 @@ Internal void async_lane(void *)
 
         case ASYNC_REQUEST_KIND__RENDER:
         {
+          ProfBegin("Render");
+
           //- kti: Result image alloc and progress reset.
           if (lane_idx() == 0)
           {
@@ -279,10 +280,14 @@ Internal void async_lane(void *)
             };
             async_event_push(event);
           }
+
+          ProfEnd();
         } break;
 
         case ASYNC_REQUEST_KIND__POSTPROCESS:
         {
+          ProfBegin("Postprocess");
+
           Temp_Arena          scratch  =  scratch_begin(&req.arena, 1);
           Image_Bloom_Params  params   =  req.postprocess_settings.bloom;
 
@@ -290,6 +295,8 @@ Internal void async_lane(void *)
 
           if (lane_idx() == 0)
           {
+            ProfBegin("Narrow Setup");
+
             Image_Bloom_Work work = {0};
 
             //- kti: Calculate num levels
@@ -344,6 +351,8 @@ Internal void async_lane(void *)
             }
 
             async.active_request.bloom_work = work;
+
+            ProfEnd();
           }
 
           lane_sync();
@@ -351,11 +360,13 @@ Internal void async_lane(void *)
           Image_Bloom_Work work = async.active_request.bloom_work;
 
           //- kti: Fill level 0
+        
+          ProfBegin("Fill Level 0");
 
           Range range = lane_range(req.hdr.height);
 
           image_bloom_threshold(work.levels[0], req.hdr, params, range);
-
+          ProfEnd();
           lane_sync();
 
           //- kti: Downsample
@@ -435,6 +446,8 @@ Internal void async_lane(void *)
           }
 
           scratch_end(scratch);
+
+          ProfEnd();
         } break;
       }
     }

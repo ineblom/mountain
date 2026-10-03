@@ -13,7 +13,7 @@ Internal void prof_begin(const char *str, L1 length);
 #define ProfBeginFunc() ProfBegin(__FUNCTION__)
 #define ProfEnd(x) spall_buffer_end(&spall_ctx, &spall_buffer, prof_clock())
 #define ProfScope(x) DeferLoop(ProfBegin(x), ProfEnd())
-#define ProfFlush() spall_buffer_flush(&spall_ctx, &spall_buffer)
+#define ProfFlush() do { if (spall_buffer.data && spall_buffer.head > sizeof(SpallBufferHeader)) spall_buffer_flush(&spall_ctx, &spall_buffer); } while (0)
 #else
 #define ProfInit()
 #define ProfShutdown()

@@ -1,5 +1,6 @@
 Global SpallProfile            spall_ctx;
 Global ThreadLocal SpallBuffer spall_buffer;
+Global I1                      prof_next_tid;
 
 Internal L1 prof_clock(void)
 {
@@ -19,7 +20,7 @@ Internal void prof_begin(const char *str, L1 length)
 
     os_commit(spall_buffer.data, spall_buffer.length);
 
-    spall_buffer.tid  =  lane_idx();
+    spall_buffer.tid  =  atomic_add_I1(&prof_next_tid, 1) + 1;
     spall_buffer.pid  =  0;
 
     spall_buffer_init(&spall_ctx, &spall_buffer);

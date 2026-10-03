@@ -31,6 +31,7 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
 
 Global State        *state  =  0;
 Global Async_State  async   =  {0};
+Global I1           async_lanes_completed;
 
 #define UI_THEME_COLOR(r, g, b, a, ...)                              \
   {                                                                  \
@@ -458,10 +459,14 @@ Internal void async_lane(void *)
           ProfEnd();
         } break;
       }
+
+      ProfFlush();
     }
 
     lane_sync();
   }
+
+  ProfFlush();
 }
 
 ////////////////////////////////
@@ -1416,7 +1421,7 @@ Internal F4x4 line_transform_F4x4(F4 begin, F4 direction, F1 thickness)
   F4    line_axis       =  F4_with_w(direction, 0.0f);
   F4    line_direction  =  normalize_F4(line_axis);
   F4    up              =  (F4){0.0f, 1.0f, 0.0f, 0.0f};
-  F4    right           =  (F4){0.0f, 1.0f, 0.0f, 0.0f};
+  F4    right           =  (F4){1.0f, 0.0f, 0.0f, 0.0f};
   F4    reference_axis  =  (abs_F1(line_direction[1]) < 0.99f) ? up : right;
   F4    side_axis       =  normalize_F4(cross_F4(line_direction, reference_axis));
   F4    up_axis         =  normalize_F4(cross_F4(side_axis, line_direction));
@@ -3495,6 +3500,12 @@ Internal void lane(void *user_data)
   atomic_swap_I1(&async.exit, 1);
   async_signal();
 
+  while (!atomic_load_I1(&async_lanes_completed))
+  {
+    Pause();
+  }
+
+  ProfFlush();
   ProfShutdown();
 }
 
@@ -3506,8 +3517,9 @@ SI1 main(void)
   async.event_queue.mutex    =  os_mutex_alloc();
 
   Lane_Group_Params async_group_params = {
-    .count  =  Max(1, os_core_count() - 1),
-    .proc   =  async_lane,
+    .count      =  Max(1, os_core_count() - 1),
+    .completed  =  &async_lanes_completed,
+    .proc       =  async_lane,
 
     .arena_size    =  MiB(64),
     .scratch_size  =  MiB(64),

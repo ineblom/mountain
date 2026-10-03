@@ -1,3 +1,9 @@
+// Maps a 64-bit hash to [0, count). Requires count > 0.
+Inline L1 hash_index_L1(L1 hash, L1 count)
+{
+  return (L1)(((unsigned __int128)hash * count) >> 64);
+}
+
 #define HASH_XX_P1 11400714785074694791ULL
 #define HASH_XX_P2 14029467366897019727ULL
 #define HASH_XX_P3 1609587929392839161ULL

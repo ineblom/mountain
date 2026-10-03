@@ -2899,7 +2899,7 @@ Internal void lane(void *user_data)
             F4           bounds    =  view->render_result_box->rect;
             GFX_Texture  *texture  =  rendered_texture;
 
-            if (bounds[2] > 0.0f && bounds[3] > 0.0f && texture->width > 0 && texture->height > 0)
+            if (bounds[2] > 2.0f && bounds[3] > 2.0f && texture->width > 0 && texture->height > 0)
             {
               F1  scale        =  Min(bounds[2] / (F1)texture->width, bounds[3] / (F1)texture->height);
               F2  fitted_size  =  {
@@ -2919,7 +2919,8 @@ Internal void lane(void *user_data)
                 -(F1)texture->height,
               };
 
-              dr_push_clip(bounds);
+              // Match the UI box's inset clip so the image cannot cover the tab bar border.
+              dr_push_clip(rect_pad(bounds, -1.0f));
               dr_img(dst, src, texture, (F4){1.0f, 1.0f, 1.0f, 1.0f}, 0.0f, 0.0f);
               dr_pop_clip();
             }

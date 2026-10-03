@@ -120,6 +120,13 @@ struct FC_Raster_Info_HT_Slot
 //- kti: Style Raster Hash Table
 
 typedef struct FC_Style_Raster_HT_Node FC_Style_Raster_HT_Node;
+typedef struct FC_Kerning_Cache_Entry FC_Kerning_Cache_Entry;
+struct FC_Kerning_Cache_Entry
+{
+  L1 pair_key;
+  F1 advance;
+};
+
 struct FC_Style_Raster_HT_Node
 {
   FC_Style_Raster_HT_Node *hash_next;
@@ -136,6 +143,7 @@ struct FC_Style_Raster_HT_Node
   L1                      utf8_length1_direct_map_mask[4]; // 64bit * 4  =  256bit mask.
   L1                      raster_info_hash_table_size;
   FC_Raster_Info_HT_Slot *raster_info_hash_table;
+  FC_Kerning_Cache_Entry  kerning_cache[256];
 
   L1                 run_cache_size;
   FC_Run_Cache_Slot *run_cache;

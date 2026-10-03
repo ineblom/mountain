@@ -81,6 +81,35 @@ Internal void fp_select_size(FT_Face face, FT_UInt pixel_size)
   }
 }
 
+Internal F1 fp_kerning(FP_Handle font, F1 size, F1 raster_scale, I1 left_codepoint, I1 right_codepoint)
+{
+  FT_Face face = font.face;
+
+  if (face == 0 || size <= 0 || !FT_HAS_KERNING(face))
+  {
+    return 0;
+  }
+
+  FT_UInt left_glyph  = FT_Get_Char_Index(face, left_codepoint);
+  FT_UInt right_glyph = FT_Get_Char_Index(face, right_codepoint);
+
+  if (left_glyph == 0 || right_glyph == 0)
+  {
+    return 0;
+  }
+
+  raster_scale = Max(1.0f, raster_scale);
+  fp_select_size(face, fp_pixel_size_from_font_size(size * raster_scale));
+
+  FT_Vector kerning = {0};
+  if (FT_Get_Kerning(face, left_glyph, right_glyph, FT_KERNING_DEFAULT, &kerning) != 0)
+  {
+    return 0;
+  }
+
+  return (F1)kerning.x / 64.0f / raster_scale;
+}
+
 Internal FP_Metrics fp_metrics_from_font(FP_Handle font, F1 size)
 {
   FP_Metrics result = {0};

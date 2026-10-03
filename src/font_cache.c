@@ -212,6 +212,25 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
   return style_raster_node;
 }
 
+Internal F1 fc_kerning_from_style_pair(FC_Style_Raster_HT_Node *style,
+                                       FP_Handle font,
+                                       F1 size,
+                                       I1 left_codepoint,
+                                       I1 right_codepoint)
+{
+  L1                      pair_key  =  ((L1)left_codepoint << 32) | right_codepoint;
+  L1                      slot      =  (pair_key * 11400714819323198485ull) >> 56;
+  FC_Kerning_Cache_Entry  *entry    =  &style->kerning_cache[slot];
+
+  if (entry->pair_key != pair_key)
+  {
+    entry->pair_key  =  pair_key;
+    entry->advance   =  fp_kerning(font, size, style->raster_scale, left_codepoint, right_codepoint);
+  }
+
+  return entry->advance;
+}
+
 Internal SI2 fc_vertex_from_corner(I1 corner)
 {
   Local_Persist SI2 vertices[4] = {
@@ -386,10 +405,20 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
 
     F2                   dim                        =  {0};
     FC_Piece_Chunk_List  piece_chunks               =  {0};
-    I1                   font_handle_is_set         =  0;
     FP_Handle            font_handle                =  {0};
+    I1                   previous_codepoint         =  0;
     L1                   piece_substring_begin_idx  =  0;
     L1                   piece_substring_end_idx    =  0;
+
+    L1 font_slot_idx = tag.l1[1] % fc_state->font_hash_table_size;
+    for (FC_Font_HT_Node *n = fc_state->font_hash_table[font_slot_idx].first; n != 0; n = n->hash_next)
+    {
+      if (memcmp(&n->tag, &tag, sizeof(FC_Tag)) == 0)
+      {
+        font_handle = n->handle;
+        break;
+      }
+    }
 
     for (L1 i = 0; i <= string.len;)
     {
@@ -463,30 +492,6 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
       if (info == 0)
       {
         Temp_Arena scratch = scratch_begin(0, 0);
-
-        // kti: Grab font handle.
-        if (font_handle_is_set == 0)
-        {
-          font_handle_is_set = 1;
-
-          L1               font_slot_idx   =  tag.l1[1] % fc_state->font_hash_table_size;
-          FC_Font_HT_Slot  *slot           =  &fc_state->font_hash_table[font_slot_idx];
-          FC_Font_HT_Node  *existing_node  =  0;
-
-          for (FC_Font_HT_Node *n = slot->first; n != 0; n = n->hash_next)
-          {
-            if (memcmp(&n->tag, &tag, sizeof(FC_Tag)) == 0)
-            {
-              existing_node = n;
-              break;
-            }
-          }
-
-          if (existing_node != 0)
-          {
-            font_handle = existing_node->handle;
-          }
-        }
 
         // kti: Rasterize
         FP_Raster_Result raster = {0};
@@ -593,6 +598,18 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
 
       if (info != 0)
       {
+        I1 codepoint = is_tab ? 0 : utf8_decode(piece_substring.str, piece_substring.len).codepoint;
+
+        if (previous_codepoint != 0 && codepoint != 0 && piece_chunks.last != 0)
+        {
+          F1        kerning          =  fc_kerning_from_style_pair(style_raster_node, font_handle, size, previous_codepoint, codepoint);
+          FC_Piece  *previous_piece  =  &piece_chunks.last->v[piece_chunks.last->count - 1];
+
+          previous_piece->advance  +=  kerning;
+          base_align_px            +=  kerning;
+          dim[0]                   +=  kerning;
+        }
+
         //- kti: Find atlas.
         FC_Atlas *atlas = 0;
 
@@ -644,9 +661,10 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
           piece->offset   =  (F2){0, -info->baseline};
         }
 
-        base_align_px  +=  piece->advance;
-        dim[0]         +=  piece->advance;
-        dim[1]         =   Max(dim[1], (SW1)(info->raster_dim[1] * piece->scale));
+        base_align_px       +=  piece->advance;
+        dim[0]              +=  piece->advance;
+        dim[1]              =   Max(dim[1], (SW1)(info->raster_dim[1] * piece->scale));
+        previous_codepoint  =   codepoint;
       }
     }
 
@@ -693,34 +711,54 @@ Internal F2 fc_dim_from_tag_size_string(FC_Tag tag, F1 size, F1 raster_scale, F1
   return result;
 }
 
-Internal L1 fc_char_pos_from_tag_size_string_p(FC_Tag tag, F1 size, F1 raster_scale, F1 base_align_px, F1 tab_size_px, String8 string, F1 p)
+Internal F1 fc_x_offset_from_tag_size_string_byte_offset(FC_Tag tag, F1 size, F1 raster_scale, F1 base_align_px, F1 tab_size_px, String8 string, L1 byte_offset)
 {
-  Temp_Arena  scratch            =  scratch_begin(0, 0);
-  L1          best_offset_bytes  =  0;
-  F1          best_offset_px     =  F1_MAX;
-  L1          offset_bytes       =  0;
-  F1          offset_px          =  0.f;
-  FC_Run      run                =  fc_run_from_string(tag, size, raster_scale, base_align_px, tab_size_px, string);
+  FC_Run  run                  =  fc_run_from_string(tag, size, raster_scale, base_align_px, tab_size_px, string);
+  L1      current_byte_offset  =  0;
+  F1      x_offset_px          =  0;
+
+  for (L1 i = 0; i < run.pieces.count; i += 1)
+  {
+    FC_Piece *piece = &run.pieces.v[i];
+    if (current_byte_offset + piece->decode_size > byte_offset)
+    {
+      break;
+    }
+    current_byte_offset += piece->decode_size;
+    x_offset_px += piece->advance;
+  }
+
+  return x_offset_px;
+}
+
+Internal L1 fc_byte_offset_from_tag_size_string_x_offset(FC_Tag tag, F1 size, F1 raster_scale, F1 base_align_px, F1 tab_size_px, String8 string, F1 x_offset_px)
+{
+  Temp_Arena  scratch              =  scratch_begin(0, 0);
+  L1          nearest_byte_offset  =  0;
+  F1          nearest_distance_px  =  F1_MAX;
+  L1          current_byte_offset  =  0;
+  F1          current_x_offset_px  =  0.f;
+  FC_Run      run                  =  fc_run_from_string(tag, size, raster_scale, base_align_px, tab_size_px, string);
 
   for (L1 idx = 0; idx <= run.pieces.count; idx += 1)
   {
-    F1 this_piece_offset_px = abs_F1(offset_px - p);
+    F1 distance_px = abs_F1(current_x_offset_px - x_offset_px);
 
-    if (this_piece_offset_px < best_offset_px)
+    if (distance_px < nearest_distance_px)
     {
-      best_offset_bytes  =  offset_bytes;
-      best_offset_px     =  this_piece_offset_px;
+      nearest_byte_offset  =  current_byte_offset;
+      nearest_distance_px  =  distance_px;
     }
 
     if (idx < run.pieces.count)
     {
       FC_Piece *piece = &run.pieces.v[idx];
 
-      offset_px     +=  piece->advance;
-      offset_bytes  +=  piece->decode_size;
+      current_x_offset_px  +=  piece->advance;
+      current_byte_offset  +=  piece->decode_size;
     }
   }
 
   scratch_end(scratch);
-  return best_offset_bytes;
+  return nearest_byte_offset;
 }

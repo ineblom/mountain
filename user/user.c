@@ -2,51 +2,72 @@
 #include "user_api.h"
 #include "math.c"
 
-Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time) {
+Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time)
+{
   //- kti: Scene
   Entity *e = api.entity(str8("Sphere"));
-  e->flags |= ENTITY_FLAG__SHAPE;
-  e->material.base_color = (F4){1.0f, 0.0f, 0.0f, 1.0f};
+  
+  e->flags                |=  ENTITY_FLAG__SHAPE;
+  e->material.base_color  =   (F4){1.0f, 0.0f, 0.0f, 1.0f};
+  e->material.metallic    =   0.5f;
+  e->material.roughness   =   0.2f;
 
-  e = api.entity(str8("Box"));
-  e->flags |= ENTITY_FLAG__SHAPE;
-  e->shape_kind = SHAPE_KIND__BOX;
-  e->material.base_color = (F4){0.0f, 1.0f, 0.5f, 1.0f};
+  if (frame_index == 1)
+  {
+    e->pos[0] = -0.45f;
+  }
+
+  e                       =   api.entity(str8("Box"));
+  e->flags                |=  ENTITY_FLAG__SHAPE;
+  e->shape_kind           =   SHAPE_KIND__BOX;
+  e->material.base_color  =   (F4){0.0f, 1.0f, 0.5f, 1.0f};
+  e->material.metallic    =   0.2f;
+  e->material.roughness   =   0.8f;
+
+  if (frame_index == 1)
+  {
+    e->pos[0] = 0.45f;
+    e->pos[2] = 1.45f;
+  }
 
   //- kti: Floor
-  Entity *floor = api.entity(str8("Floor"));
-  floor->flags |= ENTITY_FLAG__SHAPE;
-  floor->shape_kind = SHAPE_KIND__PLANE;
-  floor->direction = (F4){0.0f, 1.0f, 0.0f, 0.0f};
-  floor->material.metallic = 0.5f;
-  floor->material.roughness = 0.4f;
-  floor->pos[1] = -0.5f;
+  e                      =   api.entity(str8("Floor"));
+  e->flags               |=  ENTITY_FLAG__SHAPE;
+  e->shape_kind          =   SHAPE_KIND__PLANE;
+  e->direction           =   (F4){0.0f, 1.0f, 0.0f, 0.0f};
+  e->material.metallic   =   0.5f;
+  e->material.roughness  =   0.4f;
+  e->pos[1]              =   -0.5f;
 
   //- kti: Light
-  Entity *light = api.entity(str8("Light"));
-  light->flags |= ENTITY_FLAG__SHAPE;
-  light->shape_kind = SHAPE_KIND__BOX;
-  light->pos[1] = 5.0f;
-  light->size = (F4){8.0f, 0.1f, 8.0f, 1.0f};
-  light->material.emissive = (F4){2.0f, 2.0f, 2.0f, 1.0f};
+  e                     =   api.entity(str8("Light"));
+  e->flags              |=  ENTITY_FLAG__SHAPE;
+  e->shape_kind         =   SHAPE_KIND__BOX;
+  e->pos[1]             =   5.0f;
+  e->size               =   (F4){8.0f, 0.1f, 8.0f, 1.0f};
+  e->material.emissive  =   (F4){2.0f, 2.0f, 2.0f, 1.0f};
 
   //- kti: Camera
-  Entity *c = api.entity(str8("Camera"));
-  c->flags |= ENTITY_FLAG__CAMERA;
-  c->pos[2] = -2.0f;
-  c->direction = (F4){0.0f, 0.0f, 1.0f, 0.0f};
+  e             =   api.entity(str8("Camera"));
+  e->flags      |=  ENTITY_FLAG__CAMERA;
+  e->pos[2]     =   -2.0f;
+  e->direction  =   (F4){0.0f, 0.0f, 1.0f, 0.0f};
 
   Image image = api.image_alloc(frame_arena, 320, 240);
 
-  for (L1 y = 0; y < image.height; y += 1) {
+  for (L1 y = 0; y < image.height; y += 1)
+  {
     F4 *row = image.pixels + y*image.row_stride;
-    for (L1 x = 0; x < image.width; x += 1) {
+
+    for (L1 x = 0; x < image.width; x += 1)
+    {
       F1 a = (F1)x/20.0f+time;
       F1 b = (F1)x/20.0f;
-      F1 r = sin_F1(PI*a);
+      F1 r = Square(sin_F1(PI*a));
       F1 g = sin_F1(PI*b);
-      r *= r;
-      g = g*g*g*g;
+
+      g  =  g*g*g*g;
+
       row[x] = (F4){r, g, 0.0f, 1.0f};
     }
   }

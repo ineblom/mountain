@@ -216,7 +216,7 @@ Internal void ui__push_tags_key_from_appended_string(String8 string)
 
   if (!is_new_root)
   {
-    L1                  slot_idx  =  key.l1[0] % ui_state->tags_cache_slot_count;
+    L1                  slot_idx  =  hash_index_L1(key.l1[0], ui_state->tags_cache_slot_count);
     UI_Tags_Cache_Slot  *slot     =  &ui_state->tags_cache_slots[slot_idx];
     UI_Tags_Cache_Node  *node     =  0;
 
@@ -370,7 +370,7 @@ Internal F4 ui_color_from_tags_key_extras(UI_Key key, String8_Array extras)
       final_key = ui_key_from_string(final_key, extras.v[idx]);
     }
 
-    L1                           slot_idx  =  final_key.l1[0] % ui_state->theme_pattern_cache_slot_count;
+    L1                           slot_idx  =  hash_index_L1(final_key.l1[0], ui_state->theme_pattern_cache_slot_count);
     UI_Theme_Pattern_Cache_Slot  *slot     =  &ui_state->theme_pattern_cache_slots[slot_idx];
     UI_Theme_Pattern_Cache_Node  *node     =  0;
 
@@ -386,7 +386,7 @@ Internal F4 ui_color_from_tags_key_extras(UI_Key key, String8_Array extras)
     {
       String8_Array tags = {0};
       {
-        L1                  tags_cache_slot_idx  =  key.l1[0] % ui_state->tags_cache_slot_count;
+        L1                  tags_cache_slot_idx  =  hash_index_L1(key.l1[0], ui_state->tags_cache_slot_count);
         UI_Tags_Cache_Slot  *tags_cache_slot     =  &ui_state->tags_cache_slots[tags_cache_slot_idx];
 
         for (UI_Tags_Cache_Node *n = tags_cache_slot->first; n != 0; n = n->next)
@@ -703,7 +703,7 @@ Internal UI_Box *ui_box_from_key(UI_Key key)
 
   if (!ui_key_match(key, ui_key_zero()))
   {
-    UI_Box_HT_Slot *slot = &ui_state->box_table[key.l1[0] % ui_state->box_table_size];
+    UI_Box_HT_Slot *slot = &ui_state->box_table[hash_index_L1(key.l1[0], ui_state->box_table_size)];
 
     for (UI_Box *b = slot->first; !ui_box_is_nil(b); b = b->hash_next)
     {
@@ -785,7 +785,7 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key)
 
   if (box_first_frame && !box_is_transient)
   {
-    UI_Box_HT_Slot *slot = &ui_state->box_table[key.l1[0] % ui_state->box_table_size];
+    UI_Box_HT_Slot *slot = &ui_state->box_table[hash_index_L1(key.l1[0], ui_state->box_table_size)];
 
     DLLInsert_NPZ(&ui_nil_box, slot->first, slot->last, slot->last, box, hash_next, hash_prev);
   }
@@ -1409,7 +1409,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
     if (node->last_build_index_accessed + 2 < ui_state->theme_build_index)
     {
-      L1                           slot_idx  =  node->key.l1[0] % ui_state->theme_pattern_cache_slot_count;
+      L1                           slot_idx  =  hash_index_L1(node->key.l1[0], ui_state->theme_pattern_cache_slot_count);
       UI_Theme_Pattern_Cache_Slot  *slot     =  &ui_state->theme_pattern_cache_slots[slot_idx];
 
       DLLRemove_NP(slot->first, slot->last, node, slot_next, slot_prev);

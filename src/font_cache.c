@@ -91,7 +91,7 @@ Internal FC_Tag fc_tag_from_path(String8 path)
   result.l1[1]  =  hash.l1[1];
 
   //- kti: Find the slot for this path.
-  L1               slot_idx  =  result.l1[1] % fc_state->font_hash_table_size;
+  L1               slot_idx  =  hash_index_L1(result.l1[1], fc_state->font_hash_table_size);
   FC_Font_HT_Slot  *slot     =  &fc_state->font_hash_table[slot_idx];
 
   //- kti: Check if this tag (font path) is already in the table.
@@ -132,7 +132,7 @@ Internal FC_Tag fc_tag_from_path(String8 path)
 
 Internal FP_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size)
 {
-  L1 slot_idx = tag.l1[1] % fc_state->font_hash_table_size;
+  L1 slot_idx = hash_index_L1(tag.l1[1], fc_state->font_hash_table_size);
 
   FC_Font_HT_Node *existing_node = 0;
 
@@ -178,7 +178,7 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
 
   Hash128                  hash                =  hash128(buffer, sizeof(buffer));
   L1                       style_hash          =  hash.l1[0];
-  L1                       slot_idx            =  style_hash % fc_state->style_raster_hash_table_size;
+  L1                       slot_idx            =  hash_index_L1(style_hash, fc_state->style_raster_hash_table_size);
   FC_Style_Raster_HT_Slot  *slot               =  &fc_state->style_raster_hash_table[slot_idx];
   FC_Style_Raster_HT_Node  *style_raster_node  =  0;
 
@@ -374,7 +374,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
   //- kti: Unpack run params.
   Hash128            hash                =  hash128(string.str, string.len);
   L1                 run_hash            =  hash.l1[0];
-  L1                 run_cache_slot_idx  =  run_hash % style_raster_node->run_cache_size;
+  L1                 run_cache_slot_idx  =  hash_index_L1(run_hash, style_raster_node->run_cache_size);
   FC_Run_Cache_Slot  *run_slot           =  &style_raster_node->run_cache[run_cache_slot_idx];
 
   //- kti: Check cache for existing run node for this string.
@@ -410,7 +410,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
     L1                   piece_substring_begin_idx  =  0;
     L1                   piece_substring_end_idx    =  0;
 
-    L1 font_slot_idx = tag.l1[1] % fc_state->font_hash_table_size;
+    L1 font_slot_idx = hash_index_L1(tag.l1[1], fc_state->font_hash_table_size);
     for (FC_Font_HT_Node *n = fc_state->font_hash_table[font_slot_idx].first; n != 0; n = n->hash_next)
     {
       if (memcmp(&n->tag, &tag, sizeof(FC_Tag)) == 0)
@@ -475,7 +475,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
 
         piece_hash = hash.l1[0];
 
-        L1                      slot_idx  =  piece_hash % style_raster_node->raster_info_hash_table_size;
+        L1                      slot_idx  =  hash_index_L1(piece_hash, style_raster_node->raster_info_hash_table_size);
         FC_Raster_Info_HT_Slot  *slot     =  &style_raster_node->raster_info_hash_table[slot_idx];
 
         for (FC_Raster_Info_HT_Node *n = slot->first; n != 0; n = n->hash_next)
@@ -571,7 +571,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
         }
         else
         {
-          L1                      slot_idx  =  piece_hash % style_raster_node->raster_info_hash_table_size;
+          L1                      slot_idx  =  hash_index_L1(piece_hash, style_raster_node->raster_info_hash_table_size);
           FC_Raster_Info_HT_Slot  *slot     =  &style_raster_node->raster_info_hash_table[slot_idx];
           FC_Raster_Info_HT_Node  *node     =  push_array_no_zero(fc_state->raster_arena, FC_Raster_Info_HT_Node, 1);
 

@@ -28,8 +28,8 @@ Internal Lister_Entry *lister_entry_push(Lister_Entry_Kind kind, String8 str)
 
 Internal Lister_Entry *lister_entry_get_or_push(Lister_Entry_Kind kind, String8 str)
 {
-  L1            hash      =  str8_hash(str) ^ (5381 * kind);
-  L1            slot_idx  =  hash % ArrayCount(lister_state.entry_hash_table);
+  L1            hash      =  hash64_seed(str.str, str.len, (L1)kind);
+  L1            slot_idx  =  hash_index_L1(hash, ArrayCount(lister_state.entry_hash_table));
   Lister_Entry  **slot    =  &lister_state.entry_hash_table[slot_idx];
   Lister_Entry  *entry    =  0;
 

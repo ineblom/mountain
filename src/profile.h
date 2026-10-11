@@ -3,11 +3,11 @@
 
 #include "spall.h"
 
+Internal void prof_init(void);
 Internal void prof_begin(const char *str, L1 length);
 
 #if (PROF_ENABLED)
-// Keep Spall timestamps in raw ticks; only relative durations are meaningful.
-#define ProfInit() spall_init_file("profile.spall", 1, &spall_ctx)
+#define ProfInit() prof_init()
 #define ProfShutdown() spall_quit(&spall_ctx)
 #define ProfBegin(x) prof_begin(x, sizeof(x) - 1)
 #define ProfBeginFunc() ProfBegin(__FUNCTION__)

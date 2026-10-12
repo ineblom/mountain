@@ -3,7 +3,7 @@
 
 //- kti: CODE DRIVEN EDITOR
 
-//- kti: Image Cache.
+//- kti: Multithread Tonemap.
 //- kti: SIMD.
 //- kti: Should user code be a compute shader?
 //- kti: Camera icon and picking.
@@ -427,11 +427,13 @@ Internal void async_lane(void *)
             image_add(out, upsampled, y_range);
             lane_sync();
           }
+
           ProfEnd();
 
           //- kti: Combine HDR input and reconstructed bloom.
 
           ProfBegin("Bloom Combine");
+
           Range combine_range = lane_range(work.levels[0].height);
 
           image_bloom_combine(work.levels[0], req.hdr, work.levels[0], params, combine_range);
@@ -443,13 +445,15 @@ Internal void async_lane(void *)
           if (lane_idx() == 0)
           {
             ProfBegin("Tonemap and Publish");
-            Image_RGBA8  result                       =  image_tonemap(req.arena, work.levels[0], TONEMAP_KIND__LOTTES);
-            Async_Event event  =  {
+
+            Image_RGBA8  result  =  image_tonemap(req.arena, work.levels[0], TONEMAP_KIND__LOTTES);
+            Async_Event  event   =  {
                .kind         =  ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
                .image_rgba8  =  result,
             };
 
             async_event_push(event);
+
             ProfEnd();
           }
 
@@ -1693,10 +1697,15 @@ Internal void lane(void *user_data)
   gfx_init();
   fp_init();
   fc_init();
+  ic_init();
+  tc_init();
 
   state                    =  push_array(arena, State, 1);
   state->arena             =  arena;
   state->frames_requested  =  2;
+  state->hdr_key           =  ic_key_from_string(str8("render/hdr"));
+  state->render_result_key =  tc_key_from_string(str8("render/result"));
+  state->user_render_key   =  tc_key_from_string(str8("render/user"));
 
   state->meshes[SHAPE_KIND__SPHERE]  =  mesh_alloc_sphere(16, 32);
   state->meshes[SHAPE_KIND__BOX]     =  mesh_alloc_box();
@@ -1895,27 +1904,15 @@ Internal void lane(void *user_data)
             }
             else
             {
-              //- kti: Release previous hdr arena.
-              arena_release(state->hdr_arena);
-
-              //- kti: Take ownership of arena containing HDR image.
-              state->hdr_arena  =  e.arena;
-              state->hdr        =  e.image;
-
-              //- kti: Trigger postprocess.
-              state->postprocess_displayed_hash = 0;
+              ic_set(state->hdr_key, &e.arena, e.image);
             }
           }
         } break;
 
         case ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE:
         {
-          Image_RGBA8  image         =  e.image_rgba8;
-          GFX_Texture  *new_texture  =  gfx_tex2d_from_image(image, GFX_TEXTURE_USAGE__STATIC);
-
-          gfx_tex2d_free(state->render_result_texture);
-
-          state->render_result_texture = new_texture;
+          tc_set(state->render_result_key, e.image_rgba8);
+          ic_drop(&state->postprocess_source);
           state->postprocess_in_flight = 0;
         } break;
       }
@@ -1941,32 +1938,9 @@ Internal void lane(void *user_data)
       //- kti: Ensure correct image format.
       Image_RGBA8 upload_image = image_tonemap(scratch.arena, user_image, TONEMAP_KIND__LOTTES);
 
-      GFX_Texture *texture = state->user_render_texture;
-
-      //- kti: Delete previous texture if necessary.
-      if (texture != 0 && (
-          texture->width  != upload_image.width ||
-          texture->height != upload_image.height))
-      {
-        gfx_tex2d_free(texture);
-
-        texture = 0;
-      }
-
-      //- kti: Create or fill texture.
-      if (texture == 0)
-      {
-        texture = gfx_tex2d_from_image(upload_image, GFX_TEXTURE_USAGE__DYNAMIC);
-      }
-      else
-      {
-        SI4 region = {0, 0, upload_image.width, upload_image.height};
-
-        gfx_fill_tex2d_region(texture, region, upload_image.pixels);
-      }
-
-      texture->filter             =  GFX_TEXTURE_FILTER__NEAREST;
-      state->user_render_texture  =  texture;
+      tc_set(state->user_render_key, upload_image);
+      GFX_Texture *texture = tc_texture(state->user_render_key);
+      if (texture) { texture->filter = GFX_TEXTURE_FILTER__NEAREST; }
     }
 
     //- kti: Build lister.
@@ -2830,11 +2804,11 @@ Internal void lane(void *user_data)
 
           if (view->kind == VIEW_KIND__RT_RENDER)
           {
-            rendered_texture = state->render_result_texture;
+            rendered_texture = tc_texture(state->render_result_key);
           }
           else if (view->kind == VIEW_KIND__USER_RENDER)
           {
-            rendered_texture = state->user_render_texture;
+            rendered_texture = tc_texture(state->user_render_key);
           }
 
           if (view->render_result_box != 0 && rendered_texture != 0)
@@ -3281,30 +3255,37 @@ Internal void lane(void *user_data)
 
     L1 postprocess_settings_hash = hash64_seed(&state->postprocess_settings, sizeof(state->postprocess_settings), 0);
 
+    L1 hdr_generation = ic_generation(state->hdr_key);
+
     if (!state->postprocess_in_flight &&
-        state->postprocess_displayed_hash != postprocess_settings_hash &&
+        (state->postprocess_displayed_hash != postprocess_settings_hash ||
+         state->postprocess_hdr_generation != hdr_generation) &&
         state->render_request_id == 0 &&
-        !image_is_nil(state->hdr))
+        !image_is_nil(ic_image(state->hdr_key)))
     {
       if (state->display_arena == 0)
       {
         state->display_arena = arena_alloc(GiB(1));
       }
 
+      IC_Ref source = ic_acquire(state->hdr_key);
       Async_Request request = {
         .kind                  =  ASYNC_REQUEST_KIND__POSTPROCESS,
         .arena                 =  state->display_arena,
-        .hdr                   =  state->hdr,
+        .hdr                   =  source.image,
         .postprocess_settings  =  state->postprocess_settings,
       };
 
       if (async_request_push(request))
       {
+        state->postprocess_source          =  source;
+        state->postprocess_hdr_generation  =  hdr_generation;
         state->postprocess_displayed_hash  =  postprocess_settings_hash;
         state->postprocess_in_flight       =  1;
       }
       else
       {
+        ic_drop(&source);
         editor_request_frame();
       }
     }

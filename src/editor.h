@@ -339,13 +339,14 @@ struct State
   Postprocess_Settings postprocess_settings;
   L1                   render_request_id;
   Render_Progress      render_progress;
-  Arena               *hdr_arena;
-  Image                hdr;
+  IC_Key               hdr_key;
+  TC_Key               render_result_key;
+  TC_Key               user_render_key;
+  IC_Ref               postprocess_source;
+  L1                   postprocess_hdr_generation;
   L1                   postprocess_displayed_hash;
   I1                   postprocess_in_flight;
   Arena               *display_arena;
-  GFX_Texture         *render_result_texture;
-  GFX_Texture         *user_render_texture;
 
   //- kti: User Code
   User_Render_Func user_render_func;

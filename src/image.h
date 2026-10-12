@@ -55,6 +55,15 @@ struct Image_RGBA8
   RGBA8 *pixels;
 };
 
+typedef struct Image_Tonemap_Params Image_Tonemap_Params;
+struct Image_Tonemap_Params
+{
+  Tonemap_Kind kind;
+  F1          exposure_ev; // Stops before tonemapping; 0 is neutral.
+  F1          saturation;  // Display-linear RGB; 1 is neutral, 0 is grayscale.
+  F1          white_point; // Reinhard only, after exposure; 0 keeps the simple curve.
+};
+
 typedef struct Image_Bloom_Params Image_Bloom_Params;
 struct Image_Bloom_Params
 {

@@ -677,48 +677,106 @@ Inline B1 srgb8_from_linear(F1 l)
   return (B1)(lo + (position - (F1)index) * (hi - lo));
 }
 
-//- kti: Specialize each pixel loop so kind selection happens once per call.
-#define IMAGE_TONEMAP_KERNEL(name, color)                                                 \
-  Internal void image_tonemap_##name(Image_RGBA8 dst, Image src, Range rows)              \
-  {                                                                                       \
-    for (L1 y = rows.min; y < rows.max; y += 1)                                           \
-    {                                                                                     \
-      F4     *src_row  =  image_row(src, y);                                              \
-      RGBA8  *dst_row  =  image_rgba8_row(dst, y);                                        \
-                                                                                          \
-      for (L1 x = 0; x < src.width; x += 1)                                               \
-      {                                                                                   \
-        F4 in_px = src_row[x];                                                            \
-        F4 tonemapped = (color);                                                          \
-                                                                                          \
-        dst_row[x] = (RGBA8){                                                             \
-          srgb8_from_linear(tonemapped[0]),                                               \
-          srgb8_from_linear(tonemapped[1]),                                               \
-          srgb8_from_linear(tonemapped[2]),                                               \
-          255,                                                                            \
-        };                                                                                \
-      }                                                                                   \
-    }                                                                                     \
+Inline F4 tonemap_reinhard_white(F4 v, F1 inv_white_squared)
+{
+  F4 result = (v / (1.0f + v)) * (1.0f + v * inv_white_squared);
+
+  return result;
+}
+
+Inline F4 image_tonemap_saturation(F4 color, F1 saturation)
+{
+  color = clamp01_F4(color);
+  F1 gray = luminance_F4(color);
+  F4 result = gray + (color - gray) * saturation;
+
+  return result;
+}
+
+typedef struct Image_Tonemap_Adjustments Image_Tonemap_Adjustments;
+struct Image_Tonemap_Adjustments
+{
+  F1 exposure_scale;
+  F1 saturation;
+  F1 inv_white_squared;
+};
+
+//- kti: Specialize kind and neutral settings outside the pixel loops.
+#define IMAGE_TONEMAP_KERNEL(name, input, curve, output)                                                          \
+  Internal void image_tonemap_##name(Image_RGBA8 dst, Image src, Image_Tonemap_Adjustments adjustments, Range rows)\
+  {                                                                                                               \
+    for (L1 y = rows.min; y < rows.max; y += 1)                                                                   \
+    {                                                                                                             \
+      F4     *src_row  =  image_row(src, y);                                                                      \
+      RGBA8  *dst_row  =  image_rgba8_row(dst, y);                                                                \
+                                                                                                                  \
+      for (L1 x = 0; x < src.width; x += 1)                                                                       \
+      {                                                                                                           \
+        F4 in_px = (input);                                                                                       \
+        F4 tonemapped = (curve);                                                                                  \
+        F4 color = (output);                                                                                      \
+                                                                                                                  \
+        dst_row[x] = (RGBA8){                                                                                     \
+          srgb8_from_linear(color[0]),                                                                            \
+          srgb8_from_linear(color[1]),                                                                            \
+          srgb8_from_linear(color[2]),                                                                            \
+          255,                                                                                                    \
+        };                                                                                                        \
+      }                                                                                                           \
+    }                                                                                                             \
   }
 
-IMAGE_TONEMAP_KERNEL(aces,     tonemap_aces(in_px))
-IMAGE_TONEMAP_KERNEL(reinhard, tonemap_reinhard(in_px))
-IMAGE_TONEMAP_KERNEL(lottes,   tonemap_lottes(in_px))
-IMAGE_TONEMAP_KERNEL(linear,   in_px)
+IMAGE_TONEMAP_KERNEL(aces,     src_row[x], tonemap_aces(in_px),     tonemapped)
+IMAGE_TONEMAP_KERNEL(reinhard, src_row[x], tonemap_reinhard(in_px), tonemapped)
+IMAGE_TONEMAP_KERNEL(lottes,   src_row[x], tonemap_lottes(in_px),   tonemapped)
+IMAGE_TONEMAP_KERNEL(linear,   src_row[x], in_px,                  tonemapped)
+
+IMAGE_TONEMAP_KERNEL(aces_adjusted, src_row[x] * adjustments.exposure_scale,
+                    tonemap_aces(in_px), image_tonemap_saturation(tonemapped, adjustments.saturation))
+IMAGE_TONEMAP_KERNEL(reinhard_adjusted, src_row[x] * adjustments.exposure_scale,
+                    tonemap_reinhard_white(in_px, adjustments.inv_white_squared),
+                    image_tonemap_saturation(tonemapped, adjustments.saturation))
+IMAGE_TONEMAP_KERNEL(lottes_adjusted, src_row[x] * adjustments.exposure_scale,
+                    tonemap_lottes(in_px), image_tonemap_saturation(tonemapped, adjustments.saturation))
+IMAGE_TONEMAP_KERNEL(linear_adjusted, src_row[x] * adjustments.exposure_scale,
+                    in_px, image_tonemap_saturation(tonemapped, adjustments.saturation))
 
 #undef IMAGE_TONEMAP_KERNEL
 
-Internal void image_tonemap(Image_RGBA8 dst, Image src, Tonemap_Kind kind, Range rows)
+Internal void image_tonemap(Image_RGBA8 dst, Image src, Image_Tonemap_Params params, Range rows)
 {
   ProfBeginFunc();
   if (src.width == dst.width && src.height == dst.height)
   {
-    switch (kind)
+    Image_Tonemap_Adjustments adjustments = {
+      .exposure_scale = params.exposure_ev == 0.0f ? 1.0f : exp2f(params.exposure_ev),
+      .saturation = params.saturation,
+    };
+
+    if (params.kind == TONEMAP_KIND__REINHARD && params.white_point > 0.0f)
     {
-      case TONEMAP_KIND__ACES:     image_tonemap_aces(dst, src, rows);     break;
-      case TONEMAP_KIND__REINHARD: image_tonemap_reinhard(dst, src, rows); break;
-      case TONEMAP_KIND__LOTTES:   image_tonemap_lottes(dst, src, rows);   break;
-      default:                   image_tonemap_linear(dst, src, rows);   break;
+      adjustments.inv_white_squared = 1.0f / (params.white_point * params.white_point);
+    }
+
+    if (params.exposure_ev == 0.0f && params.saturation == 1.0f && adjustments.inv_white_squared == 0.0f)
+    {
+      switch (params.kind)
+      {
+        case TONEMAP_KIND__ACES:     image_tonemap_aces(dst, src, adjustments, rows);     break;
+        case TONEMAP_KIND__REINHARD: image_tonemap_reinhard(dst, src, adjustments, rows); break;
+        case TONEMAP_KIND__LOTTES:   image_tonemap_lottes(dst, src, adjustments, rows);   break;
+        default:                   image_tonemap_linear(dst, src, adjustments, rows);   break;
+      }
+    }
+    else
+    {
+      switch (params.kind)
+      {
+        case TONEMAP_KIND__ACES:     image_tonemap_aces_adjusted(dst, src, adjustments, rows);     break;
+        case TONEMAP_KIND__REINHARD: image_tonemap_reinhard_adjusted(dst, src, adjustments, rows); break;
+        case TONEMAP_KIND__LOTTES:   image_tonemap_lottes_adjusted(dst, src, adjustments, rows);   break;
+        default:                   image_tonemap_linear_adjusted(dst, src, adjustments, rows);   break;
+      }
     }
   }
   ProfEnd();

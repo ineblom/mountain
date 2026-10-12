@@ -245,6 +245,7 @@ struct Async_Request
   Render_Settings      render_settings;
   RT_Scene             scene;
   Image                hdr;
+  Image_RGBA8          ldr;
   Render_Progress     *render_progress;
   Postprocess_Settings postprocess_settings;
   Image_Bloom_Work     bloom_work;

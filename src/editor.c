@@ -3,7 +3,6 @@
 
 //- kti: CODE DRIVEN EDITOR
 
-//- kti: Multithread Tonemap.
 //- kti: SIMD.
 //- kti: Should user code be a compute shader?
 //- kti: Camera icon and picking.
@@ -318,6 +317,8 @@ Internal void async_lane(void *)
 
             arena_clear(req.arena);
 
+            async.active_request.ldr = image_rgba8_alloc(req.arena, req.hdr.width, req.hdr.height);
+
             work.levels     =  push_array(scratch.arena, Image, work.level_count);
             work.upsampled  =  push_array(scratch.arena, Image, work.level_count - 1);
 
@@ -440,13 +441,22 @@ Internal void async_lane(void *)
           lane_sync();
           ProfEnd();
 
+          //- kti: Tonemap
+
+          Image_RGBA8 result = async.active_request.ldr;
+
+          ProfBegin("Tonemap");
+          image_tonemap(result, work.levels[0], TONEMAP_KIND__REINHARD, lane_range(result.height));
+          ProfEnd();
+
+          lane_sync();
+
           //- kti: Push complete event
 
           if (lane_idx() == 0)
           {
-            ProfBegin("Tonemap and Publish");
+            ProfBegin("Publish");
 
-            Image_RGBA8  result  =  image_tonemap(req.arena, work.levels[0], TONEMAP_KIND__LOTTES);
             Async_Event  event   =  {
                .kind         =  ASYNC_EVENT_KIND__POSTPROCESS_COMPLETE,
                .image_rgba8  =  result,
@@ -1936,7 +1946,8 @@ Internal void lane(void *user_data)
       Image user_image = state->user_render_func(api, scratch.arena, state->scene_frame_index, time);
 
       //- kti: Ensure correct image format.
-      Image_RGBA8 upload_image = image_tonemap(scratch.arena, user_image, TONEMAP_KIND__LOTTES);
+      Image_RGBA8 upload_image = image_rgba8_alloc(scratch.arena, user_image.width, user_image.height);
+      image_tonemap(upload_image, user_image, TONEMAP_KIND__LOTTES, (Range){0, user_image.height});
 
       tc_set(state->user_render_key, upload_image);
       GFX_Texture *texture = tc_texture(state->user_render_key);

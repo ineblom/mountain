@@ -591,21 +591,20 @@ Inline F4 tonemap_lottes(F4 v)
   F1  mid_out  =  0.267f;
   F1  b        =  (-powf(mid_in, a) + powf(hdr_max, a) * mid_out) / ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
   F1  c        =  (powf(hdr_max, a * d) * powf(mid_in, a) - powf(hdr_max, a) * powf(mid_in, a * d) * mid_out) / ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
-  F4  result   =  pow_F4(v, a) / (pow_F4(v, a * d) * b + c);
-
-  return result;
-}
-
-Internal F4 tonemap(Tonemap_Kind kind, F4 v)
-{
-  F4 result = v;
-
-  switch (kind)
-  {
-    case TONEMAP_KIND__ACES:     result  =  tonemap_aces(v);     break;
-    case TONEMAP_KIND__REINHARD: result  =  tonemap_reinhard(v); break;
-    case TONEMAP_KIND__LOTTES:   result  =  tonemap_lottes(v);   break;
-  }
+  //- kti: Skip alpha powers, but keep the remaining arithmetic vectorized.
+  F4 numerator = {
+    powf(v[0], a),
+    powf(v[1], a),
+    powf(v[2], a),
+    1.0f,
+  };
+  F4 denominator_power = {
+    powf(v[0], a * d),
+    powf(v[1], a * d),
+    powf(v[2], a * d),
+    1.0f,
+  };
+  F4 result = numerator / (denominator_power * b + c);
 
   return result;
 }
@@ -627,37 +626,138 @@ Inline F1 srgb_from_linear(F1 l)
   return s;
 }
 
-Internal Image_RGBA8 image_tonemap(Arena *arena, Image input, Tonemap_Kind tonemap_kind)
+//- kti: Samples of (B1)(255 * srgb_from_linear(i / 1024.0f)).
+// If adjacent samples agree, monotonicity makes the whole interval exact.
+// Intervals crossing a byte boundary use the original conversion instead.
+// The upper endpoint is conservative: float rounding of white can vary.
+Global const B1 srgb8_from_linear_table[1025] = {
+  0, 3, 6, 9, 12, 15, 17, 19, 21, 23, 25, 26, 28, 29, 30, 32,
+  33, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 46, 47, 48,
+  49, 50, 51, 51, 52, 53, 54, 54, 55, 56, 57, 57, 58, 59, 59, 60,
+  61, 61, 62, 63, 63, 64, 64, 65, 66, 66, 67, 67, 68, 69, 69, 70,
+  70, 71, 71, 72, 72, 73, 73, 74, 74, 75, 75, 76, 77, 77, 77, 78,
+  78, 79, 79, 80, 80, 81, 81, 82, 82, 83, 83, 84, 84, 84, 85, 85,
+  86, 86, 87, 87, 88, 88, 88, 89, 89, 90, 90, 90, 91, 91, 92, 92,
+  92, 93, 93, 94, 94, 94, 95, 95, 96, 96, 96, 97, 97, 97, 98, 98,
+  99, 99, 99, 100, 100, 100, 101, 101, 101, 102, 102, 103, 103, 103, 104, 104,
+  104, 105, 105, 105, 106, 106, 106, 107, 107, 107, 108, 108, 108, 109, 109, 109,
+  110, 110, 110, 111, 111, 111, 112, 112, 112, 112, 113, 113, 113, 114, 114, 114,
+  115, 115, 115, 116, 116, 116, 116, 117, 117, 117, 118, 118, 118, 119, 119, 119,
+  119, 120, 120, 120, 121, 121, 121, 121, 122, 122, 122, 123, 123, 123, 123, 124,
+  124, 124, 124, 125, 125, 125, 126, 126, 126, 126, 127, 127, 127, 127, 128, 128,
+  128, 129, 129, 129, 129, 130, 130, 130, 130, 131, 131, 131, 131, 132, 132, 132,
+  132, 133, 133, 133, 133, 134, 134, 134, 134, 135, 135, 135, 135, 136, 136, 136,
+  136, 137, 137, 137, 137, 138, 138, 138, 138, 139, 139, 139, 139, 140, 140, 140,
+  140, 141, 141, 141, 141, 142, 142, 142, 142, 142, 143, 143, 143, 143, 144, 144,
+  144, 144, 145, 145, 145, 145, 145, 146, 146, 146, 146, 147, 147, 147, 147, 147,
+  148, 148, 148, 148, 149, 149, 149, 149, 149, 150, 150, 150, 150, 151, 151, 151,
+  151, 151, 152, 152, 152, 152, 152, 153, 153, 153, 153, 154, 154, 154, 154, 154,
+  155, 155, 155, 155, 155, 156, 156, 156, 156, 156, 157, 157, 157, 157, 157, 158,
+  158, 158, 158, 158, 159, 159, 159, 159, 160, 160, 160, 160, 160, 161, 161, 161,
+  161, 161, 162, 162, 162, 162, 162, 162, 163, 163, 163, 163, 163, 164, 164, 164,
+  164, 164, 165, 165, 165, 165, 165, 166, 166, 166, 166, 166, 167, 167, 167, 167,
+  167, 168, 168, 168, 168, 168, 168, 169, 169, 169, 169, 169, 170, 170, 170, 170,
+  170, 170, 171, 171, 171, 171, 171, 172, 172, 172, 172, 172, 173, 173, 173, 173,
+  173, 173, 174, 174, 174, 174, 174, 175, 175, 175, 175, 175, 175, 176, 176, 176,
+  176, 176, 176, 177, 177, 177, 177, 177, 178, 178, 178, 178, 178, 178, 179, 179,
+  179, 179, 179, 179, 180, 180, 180, 180, 180, 180, 181, 181, 181, 181, 181, 181,
+  182, 182, 182, 182, 182, 183, 183, 183, 183, 183, 183, 184, 184, 184, 184, 184,
+  184, 185, 185, 185, 185, 185, 185, 186, 186, 186, 186, 186, 186, 187, 187, 187,
+  187, 187, 187, 188, 188, 188, 188, 188, 188, 188, 189, 189, 189, 189, 189, 189,
+  190, 190, 190, 190, 190, 190, 191, 191, 191, 191, 191, 191, 192, 192, 192, 192,
+  192, 192, 192, 193, 193, 193, 193, 193, 193, 194, 194, 194, 194, 194, 194, 195,
+  195, 195, 195, 195, 195, 195, 196, 196, 196, 196, 196, 196, 197, 197, 197, 197,
+  197, 197, 197, 198, 198, 198, 198, 198, 198, 199, 199, 199, 199, 199, 199, 199,
+  200, 200, 200, 200, 200, 200, 200, 201, 201, 201, 201, 201, 201, 202, 202, 202,
+  202, 202, 202, 202, 203, 203, 203, 203, 203, 203, 203, 204, 204, 204, 204, 204,
+  204, 204, 205, 205, 205, 205, 205, 205, 205, 206, 206, 206, 206, 206, 206, 207,
+  207, 207, 207, 207, 207, 207, 208, 208, 208, 208, 208, 208, 208, 209, 209, 209,
+  209, 209, 209, 209, 210, 210, 210, 210, 210, 210, 210, 210, 211, 211, 211, 211,
+  211, 211, 211, 212, 212, 212, 212, 212, 212, 212, 213, 213, 213, 213, 213, 213,
+  213, 214, 214, 214, 214, 214, 214, 214, 215, 215, 215, 215, 215, 215, 215, 215,
+  216, 216, 216, 216, 216, 216, 216, 217, 217, 217, 217, 217, 217, 217, 218, 218,
+  218, 218, 218, 218, 218, 218, 219, 219, 219, 219, 219, 219, 219, 220, 220, 220,
+  220, 220, 220, 220, 220, 221, 221, 221, 221, 221, 221, 221, 222, 222, 222, 222,
+  222, 222, 222, 222, 223, 223, 223, 223, 223, 223, 223, 223, 224, 224, 224, 224,
+  224, 224, 224, 224, 225, 225, 225, 225, 225, 225, 225, 226, 226, 226, 226, 226,
+  226, 226, 226, 227, 227, 227, 227, 227, 227, 227, 227, 228, 228, 228, 228, 228,
+  228, 228, 228, 229, 229, 229, 229, 229, 229, 229, 229, 230, 230, 230, 230, 230,
+  230, 230, 230, 231, 231, 231, 231, 231, 231, 231, 231, 232, 232, 232, 232, 232,
+  232, 232, 232, 233, 233, 233, 233, 233, 233, 233, 233, 234, 234, 234, 234, 234,
+  234, 234, 234, 235, 235, 235, 235, 235, 235, 235, 235, 236, 236, 236, 236, 236,
+  236, 236, 236, 236, 237, 237, 237, 237, 237, 237, 237, 237, 238, 238, 238, 238,
+  238, 238, 238, 238, 239, 239, 239, 239, 239, 239, 239, 239, 239, 240, 240, 240,
+  240, 240, 240, 240, 240, 241, 241, 241, 241, 241, 241, 241, 241, 241, 242, 242,
+  242, 242, 242, 242, 242, 242, 243, 243, 243, 243, 243, 243, 243, 243, 243, 244,
+  244, 244, 244, 244, 244, 244, 244, 244, 245, 245, 245, 245, 245, 245, 245, 245,
+  246, 246, 246, 246, 246, 246, 246, 246, 246, 247, 247, 247, 247, 247, 247, 247,
+  247, 247, 248, 248, 248, 248, 248, 248, 248, 248, 248, 249, 249, 249, 249, 249,
+  249, 249, 249, 250, 250, 250, 250, 250, 250, 250, 250, 250, 251, 251, 251, 251,
+  251, 251, 251, 251, 251, 252, 252, 252, 252, 252, 252, 252, 252, 252, 253, 253,
+  253, 253, 253, 253, 253, 253, 253, 254, 254, 254, 254, 254, 254, 254, 254, 254,
+  255,
+};
+
+Inline B1 srgb8_from_linear(F1 l)
 {
-  ProfBeginFunc();
-  Image_RGBA8 result = image_rgba8_alloc(arena, input.width, input.height);
+  if (l <= 0.0f)
+    return 0;
+  if (l >= 1.0f)
+    return (B1)(255.0f * srgb_from_linear(1.0f));
 
-  for (L1 y = 0; y < input.height; y += 1)
-  {
-    F4     *in_row   =  image_row(input, y);
-    RGBA8  *out_row  =  image_rgba8_row(result, y);
+  I1 index = (I1)(l * 1024.0f);
+  B1 lo = srgb8_from_linear_table[index];
+  B1 hi = srgb8_from_linear_table[index + 1];
 
-    for (L1 x = 0; x < input.width; x += 1)
-    {
-      F4     in_px       =  in_row[x];
-      RGBA8  *out_px     =  &out_row[x];
-      F4     tonemapped  =  tonemap(tonemap_kind, in_px);
+  if (lo == hi)
+    return lo;
 
-      F4 out_color = {
-        255.0f * srgb_from_linear(tonemapped[0]),
-        255.0f * srgb_from_linear(tonemapped[1]),
-        255.0f * srgb_from_linear(tonemapped[2]),
-        255.0f,
-      };
+  return (B1)(255.0f * srgb_from_linear(l));
+}
 
-      out_px->r  =  (B1)out_color[0];
-      out_px->g  =  (B1)out_color[1];
-      out_px->b  =  (B1)out_color[2];
-      out_px->a  =  (B1)out_color[3];
-    }
+//- kti: Specialize each pixel loop so kind selection happens once per call.
+#define IMAGE_TONEMAP_KERNEL(name, color)                                                 \
+  Internal void image_tonemap_##name(Image_RGBA8 dst, Image src, Range rows)              \
+  {                                                                                       \
+    for (L1 y = rows.min; y < rows.max; y += 1)                                           \
+    {                                                                                     \
+      F4     *src_row  =  image_row(src, y);                                              \
+      RGBA8  *dst_row  =  image_rgba8_row(dst, y);                                        \
+                                                                                          \
+      for (L1 x = 0; x < src.width; x += 1)                                               \
+      {                                                                                   \
+        F4 in_px = src_row[x];                                                            \
+        F4 tonemapped = (color);                                                          \
+                                                                                          \
+        dst_row[x] = (RGBA8){                                                             \
+          srgb8_from_linear(tonemapped[0]),                                               \
+          srgb8_from_linear(tonemapped[1]),                                               \
+          srgb8_from_linear(tonemapped[2]),                                               \
+          255,                                                                            \
+        };                                                                                \
+      }                                                                                   \
+    }                                                                                     \
   }
 
-  ProfEnd();
+IMAGE_TONEMAP_KERNEL(aces,     tonemap_aces(in_px))
+IMAGE_TONEMAP_KERNEL(reinhard, tonemap_reinhard(in_px))
+IMAGE_TONEMAP_KERNEL(lottes,   tonemap_lottes(in_px))
+IMAGE_TONEMAP_KERNEL(linear,   in_px)
 
-  return result;
+#undef IMAGE_TONEMAP_KERNEL
+
+Internal void image_tonemap(Image_RGBA8 dst, Image src, Tonemap_Kind kind, Range rows)
+{
+  ProfBeginFunc();
+  if (src.width == dst.width && src.height == dst.height)
+  {
+    switch (kind)
+    {
+      case TONEMAP_KIND__ACES:     image_tonemap_aces(dst, src, rows);     break;
+      case TONEMAP_KIND__REINHARD: image_tonemap_reinhard(dst, src, rows); break;
+      case TONEMAP_KIND__LOTTES:   image_tonemap_lottes(dst, src, rows);   break;
+      default:                   image_tonemap_linear(dst, src, rows);   break;
+    }
+  }
+  ProfEnd();
 }

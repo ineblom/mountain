@@ -6,6 +6,7 @@ typedef enum
   TONEMAP_KIND__ACES,
   TONEMAP_KIND__REINHARD,
   TONEMAP_KIND__LOTTES,
+  TONEMAP_KIND_COUNT,
 } Tonemap_Kind;
 
 #pragma pack(push, 1)

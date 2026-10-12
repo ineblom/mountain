@@ -214,6 +214,7 @@ typedef struct Postprocess_Settings Postprocess_Settings;
 struct Postprocess_Settings
 {
   Image_Bloom_Params bloom;
+  Tonemap_Kind      tonemap_kind;
 };
 
 ////////////////////////////////
@@ -351,6 +352,7 @@ struct State
 
   //- kti: User Code
   User_Render_Func user_render_func;
+  Tonemap_Kind    user_render_tonemap_kind;
   I1               user_code_dirty;
   I1               animation_active;
   L1               frames_requested;

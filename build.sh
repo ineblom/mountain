@@ -2,7 +2,7 @@
 
 WARN="-Wall -Wno-unused-function -Wno-unused-variable"
 DEFS="-DDEV=1"
-OPT="-g"
+OPT="${M_OPT:--g}"
 
 case "$(uname -s)" in Darwin)
     COMPILER="${CC:-clang}"

@@ -27,6 +27,12 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__USER_RENDER]  =  str8("User Render"),
 };
 
+Global String8 tonemap_kind_names[TONEMAP_KIND_COUNT] = {
+  [TONEMAP_KIND__ACES]      =  str8("ACES"),
+  [TONEMAP_KIND__REINHARD]  =  str8("Reinhard"),
+  [TONEMAP_KIND__LOTTES]    =  str8("Lottes"),
+};
+
 Global State        *state  =  0;
 Global Async_State  async   =  {0};
 Global I1           async_lanes_completed;
@@ -446,7 +452,7 @@ Internal void async_lane(void *)
           Image_RGBA8 result = async.active_request.ldr;
 
           ProfBegin("Tonemap");
-          image_tonemap(result, work.levels[0], TONEMAP_KIND__REINHARD, lane_range(result.height));
+          image_tonemap(result, work.levels[0], req.postprocess_settings.tonemap_kind, lane_range(result.height));
           ProfEnd();
 
           lane_sync();
@@ -1745,6 +1751,7 @@ Internal void lane(void *user_data)
   state->postprocess_settings.bloom.threshold   =  0.5f;
   state->postprocess_settings.bloom.strength    =  0.4f;
   state->postprocess_settings.bloom.knee        =  0.5f;
+  state->postprocess_settings.tonemap_kind      =  TONEMAP_KIND__ACES;
 
   user_code_reload();
 
@@ -1933,11 +1940,14 @@ Internal void lane(void *user_data)
     //- kti: Build the code-defined scene.
     I1 user_code_ran = 0;
 
-    if (state->user_render_func && state->user_code_dirty)
+    if (state->user_render_func &&
+        (state->user_code_dirty ||
+         state->user_render_tonemap_kind != state->postprocess_settings.tonemap_kind))
     {
-      state->user_code_dirty    =   0;
-      state->scene_frame_index  +=  1;
-      user_code_ran             =   1;
+      state->user_code_dirty           =   0;
+      state->user_render_tonemap_kind  =   state->postprocess_settings.tonemap_kind;
+      state->scene_frame_index         +=  1;
+      user_code_ran                    =   1;
 
       User_API api = {
         .entity       =  user_code_entity,
@@ -1947,7 +1957,7 @@ Internal void lane(void *user_data)
 
       //- kti: Ensure correct image format.
       Image_RGBA8 upload_image = image_rgba8_alloc(scratch.arena, user_image.width, user_image.height);
-      image_tonemap(upload_image, user_image, TONEMAP_KIND__LOTTES, (Range){0, user_image.height});
+      image_tonemap(upload_image, user_image, state->postprocess_settings.tonemap_kind, (Range){0, user_image.height});
 
       tc_set(state->user_render_key, upload_image);
       GFX_Texture *texture = tc_texture(state->user_render_key);
@@ -2071,6 +2081,9 @@ Internal void lane(void *user_data)
         lister_L1(str8("Max Bounces"), &state->render_settings.max_num_bounces, .default_value = 8);
 
         lister_header(str8("Postprocessing"));
+
+        lister_enum(str8("Tonemap"), &state->postprocess_settings.tonemap_kind,
+                    tonemap_kind_names, TONEMAP_KIND_COUNT);
 
         lister_L1(str8("Passes"), &state->postprocess_settings.bloom.pass_count, .default_value = 8);
 
@@ -3375,6 +3388,8 @@ Internal void lane(void *user_data)
 
 SI1 main(void)
 {
+  image_init();
+
   async.mutex                =  os_mutex_alloc();
   async.cond_var             =  os_cond_var_alloc();
   async.request_queue.mutex  =  os_mutex_alloc();

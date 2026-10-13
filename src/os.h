@@ -37,9 +37,10 @@ struct OS_Cond_Var
 typedef struct OS_Barrier OS_Barrier;
 struct OS_Barrier
 {
-  pthread_mutex_t mutex;
-  pthread_cond_t  condition;
+  OS_Mutex        mutex;
+  OS_Cond_Var     condition;
   I1              threshold;
+  // Access count and generation atomically after initialization.
   I1              count;
   I1              generation;
 };

@@ -262,44 +262,63 @@ Internal void os_cond_var_broadcast(OS_Cond_Var cond_var)
 
 Internal OS_Barrier os_barrier_alloc(I1 count)
 {
-  OS_Barrier result = {.threshold = count, .count = count};
-
-  pthread_mutex_init(&result.mutex, 0);
-  pthread_cond_init(&result.condition, 0);
-
+  OS_Barrier result = {
+    .mutex      = os_mutex_alloc(),
+    .condition  = os_cond_var_alloc(),
+    .threshold  = count,
+    .count      = count,
+  };
   return result;
 }
 
 Internal void os_barrier_release(OS_Barrier *barrier)
 {
-  pthread_cond_destroy(&barrier->condition);
-  pthread_mutex_destroy(&barrier->mutex);
+  os_cond_var_release(barrier->condition);
+  os_mutex_release(barrier->mutex);
 }
 
 Internal void os_barrier_wait(OS_Barrier *barrier)
 {
-  pthread_mutex_lock(&barrier->mutex);
-
-  I1 generation = barrier->generation;
-
-  barrier->count -= 1;
-
-  if (barrier->count == 0)
+  if (barrier->threshold <= 1)
   {
-    barrier->generation  +=  1;
-    barrier->count       =   barrier->threshold;
+    return;
+  }
 
-    pthread_cond_broadcast(&barrier->condition);
+  I1  generation  =  atomic_load_I1(&barrier->generation);
+  I1  remaining   =  __atomic_fetch_sub(&barrier->count, 1, __ATOMIC_ACQ_REL);
+
+  if (remaining == 1)
+  {
+    // Arrival acquire/release operations collect every lane's writes. Publish
+    // them through generation only after resetting the next round's count.
+    os_mutex_take(barrier->mutex);
+    __atomic_store_n(&barrier->count, barrier->threshold, __ATOMIC_RELAXED);
+    __atomic_store_n(&barrier->generation, generation + 1, __ATOMIC_RELEASE);
+
+    os_cond_var_broadcast(barrier->condition);
+    os_mutex_drop(barrier->mutex);
   }
   else
   {
-    while (generation == barrier->generation)
+    // Short compute stages usually finish before parking would pay off. Bound
+    // the spin so idle or descheduled lanes do not keep other CPUs busy forever.
+    for (I1 spin = 0; spin < 1024; spin += 1)
     {
-      pthread_cond_wait(&barrier->condition, &barrier->mutex);
+      if (atomic_load_I1(&barrier->generation) != generation)
+      {
+        return;
+      }
+      Pause();
     }
-  }
 
-  pthread_mutex_unlock(&barrier->mutex);
+    // Check and sleep under the publisher's mutex to avoid a missed wakeup.
+    os_mutex_take(barrier->mutex);
+    while (generation == atomic_load_I1(&barrier->generation))
+    {
+      os_cond_var_wait(barrier->condition, barrier->mutex, L1_MAX);
+    }
+    os_mutex_drop(barrier->mutex);
+  }
 }
 
 Internal L1 os_clock(void)

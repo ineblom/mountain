@@ -8,7 +8,7 @@
 // kti: Modules
 
 //- kti: Config
-#define PROF_ENABLED 0
+#define PROF_ENABLED 1
 
 //- kti: Headers
 #include "arena.h"

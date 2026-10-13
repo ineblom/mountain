@@ -397,14 +397,14 @@ Internal void async_lane(void *)
             image_resample_x(horizontal, in, x_range);
             lane_sync();
             image_resample_y(out, horizontal, y_range);
-            lane_sync();
 
             //- kti: Apply karis average to first downsample.
             if (i == 0)
             {
+              // Both operations use this lane's rows.
               image_apply_karis(out, y_range);
-              lane_sync();
             }
+            lane_sync();
           }
           ProfEnd();
 
@@ -430,9 +430,13 @@ Internal void async_lane(void *)
             image_resample_x(horizontal, in, x_range);
             lane_sync();
             image_resample_y(upsampled, horizontal, y_range);
-            lane_sync();
+            // Add consumes only the rows this lane just resampled.
             image_add(out, upsampled, y_range);
-            lane_sync();
+            if (i > 1)
+            {
+              // The next resample reads neighboring rows and reuses horizontal.
+              lane_sync();
+            }
           }
 
           ProfEnd();
@@ -444,7 +448,6 @@ Internal void async_lane(void *)
           Range combine_range = lane_range(work.levels[0].height);
 
           image_bloom_combine(work.levels[0], req.hdr, work.levels[0], params, combine_range);
-          lane_sync();
           ProfEnd();
 
           //- kti: Tonemap
@@ -452,7 +455,8 @@ Internal void async_lane(void *)
           Image_RGBA8 result = async.active_request.ldr;
 
           ProfBegin("Tonemap");
-          image_tonemap(result, work.levels[0], req.postprocess_settings.tonemap, lane_range(result.height));
+          // Final add, combine, and tonemap all consume this lane's own rows.
+          image_tonemap(result, work.levels[0], req.postprocess_settings.tonemap, combine_range);
           ProfEnd();
 
           lane_sync();

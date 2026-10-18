@@ -100,6 +100,33 @@ Inline V3 V3_from_F4(F4 v)
 ////////////////////////////////
 //~ kti: F4
 
+Inline F4 splat_F4(F1 x)
+{
+  return (F4){x, x, x, x};
+}
+
+Inline F4 select_F4(SI4 mask, F4 yes, F4 no)
+{
+  // Bitcasts preserve floating-point payloads (including signed zero).
+  union
+  {
+    F4 f;
+    SI4 i;
+  } a = {.f = yes}, b = {.f = no}, result;
+  result.i = (mask & a.i) | (~mask & b.i);
+  return result.f;
+}
+
+Inline F4 max_F4(F4 a, F4 b)
+{
+  return select_F4(a > b, a, b);
+}
+
+Inline F4 min_F4(F4 a, F4 b)
+{
+  return select_F4(a < b, a, b);
+}
+
 Inline F4 F4_from_V3(V3 v)
 {
   F4 result = {v.x, v.y, v.z, 0.0f};
@@ -111,6 +138,7 @@ Inline F4 F4_with_w(F4 v, F1 w)
   F4 result = v;
 
   result[3] = w;
+
   return result;
 }
 
@@ -175,8 +203,7 @@ Inline F4 abs_F4(F4 v)
 
 Inline F4 clamp01_F4(F4 v)
 {
-  F4 result = {clamp01_F1(v[0]), clamp01_F1(v[1]), clamp01_F1(v[2]), clamp01_F1(v[3])};
-  return result;
+  return min_F4(max_F4(v, splat_F4(0)), splat_F4(1));
 }
 
 Inline F1 luminance_F4(F4 v)
@@ -194,6 +221,102 @@ Inline F4 pow_F4(F4 v, F1 exp)
 Inline F4 reflect_F4(F4 v, F4 normal)
 {
   F4 result = v - 2 * dot_F4(v, normal) * normal;
+  return result;
+}
+
+////////////////////////////////
+//~ F4x3
+
+Inline F4 luminance_F4x3(F4x3 c)
+{
+  return 0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z;
+}
+
+Inline F4x3 scale_F4x3(F4x3 c, F4 scale)
+{
+  return (F4x3){c.x * scale, c.y * scale, c.z * scale};
+}
+
+Inline F4x3 add_F4x3(F4x3 a, F4x3 b)
+{
+  return (F4x3){a.x + b.x, a.y + b.y, a.z + b.z};
+}
+
+Inline F4x3 lerp_F4x3(F4x3 a, F4 t, F4x3 b)
+{
+  F4x3  left_contribution   =  scale_F4x3(a, 1.0f - t);
+  F4x3  right_contribution  =  scale_F4x3(b, t);
+  F4x3  result              =  add_F4x3(left_contribution, right_contribution);
+
+  return result;
+}
+
+// Repeat the last valid lane; count must be between one and four.
+Inline F4x3 pad_F4x3(F4x3 c, L1 count)
+{
+  for (L1 i = count; i < 4; ++i)
+  {
+    c.x[i] = c.x[count - 1];
+    c.y[i] = c.y[count - 1];
+    c.z[i] = c.z[count - 1];
+  }
+  return c;
+}
+
+// Transpose four vectors into component lanes, discarding the fourth component.
+Inline F4x3 F4x3_from_F4(F4 a, F4 b, F4 c, F4 d)
+{
+  F4  first_xy   =  shuffle_F4(a, b, F4_A0, F4_A1, F4_B0, F4_B1); // {ax, ay, bx, by}
+  F4  second_xy  =  shuffle_F4(c, d, F4_A0, F4_A1, F4_B0, F4_B1); // {cx, cy, dx, dy}
+  F4  first_zw   =  shuffle_F4(a, b, F4_A2, F4_A3, F4_B2, F4_B3); // {az, aw, bz, bw}
+  F4  second_zw  =  shuffle_F4(c, d, F4_A2, F4_A3, F4_B2, F4_B3); // {cz, cw, dz, dw}
+
+  return (F4x3){
+    shuffle_F4(first_xy, second_xy, F4_A0, F4_A2, F4_B0, F4_B2), // {ax, bx, cx, dx}
+    shuffle_F4(first_xy, second_xy, F4_A1, F4_A3, F4_B1, F4_B3), // {ay, by, cy, dy}
+    shuffle_F4(first_zw, second_zw, F4_A0, F4_A2, F4_B0, F4_B2)  // {az, bz, cz, dz}
+  };
+}
+
+// Gather is explicit because SSSE3 and NEON have no arbitrary memory gather.
+// The interpolation and filtering following these loads still process four pixels.
+Inline F4x3 gather_F4x3(const F4x3 *row, const L1 indices[4])
+{
+  L1  first_block_index   =  indices[0] / 4;
+  L1  second_block_index  =  indices[1] / 4;
+  L1  third_block_index   =  indices[2] / 4;
+  L1  fourth_block_index  =  indices[3] / 4;
+
+  L1  first_lane   =  indices[0] % 4;
+  L1  second_lane  =  indices[1] % 4;
+  L1  third_lane   =  indices[2] % 4;
+  L1  fourth_lane  =  indices[3] % 4;
+
+  const F4x3  *first_block   =  &row[first_block_index];
+  const F4x3  *second_block  =  &row[second_block_index];
+  const F4x3  *third_block   =  &row[third_block_index];
+  const F4x3  *fourth_block  =  &row[fourth_block_index];
+
+  F4 x = {
+    first_block->x[first_lane],
+    second_block->x[second_lane],
+    third_block->x[third_lane],
+    fourth_block->x[fourth_lane]
+  };
+  F4 y = {
+    first_block->y[first_lane],
+    second_block->y[second_lane],
+    third_block->y[third_lane],
+    fourth_block->y[fourth_lane]
+  };
+  F4 z = {
+    first_block->z[first_lane],
+    second_block->z[second_lane],
+    third_block->z[third_lane],
+    fourth_block->z[fourth_lane]
+  };
+
+  F4x3 result = {x, y, z};
   return result;
 }
 

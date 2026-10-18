@@ -40,6 +40,17 @@ struct Image
   F4 *pixels;
 };
 
+// Four horizontal RGB pixels per block. Width is in pixels; stride is in blocks.
+// The last block repeats the final pixel in its unused lanes for edge sampling.
+typedef struct Image_RGB Image_RGB;
+struct Image_RGB
+{
+  I1 width;
+  I1 height;
+  L1 block_stride;
+  F4x3 *blocks;
+};
+
 typedef struct RGBA8 RGBA8;
 struct RGBA8
 {

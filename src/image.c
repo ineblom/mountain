@@ -4,21 +4,18 @@
 Internal I1 image_is_nil(Image image)
 {
   I1 result = image.width == 0 || image.height == 0 || image.pixels == 0;
-
   return result;
 }
 
 Internal F4 *image_row(Image image, L1 y)
 {
   F4 *result = image.pixels + image.row_stride * y;
-
   return result;
 }
 
 Internal RGBA8 *image_rgba8_row(Image_RGBA8 image, L1 y)
 {
   RGBA8 *result = image.pixels + image.row_stride * y;
-
   return result;
 }
 
@@ -238,329 +235,6 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v)
   return result;
 }
 
-Internal void image_bloom_threshold(Image dst, Image src, Image_Bloom_Params params, Range rows)
-{
-  ProfBeginFunc();
-  //- kti: Equal dimensions.
-  if (src.width == dst.width && src.height == dst.height)
-  {
-    for (L1 y = rows.min; y < rows.max; y += 1)
-    {
-      F4  *src_row  =  image_row(src, y);
-      F4  *dst_row  =  image_row(dst, y);
-
-      for (L1 x = 0; x < src.width; x += 1)
-      {
-        F4 color = src_row[x];
-
-        F1  luminance       =  luminance_F4(color);
-        F1  soft_threshold  =  params.threshold - params.knee;
-        F1  knee_range      =  2.0f * params.knee;
-        F1  contrib         =  0.0f;
-
-        if (luminance > params.threshold + params.knee)
-        {
-          contrib = 1.0f;
-        }
-        else if (luminance > soft_threshold)
-        {
-          F1  x             =  luminance - soft_threshold;
-          F1  knee_contrib  =  Square(x) / (4.0f * Square(knee_range));
-
-          contrib = knee_contrib;
-        }
-
-        if (contrib > 0.0f && luminance > 1e-6f)
-        {
-          F1 excess_luminance = Max(0.0f, luminance - params.threshold);
-          color *= excess_luminance / luminance * contrib;
-        }
-        else
-        {
-          color = (F4){0};
-        }
-
-        dst_row[x] = color;
-      }
-    }
-  }
-  ProfEnd();
-}
-
-Internal void image_resample_x(Image dst, Image src, Range rows)
-{
-  ProfBeginFunc();
-  if (src.height == dst.height)
-  {
-    L1  src_dim  =  src.width;
-    L1  dst_dim  =  dst.width;
-
-    if (dst_dim > 0 && src_dim == 2 * dst_dim)
-    {
-      for (L1 y = rows.min; y < rows.max; y += 1)
-      {
-        F4  *src_row  =  image_row(src, y);
-        F4  *dst_row  =  image_row(dst, y);
-
-        for (L1 x = 0; x < dst_dim; x += 1)
-        {
-          L1  base  =  2 * x;
-          F4  a     =  src_row[base > 0 ? base - 1 : 0];
-          F4  b     =  src_row[base];
-          F4  c     =  src_row[base + 1];
-          F4  d     =  src_row[Min(base + 2, src_dim - 1)];
-
-          dst_row[x] = (0.25f * a + 0.75f * b + 0.75f * c + 0.25f * d) * 0.5f;
-        }
-      }
-    }
-    else if (src_dim > 0 && dst_dim == 2 * src_dim)
-    {
-      for (L1 y = rows.min; y < rows.max; y += 1)
-      {
-        F4  *src_row  =  image_row(src, y);
-        F4  *dst_row  =  image_row(dst, y);
-
-        for (L1 x = 0; x < src_dim; x += 1)
-        {
-          F4  prev  =  src_row[x > 0 ? x - 1 : 0];
-          F4  curr  =  src_row[x];
-          F4  next  =  src_row[Min(x + 1, src_dim - 1)];
-
-          dst_row[2 * x]      =  0.25f * prev + 0.75f * curr;
-          dst_row[2 * x + 1]  =  0.75f * curr + 0.25f * next;
-        }
-      }
-    }
-    else
-    {
-      F1  scale          =  (F1)src_dim / (F1)dst_dim;
-      F1  filter_scale   =  Max(1, scale);
-      F1  filter_radius  =  1.0f;
-      F1  support        =  filter_radius * filter_scale;
-
-      for (L1 y = rows.min; y < rows.max; y += 1)
-      {
-        F4  *src_row  =  image_row(src, y);
-        F4  *dst_row  =  image_row(dst, y);
-
-        for (L1 dst_x = 0; dst_x < dst_dim; dst_x += 1)
-        {
-          F1  center         =  ((F1)dst_x + 0.5f) * scale - 0.5f;
-          F1  first_src_pos  =  ceil_F1(center - support);
-          F1  last_src_pos   =  floor_F1(center + support);
-          L1  src_pos_count  =  (L1)(last_src_pos - first_src_pos) + 1;
-          F4  sum            =  {0};
-          F1  weight_sum     =  0;
-
-          for (L1 src_pos_idx = 0; src_pos_idx < src_pos_count; src_pos_idx += 1)
-          {
-            F1  src_pos   =  first_src_pos + (F1)src_pos_idx;
-            F1  distance  =  (src_pos - center) / filter_scale;
-            F1  weight    =  Max(0, 1.0f - abs_F1(distance));
-            L1  sample_x  =  (L1)Clamp(0.0f, src_pos, (F1)src_dim - 1.0f);
-
-            sum         +=  src_row[sample_x] * weight;
-            weight_sum  +=  weight;
-          }
-
-          if (weight_sum > 0.0f)
-          {
-            dst_row[dst_x] = sum / weight_sum;
-          }
-          else
-          {
-            L1 nearest_x = (L1)Clamp(0.0f, floor_F1(center + 0.5f), (F1)src_dim - 1.0f);
-
-            dst_row[dst_x] = src_row[nearest_x];
-          }
-        }
-      }
-    }
-  }
-  ProfEnd();
-}
-
-Internal void image_resample_y(Image dst, Image src, Range rows)
-{
-  ProfBeginFunc();
-  if (src.width == dst.width)
-  {
-    L1  src_dim  =  src.height;
-    L1  dst_dim  =  dst.height;
-
-    if (dst_dim > 0 && src_dim == 2 * dst_dim)
-    {
-      for (L1 y = rows.min; y < rows.max; y += 1)
-      {
-        L1  base      =  2 * y;
-        F4  *a        =  image_row(src, base > 0 ? base - 1 : 0);
-        F4  *b        =  image_row(src, base);
-        F4  *c        =  image_row(src, base + 1);
-        F4  *d        =  image_row(src, Min(base + 2, src_dim - 1));
-        F4  *dst_row  =  image_row(dst, y);
-
-        for (L1 x = 0; x < dst.width; x += 1)
-        {
-          dst_row[x] = (0.25f * a[x] + 0.75f * b[x] + 0.75f * c[x] + 0.25f * d[x]) * 0.5f;
-        }
-      }
-    }
-    else if (src_dim > 0 && dst_dim == 2 * src_dim)
-    {
-      for (L1 y = rows.min; y < rows.max; y += 1)
-      {
-        L1  base      =  y / 2;
-        F4  *dst_row  =  image_row(dst, y);
-
-        if (y & 1)
-        {
-          F4  *a  =  image_row(src, base);
-          F4  *b  =  image_row(src, Min(base + 1, src_dim - 1));
-
-          for (L1 x = 0; x < dst.width; x += 1)
-          {
-            dst_row[x] = 0.75f * a[x] + 0.25f * b[x];
-          }
-        }
-        else
-        {
-          F4  *a  =  image_row(src, base > 0 ? base - 1 : 0);
-          F4  *b  =  image_row(src, base);
-
-          for (L1 x = 0; x < dst.width; x += 1)
-          {
-            dst_row[x] = 0.25f * a[x] + 0.75f * b[x];
-          }
-        }
-      }
-    }
-    else
-    {
-      F1  scale          =  (F1)src_dim / (F1)dst_dim;
-      F1  filter_scale   =  Max(1, scale);
-      F1  filter_radius  =  1.0f;
-      F1  support        =  filter_radius * filter_scale;
-
-      for (L1 dst_y = rows.min; dst_y < rows.max; dst_y += 1)
-      {
-        F1  weight_sum     =  0;
-        F1  center         =  ((F1)dst_y + 0.5f) * scale - 0.5f;
-        F1  first_src_pos  =  ceil_F1(center - support);
-        F1  last_src_pos   =  floor_F1(center + support);
-        L1  src_pos_count  =  (L1)(last_src_pos - first_src_pos) + 1;
-        F4  *dst_row       =  image_row(dst, dst_y);
-
-        //- kti: Clear dst row.
-        for (L1 x = 0; x < dst.width; x += 1)
-        {
-          dst_row[x] = (F4){0};
-        }
-
-        for (L1 src_pos_idx = 0; src_pos_idx < src_pos_count; src_pos_idx += 1)
-        {
-          F1  src_pos   =  first_src_pos + (F1)src_pos_idx;
-          F1  distance  =  (src_pos - center) / filter_scale;
-          F1  weight    =  Max(0, 1.0f - abs_F1(distance));
-          L1  sample_y  =  (L1)Clamp(0.0f, src_pos, (F1)src_dim - 1.0f);
-          F4  *src_row  =  image_row(src, sample_y);
-
-          for (L1 x = 0; x < dst.width; x += 1)
-          {
-            dst_row[x] += src_row[x] * weight;
-          }
-
-          weight_sum += weight;
-        }
-
-        if (weight_sum > 0.0f)
-        {
-          for (L1 x = 0; x < dst.width; x += 1)
-          {
-            dst_row[x] /= weight_sum;
-          }
-        }
-        else
-        {
-          L1  nearest_y  =  (L1)Clamp(0.0f, floor_F1(center + 0.5f), (F1)src_dim - 1.0f);
-          F4  *src_row   =  image_row(src, nearest_y);
-
-          for (L1 x = 0; x < dst.width; x += 1)
-          {
-            dst_row[x] = src_row[x];
-          }
-        }
-      }
-    }
-  }
-  ProfEnd();
-}
-
-Internal void image_apply_karis(Image image, Range rows)
-{
-  ProfBeginFunc();
-  for (L1 y = rows.min; y < rows.max; y += 1)
-  {
-    F4 *row = image_row(image, y);
-
-    for (L1 x = 0; x < image.width; x += 1)
-    {
-      F4 color = row[x];
-
-      row[x] = color / (1.0f + luminance_F4(color));
-    }
-  }
-  ProfEnd();
-}
-
-Internal void image_add(Image dst, Image src, Range rows)
-{
-  ProfBeginFunc();
-  if (src.width == dst.width && src.height == dst.height)
-  {
-    for (L1 y = rows.min; y < rows.max; y += 1)
-    {
-      F4  *src_row  =  image_row(src, y);
-      F4  *dst_row  =  image_row(dst, y);
-
-      for (L1 x = 0; x < src.width; x += 1)
-      {
-        dst_row[x] += src_row[x];
-      }
-    }
-  }
-  ProfEnd();
-}
-
-Internal void image_bloom_combine(Image dst, Image hdr, Image bloom, Image_Bloom_Params params, Range rows)
-{
-  ProfBeginFunc();
-  if (   dst.width == hdr.width
-      && dst.height == hdr.height
-      && bloom.width == hdr.width
-      && bloom.height == hdr.height)
-  {
-    for (L1 y = rows.min; y < rows.max; y += 1)
-    {
-      F4  *dst_row    =  image_row(dst, y);
-      F4  *hdr_row    =  image_row(hdr, y);
-      F4  *bloom_row  =  image_row(bloom, y);
-      F1  v           =  dst.height > 1 ? (F1)y / (F1)(dst.height - 1) : 0.0f;
-
-      for (L1 x = 0; x < dst.width; x += 1)
-      {
-        F1  u              =  dst.width > 1 ? (F1)x / (F1)(dst.width - 1) : 0.0f;
-        F4  bloom_overlay  =  image_sample_bilinear_F4(params.overlay, u, v);
-        F4  bloom_px       =  bloom_row[x];
-
-        bloom_px    *=  1.0f + luminance_F4(bloom_overlay) * params.overlay_strength;
-        dst_row[x]  =   hdr_row[x] * (1.0f - 0.5f * params.strength) + bloom_px * params.strength;
-      }
-    }
-  }
-  ProfEnd();
-}
-
 enum
 {
   IMAGE_SRGB_TABLE_COUNT    =  1024,
@@ -578,7 +252,10 @@ Inline F4 tonemap_aces(F4 v)
   F1  d  =  0.59f;
   F1  e  =  0.14f;
 
-  F4 result = clamp01_F4((v * (a * v + b)) / (v * (c * v + d) + e));
+  F4  numerator    =  v * (a * v + b);
+  F4  denominator  =  v * (c * v + d) + e;
+  F4  mapped       =  numerator / denominator;
+  F4  result       =  clamp01_F4(mapped);
 
   return result;
 }
@@ -602,7 +279,11 @@ Inline F1 lottes_from_linear(F1 v)
   F1 lo = image_lottes_table[index];
   F1 hi = image_lottes_table[index + 1];
 
-  return lo + (position - (F1)index) * (hi - lo);
+  F1  blend_fraction  =  position - (F1)index;
+  F1  value_delta     =  hi - lo;
+  F1  interpolated    =  lo + blend_fraction * value_delta;
+
+  return interpolated;
 }
 
 Inline F4 tonemap_lottes(F4 v)
@@ -634,7 +315,6 @@ Inline F1 srgb_from_linear(F1 l)
   return s;
 }
 
-//- kti: Build once before launching lanes; all subsequent access is read-only.
 Internal void image_init(void)
 {
   for (I1 i = 0; i <= IMAGE_SRGB_TABLE_COUNT; i += 1)
@@ -646,18 +326,29 @@ Internal void image_init(void)
 
   // Lottes 2016. The curve reaches white at hdr_max, so higher inputs can
   // saturate here because the following sRGB conversion clamps to white.
-  F1 a = 1.6f;
-  F1 d = 0.977f;
-  F1 hdr_max = 8.0f;
-  F1 mid_in = 0.18f;
-  F1 mid_out = 0.267f;
-  F1 b = (-powf(mid_in, a) + powf(hdr_max, a) * mid_out) / ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
-  F1 c = (powf(hdr_max, a * d) * powf(mid_in, a) - powf(hdr_max, a) * powf(mid_in, a * d) * mid_out) / ((powf(hdr_max, a * d) - powf(mid_in, a * d)) * mid_out);
+  F1  a                        =  1.6f;
+  F1  d                        =  0.977f;
+  F1  hdr_max                  =  8.0f;
+  F1  mid_in                   =  0.18f;
+  F1  mid_out                  =  0.267f;
+  F1  contrast_exponent        =  a * d;
+  F1  mid_contrast             =  powf(mid_in, a);
+  F1  hdr_contrast             =  powf(hdr_max, a);
+  F1  mid_shoulder             =  powf(mid_in, contrast_exponent);
+  F1  hdr_shoulder             =  powf(hdr_max, contrast_exponent);
+  F1  coefficient_denominator  =  (hdr_shoulder - mid_shoulder) * mid_out;
+  F1  b_numerator              =  -mid_contrast + hdr_contrast * mid_out;
+  F1  c_numerator              =  hdr_shoulder * mid_contrast - hdr_contrast * mid_shoulder * mid_out;
+  F1  b                        =  b_numerator / coefficient_denominator;
+  F1  c                        =  c_numerator / coefficient_denominator;
 
   for (I1 i = 0; i <= IMAGE_LOTTES_TABLE_COUNT; i += 1)
   {
-    F1 linear = hdr_max * (F1)i / IMAGE_LOTTES_TABLE_COUNT;
-    image_lottes_table[i] = powf(linear, a) / (powf(linear, a * d) * b + c);
+    F1  linear       =  hdr_max * (F1)i / IMAGE_LOTTES_TABLE_COUNT;
+    F1  numerator    =  powf(linear, a);
+    F1  denominator  =  powf(linear, contrast_exponent) * b + c;
+
+    image_lottes_table[i] = numerator / denominator;
   }
   image_lottes_table[IMAGE_LOTTES_TABLE_COUNT] = 1.0f;
 }
@@ -674,13 +365,18 @@ Inline B1 srgb8_from_linear(F1 l)
   F1 lo = image_srgb_table[index];
   F1 hi = image_srgb_table[index + 1];
 
-  return (B1)(lo + (position - (F1)index) * (hi - lo));
+  F1  blend_fraction  =  position - (F1)index;
+  F1  value_delta     =  hi - lo;
+  F1  interpolated    =  lo + blend_fraction * value_delta;
+
+  return (B1)interpolated;
 }
 
 Inline F4 tonemap_reinhard_white(F4 v, F1 inv_white_squared)
 {
-  F4 result = (v / (1.0f + v)) * (1.0f + v * inv_white_squared);
-
+  F4  compressed         =  v / (1.0f + v);
+  F4  white_point_scale  =  1.0f + v * inv_white_squared;
+  F4  result             =  compressed * white_point_scale;
   return result;
 }
 
@@ -800,3 +496,6 @@ Internal void image_tonemap(Image_RGBA8 dst, Image src, Image_Tonemap_Params par
 
   ProfEnd();
 }
+
+// RGB SIMD postprocessing kernels share the transfer tables above.
+#include "image_rgb.c"

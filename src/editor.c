@@ -235,6 +235,9 @@ Internal void async_lane(void *)
       {
         case ASYNC_REQUEST_KIND__NONE: {} break;
 
+        ////////////////////////////////
+        //~ kti: Render
+
         case ASYNC_REQUEST_KIND__RENDER:
         {
           ProfBegin("Render");
@@ -289,6 +292,9 @@ Internal void async_lane(void *)
           ProfEnd();
         } break;
 
+        ////////////////////////////////
+        //~ kti: Postprocess
+
         case ASYNC_REQUEST_KIND__POSTPROCESS:
         {
           ProfBegin("Postprocess");
@@ -325,8 +331,8 @@ Internal void async_lane(void *)
 
             async.active_request.ldr = image_rgba8_alloc(req.arena, req.hdr.width, req.hdr.height);
 
-            work.levels     =  push_array(scratch.arena, Image, work.level_count);
-            work.upsampled  =  push_array(scratch.arena, Image, work.level_count - 1);
+            work.levels     =  push_array(scratch.arena, Image_RGB, work.level_count);
+            work.upsampled  =  push_array(scratch.arena, Image_RGB, work.level_count - 1);
 
             //- kti: Alloc images.
 
@@ -335,7 +341,7 @@ Internal void async_lane(void *)
 
             for (L1 i = 0; i < work.level_count; i += 1)
             {
-              work.levels[i] = image_alloc(scratch.arena, width, height);
+              work.levels[i] = image_rgb_alloc(scratch.arena, width, height);
 
               width /= 2;
               height /= 2;
@@ -343,18 +349,19 @@ Internal void async_lane(void *)
 
             if (work.level_count > 1)
             {
-              Image  high              =  work.levels[0];
-              Image  low               =  work.levels[1];
-              L1     horizontal_count  =  Max((L1)low.width * high.height, (L1)high.width * low.height);
+              Image_RGB high = work.levels[0];
+              Image_RGB low  = work.levels[1];
+              L1 horizontal_count = Max(image_rgb_block_count(low.width) * high.height,
+                                        image_rgb_block_count(high.width) * low.height);
 
-              work.horizontal_pixels = push_array_no_zero(scratch.arena, F4, horizontal_count);
+              work.horizontal_blocks = push_array_no_zero(scratch.arena, F4x3, horizontal_count);
             }
 
             for (L1 i = 0; i + 1 < work.level_count; i += 1)
             {
-              Image high = work.levels[i];
+              Image_RGB high = work.levels[i];
 
-              work.upsampled[i] = image_alloc(scratch.arena, high.width, high.height);
+              work.upsampled[i] = image_rgb_alloc(scratch.arena, high.width, high.height);
             }
 
             async.active_request.bloom_work = work;
@@ -372,7 +379,7 @@ Internal void async_lane(void *)
 
           Range range = lane_range(req.hdr.height);
 
-          image_bloom_threshold(work.levels[0], req.hdr, params, range);
+          image_rgb_bloom_threshold(work.levels[0], req.hdr, params, range);
           ProfEnd();
           lane_sync();
 
@@ -381,29 +388,22 @@ Internal void async_lane(void *)
           ProfBegin("Downsample");
           for (L1 i = 0; i < work.level_count - 1; i += 1)
           {
-            Image  in   =  work.levels[i];
-            Image  out  =  work.levels[i + 1];
+            Image_RGB  in   =  work.levels[i];
+            Image_RGB  out  =  work.levels[i + 1];
 
-            Image horizontal = {
-              .width       =  out.width,
-              .height      =  in.height,
-              .row_stride  =  out.width,
-              .pixels      =  work.horizontal_pixels,
+            Image_RGB horizontal = {
+              .width        = out.width,
+              .height       = in.height,
+              .block_stride = image_rgb_block_count(out.width),
+              .blocks       = work.horizontal_blocks,
             };
 
             Range  x_range  =  lane_range(horizontal.height);
             Range  y_range  =  lane_range(out.height);
 
-            image_resample_x(horizontal, in, x_range);
+            image_rgb_resample_x(horizontal, in, x_range, scratch.arena);
             lane_sync();
-            image_resample_y(out, horizontal, y_range);
-
-            //- kti: Apply karis average to first downsample.
-            if (i == 0)
-            {
-              // Both operations use this lane's rows.
-              image_apply_karis(out, y_range);
-            }
+            image_rgb_resample_y(out, horizontal, y_range, i == 0, scratch.arena);
             lane_sync();
           }
           ProfEnd();
@@ -413,25 +413,25 @@ Internal void async_lane(void *)
           ProfBegin("Upsample");
           for (L1 i = work.level_count - 1; i >= 1; i -= 1)
           {
-            Image  in         =  work.levels[i];
-            Image  upsampled  =  work.upsampled[i - 1];
-            Image  out        =  work.levels[i - 1];
+            Image_RGB  in         =  work.levels[i];
+            Image_RGB  upsampled  =  work.upsampled[i - 1];
+            Image_RGB  out        =  work.levels[i - 1];
 
-            Image horizontal = {
-              .width       =  out.width,
-              .height      =  in.height,
-              .row_stride  =  out.width,
-              .pixels      =  work.horizontal_pixels,
+            Image_RGB horizontal = {
+              .width        = out.width,
+              .height       = in.height,
+              .block_stride = image_rgb_block_count(out.width),
+              .blocks       = work.horizontal_blocks,
             };
 
             Range  x_range  =  lane_range(horizontal.height);
             Range  y_range  =  lane_range(upsampled.height);
 
-            image_resample_x(horizontal, in, x_range);
+            image_rgb_resample_x(horizontal, in, x_range, scratch.arena);
             lane_sync();
-            image_resample_y(upsampled, horizontal, y_range);
+            image_rgb_resample_y(upsampled, horizontal, y_range, 0, scratch.arena);
             // Add consumes only the rows this lane just resampled.
-            image_add(out, upsampled, y_range);
+            image_rgb_add(out, upsampled, y_range);
             if (i > 1)
             {
               // The next resample reads neighboring rows and reuses horizontal.
@@ -441,23 +441,12 @@ Internal void async_lane(void *)
 
           ProfEnd();
 
-          //- kti: Combine HDR input and reconstructed bloom.
-
-          ProfBegin("Bloom Combine");
-
+          // Final add and output consume only this lane's own rows.
           Range combine_range = lane_range(work.levels[0].height);
-
-          image_bloom_combine(work.levels[0], req.hdr, work.levels[0], params, combine_range);
-          ProfEnd();
-
-          //- kti: Tonemap
-
           Image_RGBA8 result = async.active_request.ldr;
 
-          ProfBegin("Tonemap");
-          // Final add, combine, and tonemap all consume this lane's own rows.
-          image_tonemap(result, work.levels[0], req.postprocess_settings.tonemap, combine_range);
-          ProfEnd();
+          image_rgb_bloom_tonemap(result, req.hdr, work.levels[0], params,
+                                  req.postprocess_settings.tonemap, combine_range);
 
           lane_sync();
 
@@ -1947,13 +1936,9 @@ Internal void lane(void *user_data)
     //- kti: Build the code-defined scene.
     I1 user_code_ran = 0;
 
-    L1 tonemap_hash = hash64_seed(&state->postprocess_settings.tonemap, sizeof(state->postprocess_settings.tonemap), 0);
-
-    if (state->user_render_func &&
-        (state->user_code_dirty || state->user_render_tonemap_hash != tonemap_hash))
+    if (state->user_render_func && state->user_code_dirty)
     {
       state->user_code_dirty           =   0;
-      state->user_render_tonemap_hash  =   tonemap_hash;
       state->scene_frame_index         +=  1;
       user_code_ran                    =   1;
 

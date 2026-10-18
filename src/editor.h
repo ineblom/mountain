@@ -231,9 +231,9 @@ typedef struct Image_Bloom_Work Image_Bloom_Work;
 struct Image_Bloom_Work
 {
   L1     level_count;
-  Image *levels;
-  F4    *horizontal_pixels;
-  Image *upsampled;
+  Image_RGB *levels;
+  F4x3     *horizontal_blocks;
+  Image_RGB *upsampled;
 };
 
 typedef struct Async_Request Async_Request;
@@ -352,7 +352,6 @@ struct State
 
   //- kti: User Code
   User_Render_Func user_render_func;
-  L1               user_render_tonemap_hash;
   I1               user_code_dirty;
   I1               animation_active;
   L1               frames_requested;

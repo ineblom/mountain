@@ -20,6 +20,7 @@ struct V3
   F1 x, y, z;
 };
 
+// Four independent three-component values, one value per SIMD lane.
 typedef struct F4x3 F4x3;
 struct F4x3
 {
@@ -130,5 +131,30 @@ struct Ray
 #define sin_F1(x) sinf(x)
 #define cos_F1(x) cosf(x)
 #define tan_F1(x) tanf(x)
+
+////////////////////////////////
+//~ SIMD helpers
+
+enum
+{
+  F4_A0, F4_A1, F4_A2, F4_A3,
+  F4_B0, F4_B1, F4_B2, F4_B3,
+};
+
+#define shuffle_F4(a, b, lane0, lane1, lane2, lane3) __builtin_shufflevector((a), (b), (lane0), (lane1), (lane2), (lane3))
+
+Inline F4 splat_F4(F1 x);
+Inline F4 select_F4(SI4 mask, F4 yes, F4 no);
+Inline F4 max_F4(F4 a, F4 b);
+Inline F4 min_F4(F4 a, F4 b);
+Inline F4 clamp01_F4(F4 v);
+
+Inline F4 luminance_F4x3(F4x3 c);
+Inline F4x3 scale_F4x3(F4x3 c, F4 scale);
+Inline F4x3 add_F4x3(F4x3 a, F4x3 b);
+Inline F4x3 lerp_F4x3(F4x3 a, F4 t, F4x3 b);
+Inline F4x3 pad_F4x3(F4x3 c, L1 count);
+Inline F4x3 F4x3_from_F4(F4 a, F4 b, F4 c, F4 d);
+Inline F4x3 gather_F4x3(const F4x3 *row, const L1 indices[4]);
 
 #endif

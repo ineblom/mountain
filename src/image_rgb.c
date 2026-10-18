@@ -506,36 +506,9 @@ Inline F4 image_table_lookup(F4 values, F1 *table, I1 count, F1 maximum)
   return interpolated;
 }
 
-Inline F4 rgb_tonemap_channel(F4 v, Tonemap_Kind kind, F1 inv_white_squared)
+Inline F4 rgb_tonemap_lottes(F4 values)
 {
-  F4 result = v;
-
-  switch (kind)
-  {
-    case TONEMAP_KIND__ACES: {
-      F4  numerator    =  v * (2.51f * v + 0.03f);
-      F4  denominator  =  v * (2.43f * v + 0.59f) + 0.14f;
-      F4  mapped       =  numerator / denominator;
-
-      result = clamp01_F4(mapped);
-    } break;
-
-    case TONEMAP_KIND__REINHARD:
-    {
-      result = v / (1.0f + v);
-      if (inv_white_squared > 0)
-      {
-        F4 white_point_scale = 1.0f + v * inv_white_squared;
-
-        result *= white_point_scale;
-      }
-    } break;
-
-    case TONEMAP_KIND__LOTTES: {
-      result = image_table_lookup(v, image_lottes_table, IMAGE_LOTTES_TABLE_COUNT, 8.0f);
-    } break;
-  }
-
+  F4 result = image_table_lookup(values, image_lottes_table, IMAGE_LOTTES_TABLE_COUNT, image_lottes_table_params.hdr_max);
   return result;
 }
 
@@ -615,10 +588,10 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
 {
   ProfBeginFunc();
 
+  image_lottes_prepare(tonemap.lottes);
+
   F1  exposure_scale     =  tonemap.exposure_ev == 0 ? 1.0f : exp2f(tonemap.exposure_ev);
-  I1  uses_white_point   =  tonemap.kind == TONEMAP_KIND__REINHARD && tonemap.white_point > 0;
-  F1  inv_white_squared  =  uses_white_point ? 1.0f / Square(tonemap.white_point) : 0;
-  I1  needs_adjustments  =  tonemap.exposure_ev != 0 || tonemap.saturation != 1 || inv_white_squared != 0;
+  I1  needs_adjustments  =  tonemap.exposure_ev != 0 || tonemap.saturation != 1;
 
   for (L1 y = rows.min; y < rows.max; ++y)
   {
@@ -653,9 +626,9 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
       F4x3  color               =  scale_F4x3(combined_color, splat_F4(exposure_scale));
 
       color = (F4x3){
-        rgb_tonemap_channel(color.x, tonemap.kind, inv_white_squared),
-        rgb_tonemap_channel(color.y, tonemap.kind, inv_white_squared),
-        rgb_tonemap_channel(color.z, tonemap.kind, inv_white_squared)
+        rgb_tonemap_lottes(color.x),
+        rgb_tonemap_lottes(color.y),
+        rgb_tonemap_lottes(color.z)
       };
 
       if (needs_adjustments)

@@ -242,40 +242,113 @@ enum
 };
 
 Global F1 image_srgb_table[IMAGE_SRGB_TABLE_COUNT + 1];
-Global F1 image_lottes_table[IMAGE_LOTTES_TABLE_COUNT + 1];
+Global ThreadLocal F1 image_lottes_table[IMAGE_LOTTES_TABLE_COUNT + 1];
+Global ThreadLocal Image_Lottes_Params image_lottes_table_params;
 
-Inline F4 tonemap_aces(F4 v)
+Internal Image_Lottes_Params image_lottes_default_params(void)
 {
-  F1  a  =  2.51f;
-  F1  b  =  0.03f;
-  F1  c  =  2.43f;
-  F1  d  =  0.59f;
-  F1  e  =  0.14f;
-
-  F4  numerator    =  v * (a * v + b);
-  F4  denominator  =  v * (c * v + d) + e;
-  F4  mapped       =  numerator / denominator;
-  F4  result       =  clamp01_F4(mapped);
+  Image_Lottes_Params result = {
+    .contrast  =  1.6f,
+    .shoulder  =  0.977f,
+    .hdr_max   =  8.0f,
+    .mid_in    =  0.18f,
+    .mid_out   =  0.267f,
+  };
 
   return result;
 }
 
-Inline F4 tonemap_reinhard(F4 v)
+Internal F2 image_lottes_mid_out_bounds(Image_Lottes_Params params)
 {
-  F4 result = v / (1.0f + v);
+  F1 gray_to_white      =  params.mid_in / params.hdr_max;
+  F1 shoulder_exponent  =  params.contrast * (1.0f - params.shoulder);
+  F1 maximum_output     =  powf(gray_to_white, shoulder_exponent) * 0.99f;
+  F1 minimum_output     =  Min(0.001f, maximum_output * 0.01f);
 
+  F2 result = {minimum_output, maximum_output};
   return result;
+}
+
+Internal Image_Lottes_Params image_lottes_normalize_params(Image_Lottes_Params params)
+{
+  Image_Lottes_Params defaults = image_lottes_default_params();
+
+  if (   params.contrast == 0 && params.shoulder == 0 && params.hdr_max == 0
+      && params.mid_in == 0 && params.mid_out == 0)
+  {
+    params = defaults;
+  }
+
+  if (!isfinite(params.contrast)) params.contrast = defaults.contrast;
+  if (!isfinite(params.shoulder)) params.shoulder = defaults.shoulder;
+  if (!isfinite(params.hdr_max))  params.hdr_max  = defaults.hdr_max;
+  if (!isfinite(params.mid_in))   params.mid_in   = defaults.mid_in;
+  if (!isfinite(params.mid_out))  params.mid_out  = defaults.mid_out;
+
+  params.contrast  =  Clamp(0.1f, params.contrast, 4.0f);
+  params.shoulder  =  Clamp(0.01f, params.shoulder, 1.0f);
+  params.hdr_max   =  Clamp(1.0f, params.hdr_max, 128.0f);
+  params.mid_in    =  Clamp(0.001f, params.mid_in, Min(1.0f, params.hdr_max * 0.9f));
+
+  F2 output_bounds = image_lottes_mid_out_bounds(params);
+
+  params.mid_out = Clamp(output_bounds[0], params.mid_out, output_bounds[1]);
+
+  return params;
+}
+
+Internal void image_lottes_prepare(Image_Lottes_Params params)
+{
+  params = image_lottes_normalize_params(params);
+
+  if (   params.contrast  == image_lottes_table_params.contrast
+      && params.shoulder  == image_lottes_table_params.shoulder
+      && params.hdr_max   == image_lottes_table_params.hdr_max
+      && params.mid_in    == image_lottes_table_params.mid_in
+      && params.mid_out   == image_lottes_table_params.mid_out)
+  {
+    return;
+  }
+
+  D1  a                        =  params.contrast;
+  D1  d                        =  params.shoulder;
+  D1  hdr_max                  =  params.hdr_max;
+  D1  mid_in                   =  params.mid_in;
+  D1  mid_out                  =  params.mid_out;
+  D1  contrast_exponent        =  a * d;
+  D1  mid_contrast             =  pow(mid_in, a);
+  D1  hdr_contrast             =  pow(hdr_max, a);
+  D1  mid_shoulder             =  pow(mid_in, contrast_exponent);
+  D1  hdr_shoulder             =  pow(hdr_max, contrast_exponent);
+  D1  coefficient_denominator  =  (hdr_shoulder - mid_shoulder) * mid_out;
+  D1  b_numerator              =  -mid_contrast + hdr_contrast * mid_out;
+  D1  c_numerator              =  hdr_shoulder * mid_contrast - hdr_contrast * mid_shoulder * mid_out;
+  D1  b                        =  b_numerator / coefficient_denominator;
+  D1  c                        =  c_numerator / coefficient_denominator;
+
+  for (I1 i = 0; i <= IMAGE_LOTTES_TABLE_COUNT; i += 1)
+  {
+    D1  linear       =  hdr_max * (D1)i / IMAGE_LOTTES_TABLE_COUNT;
+    D1  numerator    =  pow(linear, a);
+    D1  denominator  =  pow(linear, contrast_exponent) * b + c;
+
+    D1 mapped = numerator / denominator;
+
+    image_lottes_table[i] = (F1)Clamp(0.0, mapped, 1.0);
+  }
+  image_lottes_table[IMAGE_LOTTES_TABLE_COUNT] = 1.0f;
+  image_lottes_table_params = params;
 }
 
 Inline F1 lottes_from_linear(F1 v)
 {
   if (!(v > 0.0f))
     return 0.0f;
-  if (v >= 8.0f)
+  if (v >= image_lottes_table_params.hdr_max)
     return 1.0f;
 
-  F1 position = v * (IMAGE_LOTTES_TABLE_COUNT / 8.0f);
-  I1 index = (I1)position;
+  F1 position = v * (IMAGE_LOTTES_TABLE_COUNT / image_lottes_table_params.hdr_max);
+  I1 index = Min((I1)position, IMAGE_LOTTES_TABLE_COUNT - 1);
   F1 lo = image_lottes_table[index];
   F1 hi = image_lottes_table[index + 1];
 
@@ -324,33 +397,7 @@ Internal void image_init(void)
   }
   image_srgb_table[IMAGE_SRGB_TABLE_COUNT] = 255.0f;
 
-  // Lottes 2016. The curve reaches white at hdr_max, so higher inputs can
-  // saturate here because the following sRGB conversion clamps to white.
-  F1  a                        =  1.6f;
-  F1  d                        =  0.977f;
-  F1  hdr_max                  =  8.0f;
-  F1  mid_in                   =  0.18f;
-  F1  mid_out                  =  0.267f;
-  F1  contrast_exponent        =  a * d;
-  F1  mid_contrast             =  powf(mid_in, a);
-  F1  hdr_contrast             =  powf(hdr_max, a);
-  F1  mid_shoulder             =  powf(mid_in, contrast_exponent);
-  F1  hdr_shoulder             =  powf(hdr_max, contrast_exponent);
-  F1  coefficient_denominator  =  (hdr_shoulder - mid_shoulder) * mid_out;
-  F1  b_numerator              =  -mid_contrast + hdr_contrast * mid_out;
-  F1  c_numerator              =  hdr_shoulder * mid_contrast - hdr_contrast * mid_shoulder * mid_out;
-  F1  b                        =  b_numerator / coefficient_denominator;
-  F1  c                        =  c_numerator / coefficient_denominator;
-
-  for (I1 i = 0; i <= IMAGE_LOTTES_TABLE_COUNT; i += 1)
-  {
-    F1  linear       =  hdr_max * (F1)i / IMAGE_LOTTES_TABLE_COUNT;
-    F1  numerator    =  powf(linear, a);
-    F1  denominator  =  powf(linear, contrast_exponent) * b + c;
-
-    image_lottes_table[i] = numerator / denominator;
-  }
-  image_lottes_table[IMAGE_LOTTES_TABLE_COUNT] = 1.0f;
+  image_lottes_prepare(image_lottes_default_params());
 }
 
 Inline B1 srgb8_from_linear(F1 l)
@@ -372,14 +419,6 @@ Inline B1 srgb8_from_linear(F1 l)
   return (B1)interpolated;
 }
 
-Inline F4 tonemap_reinhard_white(F4 v, F1 inv_white_squared)
-{
-  F4  compressed         =  v / (1.0f + v);
-  F4  white_point_scale  =  1.0f + v * inv_white_squared;
-  F4  result             =  compressed * white_point_scale;
-  return result;
-}
-
 Inline F4 image_tonemap_saturation(F4 color, F1 saturation)
 {
   color = clamp01_F4(color);
@@ -389,107 +428,44 @@ Inline F4 image_tonemap_saturation(F4 color, F1 saturation)
   return result;
 }
 
-typedef struct Image_Tonemap_Adjustments Image_Tonemap_Adjustments;
-struct Image_Tonemap_Adjustments
-{
-  F1 exposure_scale;
-  F1 saturation;
-  F1 inv_white_squared;
-};
-
-#define IMAGE_TONEMAP_KERNEL(name, input, curve, output)                                                            \
-  Internal void image_tonemap_##name(Image_RGBA8 dst, Image src, Image_Tonemap_Adjustments adjustments, Range rows) \
-  {                                                                                                                 \
-    for (L1 y = rows.min; y < rows.max; y += 1)                                                                     \
-    {                                                                                                               \
-      F4     *src_row  =  image_row(src, y);                                                                        \
-      RGBA8  *dst_row  =  image_rgba8_row(dst, y);                                                                  \
-                                                                                                                    \
-      for (L1 x = 0; x < src.width; x += 1)                                                                         \
-      {                                                                                                             \
-        F4 in_px       =  (input);                                                                                  \
-        F4 tonemapped  =  (curve);                                                                                  \
-        F4 color       =  (output);                                                                                 \
-                                                                                                                    \
-        dst_row[x] = (RGBA8){                                                                                       \
-          srgb8_from_linear(color[0]),                                                                              \
-          srgb8_from_linear(color[1]),                                                                              \
-          srgb8_from_linear(color[2]),                                                                              \
-          255,                                                                                                      \
-        };                                                                                                          \
-      }                                                                                                             \
-    }                                                                                                               \
-  }
-
-//- kti: Regular Kernels
-IMAGE_TONEMAP_KERNEL(aces,     src_row[x], tonemap_aces(in_px),     tonemapped)
-IMAGE_TONEMAP_KERNEL(reinhard, src_row[x], tonemap_reinhard(in_px), tonemapped)
-IMAGE_TONEMAP_KERNEL(lottes,   src_row[x], tonemap_lottes(in_px),   tonemapped)
-IMAGE_TONEMAP_KERNEL(linear,   src_row[x], in_px,                   tonemapped)
-
-//- kti: Adjusted Kerlens.
-
-//- kti: ACES
-IMAGE_TONEMAP_KERNEL(aces_adjusted,
-                     src_row[x] * adjustments.exposure_scale,
-                     tonemap_aces(in_px),
-                     image_tonemap_saturation(tonemapped, adjustments.saturation))
-//- kti: Reinhard
-IMAGE_TONEMAP_KERNEL(reinhard_adjusted,
-                     src_row[x] * adjustments.exposure_scale,
-                     tonemap_reinhard_white(in_px, adjustments.inv_white_squared),
-                     image_tonemap_saturation(tonemapped, adjustments.saturation))
-//- kti: Lottes
-IMAGE_TONEMAP_KERNEL(lottes_adjusted,
-                     src_row[x] * adjustments.exposure_scale,
-                     tonemap_lottes(in_px),
-                     image_tonemap_saturation(tonemapped, adjustments.saturation))
-//- kti: Linear
-IMAGE_TONEMAP_KERNEL(linear_adjusted,
-                     src_row[x] * adjustments.exposure_scale,
-                     in_px,
-                     image_tonemap_saturation(tonemapped, adjustments.saturation))
-
-#undef IMAGE_TONEMAP_KERNEL
-
 Internal void image_tonemap(Image_RGBA8 dst, Image src, Image_Tonemap_Params params, Range rows)
 {
   ProfBeginFunc();
 
   if (src.width == dst.width && src.height == dst.height)
   {
-    Image_Tonemap_Adjustments adjustments = {
-      .exposure_scale = params.exposure_ev == 0.0f ? 1.0f : exp2f(params.exposure_ev),
-      .saturation = params.saturation,
-    };
+    image_lottes_prepare(params.lottes);
 
-    if (params.kind == TONEMAP_KIND__REINHARD && params.white_point > 0.0f)
+    F1 exposure_scale     =  params.exposure_ev == 0.0f ? 1.0f : exp2f(params.exposure_ev);
+    I1 needs_adjustments  =  params.exposure_ev != 0.0f || params.saturation != 1.0f;
+
+    for (L1 y = rows.min; y < rows.max; ++y)
     {
-      adjustments.inv_white_squared = 1.0f / (params.white_point * params.white_point);
-    }
+      F4     *src_row  =  image_row(src, y);
+      RGBA8  *dst_row  =  image_rgba8_row(dst, y);
 
-    //- kti: Select Kernel
-
-    if (params.exposure_ev == 0.0f && params.saturation == 1.0f && adjustments.inv_white_squared == 0.0f)
-    {
-      //- kti: No Params
-      switch (params.kind)
+      for (L1 x = 0; x < src.width; ++x)
       {
-        case TONEMAP_KIND__ACES:     image_tonemap_aces(dst, src, adjustments, rows);     break;
-        case TONEMAP_KIND__REINHARD: image_tonemap_reinhard(dst, src, adjustments, rows); break;
-        case TONEMAP_KIND__LOTTES:   image_tonemap_lottes(dst, src, adjustments, rows);   break;
-        default:                     image_tonemap_linear(dst, src, adjustments, rows);   break;
-      }
-    }
-    else
-    {
-      //- kti: With Params. Use adjustable kernels (more expensive)
-      switch (params.kind)
-      {
-        case TONEMAP_KIND__ACES:     image_tonemap_aces_adjusted(dst, src, adjustments, rows);     break;
-        case TONEMAP_KIND__REINHARD: image_tonemap_reinhard_adjusted(dst, src, adjustments, rows); break;
-        case TONEMAP_KIND__LOTTES:   image_tonemap_lottes_adjusted(dst, src, adjustments, rows);   break;
-        default:                     image_tonemap_linear_adjusted(dst, src, adjustments, rows);   break;
+        F4 color = src_row[x];
+
+        if (needs_adjustments)
+        {
+          color *= exposure_scale;
+        }
+
+        color = tonemap_lottes(color);
+
+        if (needs_adjustments)
+        {
+          color = image_tonemap_saturation(color, params.saturation);
+        }
+
+        dst_row[x] = (RGBA8){
+          srgb8_from_linear(color[0]),
+          srgb8_from_linear(color[1]),
+          srgb8_from_linear(color[2]),
+          255,
+        };
       }
     }
   }

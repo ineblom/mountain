@@ -1,14 +1,6 @@
 #ifndef IMAGE_H
 #define IMAGE_H
 
-typedef enum
-{
-  TONEMAP_KIND__ACES,
-  TONEMAP_KIND__REINHARD,
-  TONEMAP_KIND__LOTTES,
-  TONEMAP_KIND_COUNT,
-} Tonemap_Kind;
-
 #pragma pack(push, 1)
 typedef struct Bitmap_Header Bitmap_Header;
 struct Bitmap_Header
@@ -66,13 +58,22 @@ struct Image_RGBA8
   RGBA8 *pixels;
 };
 
+typedef struct Image_Lottes_Params Image_Lottes_Params;
+struct Image_Lottes_Params
+{
+  F1 contrast;
+  F1 shoulder;
+  F1 hdr_max;
+  F1 mid_in;
+  F1 mid_out;
+};
+
 typedef struct Image_Tonemap_Params Image_Tonemap_Params;
 struct Image_Tonemap_Params
 {
-  Tonemap_Kind kind;
   F1          exposure_ev; // Stops before tonemapping; 0 is neutral.
   F1          saturation;  // Display-linear RGB; 1 is neutral, 0 is grayscale.
-  F1          white_point; // Reinhard only, after exposure; 0 keeps the simple curve.
+  Image_Lottes_Params lottes;
 };
 
 typedef struct Image_Bloom_Params Image_Bloom_Params;

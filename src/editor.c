@@ -27,12 +27,6 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
   [VIEW_KIND__USER_RENDER]  =  str8("User Render"),
 };
 
-Global String8 tonemap_kind_names[TONEMAP_KIND_COUNT] = {
-  [TONEMAP_KIND__ACES]      =  str8("ACES"),
-  [TONEMAP_KIND__REINHARD]  =  str8("Reinhard"),
-  [TONEMAP_KIND__LOTTES]    =  str8("Lottes"),
-};
-
 Global State        *state  =  0;
 Global Async_State  async   =  {0};
 Global I1           async_lanes_completed;
@@ -1745,8 +1739,8 @@ Internal void lane(void *user_data)
   state->postprocess_settings.bloom.strength    =  0.4f;
   state->postprocess_settings.bloom.knee        =  0.5f;
   state->postprocess_settings.tonemap = (Image_Tonemap_Params){
-    .kind        =  TONEMAP_KIND__ACES,
     .saturation  =  1.0f,
+    .lottes      =  image_lottes_default_params(),
   };
 
   user_code_reload();
@@ -2075,20 +2069,34 @@ Internal void lane(void *user_data)
 
         lister_header(str8("Postprocessing"));
 
-        lister_enum(str8("Tonemap"), &state->postprocess_settings.tonemap.kind,
-                    tonemap_kind_names, TONEMAP_KIND_COUNT);
-
         lister_F1(str8("Exposure (EV)"), &state->postprocess_settings.tonemap.exposure_ev,
                   .default_value = 0.0f, .min = -8.0f, .max = 8.0f, .pixels_per_unit = 50.0f);
 
         lister_F1(str8("Saturation"), &state->postprocess_settings.tonemap.saturation,
                   .default_value = 1.0f, .min = 0.0f, .max = 2.0f, .pixels_per_unit = 100.0f);
 
-        if (state->postprocess_settings.tonemap.kind == TONEMAP_KIND__REINHARD)
-        {
-          lister_F1(str8("White Point (0 = off)"), &state->postprocess_settings.tonemap.white_point,
-                    .default_value = 0.0f, .min = 0.0f, .max = 64.0f, .pixels_per_unit = 100.0f);
-        }
+        Image_Lottes_Params *lottes = &state->postprocess_settings.tonemap.lottes;
+
+        *lottes = image_lottes_normalize_params(*lottes);
+
+        F2 output_bounds = image_lottes_mid_out_bounds(*lottes);
+
+        lister_F1(str8("Contrast"), &lottes->contrast,
+                  .default_value = 1.6f, .min = 0.1f, .max = 4.0f, .pixels_per_unit = 100.0f);
+
+        lister_F1(str8("Shoulder"), &lottes->shoulder,
+                  .default_value = 0.977f, .min = 0.01f, .max = 1.0f, .pixels_per_unit = 500.0f);
+
+        lister_F1(str8("HDR White"), &lottes->hdr_max,
+                  .default_value = 8.0f, .min = 1.0f, .max = 128.0f, .pixels_per_unit = 10.0f);
+
+        lister_F1(str8("Middle Gray Input"), &lottes->mid_in,
+                  .default_value = 0.18f, .min = 0.001f, .max = Min(1.0f, lottes->hdr_max * 0.9f),
+                  .pixels_per_unit = 500.0f);
+
+        lister_F1(str8("Middle Gray Output"), &lottes->mid_out,
+                  .default_value = 0.267f, .min = output_bounds[0], .max = output_bounds[1],
+                  .pixels_per_unit = 500.0f);
 
         lister_L1(str8("Passes"), &state->postprocess_settings.bloom.pass_count, .default_value = 8);
 

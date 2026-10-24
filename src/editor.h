@@ -233,7 +233,6 @@ struct Image_Bloom_Work
   L1     level_count;
   Image_RGB *levels;
   F4x3     *horizontal_blocks;
-  Image_RGB *upsampled;
 };
 
 typedef struct Async_Request Async_Request;

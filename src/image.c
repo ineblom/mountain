@@ -245,6 +245,10 @@ Global F1 image_srgb_table[IMAGE_SRGB_TABLE_COUNT + 1];
 Global ThreadLocal F1 image_lottes_table[IMAGE_LOTTES_TABLE_COUNT + 1];
 Global ThreadLocal Image_Lottes_Params image_lottes_table_params;
 
+// NOTE(kti): sRGB(255 * clamp01(Lottes(x))) composed into one table; the
+// tonemap pass can then do one lookup per channel instead of two.
+Global ThreadLocal F1 image_lottes_srgb_table[IMAGE_LOTTES_TABLE_COUNT + 1];
+
 Internal Image_Lottes_Params image_lottes_default_params(void)
 {
   Image_Lottes_Params result = {
@@ -297,6 +301,23 @@ Internal Image_Lottes_Params image_lottes_normalize_params(Image_Lottes_Params p
   return params;
 }
 
+Inline F1 srgb_from_linear(F1 l)
+{
+  if (l < 0.0f)
+    l = 0.0f;
+  if (l > 1.0f)
+    l = 1.0f;
+
+  F1 s = l * 12.92f;
+
+  if (l > 0.0031308f)
+  {
+    s = 1.055f * powf(l, 1.0f / 2.4f) - 0.055f;
+  }
+
+  return s;
+}
+
 Internal void image_lottes_prepare(Image_Lottes_Params params)
 {
   params = image_lottes_normalize_params(params);
@@ -337,6 +358,13 @@ Internal void image_lottes_prepare(Image_Lottes_Params params)
     image_lottes_table[i] = (F1)Clamp(0.0, mapped, 1.0);
   }
   image_lottes_table[IMAGE_LOTTES_TABLE_COUNT] = 1.0f;
+
+  for (I1 i = 0; i < IMAGE_LOTTES_TABLE_COUNT; i += 1)
+  {
+    image_lottes_srgb_table[i] = 255.0f * srgb_from_linear(image_lottes_table[i]);
+  }
+  image_lottes_srgb_table[IMAGE_LOTTES_TABLE_COUNT] = 255.0f;
+
   image_lottes_table_params = params;
 }
 
@@ -371,23 +399,6 @@ Inline F4 tonemap_lottes(F4 v)
   return result;
 }
 
-Inline F1 srgb_from_linear(F1 l)
-{
-  if (l < 0.0f)
-    l = 0.0f;
-  if (l > 1.0f)
-    l = 1.0f;
-
-  F1 s = l * 12.92f;
-
-  if (l > 0.0031308f)
-  {
-    s = 1.055f * powf(l, 1.0f / 2.4f) - 0.055f;
-  }
-
-  return s;
-}
-
 Internal void image_init(void)
 {
   for (I1 i = 0; i <= IMAGE_SRGB_TABLE_COUNT; i += 1)
@@ -419,6 +430,25 @@ Inline B1 srgb8_from_linear(F1 l)
   return (B1)interpolated;
 }
 
+Inline B1 srgb8_from_lottes_linear(F1 v)
+{
+  if (!(v > 0.0f))
+    return 0;
+  if (v >= image_lottes_table_params.hdr_max)
+    return 255;
+
+  F1 position = v * (IMAGE_LOTTES_TABLE_COUNT / image_lottes_table_params.hdr_max);
+  I1 index = Min((I1)position, IMAGE_LOTTES_TABLE_COUNT - 1);
+  F1 lo = image_lottes_srgb_table[index];
+  F1 hi = image_lottes_srgb_table[index + 1];
+
+  F1  blend_fraction  =  position - (F1)index;
+  F1  value_delta     =  hi - lo;
+  F1  interpolated    =  lo + blend_fraction * value_delta + 0.5f;
+
+  return (B1)interpolated;
+}
+
 Inline F4 image_tonemap_saturation(F4 color, F1 saturation)
 {
   color = clamp01_F4(color);
@@ -436,8 +466,8 @@ Internal void image_tonemap(Image_RGBA8 dst, Image src, Image_Tonemap_Params par
   {
     image_lottes_prepare(params.lottes);
 
-    F1 exposure_scale     =  params.exposure_ev == 0.0f ? 1.0f : exp2f(params.exposure_ev);
-    I1 needs_adjustments  =  params.exposure_ev != 0.0f || params.saturation != 1.0f;
+    F1  exposure_scale     =  params.exposure_ev == 0.0f ? 1.0f : exp2f(params.exposure_ev);
+    I1  needs_adjustments  =  params.saturation != 1.0f;
 
     for (L1 y = rows.min; y < rows.max; ++y)
     {
@@ -446,26 +476,30 @@ Internal void image_tonemap(Image_RGBA8 dst, Image src, Image_Tonemap_Params par
 
       for (L1 x = 0; x < src.width; ++x)
       {
-        F4 color = src_row[x];
+        F4 color = src_row[x] * exposure_scale;
 
-        if (needs_adjustments)
+        if (!needs_adjustments)
         {
-          color *= exposure_scale;
+          //- kti: Fast path: one composed table maps HDR linear straight to sRGB.
+          dst_row[x] = (RGBA8){
+            srgb8_from_lottes_linear(color[0]),
+            srgb8_from_lottes_linear(color[1]),
+            srgb8_from_lottes_linear(color[2]),
+            255,
+          };
         }
-
-        color = tonemap_lottes(color);
-
-        if (needs_adjustments)
+        else
         {
+          color = tonemap_lottes(color);
           color = image_tonemap_saturation(color, params.saturation);
-        }
 
-        dst_row[x] = (RGBA8){
-          srgb8_from_linear(color[0]),
-          srgb8_from_linear(color[1]),
-          srgb8_from_linear(color[2]),
-          255,
-        };
+          dst_row[x] = (RGBA8){
+            srgb8_from_linear(color[0]),
+            srgb8_from_linear(color[1]),
+            srgb8_from_linear(color[2]),
+            255,
+          };
+        }
       }
     }
   }

@@ -2,7 +2,19 @@
 
 WARN="-Wall -Wno-unused-function -Wno-unused-variable"
 DEFS="-DDEV=1"
-OPT="-O2"
+OPT="-O0"
+
+META=0
+for ARG in "$@"; do
+  case "$ARG" in
+    release) OPT="-O2" ;;
+    META) META=1 ;;
+    *)
+      echo "Usage: $0 [META] [release]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 case "$(uname -s)" in Darwin)
     COMPILER="${CC:-clang}"
@@ -42,7 +54,7 @@ if [ $SHADERS_DIRTY -eq 1 ]; then
   ./build-shaders.sh || exit $?
 fi
 
-if [ "$1" = "META" ]; then
+if [ "$META" -eq 1 ]; then
   cd src || exit 1
   $COMPILER $LANGUAGE $WARN $DEFS $INC $OPT -DMETA_APP=1 build.c -o ../meta $LANGUAGE_END $LIB
   BUILD_STATUS=$?
@@ -64,9 +76,6 @@ cd .. || exit 1
 
 if [ $BUILD_STATUS -eq 0 ]; then
   echo "Build successful."
-  if [ "${BUILD_ONLY:-0}" != "1" ]; then
-    ./m
-  fi
 else
   echo "Build failed."
   exit $BUILD_STATUS

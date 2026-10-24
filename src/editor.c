@@ -326,7 +326,6 @@ Internal void async_lane(void *)
             async.active_request.ldr = image_rgba8_alloc(req.arena, req.hdr.width, req.hdr.height);
 
             work.levels     =  push_array(scratch.arena, Image_RGB, work.level_count);
-            work.upsampled  =  push_array(scratch.arena, Image_RGB, work.level_count - 1);
 
             //- kti: Alloc images.
 
@@ -349,13 +348,6 @@ Internal void async_lane(void *)
                                         image_rgb_block_count(high.width) * low.height);
 
               work.horizontal_blocks = push_array_no_zero(scratch.arena, F4x3, horizontal_count);
-            }
-
-            for (L1 i = 0; i + 1 < work.level_count; i += 1)
-            {
-              Image_RGB high = work.levels[i];
-
-              work.upsampled[i] = image_rgb_alloc(scratch.arena, high.width, high.height);
             }
 
             async.active_request.bloom_work = work;
@@ -397,7 +389,7 @@ Internal void async_lane(void *)
 
             image_rgb_resample_x(horizontal, in, x_range, scratch.arena);
             lane_sync();
-            image_rgb_resample_y(out, horizontal, y_range, i == 0, scratch.arena);
+            image_rgb_resample_y(out, horizontal, y_range, i == 0, 0, scratch.arena);
             lane_sync();
           }
           ProfEnd();
@@ -407,9 +399,8 @@ Internal void async_lane(void *)
           ProfBegin("Upsample");
           for (L1 i = work.level_count - 1; i >= 1; i -= 1)
           {
-            Image_RGB  in         =  work.levels[i];
-            Image_RGB  upsampled  =  work.upsampled[i - 1];
-            Image_RGB  out        =  work.levels[i - 1];
+            Image_RGB  in   =  work.levels[i];
+            Image_RGB  out  =  work.levels[i - 1];
 
             Image_RGB horizontal = {
               .width        = out.width,
@@ -419,13 +410,12 @@ Internal void async_lane(void *)
             };
 
             Range  x_range  =  lane_range(horizontal.height);
-            Range  y_range  =  lane_range(upsampled.height);
+            Range  y_range  =  lane_range(out.height);
 
             image_rgb_resample_x(horizontal, in, x_range, scratch.arena);
             lane_sync();
-            image_rgb_resample_y(upsampled, horizontal, y_range, 0, scratch.arena);
-            // Add consumes only the rows this lane just resampled.
-            image_rgb_add(out, upsampled, y_range);
+            // Accumulate consumes only the rows this lane just resampled.
+            image_rgb_resample_y(out, horizontal, y_range, 0, 1, scratch.arena);
             if (i > 1)
             {
               // The next resample reads neighboring rows and reuses horizontal.

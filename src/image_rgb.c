@@ -40,10 +40,10 @@ Internal void image_rgb_bloom_threshold(Image_RGB dst, Image src, Image_Bloom_Pa
   F4  threshold           =  splat_F4(params.threshold);
   F4  knee_start          =  splat_F4(params.threshold - params.knee);
   F4  knee_end            =  splat_F4(params.threshold + params.knee);
-  F1  knee_width          =  2.0f * params.knee;
-  F1  knee_normalization  =  4.0f * Square(knee_width);
-
-  if (knee_normalization == 0) knee_normalization = 1.0f;
+  F1  knee_width              =  2.0f * params.knee;
+  // Normalized so the quadratic reaches one at knee_end, where the piecewise
+  // select switches to full contribution, keeping the soft knee continuous.
+  F1  inv_knee_normalization  =  knee_width != 0 ? 1.0f / Square(knee_width) : 1.0f;
 
   for (L1 y = rows.min; y < rows.max; ++y)
   {
@@ -56,7 +56,7 @@ Internal void image_rgb_bloom_threshold(Image_RGB dst, Image src, Image_Bloom_Pa
       F4x3  color               =  rgb_load_pixels(src_row, first_pixel, src.width);
       F4    luminance           =  luminance_F4x3(color);
       F4    distance_into_knee  =  luminance - knee_start;
-      F4    knee_contribution   =  Square(distance_into_knee) / knee_normalization;
+      F4    knee_contribution   =  Square(distance_into_knee) * inv_knee_normalization;
       F4    soft_contribution   =  select_F4(luminance > knee_start, knee_contribution, zero);
       F4    contribution        =  select_F4(luminance > knee_end, one, soft_contribution);
       SI4   has_contribution    =  contribution > zero;
@@ -69,6 +69,8 @@ Internal void image_rgb_bloom_threshold(Image_RGB dst, Image src, Image_Bloom_Pa
 
       color = scale_F4x3(color, bloom_scale);
 
+      // The selects double as NaN masks for degenerate input pixels:
+      // bloom_scale is zero there, but 0 * NaN would still be NaN.
       dst_row[block] = (F4x3){
         select_F4(active_pixels, color.x, zero),
         select_F4(active_pixels, color.y, zero),
@@ -289,10 +291,12 @@ Internal void image_rgb_resample_x(Image_RGB dst, Image_RGB src, Range rows, Are
             span[3].weight_sum
           };
 
+          F4 inv_weight_sums = splat_F4(1.0f) / weight_sums;
+
           result = (F4x3){
-            result.x / weight_sums,
-            result.y / weight_sums,
-            result.z / weight_sums
+            result.x * inv_weight_sums,
+            result.y * inv_weight_sums,
+            result.z * inv_weight_sums
           };
         }
 
@@ -312,10 +316,12 @@ Internal void image_rgb_resample_x(Image_RGB dst, Image_RGB src, Range rows, Are
 typedef struct RGB_Row_Tap
 {
   F4x3 *row;
-  F1 weight;
+  F4 weight; // Splatted once per row instead of once per block.
 } RGB_Row_Tap;
 
-Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 karis, Arena *arena)
+// NOTE(kti): With accumulate set, dst is read and summed into rather than
+// overwritten; the caller must guarantee dst is fully initialized.
+Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 karis, I1 accumulate, Arena *arena)
 {
   ProfBeginFunc();
 
@@ -390,7 +396,7 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
 
           F4x3 *sample_row = image_rgb_row(src, source_sample);
 
-          taps[tap_offset]  =   (RGB_Row_Tap){sample_row, weight};
+          taps[tap_offset]  =   (RGB_Row_Tap){sample_row, splat_F4(weight)};
           weight_sum      +=  weight;
         }
       }
@@ -426,29 +432,35 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
         {
           for (L1 tap_offset = 0; tap_offset < tap_count; ++tap_offset)
           {
-            F4    weight           =  splat_F4(taps[tap_offset].weight);
             F4x3  source_sample    =  taps[tap_offset].row[block];
-            F4x3  weighted_sample  =  scale_F4x3(source_sample, weight);
+            F4x3  weighted_sample  =  scale_F4x3(source_sample, taps[tap_offset].weight);
 
             result = add_F4x3(result, weighted_sample);
           }
 
+          F4 inv_weight_sum = splat_F4(1.0f / weight_sum);
+
           result = (F4x3){
-            result.x / weight_sum,
-            result.y / weight_sum,
-            result.z / weight_sum
+            result.x * inv_weight_sum,
+            result.y * inv_weight_sum,
+            result.z * inv_weight_sum
           };
         }
         if (karis)
         {
-          F4  luminance          =  luminance_F4x3(result);
-          F4  karis_denominator  =  1.0f + luminance;
+          F4  luminance     =  luminance_F4x3(result);
+          F4  inv_karis     =  splat_F4(1.0f) / (1.0f + luminance);
 
           result = (F4x3){
-            result.x / karis_denominator,
-            result.y / karis_denominator,
-            result.z / karis_denominator
+            result.x * inv_karis,
+            result.y * inv_karis,
+            result.z * inv_karis
           };
+        }
+
+        if (accumulate)
+        {
+          result = add_F4x3(dst_row[block], result);
         }
 
         dst_row[block] = result;
@@ -456,23 +468,6 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
     }
 
     temp_arena_end(temp);
-  }
-
-  ProfEnd();
-}
-
-Internal void image_rgb_add(Image_RGB dst, Image_RGB src, Range rows)
-{
-  ProfBeginFunc();
-
-  for (L1 y = rows.min; y < rows.max; ++y)
-  {
-    F4x3 *out = image_rgb_row(dst, y), *in = image_rgb_row(src, y);
-
-    for (L1 b = 0; b < image_rgb_block_count(dst.width); ++b)
-    {
-      out[b] = add_F4x3(out[b], in[b]);
-    }
   }
 
   ProfEnd();
@@ -512,17 +507,15 @@ Inline F4 rgb_tonemap_lottes(F4 values)
   return result;
 }
 
-Inline void rgb_store_srgb8(RGBA8 *out, F4x3 color, L1 count)
+// Pack four sRGB-encoded pixels (0..255 floats) with round-to-nearest and
+// vector integer shifts. memcpy permits unaligned destinations and writes
+// only the valid pixels of a partial block.
+Inline void rgb_pack_srgb8(RGBA8 *out, F4 srgb_red, F4 srgb_green, F4 srgb_blue, L1 count)
 {
-  F4  srgb_red    =  image_table_lookup(color.x, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
-  F4  srgb_green  =  image_table_lookup(color.y, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
-  F4  srgb_blue   =  image_table_lookup(color.z, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
-
-  SI4  red_bytes    =  __builtin_convertvector(srgb_red, SI4);
-  SI4  green_bytes  =  __builtin_convertvector(srgb_green, SI4);
-  SI4  blue_bytes   =  __builtin_convertvector(srgb_blue, SI4);
-  // Pack four RGBA pixels with vector integer shifts. memcpy permits unaligned
-  // destinations and writes only the valid pixels of a partial block.
+  F4   half       =  splat_F4(0.5f);
+  SI4  red_bytes    =  __builtin_convertvector(srgb_red + half, SI4);
+  SI4  green_bytes  =  __builtin_convertvector(srgb_green + half, SI4);
+  SI4  blue_bytes   =  __builtin_convertvector(srgb_blue + half, SI4);
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
   SI4  packed_red    =  red_bytes << 24;
   SI4  packed_green  =  green_bytes << 16;
@@ -538,6 +531,15 @@ Inline void rgb_store_srgb8(RGBA8 *out, F4x3 color, L1 count)
   L1   output_size    =  count * sizeof(RGBA8);
 
   memcpy(out, &packed_pixels, output_size);
+}
+
+Inline void rgb_store_srgb8(RGBA8 *out, F4x3 color, L1 count)
+{
+  F4  srgb_red    =  image_table_lookup(color.x, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
+  F4  srgb_green  =  image_table_lookup(color.y, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
+  F4  srgb_blue   =  image_table_lookup(color.z, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
+
+  rgb_pack_srgb8(out, srgb_red, srgb_green, srgb_blue, count);
 }
 
 Inline F4 rgb_overlay_luminance(Image overlay, F4 u, F1 v)
@@ -590,33 +592,43 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
 
   image_lottes_prepare(tonemap.lottes);
 
+  // NOTE(kti): Exposure alone needs no grade block; the composed table clamps.
+  I1  needs_adjustments  =  tonemap.saturation != 1;
+  I1  has_overlay        =  !image_is_nil(params.overlay);
   F1  exposure_scale     =  tonemap.exposure_ev == 0 ? 1.0f : exp2f(tonemap.exposure_ev);
-  I1  needs_adjustments  =  tonemap.exposure_ev != 0 || tonemap.saturation != 1;
+  F1  lottes_hdr_max     =  image_lottes_table_params.hdr_max;
 
   for (L1 y = rows.min; y < rows.max; ++y)
   {
     F4     *hdr_row    =  image_row(hdr, y);
     F4x3   *bloom_row  =  image_rgb_row(bloom, y);
     RGBA8  *dst_row    =  image_rgba8_row(dst, y);
-    F1     overlay_v  =  dst.height > 1 ? (F1)y / (F1)(dst.height - 1) : 0;
+    F1     overlay_v   =  dst.height > 1 ? (F1)y / (F1)(dst.height - 1) : 0;
 
     for (L1 block = 0; block < image_rgb_block_count(dst.width); ++block)
     {
       L1  x             =  block * 4;
       L1  valid_pixels  =  Min((L1)4, dst.width - x);
-      F4  overlay_u     =  {
-        (F1)x,
-        (F1)Min(x + 1, dst.width - 1),
-        (F1)Min(x + 2, dst.width - 1),
-        (F1)Min(x + 3, dst.width - 1)
-      };
+      F4  hdr_weight    =  splat_F4(1.0f - 0.5f * params.strength);
+      F4  bloom_weight  =  splat_F4(params.strength);
 
-      overlay_u /= (F1)Max(dst.width - 1, 1);
+      F4  bloom_modulation  =  splat_F4(1.0f);
 
-      F4  overlay_luminance  =  rgb_overlay_luminance(params.overlay, overlay_u, overlay_v);
-      F4  bloom_modulation   =  1.0f + overlay_luminance * params.overlay_strength;
-      F4  hdr_weight         =  splat_F4(1.0f - 0.5f * params.strength);
-      F4  bloom_weight       =  splat_F4(params.strength);
+      if (has_overlay)
+      {
+        F4  overlay_u  =  {
+          (F1)x,
+          (F1)Min(x + 1, dst.width - 1),
+          (F1)Min(x + 2, dst.width - 1),
+          (F1)Min(x + 3, dst.width - 1)
+        };
+
+        overlay_u /= (F1)Max(dst.width - 1, 1);
+
+        F4 overlay_luminance = rgb_overlay_luminance(params.overlay, overlay_u, overlay_v);
+
+        bloom_modulation = 1.0f + overlay_luminance * params.overlay_strength;
+      }
 
       F4x3  hdr_color           =  rgb_load_pixels(hdr_row, x, hdr.width);
       F4x3  hdr_contribution    =  scale_F4x3(hdr_color, hdr_weight);
@@ -625,14 +637,24 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
       F4x3  combined_color      =  add_F4x3(hdr_contribution, bloom_contribution);
       F4x3  color               =  scale_F4x3(combined_color, splat_F4(exposure_scale));
 
-      color = (F4x3){
-        rgb_tonemap_lottes(color.x),
-        rgb_tonemap_lottes(color.y),
-        rgb_tonemap_lottes(color.z)
-      };
-
-      if (needs_adjustments)
+      if (!needs_adjustments)
       {
+        //- kti: Fast path: one composed table maps HDR linear straight to sRGB bytes,
+        // replacing separate Lottes and sRGB table lookups per channel.
+        F4  srgb_red    =  image_table_lookup(color.x, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
+        F4  srgb_green  =  image_table_lookup(color.y, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
+        F4  srgb_blue   =  image_table_lookup(color.z, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
+
+        rgb_pack_srgb8(dst_row + x, srgb_red, srgb_green, srgb_blue, valid_pixels);
+      }
+      else
+      {
+        color = (F4x3){
+          rgb_tonemap_lottes(color.x),
+          rgb_tonemap_lottes(color.y),
+          rgb_tonemap_lottes(color.z)
+        };
+
         color = (F4x3){clamp01_F4(color.x), clamp01_F4(color.y), clamp01_F4(color.z)};
 
         F4 gray = luminance_F4x3(color);
@@ -650,9 +672,9 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
           gray + saturated_chroma.y,
           gray + saturated_chroma.z
         };
-      }
 
-      rgb_store_srgb8(dst_row + x, color, valid_pixels);
+        rgb_store_srgb8(dst_row + x, color, valid_pixels);
+      }
     }
   }
 

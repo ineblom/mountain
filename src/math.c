@@ -1,5 +1,11 @@
 #include "math.h"
 
+#if defined(__SSE__)
+#include <xmmintrin.h>
+#elif defined(__ARM_NEON)
+#include <arm_neon.h>
+#endif
+
 ////////////////////////////////
 //~ General
 
@@ -117,14 +123,30 @@ Inline F4 select_F4(SI4 mask, F4 yes, F4 no)
   return result.f;
 }
 
+// NOTE(kti): The select formulation of min/max compiles to compare plus three
+// logic ops (and blocks the compiler's own maxps/minps pattern matching).
+// These are too hot for that; use the single instructions where available.
+// NaN/tie behavior matches the select version (the second operand wins).
 Inline F4 max_F4(F4 a, F4 b)
 {
+#if defined(__SSE__)
+  return (F4)_mm_max_ps((__m128)a, (__m128)b);
+#elif defined(__ARM_NEON)
+  return (F4)vmaxq_f32((float32x4_t)a, (float32x4_t)b);
+#else
   return select_F4(a > b, a, b);
+#endif
 }
 
 Inline F4 min_F4(F4 a, F4 b)
 {
+#if defined(__SSE__)
+  return (F4)_mm_min_ps((__m128)a, (__m128)b);
+#elif defined(__ARM_NEON)
+  return (F4)vminq_f32((float32x4_t)a, (float32x4_t)b);
+#else
   return select_F4(a < b, a, b);
+#endif
 }
 
 Inline F4 F4_from_V3(V3 v)

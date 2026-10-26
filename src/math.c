@@ -123,10 +123,22 @@ Inline F4 select_F4(SI4 mask, F4 yes, F4 no)
   return result.f;
 }
 
-// NOTE(kti): The select formulation of min/max compiles to compare plus three
-// logic ops (and blocks the compiler's own maxps/minps pattern matching).
-// These are too hot for that; use the single instructions where available.
-// NaN/tie behavior matches the select version (the second operand wins).
+Inline F4 sqrt_F4(F4 v)
+{
+#if defined(__SSE__)
+  return (F4)_mm_sqrt_ps((__m128)v);
+#elif defined(__aarch64__) && defined(__ARM_NEON)
+  return (F4)vsqrtq_f32((float32x4_t)v);
+#else
+  return (F4){
+    sqrt_F1(v[0]),
+    sqrt_F1(v[1]),
+    sqrt_F1(v[2]),
+    sqrt_F1(v[3]),
+  };
+#endif
+}
+
 Inline F4 max_F4(F4 a, F4 b)
 {
 #if defined(__SSE__)
@@ -248,6 +260,32 @@ Inline F4 reflect_F4(F4 v, F4 normal)
 
 ////////////////////////////////
 //~ F4x3
+
+Inline F4x3 splat_F4x3(F4 v)
+{
+  F4x3 result = {
+    .x = splat_F4(v[0]),
+    .y = splat_F4(v[1]),
+    .z = splat_F4(v[2]),
+  };
+  return result;
+}
+
+Inline F4x3 sub_F4x3(F4x3 a, F4x3 b)
+{
+  F4x3 result = {
+    .x = a.x - b.x,
+    .y = a.y - b.y,
+    .z = a.z - b.z,
+  };
+  return result;
+}
+
+Inline F4 dot_F4x3(F4x3 a, F4x3 b)
+{
+  F4 result = a.x*b.x + a.y*b.y + a.z*b.z;
+  return result;
+}
 
 Inline F4 luminance_F4x3(F4x3 c)
 {
@@ -515,12 +553,12 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane)
 
 Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
 {
-  F1 result                    =  0.0f;
-  F4 sphere_pos                =  F4_from_V3(sphere.pos);
+  F1  result                   =  F1_MAX;
+  F4  sphere_pos               =  F4_from_V3(sphere.pos);
   F4  sphere_relative_ray_pos  =  ray.pos - sphere_pos;
-  F1  b                        =  2.0f * dot_F4(ray.dir, sphere_relative_ray_pos);
+  F1  half_b                   =  dot_F4(ray.dir, sphere_relative_ray_pos);
   F1  c                        =  dot_F4(sphere_relative_ray_pos, sphere_relative_ray_pos) - Square(sphere.radius);
-  F1  discriminant             =  b * b - 4.0f * c;
+  F1  discriminant             =  Square(half_b) - c;
 
   if (discriminant > 0.0f)
   {
@@ -528,15 +566,41 @@ Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
 
     if (root_term > 0.0001f)
     {
-      F1  tp  =  (-b + root_term) / 2.0f;
-      F1  tn  =  (-b - root_term) / 2.0f;
+      F1 tp = -half_b + root_term;
+      F1 tn = -half_b - root_term;
+      F1 t  = tn > 0.001f ? tn : tp;
 
-      result = tp;
-
-      if (tn > 0.001f && tn < tp)
-        result = tn;
+      if (t > 0.001f)
+        result = t;
     }
   }
+
+  return result;
+}
+
+Internal F4 ray_sphere4_intersect(Ray ray, Sphere4 spheres)
+{
+  F1 min_t = 0.001f;
+
+  F4x3 ray_pos = splat_F4x3(ray.pos);
+  F4x3 ray_dir = splat_F4x3(ray.dir);
+  F4x3 rel     = sub_F4x3(ray_pos, spheres.pos);
+
+  F4 half_b       = dot_F4x3(ray_dir, rel);
+  F4 c            = dot_F4x3(rel, rel) - Square(spheres.radius);
+  F4 discriminant = Square(half_b) - c;
+
+  F4 root_term = sqrt_F4(max_F4(discriminant, splat_F4(0.0f)));
+
+  F4 far_t  = -half_b + root_term;
+  F4 near_t = -half_b - root_term;
+  F4 t      = select_F4(near_t > min_t, near_t, far_t);
+
+  SI4 valid_discriminant = discriminant > 0;
+  SI4 valid_root         = root_term > 0.0001f;
+  SI4 is_valid           = valid_discriminant & valid_root & (t > min_t);
+
+  F4 result = select_F4(is_valid, t, splat_F4(F1_MAX));
 
   return result;
 }
@@ -577,6 +641,44 @@ Internal F1 ray_box_intersect(Ray ray, Box box)
     return 0.0f;
 
   return t_min;
+}
+
+Internal F4 ray_box4_intersect(Ray ray, Box4 boxes)
+{
+  F1 min_t = 0.001f;
+
+  F4x3 ray_pos     = splat_F4x3(ray.pos);
+  F4x3 ray_dir     = splat_F4x3(ray.dir);
+  F4x3 ray_inv_dir = splat_F4x3(ray.inv_dir);
+
+  //- kti: X
+  F4 tx0 = (boxes.min.x - ray_pos.x) * ray_inv_dir.x;
+  F4 tx1 = (boxes.max.x - ray_pos.x) * ray_inv_dir.x;
+
+  F4 t_min = min_F4(tx0, tx1);
+  F4 t_max = max_F4(tx0, tx1);
+
+  //- kti: Y
+  F4 ty0 = (boxes.min.y - ray_pos.y) * ray_inv_dir.y;
+  F4 ty1 = (boxes.max.y - ray_pos.y) * ray_inv_dir.y;
+
+  t_min = max_F4(t_min, min_F4(ty0, ty1));
+  t_max = min_F4(t_max, max_F4(ty0, ty1));
+
+  //- kti: Z
+  F4 tz0 = (boxes.min.z - ray_pos.z) * ray_inv_dir.z;
+  F4 tz1 = (boxes.max.z - ray_pos.z) * ray_inv_dir.z;
+
+  t_min = max_F4(t_min, min_F4(tz0, tz1));
+  t_max = min_F4(t_max, max_F4(tz0, tz1));
+
+  //- kti: Result
+
+  F4 t = select_F4(t_min > min_t, t_min, t_max);
+  SI4 valid = (t_min <= t_max) & (t > min_t);
+  F4 result = select_F4(valid, t, splat_F4(F1_MAX));
+
+  return result;
 }
 
 Internal F1 ray_shape_intersect(Ray ray, Shape shape)

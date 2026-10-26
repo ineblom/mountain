@@ -2,28 +2,26 @@ Global OS_GFX_State *os_gfx_state = 0;
 
 Internal String8 os_read_entire_file(Arena *arena, String8 filename)
 {
-  Temp_Arena  scratch        =  scratch_begin(0, 0);
+  String8     result         =  {0};
+  Temp_Arena  scratch        =  scratch_begin(&arena, 1);
   String8     cstr_filename  =  push_str8_copy(scratch.arena, filename);
   I1          file           =  open((CString)cstr_filename.str, O_RDONLY);
 
-  if (LtSI1(file, 0))
+  if (GtSI1(file, 0))
   {
-    scratch_end(scratch);
-    return (String8){0};
+    result.len = lseek(file, 0, SEEK_END);
+
+    lseek(file, 0, SEEK_SET);
+
+    result.str = push_array(arena, B1, result.len);
+
+    read(file, result.str, result.len);
+    close(file);
   }
 
-  L1 size = lseek(file, 0, SEEK_END);
-
-  lseek(file, 0, SEEK_SET);
-
-  B1  *buffer     =  push_array(arena, B1, size);
-  L1  bytes_read  =  read(file, buffer, size);
-
-  close(file);
   scratch_end(scratch);
-  Assert(size == bytes_read);
 
-  return (String8){.str = buffer, .len = size};
+  return result;
 }
 
 Internal L1 os_write_entire_file(String8 filename, void *data, L1 data_size)

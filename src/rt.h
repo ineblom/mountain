@@ -20,6 +20,20 @@ struct RT_Camera
   F1 focal_distance;
 };
 
+typedef struct RT_Sphere4_Packet RT_Sphere4_Packet;
+struct RT_Sphere4_Packet
+{
+  Sphere4 geometry;
+  L1 material_indices[4];
+};
+
+typedef struct RT_Box4_Packet RT_Box4_Packet;
+struct RT_Box4_Packet
+{
+  Box4 geometry;
+  L1 material_indices[4];
+};
+
 typedef struct RT_Scene RT_Scene;
 struct RT_Scene
 {
@@ -28,8 +42,12 @@ struct RT_Scene
 
   RT_Camera camera;
 
-  L1           shape_count;
-  Shape       *shapes;
+  L1                 sphere_count;
+  RT_Sphere4_Packet *spheres;
+
+  L1    box_count;
+  RT_Box4_Packet *boxes;
+
   RT_Material *materials;
 };
 

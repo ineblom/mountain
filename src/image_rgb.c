@@ -507,12 +507,9 @@ Inline F4 rgb_tonemap_lottes(F4 values)
   return result;
 }
 
-// Pack four sRGB-encoded pixels (0..255 floats) with round-to-nearest and
-// vector integer shifts. memcpy permits unaligned destinations and writes
-// only the valid pixels of a partial block.
 Inline void rgb_pack_srgb8(RGBA8 *out, F4 srgb_red, F4 srgb_green, F4 srgb_blue, L1 count)
 {
-  F4   half       =  splat_F4(0.5f);
+  F4   half         =  splat_F4(0.5f);
   SI4  red_bytes    =  __builtin_convertvector(srgb_red + half, SI4);
   SI4  green_bytes  =  __builtin_convertvector(srgb_green + half, SI4);
   SI4  blue_bytes   =  __builtin_convertvector(srgb_blue + half, SI4);
@@ -639,8 +636,6 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
 
       if (!needs_adjustments)
       {
-        //- kti: Fast path: one composed table maps HDR linear straight to sRGB bytes,
-        // replacing separate Lottes and sRGB table lookups per channel.
         F4  srgb_red    =  image_table_lookup(color.x, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
         F4  srgb_green  =  image_table_lookup(color.y, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
         F4  srgb_blue   =  image_table_lookup(color.z, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);

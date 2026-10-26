@@ -20,7 +20,6 @@ struct V3
   F1 x, y, z;
 };
 
-// Four independent three-component values, one value per SIMD lane.
 typedef struct F4x3 F4x3;
 struct F4x3
 {
@@ -84,11 +83,25 @@ struct Sphere
   F1 radius;
 };
 
+typedef struct Sphere4 Sphere4;
+struct Sphere4
+{
+  F4x3 pos;
+  F4 radius;
+};
+
 typedef struct Box Box;
 struct Box
 {
   V3 min;
   V3 max;
+};
+
+typedef struct Box4 Box4;
+struct Box4
+{
+  F4x3 min;
+  F4x3 max;
 };
 
 typedef struct Plane Plane;

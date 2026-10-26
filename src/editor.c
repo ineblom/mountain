@@ -1687,6 +1687,7 @@ Internal void lane(void *user_data)
   //~ kti: Initialization.
 
   ProfInit();
+  image_init();
   gfx_init();
   fp_init();
   fc_init();
@@ -3188,9 +3189,10 @@ Internal void lane(void *user_data)
         {
           if (state->render_request_id == 0)
           {
-            Arena   *render_arena   =  arena_alloc(GiB(1));
-            Entity  *camera_entity  =  &state->nil_entity;
+            Arena  *render_arena   =  arena_alloc(GiB(1));
+            Entity *camera_entity  =  &state->nil_entity;
 
+            L1 shape_counts[SHAPE_KIND_COUNT] = {0};
             L1 shape_count = 0;
 
             for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next)
@@ -3202,21 +3204,56 @@ Internal void lane(void *user_data)
 
               if (it->flags & ENTITY_FLAG__SHAPE)
               {
+                shape_counts[it->shape_kind] += 1;
                 shape_count += 1;
               }
             }
 
-            L1           shape_idx   =  0;
-            Shape        *shapes     =  push_array(render_arena, Shape, shape_count);
-            RT_Material  *materials  =  push_array(render_arena, RT_Material, shape_count);
+            L1 shape_index = 0;
+            L1 shape_indices[SHAPE_KIND_COUNT] = {0};
+            L1 sphere4_count = (shape_counts[SHAPE_KIND__SPHERE] + 3) / 4;
+            L1 box4_count = (shape_counts[SHAPE_KIND__BOX] + 3) / 4;
+
+            RT_Sphere4_Packet *spheres = push_array(render_arena, RT_Sphere4_Packet, sphere4_count);
+            RT_Box4_Packet    *boxes   = push_array(render_arena, RT_Box4_Packet, box4_count);
+
+            RT_Material *materials = push_array(render_arena, RT_Material, shape_count);
 
             for (Entity *it = state->first_entity; !entity_is_nil(it); it = it->next)
             {
               if (it->flags & ENTITY_FLAG__SHAPE)
               {
-                shapes[shape_idx]     =   shape_from_entity(it);
-                materials[shape_idx]  =   it->material;
-                shape_idx             +=  1;
+                L1 idx = shape_indices[it->shape_kind];
+                L1 idx4 = idx / 4;
+                L1 lane_idx = idx % 4;
+
+                if (it->shape_kind == SHAPE_KIND__SPHERE)
+                {
+                  spheres[idx4].geometry.pos.x[lane_idx] = it->pos[0];
+                  spheres[idx4].geometry.pos.y[lane_idx] = it->pos[1];
+                  spheres[idx4].geometry.pos.z[lane_idx] = it->pos[2];
+
+                  spheres[idx4].geometry.radius[lane_idx] = it->sphere_diameter*0.5f;
+
+                  spheres[idx4].material_indices[lane_idx] = shape_index;
+                }
+                else if (it->shape_kind == SHAPE_KIND__BOX)
+                {
+                  boxes[idx4].geometry.min.x[lane_idx] = it->pos[0] - it->size[0]*0.5f;
+                  boxes[idx4].geometry.min.y[lane_idx] = it->pos[1] - it->size[1]*0.5f;
+                  boxes[idx4].geometry.min.z[lane_idx] = it->pos[2] - it->size[2]*0.5f;
+
+                  boxes[idx4].geometry.max.x[lane_idx] = it->pos[0] + it->size[0]*0.5f;
+                  boxes[idx4].geometry.max.y[lane_idx] = it->pos[1] + it->size[1]*0.5f;
+                  boxes[idx4].geometry.max.z[lane_idx] = it->pos[2] + it->size[2]*0.5f;
+
+                  boxes[idx4].material_indices[lane_idx] = shape_index;
+                }
+
+                materials[shape_index] = it->material;
+
+                shape_indices[it->shape_kind] += 1;
+                shape_index += 1;
               }
             }
 
@@ -3225,16 +3262,20 @@ Internal void lane(void *user_data)
               .max_num_bounces  =  state->render_settings.max_num_bounces,
 
               .camera = {
-                  .pos              =  camera_entity->pos,
-                  .forward          =  camera_entity->direction,
-                  .vertical_fov     =  camera_entity->camera_vertical_fov,
-                  .aperture_radius  =  camera_entity->camera_aperture_radius,
-                  .focal_distance   =  camera_entity->camera_focal_distance,
-                },
+                .pos              =  camera_entity->pos,
+                .forward          =  camera_entity->direction,
+                .vertical_fov     =  camera_entity->camera_vertical_fov,
+                .aperture_radius  =  camera_entity->camera_aperture_radius,
+                .focal_distance   =  camera_entity->camera_focal_distance,
+              },
 
-              .shape_count  =  shape_count,
-              .shapes       =  shapes,
-              .materials    =  materials,
+              .sphere_count = shape_counts[SHAPE_KIND__SPHERE],
+              .spheres = spheres,
+
+              .box_count = shape_counts[SHAPE_KIND__BOX],
+              .boxes = boxes,
+
+              .materials = materials,
             };
 
             atomic_swap_L1(&state->render_progress.next_pixel, 0);
@@ -3391,7 +3432,15 @@ Internal void lane(void *user_data)
 
 SI1 main(void)
 {
-  image_init();
+  ////////////////////////////////
+  //~ kti: Test Sphere4
+
+  Ray ray     = {0};
+  ray.dir     = (F4){0, 0, 1.0f, 0.0f};
+  ray.inv_dir = 1 / ray.dir;
+
+  ////////////////////////////////
+  //~ kti: Launch Threads
 
   async.mutex                =  os_mutex_alloc();
   async.cond_var             =  os_cond_var_alloc();

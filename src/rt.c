@@ -274,7 +274,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         }
       }
 
-      ray.inv_dir  =  1.0f / ray.dir;
+      ray.inv_dir  =  safe_inv_dir_F4(ray.dir);
       ray.pos      =  next_origin + next_normal * min_hit_distance;
     }
     else
@@ -338,7 +338,7 @@ Internal void rt_trace_scene(RT_Scene scene, Image output, Range pixel_range)
       F4 focus_point = camera_p + scene.camera.focal_distance * normalize_F4(film_p - camera_p);
 
       ray.dir      =  normalize_F4(focus_point - ray.pos);
-      ray.inv_dir  =  1.0f / ray.dir;
+      ray.inv_dir  =  safe_inv_dir_F4(ray.dir);
 
       color += ray_cast(scene, &rng, ray) * contrib;
     }

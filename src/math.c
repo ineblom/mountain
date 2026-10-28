@@ -258,6 +258,15 @@ Inline F4 reflect_F4(F4 v, F4 normal)
   return result;
 }
 
+Internal F4 safe_inv_dir_F4(F4 dir)
+{
+  F4  one      = splat_F4(1.0f);
+  SI4 is_zero  = dir == 0.0f;
+  F4  safe_dir = select_F4(is_zero, one, dir);
+  F4  inv_dir  = 1.0f / safe_dir;
+  return inv_dir;
+}
+
 ////////////////////////////////
 //~ F4x3
 
@@ -643,39 +652,45 @@ Internal F1 ray_box_intersect(Ray ray, Box box)
   return t_min;
 }
 
+Inline SI4 ray_slab4_intersect(F4 low, F4 high, F1 origin_scalar, F1 dir_scalar, F1 inv_dir, F4 *near_t, F4 *far_t)
+{
+  F4 origin = splat_F4(origin_scalar);
+  F4 dir = splat_F4(dir_scalar);
+
+  SI4 parallel = dir == 0.0f;
+  SI4 inside = (low <= origin) & (origin <= high);
+
+  F4 t0 = (low - origin) * inv_dir;
+  F4 t1 = (high - origin) * inv_dir;
+
+  F4 min = min_F4(t0, t1);
+  F4 max = max_F4(t0, t1);
+
+  near_t[0] = select_F4(parallel, splat_F4(-INFINITY), min);
+  far_t[0] = select_F4(parallel, splat_F4(INFINITY), max);
+
+  SI4 can_intersect = ~parallel | inside;
+
+  return can_intersect;
+}
+
 Internal F4 ray_box4_intersect(Ray ray, Box4 boxes)
 {
   F1 min_t = 0.001f;
 
-  F4x3 ray_pos     = splat_F4x3(ray.pos);
-  F4x3 ray_dir     = splat_F4x3(ray.dir);
-  F4x3 ray_inv_dir = splat_F4x3(ray.inv_dir);
+  F4 near_x, far_x, near_y, far_y, near_z, far_z;
 
-  //- kti: X
-  F4 tx0 = (boxes.min.x - ray_pos.x) * ray_inv_dir.x;
-  F4 tx1 = (boxes.max.x - ray_pos.x) * ray_inv_dir.x;
+  SI4 valid_x = ray_slab4_intersect(boxes.min.x, boxes.max.x, ray.pos[0], ray.dir[0], ray.inv_dir[0], &near_x, &far_x);
+  SI4 valid_y = ray_slab4_intersect(boxes.min.y, boxes.max.y, ray.pos[1], ray.dir[1], ray.inv_dir[1], &near_y, &far_y);
+  SI4 valid_z = ray_slab4_intersect(boxes.min.z, boxes.max.z, ray.pos[2], ray.dir[2], ray.inv_dir[2], &near_z, &far_z);
 
-  F4 t_min = min_F4(tx0, tx1);
-  F4 t_max = max_F4(tx0, tx1);
-
-  //- kti: Y
-  F4 ty0 = (boxes.min.y - ray_pos.y) * ray_inv_dir.y;
-  F4 ty1 = (boxes.max.y - ray_pos.y) * ray_inv_dir.y;
-
-  t_min = max_F4(t_min, min_F4(ty0, ty1));
-  t_max = min_F4(t_max, max_F4(ty0, ty1));
-
-  //- kti: Z
-  F4 tz0 = (boxes.min.z - ray_pos.z) * ray_inv_dir.z;
-  F4 tz1 = (boxes.max.z - ray_pos.z) * ray_inv_dir.z;
-
-  t_min = max_F4(t_min, min_F4(tz0, tz1));
-  t_max = min_F4(t_max, max_F4(tz0, tz1));
-
-  //- kti: Result
+  F4 t_min = max_F4(max_F4(near_x, near_y), near_z);
+  F4 t_max = min_F4(min_F4(far_x, far_y), far_z);
 
   F4 t = select_F4(t_min > min_t, t_min, t_max);
-  SI4 valid = (t_min <= t_max) & (t > min_t);
+
+  SI4 valid = valid_x & valid_y & valid_z & (t_min <= t_max) & (t > min_t);
+
   F4 result = select_F4(valid, t, splat_F4(F1_MAX));
 
   return result;

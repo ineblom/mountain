@@ -1594,14 +1594,20 @@ Internal Ray camera_ray(Camera camera, F4 rect, F2 mouse)
   F1 v = (mouse[1] - rect[1]) / rect[3];
   F1 tan_half_fov = tan_F1(0.5f * camera.fov);
   F4x4 rotation = mul_F4x4(rotate_x_F4x4(camera.pitch), rotate_y_F4x4(camera.yaw));
+
   F4 camera_direction = normalize_F4((F4){
     (2.0f * u - 1.0f) * aspect * tan_half_fov,
     (1.0f - 2.0f * v) * tan_half_fov,
     1.0f, 0.0f,
   });
+
+  F4 dir = mul_F4x4_F4(rotation, camera_direction);
+  F4 inv_dir = safe_inv_dir_F4(dir);
+
   Ray ray = {
     .pos = camera.pos,
-    .dir = mul_F4x4_F4(rotation, camera_direction),
+    .dir = dir,
+    .inv_dir = inv_dir,
   };
   return ray;
 }
@@ -2709,7 +2715,6 @@ Internal void lane(void *user_data)
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_CLICKED && left_is_click && !mouse_captured)
                     {
                       Ray ray = camera_ray(view->camera, rect, ui_mouse());
-                      ray.inv_dir = 1.0f / ray.dir;
 
                       F1             min_hit_distance  =  0.001f;
                       F1             closest_t         =  F1_MAX;
@@ -3432,13 +3437,6 @@ Internal void lane(void *user_data)
 
 SI1 main(void)
 {
-  ////////////////////////////////
-  //~ kti: Test Sphere4
-
-  Ray ray     = {0};
-  ray.dir     = (F4){0, 0, 1.0f, 0.0f};
-  ray.inv_dir = 1 / ray.dir;
-
   ////////////////////////////////
   //~ kti: Launch Threads
 

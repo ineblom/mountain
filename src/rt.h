@@ -34,6 +34,13 @@ struct RT_Box4_Packet
   L1 material_indices[4];
 };
 
+typedef struct RT_Plane4_Packet RT_Plane4_Packet;
+struct RT_Plane4_Packet
+{
+  Plane4 geometry;
+  L1 material_indices[4];
+};
+
 typedef struct RT_Scene RT_Scene;
 struct RT_Scene
 {
@@ -45,8 +52,11 @@ struct RT_Scene
   L1                 sphere_count;
   RT_Sphere4_Packet *spheres;
 
-  L1    box_count;
+  L1              box_count;
   RT_Box4_Packet *boxes;
+
+  L1                plane_count;
+  RT_Plane4_Packet *planes;
 
   RT_Material *materials;
 };

@@ -231,7 +231,7 @@ Inline F4 lerp_snap_F4(F4 a, F1 t, F4 b, F1 min_dist)
 
 Inline F4 abs_F4(F4 v)
 {
-  F4 result = {abs_F1(v[0]), abs_F1(v[1]), abs_F1(v[2]), abs_F1(v[3])};
+  F4 result = select_F4(v < 0, -v, v);
   return result;
 }
 
@@ -270,6 +270,8 @@ Internal F4 safe_inv_dir_F4(F4 dir)
 ////////////////////////////////
 //~ F4x3
 
+// TODO: This is very confusing. It takes a V3 (as F4) and replicates it across every lane.
+// This should be more clear.
 Inline F4x3 splat_F4x3(F4 v)
 {
   F4x3 result = {
@@ -556,6 +558,23 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane)
       result = t;
     }
   }
+
+  return result;
+}
+
+Internal F4 ray_plane4_intersect(Ray ray, Plane4 planes)
+{
+  F1 min_t = 0.001f;
+
+  F4x3 ray_pos = splat_F4x3(ray.pos);
+  F4x3 ray_dir = splat_F4x3(ray.dir);
+
+  F4 denom = dot_F4x3(planes.normal, ray_dir);
+
+  F4 t = (-planes.d - dot_F4x3(planes.normal, ray_pos)) / denom;
+
+  SI4 valid  = (abs_F4(denom) > 0.0001f) & (t > min_t);
+  F4  result = select_F4(valid, t, splat_F4(F1_MAX));
 
   return result;
 }

@@ -3214,13 +3214,16 @@ Internal void lane(void *user_data)
               }
             }
 
-            L1 shape_index = 0;
+            L1 shape_index                     = 0;
             L1 shape_indices[SHAPE_KIND_COUNT] = {0};
+
             L1 sphere4_count = (shape_counts[SHAPE_KIND__SPHERE] + 3) / 4;
-            L1 box4_count = (shape_counts[SHAPE_KIND__BOX] + 3) / 4;
+            L1 box4_count    = (shape_counts[SHAPE_KIND__BOX] + 3) / 4;
+            L1 plane4_count  = (shape_counts[SHAPE_KIND__PLANE] + 3) / 4;
 
             RT_Sphere4_Packet *spheres = push_array(render_arena, RT_Sphere4_Packet, sphere4_count);
             RT_Box4_Packet    *boxes   = push_array(render_arena, RT_Box4_Packet, box4_count);
+            RT_Plane4_Packet  *planes  = push_array(render_arena, RT_Plane4_Packet, plane4_count);
 
             RT_Material *materials = push_array(render_arena, RT_Material, shape_count);
 
@@ -3254,6 +3257,18 @@ Internal void lane(void *user_data)
 
                   boxes[idx4].material_indices[lane_idx] = shape_index;
                 }
+                else if (it->shape_kind == SHAPE_KIND__PLANE)
+                {
+                  F4 normal = normalize_F4(it->direction);
+                  F1 d      = -dot_F4(normal, it->pos);
+
+                  planes[idx4].geometry.normal.x[lane_idx] = normal[0];
+                  planes[idx4].geometry.normal.y[lane_idx] = normal[1];
+                  planes[idx4].geometry.normal.z[lane_idx] = normal[2];
+                  planes[idx4].geometry.d[lane_idx]        = d;
+
+                  planes[idx4].material_indices[lane_idx] = shape_index;
+                }
 
                 materials[shape_index] = it->material;
 
@@ -3279,6 +3294,9 @@ Internal void lane(void *user_data)
 
               .box_count = shape_counts[SHAPE_KIND__BOX],
               .boxes = boxes,
+
+              .plane_count = shape_counts[SHAPE_KIND__PLANE],
+              .planes = planes,
 
               .materials = materials,
             };

@@ -111,6 +111,13 @@ struct Plane
   F1 d;
 };
 
+typedef struct Plane4 Plane4;
+struct Plane4
+{
+  F4x3 normal;
+  F4 d;
+};
+
 typedef struct Shape Shape;
 struct Shape
 {

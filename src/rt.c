@@ -150,6 +150,33 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
       }
     }
 
+    //- kti: Planes
+    L1 plane4_count = (scene.plane_count + 3) / 4;
+    for (L1 plane4_index = 0; plane4_index < plane4_count; plane4_index += 1)
+    {
+      RT_Plane4_Packet packet = scene.planes[plane4_index];
+
+      F4 distances = ray_plane4_intersect(ray, packet.geometry);
+
+      L1 lane_count = Min(scene.plane_count - plane4_index * 4, 4);
+      for (L1 i = 0; i < lane_count; i += 1)
+      {
+        F1 t = distances[i];
+
+        if (t > min_hit_distance && t < hit_distance)
+        {
+          F4x3 normal = packet.geometry.normal;
+          F4   d      = packet.geometry.d;
+
+          hit_distance            = t;
+          hit_shape.kind          = SHAPE_KIND__PLANE;
+          hit_shape.plane.normal  = (V3){ normal.x[i], normal.y[i], normal.z[i] };
+          hit_shape.plane.d       = d[i];
+          hit_material_index      = packet.material_indices[i];
+        }
+      }
+    }
+
     if (hit_shape.kind != SHAPE_KIND_COUNT)
     {
       RT_Material  mat          =  scene.materials[hit_material_index];
@@ -337,8 +364,8 @@ Internal void rt_trace_scene(RT_Scene scene, Image output, Range pixel_range)
 
       F4 focus_point = camera_p + scene.camera.focal_distance * normalize_F4(film_p - camera_p);
 
-      ray.dir      =  normalize_F4(focus_point - ray.pos);
-      ray.inv_dir  =  safe_inv_dir_F4(ray.dir);
+      ray.dir     = normalize_F4(focus_point - ray.pos);
+      ray.inv_dir = safe_inv_dir_F4(ray.dir);
 
       color += ray_cast(scene, &rng, ray) * contrib;
     }

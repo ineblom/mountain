@@ -93,17 +93,18 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
   for (L1 ray_index = 0; ray_index < scene.max_num_bounces; ray_index += 1)
   {
-    F1    hit_distance       = F1_MAX;
-    L1    hit_material_index = 0;
-    Shape hit_shape = {.kind = SHAPE_KIND_COUNT};
+    F1         hit_distance     = F1_MAX;
+    Shape_Kind hit_kind         = SHAPE_KIND_COUNT;
+    L1         hit_packet_index = 0;
+    L1         hit_lane         = 0;
 
     //- kti: Spheres
     L1 sphere4_count = (scene.sphere_count + 3) / 4;
     for (L1 sphere4_index = 0; sphere4_index < sphere4_count; sphere4_index += 1)
     {
-      RT_Sphere4_Packet packet = scene.spheres[sphere4_index];
+      Sphere4 spheres = scene.spheres[sphere4_index];
 
-      F4 distances = ray_sphere4_intersect(ray, packet.geometry);
+      F4 distances = ray_sphere4_intersect(ray, spheres);
 
       L1 lane_count = Min(scene.sphere_count - sphere4_index * 4, 4);
       for (L1 i = 0; i < lane_count; i += 1)
@@ -112,13 +113,10 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         
         if (t > min_hit_distance && t < hit_distance)
         {
-          F4x3 pos = packet.geometry.pos;
-
-          hit_distance            = t;
-          hit_shape.kind          = SHAPE_KIND__SPHERE;
-          hit_shape.sphere.pos    = (V3){ pos.x[i], pos.y[i], pos.z[i] };
-          hit_shape.sphere.radius = packet.geometry.radius[i];
-          hit_material_index      = packet.material_indices[i];
+          hit_distance     = t;
+          hit_kind         = SHAPE_KIND__SPHERE;
+          hit_packet_index = sphere4_index;
+          hit_lane         = i;
         }
       }
     }
@@ -127,9 +125,9 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     L1 box4_count = (scene.box_count + 3) / 4;
     for (L1 box4_index = 0; box4_index < box4_count; box4_index += 1)
     {
-      RT_Box4_Packet packet = scene.boxes[box4_index];
+      Box4 boxes = scene.boxes[box4_index];
 
-      F4 distances = ray_box4_intersect(ray, packet.geometry);
+      F4 distances = ray_box4_intersect(ray, boxes);
 
       L1 lane_count = Min(scene.box_count - box4_index * 4, 4);
       for (L1 i = 0; i < lane_count; i += 1)
@@ -138,14 +136,10 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         
         if (t > min_hit_distance && t < hit_distance)
         {
-          F4x3 min = packet.geometry.min;
-          F4x3 max = packet.geometry.max;
-
-          hit_distance            = t;
-          hit_shape.kind          = SHAPE_KIND__BOX;
-          hit_shape.box.min = (V3){ min.x[i], min.y[i], min.z[i] };
-          hit_shape.box.max = (V3){ max.x[i], max.y[i], max.z[i] };
-          hit_material_index      = packet.material_indices[i];
+          hit_distance     = t;
+          hit_kind         = SHAPE_KIND__BOX;
+          hit_packet_index = box4_index;
+          hit_lane         = i;
         }
       }
     }
@@ -154,9 +148,9 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     L1 plane4_count = (scene.plane_count + 3) / 4;
     for (L1 plane4_index = 0; plane4_index < plane4_count; plane4_index += 1)
     {
-      RT_Plane4_Packet packet = scene.planes[plane4_index];
+      Plane4 planes = scene.planes[plane4_index];
 
-      F4 distances = ray_plane4_intersect(ray, packet.geometry);
+      F4 distances = ray_plane4_intersect(ray, planes);
 
       L1 lane_count = Min(scene.plane_count - plane4_index * 4, 4);
       for (L1 i = 0; i < lane_count; i += 1)
@@ -165,44 +159,51 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
         if (t > min_hit_distance && t < hit_distance)
         {
-          F4x3 normal = packet.geometry.normal;
-          F4   d      = packet.geometry.d;
-
-          hit_distance            = t;
-          hit_shape.kind          = SHAPE_KIND__PLANE;
-          hit_shape.plane.normal  = (V3){ normal.x[i], normal.y[i], normal.z[i] };
-          hit_shape.plane.d       = d[i];
-          hit_material_index      = packet.material_indices[i];
+          hit_distance     = t;
+          hit_kind         = SHAPE_KIND__PLANE;
+          hit_packet_index = plane4_index;
+          hit_lane         = i;
         }
       }
     }
 
-    if (hit_shape.kind != SHAPE_KIND_COUNT)
+    if (hit_kind != SHAPE_KIND_COUNT)
     {
-      RT_Material  mat          =  scene.materials[hit_material_index];
-      F4           next_origin  =  ray.pos + hit_distance * ray.dir;
-      F4           next_normal  =  {0};
+      L1 primitive_index = hit_packet_index * 4 + hit_lane;
 
-      switch (hit_shape.kind)
+      L1 material_base_index = hit_kind   == SHAPE_KIND__SPHERE ? 0
+                               : hit_kind == SHAPE_KIND__BOX    ? scene.sphere_count
+                               : scene.sphere_count + scene.box_count;
+
+      RT_Material  material     =  scene.materials[material_base_index + primitive_index];
+
+      F4 next_origin = ray.pos + hit_distance * ray.dir;
+      F4 next_normal = {0};
+
+      switch (hit_kind)
       {
         case SHAPE_KIND__SPHERE:
         {
-          F4 pos = F4_from_V3(hit_shape.sphere.pos);
+          Sphere4 spheres = scene.spheres[hit_packet_index];
+          F4 pos = {spheres.pos.x[hit_lane], spheres.pos.y[hit_lane], spheres.pos.z[hit_lane], 0.0f};
 
           next_normal = normalize_F4(next_origin - pos);
         } break;
 
         case SHAPE_KIND__PLANE:
         {
-          F4 normal = F4_from_V3(hit_shape.plane.normal);
+          Plane4 planes = scene.planes[hit_packet_index];
+          F4 normal = {planes.normal.x[hit_lane], planes.normal.y[hit_lane], planes.normal.z[hit_lane], 0.0f};
 
           next_normal = dot_F4(normal, ray.dir) < 0.0f ? normal : -normal;
         } break;
 
         case SHAPE_KIND__BOX:
         {
-          F4  min        =  F4_from_V3(hit_shape.box.min);
-          F4  max        =  F4_from_V3(hit_shape.box.max);
+          Box4 boxes = scene.boxes[hit_packet_index];
+          F4 min = {boxes.min.x[hit_lane], boxes.min.y[hit_lane], boxes.min.z[hit_lane], 0.0f};
+          F4 max = {boxes.max.x[hit_lane], boxes.max.y[hit_lane], boxes.max.z[hit_lane], 0.0f};
+
           F4  center     =  (min + max) * 0.5f;
           F4  local_hit  =  next_origin - center;
           F4  box_size   =  max - min;
@@ -219,12 +220,12 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         default: break;
       }
 
-      result += attenuation * mat.emissive;
+      result += attenuation * material.emissive;
 
-      F1  roughness     =  Max(0.05f, clamp01_F1(mat.roughness));
+      F1  roughness     =  Max(0.05f, clamp01_F1(material.roughness));
       F1  alpha         =  roughness * roughness;
-      F1  metallic      =  clamp01_F1(mat.metallic);
-      F4  f0            =  lerp_F4((F4){0.04f, 0.04f, 0.04f}, metallic, mat.base_color);
+      F1  metallic      =  clamp01_F1(material.metallic);
+      F4  f0            =  lerp_F4((F4){0.04f, 0.04f, 0.04f}, metallic, material.base_color);
       F1 specular_prob  =  0.5f; // keep constant; MIS handles weighting
 
       if (random_unilateral(rng) < specular_prob)
@@ -249,7 +250,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
           // Fresnel-weighted diffuse with metallic energy conservation
           F4  kd_color  =  (1.0f - metallic) * (((F4){1, 1, 1}) - F);
-          F4  f_diff    =  (kd_color * mat.base_color) / PI;
+          F4  f_diff    =  (kd_color * material.base_color) / PI;
 
           F1  pdf_spec   =  pdf_GGX(next_normal, h, v, alpha);
           F1  pdf_diff   =  NoL / PI;
@@ -285,7 +286,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
           F4  f_spec  =  (F * (D * G)) / denom;
 
           F4  kd_color  =  (1.0f - metallic) * (((F4){1, 1, 1}) - F);
-          F4  f_diff    =  (kd_color * mat.base_color) / PI;
+          F4  f_diff    =  (kd_color * material.base_color) / PI;
 
           F1  pdf_spec   =  pdf_GGX(next_normal, h, v, alpha);
           F1  pdf_diff   =  NoL / PI;

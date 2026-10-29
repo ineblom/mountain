@@ -545,7 +545,8 @@ Internal String8 shape_kind_name(Shape_Kind kind)
 
 Internal F1 ray_plane_intersect(Ray ray, Plane plane)
 {
-  F1  result        =  0.0f;
+  F1  min_t         =  0.001f;
+  F1  result        =  F1_MAX;
   F4  plane_normal  =  F4_from_V3(plane.normal);
   F1  denom         =  dot_F4(plane_normal, ray.dir);
 
@@ -553,7 +554,7 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane)
   {
     F1 t = (-plane.d - dot_F4(plane_normal, ray.pos)) / denom;
 
-    if (t > 0.001f)
+    if (t > min_t)
     {
       result = t;
     }
@@ -581,6 +582,7 @@ Internal F4 ray_plane4_intersect(Ray ray, Plane4 planes)
 
 Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
 {
+  F1  min_t                    =  0.001f;
   F1  result                   =  F1_MAX;
   F4  sphere_pos               =  F4_from_V3(sphere.pos);
   F4  sphere_relative_ray_pos  =  ray.pos - sphere_pos;
@@ -596,9 +598,9 @@ Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
     {
       F1 tp = -half_b + root_term;
       F1 tn = -half_b - root_term;
-      F1 t  = tn > 0.001f ? tn : tp;
+      F1 t  = tn > min_t ? tn : tp;
 
-      if (t > 0.001f)
+      if (t > min_t)
         result = t;
     }
   }
@@ -635,40 +637,37 @@ Internal F4 ray_sphere4_intersect(Ray ray, Sphere4 spheres)
 
 Internal F1 ray_box_intersect(Ray ray, Box box)
 {
+  F1  min_t     =  0.001f;
   F4  aabb_min  =  F4_from_V3(box.min);
   F4  aabb_max  =  F4_from_V3(box.max);
+  F1  t_min     =  -F1_MAX;
+  F1  t_max     =  F1_MAX;
 
-  F1  t_min  =  (aabb_min[0] - ray.pos[0]) * ray.inv_dir[0];
-  F1  t_max  =  (aabb_max[0] - ray.pos[0]) * ray.inv_dir[0];
+  for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
+  {
+    if (ray.dir[axis] == 0.0f)
+    {
+      if (ray.pos[axis] < aabb_min[axis] || ray.pos[axis] > aabb_max[axis])
+        return F1_MAX;
 
-  if (t_min > t_max)
-    Swap(t_min, t_max);
+      continue;
+    }
 
-  F1  ty_min  =  (aabb_min[1] - ray.pos[1]) * ray.inv_dir[1];
-  F1  ty_max  =  (aabb_max[1] - ray.pos[1]) * ray.inv_dir[1];
+    F1 near_t = (aabb_min[axis] - ray.pos[axis]) * ray.inv_dir[axis];
+    F1 far_t  = (aabb_max[axis] - ray.pos[axis]) * ray.inv_dir[axis];
 
-  if (ty_min > ty_max)
-    Swap(ty_min, ty_max);
+    if (near_t > far_t)
+      Swap(near_t, far_t);
 
-  t_min  =  Max(t_min, ty_min);
-  t_max  =  Min(t_max, ty_max);
+    t_min = Max(t_min, near_t);
+    t_max = Min(t_max, far_t);
 
-  if (t_min > t_max)
-    return 0.0f;
+    if (t_min > t_max)
+      return F1_MAX;
+  }
 
-  F1  tz_min  =  (aabb_min[2] - ray.pos[2]) * ray.inv_dir[2];
-  F1  tz_max  =  (aabb_max[2] - ray.pos[2]) * ray.inv_dir[2];
-
-  if (tz_min > tz_max)
-    Swap(tz_min, tz_max);
-
-  t_min  =  Max(t_min, tz_min);
-  t_max  =  Min(t_max, tz_max);
-
-  if (t_min > t_max)
-    return 0.0f;
-
-  return t_min;
+  F1 t = t_min > min_t ? t_min : t_max;
+  return t > min_t ? t : F1_MAX;
 }
 
 Inline SI4 ray_slab4_intersect(F4 low, F4 high, F1 origin_scalar, F1 dir_scalar, F1 inv_dir, F4 *near_t, F4 *far_t)

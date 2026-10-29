@@ -3218,12 +3218,12 @@ Internal void lane(void *user_data)
             L1 shape_indices[SHAPE_KIND_COUNT] = {0};
 
             L1 sphere4_count = (shape_counts[SHAPE_KIND__SPHERE] + 3) / 4;
-            L1 box4_count    = (shape_counts[SHAPE_KIND__BOX] + 3) / 4;
-            L1 plane4_count  = (shape_counts[SHAPE_KIND__PLANE] + 3) / 4;
+            L1 box4_count    = (shape_counts[SHAPE_KIND__BOX]    + 3) / 4;
+            L1 plane4_count  = (shape_counts[SHAPE_KIND__PLANE]  + 3) / 4;
 
-            RT_Sphere4_Packet *spheres = push_array(render_arena, RT_Sphere4_Packet, sphere4_count);
-            RT_Box4_Packet    *boxes   = push_array(render_arena, RT_Box4_Packet, box4_count);
-            RT_Plane4_Packet  *planes  = push_array(render_arena, RT_Plane4_Packet, plane4_count);
+            Sphere4 *spheres = push_array(render_arena, Sphere4, sphere4_count);
+            Box4    *boxes   = push_array(render_arena, Box4, box4_count);
+            Plane4  *planes  = push_array(render_arena, Plane4, plane4_count);
 
             RT_Material *materials = push_array(render_arena, RT_Material, shape_count);
 
@@ -3237,40 +3237,41 @@ Internal void lane(void *user_data)
 
                 if (it->shape_kind == SHAPE_KIND__SPHERE)
                 {
-                  spheres[idx4].geometry.pos.x[lane_idx] = it->pos[0];
-                  spheres[idx4].geometry.pos.y[lane_idx] = it->pos[1];
-                  spheres[idx4].geometry.pos.z[lane_idx] = it->pos[2];
+                  spheres[idx4].pos.x[lane_idx] = it->pos[0];
+                  spheres[idx4].pos.y[lane_idx] = it->pos[1];
+                  spheres[idx4].pos.z[lane_idx] = it->pos[2];
 
-                  spheres[idx4].geometry.radius[lane_idx] = it->sphere_diameter*0.5f;
+                  spheres[idx4].radius[lane_idx] = it->sphere_diameter*0.5f;
 
-                  spheres[idx4].material_indices[lane_idx] = shape_index;
+                  materials[idx] = it->material;
                 }
                 else if (it->shape_kind == SHAPE_KIND__BOX)
                 {
-                  boxes[idx4].geometry.min.x[lane_idx] = it->pos[0] - it->size[0]*0.5f;
-                  boxes[idx4].geometry.min.y[lane_idx] = it->pos[1] - it->size[1]*0.5f;
-                  boxes[idx4].geometry.min.z[lane_idx] = it->pos[2] - it->size[2]*0.5f;
+                  boxes[idx4].min.x[lane_idx] = it->pos[0] - it->size[0]*0.5f;
+                  boxes[idx4].min.y[lane_idx] = it->pos[1] - it->size[1]*0.5f;
+                  boxes[idx4].min.z[lane_idx] = it->pos[2] - it->size[2]*0.5f;
 
-                  boxes[idx4].geometry.max.x[lane_idx] = it->pos[0] + it->size[0]*0.5f;
-                  boxes[idx4].geometry.max.y[lane_idx] = it->pos[1] + it->size[1]*0.5f;
-                  boxes[idx4].geometry.max.z[lane_idx] = it->pos[2] + it->size[2]*0.5f;
+                  boxes[idx4].max.x[lane_idx] = it->pos[0] + it->size[0]*0.5f;
+                  boxes[idx4].max.y[lane_idx] = it->pos[1] + it->size[1]*0.5f;
+                  boxes[idx4].max.z[lane_idx] = it->pos[2] + it->size[2]*0.5f;
 
-                  boxes[idx4].material_indices[lane_idx] = shape_index;
+                  L1 base_idx = shape_counts[SHAPE_KIND__SPHERE];
+                  materials[base_idx + idx] = it->material;
                 }
                 else if (it->shape_kind == SHAPE_KIND__PLANE)
                 {
                   F4 normal = normalize_F4(it->direction);
                   F1 d      = -dot_F4(normal, it->pos);
 
-                  planes[idx4].geometry.normal.x[lane_idx] = normal[0];
-                  planes[idx4].geometry.normal.y[lane_idx] = normal[1];
-                  planes[idx4].geometry.normal.z[lane_idx] = normal[2];
-                  planes[idx4].geometry.d[lane_idx]        = d;
+                  planes[idx4].normal.x[lane_idx] = normal[0];
+                  planes[idx4].normal.y[lane_idx] = normal[1];
+                  planes[idx4].normal.z[lane_idx] = normal[2];
 
-                  planes[idx4].material_indices[lane_idx] = shape_index;
+                  planes[idx4].d[lane_idx]        = d;
+
+                  L1 base_idx = shape_counts[SHAPE_KIND__SPHERE] + shape_counts[SHAPE_KIND__BOX];
+                  materials[base_idx + idx] = it->material;
                 }
-
-                materials[shape_index] = it->material;
 
                 shape_indices[it->shape_kind] += 1;
                 shape_index += 1;

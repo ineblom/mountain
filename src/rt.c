@@ -185,7 +185,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         case SHAPE_KIND__SPHERE:
         {
           Sphere4 spheres = scene.spheres[hit_packet_index];
-          F4 pos = {spheres.pos.x[hit_lane], spheres.pos.y[hit_lane], spheres.pos.z[hit_lane], 0.0f};
+          F4 pos = extract_lane_F4x3(spheres.pos, hit_lane);
 
           next_normal = normalize_F4(next_origin - pos);
         } break;
@@ -193,7 +193,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         case SHAPE_KIND__PLANE:
         {
           Plane4 planes = scene.planes[hit_packet_index];
-          F4 normal = {planes.normal.x[hit_lane], planes.normal.y[hit_lane], planes.normal.z[hit_lane], 0.0f};
+          F4 normal = extract_lane_F4x3(planes.normal, hit_lane);
 
           next_normal = dot_F4(normal, ray.dir) < 0.0f ? normal : -normal;
         } break;
@@ -201,8 +201,8 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         case SHAPE_KIND__BOX:
         {
           Box4 boxes = scene.boxes[hit_packet_index];
-          F4 min = {boxes.min.x[hit_lane], boxes.min.y[hit_lane], boxes.min.z[hit_lane], 0.0f};
-          F4 max = {boxes.max.x[hit_lane], boxes.max.y[hit_lane], boxes.max.z[hit_lane], 0.0f};
+          F4 min = extract_lane_F4x3(boxes.min, hit_lane);
+          F4 max = extract_lane_F4x3(boxes.max, hit_lane);
 
           F4  center     =  (min + max) * 0.5f;
           F4  local_hit  =  next_origin - center;

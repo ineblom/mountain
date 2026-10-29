@@ -270,8 +270,6 @@ Internal F4 safe_inv_dir_F4(F4 dir)
 ////////////////////////////////
 //~ F4x3
 
-// TODO: This is very confusing. It takes a V3 (as F4) and replicates it across every lane.
-// This should be more clear.
 Inline F4x3 splat_F4x3(F4 v)
 {
   F4x3 result = {
@@ -280,6 +278,19 @@ Inline F4x3 splat_F4x3(F4 v)
     .z = splat_F4(v[2]),
   };
   return result;
+}
+
+Inline F4 extract_lane_F4x3(F4x3 v, L1 lane)
+{
+  F4 result = {v.x[lane], v.y[lane], v.z[lane], 0.0f};
+  return result;
+}
+
+Inline void set_lane_F4x3(F4x3 *v, L1 lane, F4 value)
+{
+  v->x[lane] = value[0];
+  v->y[lane] = value[1];
+  v->z[lane] = value[2];
 }
 
 Inline F4x3 sub_F4x3(F4x3 a, F4x3 b)
@@ -334,7 +345,6 @@ Inline F4x3 pad_F4x3(F4x3 c, L1 count)
   return c;
 }
 
-// Transpose four vectors into component lanes, discarding the fourth component.
 Inline F4x3 F4x3_from_F4(F4 a, F4 b, F4 c, F4 d)
 {
   F4  first_xy   =  shuffle_F4(a, b, F4_A0, F4_A1, F4_B0, F4_B1); // {ax, ay, bx, by}

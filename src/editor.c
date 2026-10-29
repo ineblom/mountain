@@ -3237,9 +3237,7 @@ Internal void lane(void *user_data)
 
                 if (it->shape_kind == SHAPE_KIND__SPHERE)
                 {
-                  spheres[idx4].pos.x[lane_idx] = it->pos[0];
-                  spheres[idx4].pos.y[lane_idx] = it->pos[1];
-                  spheres[idx4].pos.z[lane_idx] = it->pos[2];
+                  set_lane_F4x3(&spheres[idx4].pos, lane_idx, it->pos);
 
                   spheres[idx4].radius[lane_idx] = it->sphere_diameter*0.5f;
 
@@ -3247,13 +3245,10 @@ Internal void lane(void *user_data)
                 }
                 else if (it->shape_kind == SHAPE_KIND__BOX)
                 {
-                  boxes[idx4].min.x[lane_idx] = it->pos[0] - it->size[0]*0.5f;
-                  boxes[idx4].min.y[lane_idx] = it->pos[1] - it->size[1]*0.5f;
-                  boxes[idx4].min.z[lane_idx] = it->pos[2] - it->size[2]*0.5f;
+                  F4 half_size = it->size * 0.5f;
 
-                  boxes[idx4].max.x[lane_idx] = it->pos[0] + it->size[0]*0.5f;
-                  boxes[idx4].max.y[lane_idx] = it->pos[1] + it->size[1]*0.5f;
-                  boxes[idx4].max.z[lane_idx] = it->pos[2] + it->size[2]*0.5f;
+                  set_lane_F4x3(&boxes[idx4].min, lane_idx, it->pos - half_size);
+                  set_lane_F4x3(&boxes[idx4].max, lane_idx, it->pos + half_size);
 
                   L1 base_idx = shape_counts[SHAPE_KIND__SPHERE];
                   materials[base_idx + idx] = it->material;
@@ -3263,9 +3258,7 @@ Internal void lane(void *user_data)
                   F4 normal = normalize_F4(it->direction);
                   F1 d      = -dot_F4(normal, it->pos);
 
-                  planes[idx4].normal.x[lane_idx] = normal[0];
-                  planes[idx4].normal.y[lane_idx] = normal[1];
-                  planes[idx4].normal.z[lane_idx] = normal[2];
+                  set_lane_F4x3(&planes[idx4].normal, lane_idx, normal);
 
                   planes[idx4].d[lane_idx]        = d;
 

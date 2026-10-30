@@ -26,9 +26,9 @@ struct Entity
   L1          flags;
   B1          name[128];
   L1          name_len;
-  F4          pos;
-  F4          size;
-  F4          direction;
+  V3          pos;
+  V3          size;
+  V3          direction;
   F1          sphere_diameter;
   Shape_Kind  shape_kind;
   RT_Material material;

@@ -41,6 +41,20 @@ typedef float  F4 VEC_TYPE(4, float);
 typedef int  SI2 VEC_TYPE(2, int);
 typedef int  SI4 VEC_TYPE(4, int);
 
+// Geometry SIMD width. Fixed-size F4 values (RGBA, matrices, pixel shuffles)
+// remain four components independently of this backend choice.
+#ifndef LANE_COUNT
+#define LANE_COUNT 4
+#endif
+#if LANE_COUNT != 4 && LANE_COUNT != 8 && LANE_COUNT != 16
+#error LANE_COUNT must be 4, 8, or 16
+#endif
+typedef float        Lane_F32 VEC_TYPE(LANE_COUNT, float);
+typedef int          Lane_S32 VEC_TYPE(LANE_COUNT, int);
+typedef unsigned int Lane_U32 VEC_TYPE(LANE_COUNT, unsigned int);
+// Comparisons produce signed lanes: false is zero, true is all one bits.
+typedef Lane_S32 Lane_Mask;
+
 typedef unsigned short  W2   VEC_TYPE(2, short);
 typedef unsigned short  W4   VEC_TYPE(4, short);
 typedef short           SW2  VEC_TYPE(2, short);

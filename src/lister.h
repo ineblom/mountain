@@ -17,7 +17,7 @@ typedef enum Lister_Entry_Kind
 typedef L1 Lister_Entry_Flags;
 enum
 {
-  LISTER_ENTRY_FLAG__NORMALIZE_F4 = 1 << 0,
+  LISTER_ENTRY_FLAG__NORMALIZE_V3 = 1 << 0,
 };
 
 typedef struct Lister_L1_Options Lister_L1_Options;

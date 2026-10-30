@@ -13,8 +13,8 @@ struct RT_Material
 typedef struct RT_Camera RT_Camera;
 struct RT_Camera
 {
-  F4 pos;
-  F4 forward;
+  V3 pos;
+  V3 forward;
   F1 vertical_fov;
   F1 aperture_radius;
   F1 focal_distance;
@@ -28,16 +28,16 @@ struct RT_Scene
 
   RT_Camera camera;
 
-  L1       sphere_count;
-  Sphere4 *spheres;
+  L1           sphere_count;
+  Lane_Sphere *spheres;
 
-  L1    box_count;
-  Box4 *boxes;
+  L1        box_count;
+  Lane_Box *boxes;
 
-  L1      plane_count;
-  Plane4 *planes;
+  L1          plane_count;
+  Lane_Plane *planes;
 
-  L1           material_count; 
+  L1           material_count;
   RT_Material *materials;
 };
 

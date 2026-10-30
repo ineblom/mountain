@@ -5,16 +5,25 @@ DEFS="-DDEV=1"
 OPT="-O0"
 
 META=0
+NATIVE=0
+LANES=4
 for ARG in "$@"; do
   case "$ARG" in
     release) OPT="-O2" ;;
+    native) NATIVE=1 ;;
+    lanes=4|lanes=8|lanes=16) LANES="${ARG#lanes=}" ;;
     META) META=1 ;;
     *)
-      echo "Usage: $0 [META] [release]" >&2
+      echo "Usage: $0 [META] [release] [native] [lanes=4|8|16]" >&2
       exit 1
       ;;
   esac
 done
+
+DEFS="$DEFS -DLANE_COUNT=$LANES"
+if [ "$NATIVE" -eq 1 ]; then
+  OPT="$OPT -march=native"
+fi
 
 case "$(uname -s)" in Darwin)
     COMPILER="${CC:-clang}"

@@ -1,6 +1,8 @@
 #include "math.h"
 
-#if defined(__SSE__)
+#if defined(__AVX__)
+#include <immintrin.h>
+#elif defined(__SSE__)
 #include <xmmintrin.h>
 #elif defined(__ARM_NEON)
 #include <arm_neon.h>
@@ -97,10 +99,71 @@ Inline F2 F2_from_F4(F4 v)
 ////////////////////////////////
 //~ kti: V3
 
+Inline V3 v3(F1 x, F1 y, F1 z)
+{
+  return (V3){.x = x, .y = y, .z = z};
+}
+
+Inline F1 component_V3(V3 v, Axis axis)
+{
+  return axis == AXIS__X ? v.x : axis == AXIS__Y ? v.y : v.z;
+}
+
+Inline F1 *component_ptr_V3(V3 *v, Axis axis)
+{
+  return axis == AXIS__X ? &v->x : axis == AXIS__Y ? &v->y : &v->z;
+}
+
 Inline V3 V3_from_F4(F4 v)
 {
-  V3 result = {v[0], v[1], v[2]};
+  return v3(v[0], v[1], v[2]);
+}
+
+Inline V3 add_V3(V3 a, V3 b) { return v3(a.x+b.x, a.y+b.y, a.z+b.z); }
+Inline V3 sub_V3(V3 a, V3 b) { return v3(a.x-b.x, a.y-b.y, a.z-b.z); }
+Inline V3 mul_V3(V3 a, V3 b) { return v3(a.x*b.x, a.y*b.y, a.z*b.z); }
+Inline V3 div_V3(V3 a, V3 b) { return v3(a.x/b.x, a.y/b.y, a.z/b.z); }
+Inline V3 scale_V3(V3 v, F1 s) { return v3(v.x*s, v.y*s, v.z*s); }
+Inline V3 add_scaled_V3(V3 a, F1 s, V3 b) { return add_V3(a, scale_V3(b, s)); }
+Inline V3 neg_V3(V3 v) { return scale_V3(v, -1.0f); }
+Inline V3 abs_V3(V3 v) { return v3(abs_F1(v.x), abs_F1(v.y), abs_F1(v.z)); }
+
+Inline F1 dot_V3(V3 a, V3 b)
+{
+  return a.x*b.x + a.y*b.y + a.z*b.z;
+}
+
+Inline F1 length_sq_V3(V3 v) { return dot_V3(v, v); }
+Inline F1 length_V3(V3 v) { return sqrt_F1(length_sq_V3(v)); }
+Inline V3 normalize_V3(V3 v) { return scale_V3(v, 1.0f/length_V3(v)); }
+
+Inline V3 cross_V3(V3 a, V3 b)
+{
+  return v3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x);
+}
+
+Inline V3 reflect_V3(V3 v, V3 normal)
+{
+  return sub_V3(v, scale_V3(normal, 2.0f*dot_V3(v, normal)));
+}
+
+Inline V3 lerp_V3(V3 a, F1 t, V3 b)
+{
+  return add_V3(scale_V3(a, 1.0f-t), scale_V3(b, t));
+}
+
+Inline V3 lerp_snap_V3(V3 a, F1 t, V3 b, F1 min_dist)
+{
+  V3 result = lerp_V3(a, t, b);
+  if (length_sq_V3(sub_V3(a, b)) < Square(min_dist)) result = b;
   return result;
+}
+
+Inline V3 safe_inv_dir_V3(V3 v)
+{
+  return v3(1.0f/(v.x == 0.0f ? 1.0f : v.x),
+            1.0f/(v.y == 0.0f ? 1.0f : v.y),
+            1.0f/(v.z == 0.0f ? 1.0f : v.z));
 }
 
 ////////////////////////////////
@@ -167,65 +230,14 @@ Inline F4 F4_from_V3(V3 v)
   return result;
 }
 
-Inline F4 F4_with_w(F4 v, F1 w)
+Inline F4 point_F4_from_V3(V3 v)
 {
-  F4 result = v;
-
-  result[3] = w;
-
-  return result;
-}
-
-Inline F1 dot_F4(F4 a, F4 b)
-{
-  F1 result = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-  return result;
-}
-
-Inline F1 length_sq_F4(F4 v)
-{
-  F1 result = dot_F4(v, v);
-  return result;
-}
-
-Inline F1 length_F4(F4 v)
-{
-  F1 result = sqrt_F1(length_sq_F4(v));
-  return result;
-}
-
-Inline F4 normalize_F4(F4 v)
-{
-  F4 result = v * (1.0f / length_F4(v));
-  return result;
-}
-
-Inline F4 cross_F4(F4 a, F4 b)
-{
-  F4 result = {0};
-
-  result[0]  =  a[1] * b[2] - a[2] * b[1];
-  result[1]  =  a[2] * b[0] - a[0] * b[2];
-  result[2]  =  a[0] * b[1] - a[1] * b[0];
-
-  return result;
+  return (F4){v.x, v.y, v.z, 1.0f};
 }
 
 Inline F4 lerp_F4(F4 a, F1 t, F4 b)
 {
   F4 result = a * (1 - t) + b * t;
-  return result;
-}
-
-Inline F4 lerp_snap_F4(F4 a, F1 t, F4 b, F1 min_dist)
-{
-  F4 result = lerp_F4(a, t, b);
-
-  if (length_sq_F4(a - b) < Square(min_dist))
-  {
-    result = b;
-  }
-
   return result;
 }
 
@@ -252,46 +264,160 @@ Inline F4 pow_F4(F4 v, F1 exp)
   return result;
 }
 
-Inline F4 reflect_F4(F4 v, F4 normal)
+////////////////////////////////
+//~ Geometry lanes
+
+#define Lane_Repeat4(v) (v), (v), (v), (v)
+#if LANE_COUNT == 4
+#define Lane_Values(v) Lane_Repeat4(v)
+#elif LANE_COUNT == 8
+#define Lane_Values(v) Lane_Repeat4(v), Lane_Repeat4(v)
+#else
+#define Lane_Values(v) Lane_Repeat4(v), Lane_Repeat4(v), Lane_Repeat4(v), Lane_Repeat4(v)
+#endif
+
+Inline Lane_F32 splat_Lane_F32(F1 value)
 {
-  F4 result = v - 2 * dot_F4(v, normal) * normal;
+  return (Lane_F32){Lane_Values(value)};
+}
+
+Inline Lane_S32 splat_Lane_S32(SI1 value)
+{
+  return (Lane_S32){Lane_Values(value)};
+}
+
+Inline Lane_U32 splat_Lane_U32(I1 value)
+{
+  return (Lane_U32){Lane_Values(value)};
+}
+
+#undef Lane_Values
+#undef Lane_Repeat4
+
+Inline Lane_S32 select_Lane_S32(Lane_Mask mask, Lane_S32 yes, Lane_S32 no)
+{
+  return (mask & yes) | (~mask & no);
+}
+
+Inline Lane_U32 select_Lane_U32(Lane_Mask mask, Lane_U32 yes, Lane_U32 no)
+{
+  Lane_U32 bits = (Lane_U32)mask;
+  return (bits & yes) | (~bits & no);
+}
+
+Inline Lane_F32 select_Lane_F32(Lane_Mask mask, Lane_F32 yes, Lane_F32 no)
+{
+  union { Lane_F32 f; Lane_S32 i; } a = {.f = yes}, b = {.f = no}, result;
+  result.i = select_Lane_S32(mask, a.i, b.i);
+  return result.f;
+}
+
+Inline I1 any_Lane_Mask(Lane_Mask mask)
+{
+  for (L1 i = 0; i < LANE_COUNT; i += 1) if (mask[i]) return 1;
+  return 0;
+}
+
+Inline I1 all_Lane_Mask(Lane_Mask mask)
+{
+  for (L1 i = 0; i < LANE_COUNT; i += 1) if (!mask[i]) return 0;
+  return 1;
+}
+
+Inline Lane_F32 min_Lane_F32(Lane_F32 a, Lane_F32 b)
+{
+#if LANE_COUNT == 4
+  return min_F4(a, b);
+#elif LANE_COUNT == 8 && defined(__AVX__)
+  return (Lane_F32)_mm256_min_ps((__m256)a, (__m256)b);
+#elif LANE_COUNT == 16 && defined(__AVX512F__)
+  return (Lane_F32)_mm512_min_ps((__m512)a, (__m512)b);
+#else
+  return select_Lane_F32(a < b, a, b);
+#endif
+}
+
+Inline Lane_F32 max_Lane_F32(Lane_F32 a, Lane_F32 b)
+{
+#if LANE_COUNT == 4
+  return max_F4(a, b);
+#elif LANE_COUNT == 8 && defined(__AVX__)
+  return (Lane_F32)_mm256_max_ps((__m256)a, (__m256)b);
+#elif LANE_COUNT == 16 && defined(__AVX512F__)
+  return (Lane_F32)_mm512_max_ps((__m512)a, (__m512)b);
+#else
+  return select_Lane_F32(a > b, a, b);
+#endif
+}
+
+Inline Lane_F32 abs_Lane_F32(Lane_F32 v)
+{
+  union { Lane_F32 f; Lane_U32 u; } bits = {.f = v};
+  bits.u &= splat_Lane_U32(0x7fffffffu);
+  return bits.f;
+}
+
+Inline Lane_F32 sqrt_Lane_F32(Lane_F32 v)
+{
+#if LANE_COUNT == 4
+  return sqrt_F4(v);
+#elif LANE_COUNT == 16 && defined(__AVX512F__)
+  return (Lane_F32)_mm512_sqrt_ps((__m512)v);
+#elif LANE_COUNT == 8 && defined(__AVX__)
+  return (Lane_F32)_mm256_sqrt_ps((__m256)v);
+#else
+  // SSE/NEON backends also support wider logical batches in four-lane pieces.
+  Lane_F32 result = {0};
+  for (L1 i = 0; i < LANE_COUNT; i += 4)
+  {
+    F4 part = sqrt_F4((F4){v[i], v[i+1], v[i+2], v[i+3]});
+    for (L1 j = 0; j < 4; j += 1) result[i+j] = part[j];
+  }
+  return result;
+#endif
+}
+
+Inline Lane_V3 broadcast_Lane_V3(V3 v)
+{
+  return (Lane_V3){splat_Lane_F32(v.x), splat_Lane_F32(v.y), splat_Lane_F32(v.z)};
+}
+
+Inline V3 extract_lane_V3(Lane_V3 v, L1 lane)
+{
+  return v3(v.x[lane], v.y[lane], v.z[lane]);
+}
+
+Inline void set_lane_V3(Lane_V3 *v, L1 lane, V3 value)
+{
+  v->x[lane] = value.x;
+  v->y[lane] = value.y;
+  v->z[lane] = value.z;
+}
+
+Inline Lane_V3 pack_Lane_V3(const V3 *values)
+{
+  Lane_V3 result = {0};
+  for (L1 i = 0; i < LANE_COUNT; i += 1) set_lane_V3(&result, i, values[i]);
   return result;
 }
 
-Internal F4 safe_inv_dir_F4(F4 dir)
+Inline Lane_V3 add_Lane_V3(Lane_V3 a, Lane_V3 b) { return (Lane_V3){a.x+b.x, a.y+b.y, a.z+b.z}; }
+Inline Lane_V3 sub_Lane_V3(Lane_V3 a, Lane_V3 b) { return (Lane_V3){a.x-b.x, a.y-b.y, a.z-b.z}; }
+Inline Lane_V3 scale_Lane_V3(Lane_V3 v, Lane_F32 s) { return (Lane_V3){v.x*s, v.y*s, v.z*s}; }
+Inline Lane_F32 dot_Lane_V3(Lane_V3 a, Lane_V3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+
+Inline Lane_V3 cross_Lane_V3(Lane_V3 a, Lane_V3 b)
 {
-  F4  one      = splat_F4(1.0f);
-  SI4 is_zero  = dir == 0.0f;
-  F4  safe_dir = select_F4(is_zero, one, dir);
-  F4  inv_dir  = 1.0f / safe_dir;
-  return inv_dir;
+  return (Lane_V3){a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x};
+}
+
+Inline Lane_V3 normalize_Lane_V3(Lane_V3 v)
+{
+  return scale_Lane_V3(v, 1.0f/sqrt_Lane_F32(dot_Lane_V3(v, v)));
 }
 
 ////////////////////////////////
 //~ F4x3
-
-Inline F4x3 splat_F4x3(F4 v)
-{
-  F4x3 result = {
-    .x = splat_F4(v[0]),
-    .y = splat_F4(v[1]),
-    .z = splat_F4(v[2]),
-  };
-  return result;
-}
-
-Inline F4 extract_lane_F4x3(F4x3 v, L1 lane)
-{
-  F4 result = {v.x[lane], v.y[lane], v.z[lane], 0.0f};
-  return result;
-}
-
-Inline void set_lane_F4x3(F4x3 *v, L1 lane, F4 value)
-{
-  v->x[lane] = value[0];
-  v->y[lane] = value[1];
-  v->z[lane] = value[2];
-}
 
 Inline F4x3 sub_F4x3(F4x3 a, F4x3 b)
 {
@@ -437,24 +563,24 @@ Inline F4x4 mul_F4x4(F4x4 a, F4x4 b)
   return result;
 }
 
-Inline F4x4 translate_F4x4(F4 p)
+Inline F4x4 translate_F4x4(V3 p)
 {
   F4x4 result = identity_F4x4();
 
-  result.m[3][0]  =  p[0];
-  result.m[3][1]  =  p[1];
-  result.m[3][2]  =  p[2];
+  result.m[3][0]  =  p.x;
+  result.m[3][1]  =  p.y;
+  result.m[3][2]  =  p.z;
 
   return result;
 }
 
-Inline F4x4 scale_F4x4(F4 s)
+Inline F4x4 scale_F4x4(V3 s)
 {
   F4x4 result = identity_F4x4();
 
-  result.m[0][0]  =  s[0];
-  result.m[1][1]  =  s[1];
-  result.m[2][2]  =  s[2];
+  result.m[0][0]  =  s.x;
+  result.m[1][1]  =  s.y;
+  result.m[2][2]  =  s.z;
 
   return result;
 }
@@ -532,6 +658,16 @@ Inline F4 mul_F4x4_F4(F4x4 m, F4 v)
   return result;
 }
 
+Inline V3 transform_direction_F4x4(F4x4 m, V3 direction)
+{
+  return V3_from_F4(mul_F4x4_F4(m, F4_from_V3(direction)));
+}
+
+Inline F4 project_point_F4x4(F4x4 m, V3 point)
+{
+  return mul_F4x4_F4(m, point_F4_from_V3(point));
+}
+
 ////////////////////////////////
 //~ kti: Shape
 
@@ -557,12 +693,12 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane)
 {
   F1  min_t         =  0.001f;
   F1  result        =  F1_MAX;
-  F4  plane_normal  =  F4_from_V3(plane.normal);
-  F1  denom         =  dot_F4(plane_normal, ray.dir);
+  V3  plane_normal  =  plane.normal;
+  F1  denom         =  dot_V3(plane_normal, ray.dir);
 
   if (abs_F1(denom) > 0.0001f)
   {
-    F1 t = (-plane.d - dot_F4(plane_normal, ray.pos)) / denom;
+    F1 t = (-plane.d - dot_V3(plane_normal, ray.pos)) / denom;
 
     if (t > min_t)
     {
@@ -573,19 +709,19 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane)
   return result;
 }
 
-Internal F4 ray_plane4_intersect(Ray ray, Plane4 planes)
+Internal Lane_F32 ray_lane_plane_intersect(Ray ray, Lane_Plane planes)
 {
   F1 min_t = 0.001f;
 
-  F4x3 ray_pos = splat_F4x3(ray.pos);
-  F4x3 ray_dir = splat_F4x3(ray.dir);
+  Lane_V3 ray_pos = broadcast_Lane_V3(ray.pos);
+  Lane_V3 ray_dir = broadcast_Lane_V3(ray.dir);
 
-  F4 denom = dot_F4x3(planes.normal, ray_dir);
+  Lane_F32 denom = dot_Lane_V3(planes.normal, ray_dir);
 
-  F4 t = (-planes.d - dot_F4x3(planes.normal, ray_pos)) / denom;
+  Lane_F32 t = (-planes.d - dot_Lane_V3(planes.normal, ray_pos)) / denom;
 
-  SI4 valid  = (abs_F4(denom) > 0.0001f) & (t > min_t);
-  F4  result = select_F4(valid, t, splat_F4(F1_MAX));
+  Lane_Mask valid  = (abs_Lane_F32(denom) > 0.0001f) & (t > min_t);
+  Lane_F32  result = select_Lane_F32(valid, t, splat_Lane_F32(F1_MAX));
 
   return result;
 }
@@ -594,10 +730,10 @@ Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
 {
   F1  min_t                    =  0.001f;
   F1  result                   =  F1_MAX;
-  F4  sphere_pos               =  F4_from_V3(sphere.pos);
-  F4  sphere_relative_ray_pos  =  ray.pos - sphere_pos;
-  F1  half_b                   =  dot_F4(ray.dir, sphere_relative_ray_pos);
-  F1  c                        =  dot_F4(sphere_relative_ray_pos, sphere_relative_ray_pos) - Square(sphere.radius);
+  V3  sphere_pos               =  sphere.pos;
+  V3  sphere_relative_ray_pos  =  sub_V3(ray.pos, sphere_pos);
+  F1  half_b                   =  dot_V3(ray.dir, sphere_relative_ray_pos);
+  F1  c                        =  dot_V3(sphere_relative_ray_pos, sphere_relative_ray_pos) - Square(sphere.radius);
   F1  discriminant             =  Square(half_b) - c;
 
   if (discriminant > 0.0f)
@@ -618,29 +754,29 @@ Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
   return result;
 }
 
-Internal F4 ray_sphere4_intersect(Ray ray, Sphere4 spheres)
+Internal Lane_F32 ray_lane_sphere_intersect(Ray ray, Lane_Sphere spheres)
 {
   F1 min_t = 0.001f;
 
-  F4x3 ray_pos = splat_F4x3(ray.pos);
-  F4x3 ray_dir = splat_F4x3(ray.dir);
-  F4x3 rel     = sub_F4x3(ray_pos, spheres.pos);
+  Lane_V3 ray_pos = broadcast_Lane_V3(ray.pos);
+  Lane_V3 ray_dir = broadcast_Lane_V3(ray.dir);
+  Lane_V3 rel     = sub_Lane_V3(ray_pos, spheres.pos);
 
-  F4 half_b       = dot_F4x3(ray_dir, rel);
-  F4 c            = dot_F4x3(rel, rel) - Square(spheres.radius);
-  F4 discriminant = Square(half_b) - c;
+  Lane_F32 half_b       = dot_Lane_V3(ray_dir, rel);
+  Lane_F32 c            = dot_Lane_V3(rel, rel) - Square(spheres.radius);
+  Lane_F32 discriminant = Square(half_b) - c;
 
-  F4 root_term = sqrt_F4(max_F4(discriminant, splat_F4(0.0f)));
+  Lane_F32 root_term = sqrt_Lane_F32(max_Lane_F32(discriminant, splat_Lane_F32(0.0f)));
 
-  F4 far_t  = -half_b + root_term;
-  F4 near_t = -half_b - root_term;
-  F4 t      = select_F4(near_t > min_t, near_t, far_t);
+  Lane_F32 far_t  = -half_b + root_term;
+  Lane_F32 near_t = -half_b - root_term;
+  Lane_F32 t      = select_Lane_F32(near_t > min_t, near_t, far_t);
 
-  SI4 valid_discriminant = discriminant > 0;
-  SI4 valid_root         = root_term > 0.0001f;
-  SI4 is_valid           = valid_discriminant & valid_root & (t > min_t);
+  Lane_Mask valid_discriminant = discriminant > 0;
+  Lane_Mask valid_root         = root_term > 0.0001f;
+  Lane_Mask is_valid           = valid_discriminant & valid_root & (t > min_t);
 
-  F4 result = select_F4(is_valid, t, splat_F4(F1_MAX));
+  Lane_F32 result = select_Lane_F32(is_valid, t, splat_Lane_F32(F1_MAX));
 
   return result;
 }
@@ -648,23 +784,29 @@ Internal F4 ray_sphere4_intersect(Ray ray, Sphere4 spheres)
 Internal F1 ray_box_intersect(Ray ray, Box box)
 {
   F1  min_t     =  0.001f;
-  F4  aabb_min  =  F4_from_V3(box.min);
-  F4  aabb_max  =  F4_from_V3(box.max);
+  V3  aabb_min  =  box.min;
+  V3  aabb_max  =  box.max;
   F1  t_min     =  -F1_MAX;
   F1  t_max     =  F1_MAX;
 
   for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
   {
-    if (ray.dir[axis] == 0.0f)
+    F1 origin = component_V3(ray.pos, axis);
+    F1 direction = component_V3(ray.dir, axis);
+    F1 low = component_V3(aabb_min, axis);
+    F1 high = component_V3(aabb_max, axis);
+
+    if (direction == 0.0f)
     {
-      if (ray.pos[axis] < aabb_min[axis] || ray.pos[axis] > aabb_max[axis])
+      if (origin < low || origin > high)
         return F1_MAX;
 
       continue;
     }
 
-    F1 near_t = (aabb_min[axis] - ray.pos[axis]) * ray.inv_dir[axis];
-    F1 far_t  = (aabb_max[axis] - ray.pos[axis]) * ray.inv_dir[axis];
+    F1 inv_dir = component_V3(ray.inv_dir, axis);
+    F1 near_t = (low - origin) * inv_dir;
+    F1 far_t  = (high - origin) * inv_dir;
 
     if (near_t > far_t)
       Swap(near_t, far_t);
@@ -680,46 +822,46 @@ Internal F1 ray_box_intersect(Ray ray, Box box)
   return t > min_t ? t : F1_MAX;
 }
 
-Inline SI4 ray_slab4_intersect(F4 low, F4 high, F1 origin_scalar, F1 dir_scalar, F1 inv_dir, F4 *near_t, F4 *far_t)
+Inline Lane_Mask ray_lane_slab_intersect(Lane_F32 low, Lane_F32 high, F1 origin_scalar, F1 dir_scalar, F1 inv_dir, Lane_F32 *near_t, Lane_F32 *far_t)
 {
-  F4 origin = splat_F4(origin_scalar);
-  F4 dir = splat_F4(dir_scalar);
+  Lane_F32 origin = splat_Lane_F32(origin_scalar);
+  Lane_F32 dir = splat_Lane_F32(dir_scalar);
 
-  SI4 parallel = dir == 0.0f;
-  SI4 inside = (low <= origin) & (origin <= high);
+  Lane_Mask parallel = dir == 0.0f;
+  Lane_Mask inside = (low <= origin) & (origin <= high);
 
-  F4 t0 = (low - origin) * inv_dir;
-  F4 t1 = (high - origin) * inv_dir;
+  Lane_F32 t0 = (low - origin) * inv_dir;
+  Lane_F32 t1 = (high - origin) * inv_dir;
 
-  F4 min = min_F4(t0, t1);
-  F4 max = max_F4(t0, t1);
+  Lane_F32 min = min_Lane_F32(t0, t1);
+  Lane_F32 max = max_Lane_F32(t0, t1);
 
-  near_t[0] = select_F4(parallel, splat_F4(-INFINITY), min);
-  far_t[0] = select_F4(parallel, splat_F4(INFINITY), max);
+  near_t[0] = select_Lane_F32(parallel, splat_Lane_F32(-INFINITY), min);
+  far_t[0] = select_Lane_F32(parallel, splat_Lane_F32(INFINITY), max);
 
-  SI4 can_intersect = ~parallel | inside;
+  Lane_Mask can_intersect = ~parallel | inside;
 
   return can_intersect;
 }
 
-Internal F4 ray_box4_intersect(Ray ray, Box4 boxes)
+Internal Lane_F32 ray_lane_box_intersect(Ray ray, Lane_Box boxes)
 {
   F1 min_t = 0.001f;
 
-  F4 near_x, far_x, near_y, far_y, near_z, far_z;
+  Lane_F32 near_x, far_x, near_y, far_y, near_z, far_z;
 
-  SI4 valid_x = ray_slab4_intersect(boxes.min.x, boxes.max.x, ray.pos[0], ray.dir[0], ray.inv_dir[0], &near_x, &far_x);
-  SI4 valid_y = ray_slab4_intersect(boxes.min.y, boxes.max.y, ray.pos[1], ray.dir[1], ray.inv_dir[1], &near_y, &far_y);
-  SI4 valid_z = ray_slab4_intersect(boxes.min.z, boxes.max.z, ray.pos[2], ray.dir[2], ray.inv_dir[2], &near_z, &far_z);
+  Lane_Mask valid_x = ray_lane_slab_intersect(boxes.min.x, boxes.max.x, ray.pos.x, ray.dir.x, ray.inv_dir.x, &near_x, &far_x);
+  Lane_Mask valid_y = ray_lane_slab_intersect(boxes.min.y, boxes.max.y, ray.pos.y, ray.dir.y, ray.inv_dir.y, &near_y, &far_y);
+  Lane_Mask valid_z = ray_lane_slab_intersect(boxes.min.z, boxes.max.z, ray.pos.z, ray.dir.z, ray.inv_dir.z, &near_z, &far_z);
 
-  F4 t_min = max_F4(max_F4(near_x, near_y), near_z);
-  F4 t_max = min_F4(min_F4(far_x, far_y), far_z);
+  Lane_F32 t_min = max_Lane_F32(max_Lane_F32(near_x, near_y), near_z);
+  Lane_F32 t_max = min_Lane_F32(min_Lane_F32(far_x, far_y), far_z);
 
-  F4 t = select_F4(t_min > min_t, t_min, t_max);
+  Lane_F32 t = select_Lane_F32(t_min > min_t, t_min, t_max);
 
-  SI4 valid = valid_x & valid_y & valid_z & (t_min <= t_max) & (t > min_t);
+  Lane_Mask valid = valid_x & valid_y & valid_z & (t_min <= t_max) & (t > min_t);
 
-  F4 result = select_F4(valid, t, splat_F4(F1_MAX));
+  Lane_F32 result = select_Lane_F32(valid, t, splat_Lane_F32(F1_MAX));
 
   return result;
 }

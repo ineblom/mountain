@@ -13,13 +13,20 @@ struct Random_State
   L1 inc;
 };
 
-// NOTE(kti): Used for compact storage.
+// One xyz value. Keep this a plain struct so loops can auto-vectorize.
 typedef struct V3 V3;
 struct V3
 {
   F1 x, y, z;
 };
 
+typedef struct Lane_V3 Lane_V3;
+struct Lane_V3
+{
+  Lane_F32 x, y, z;
+};
+
+// Fixed four-pixel RGB layout used by the image filtering backend.
 typedef struct F4x3 F4x3;
 struct F4x3
 {
@@ -83,11 +90,11 @@ struct Sphere
   F1 radius;
 };
 
-typedef struct Sphere4 Sphere4;
-struct Sphere4
+typedef struct Lane_Sphere Lane_Sphere;
+struct Lane_Sphere
 {
-  F4x3 pos;
-  F4 radius;
+  Lane_V3 pos;
+  Lane_F32 radius;
 };
 
 typedef struct Box Box;
@@ -97,11 +104,11 @@ struct Box
   V3 max;
 };
 
-typedef struct Box4 Box4;
-struct Box4
+typedef struct Lane_Box Lane_Box;
+struct Lane_Box
 {
-  F4x3 min;
-  F4x3 max;
+  Lane_V3 min;
+  Lane_V3 max;
 };
 
 typedef struct Plane Plane;
@@ -111,11 +118,11 @@ struct Plane
   F1 d;
 };
 
-typedef struct Plane4 Plane4;
-struct Plane4
+typedef struct Lane_Plane Lane_Plane;
+struct Lane_Plane
 {
-  F4x3 normal;
-  F4 d;
+  Lane_V3 normal;
+  Lane_F32 d;
 };
 
 typedef struct Shape Shape;
@@ -133,9 +140,9 @@ struct Shape
 typedef struct Ray Ray;
 struct Ray
 {
-  F4 pos;
-  F4 dir;
-  F4 inv_dir;
+  V3 pos;
+  V3 dir;
+  V3 inv_dir;
 };
 
 #define Square(x) ((x) * (x))
@@ -153,7 +160,62 @@ struct Ray
 #define tan_F1(x) tanf(x)
 
 ////////////////////////////////
-//~ SIMD helpers
+//~ Scalar geometry
+
+Inline V3 v3(F1 x, F1 y, F1 z);
+// Axis access without treating a struct as an array. Axis must be X, Y, or Z.
+Inline F1 component_V3(V3 v, Axis axis);
+Inline F1 *component_ptr_V3(V3 *v, Axis axis);
+Inline V3 V3_from_F4(F4 v);
+Inline F4 F4_from_V3(V3 v);       // xyz with w = 0 (direction).
+Inline F4 point_F4_from_V3(V3 v); // xyz with w = 1 (point).
+Inline V3 add_V3(V3 a, V3 b);
+Inline V3 sub_V3(V3 a, V3 b);
+Inline V3 mul_V3(V3 a, V3 b);
+Inline V3 div_V3(V3 a, V3 b);
+Inline V3 scale_V3(V3 v, F1 scale);
+Inline V3 add_scaled_V3(V3 a, F1 scale, V3 b); // a + scale*b
+Inline V3 neg_V3(V3 v);
+Inline V3 abs_V3(V3 v);
+Inline F1 dot_V3(V3 a, V3 b);
+Inline F1 length_sq_V3(V3 v);
+Inline F1 length_V3(V3 v);
+Inline V3 normalize_V3(V3 v);
+Inline V3 cross_V3(V3 a, V3 b);
+Inline V3 reflect_V3(V3 v, V3 normal);
+Inline V3 lerp_V3(V3 a, F1 t, V3 b);
+Inline V3 lerp_snap_V3(V3 a, F1 t, V3 b, F1 min_dist);
+Inline V3 safe_inv_dir_V3(V3 v);
+
+////////////////////////////////
+//~ Geometry lanes
+
+Inline Lane_F32 splat_Lane_F32(F1 value);
+Inline Lane_S32 splat_Lane_S32(SI1 value);
+Inline Lane_U32 splat_Lane_U32(I1 value);
+Inline Lane_F32 select_Lane_F32(Lane_Mask mask, Lane_F32 yes, Lane_F32 no);
+Inline Lane_S32 select_Lane_S32(Lane_Mask mask, Lane_S32 yes, Lane_S32 no);
+Inline Lane_U32 select_Lane_U32(Lane_Mask mask, Lane_U32 yes, Lane_U32 no);
+Inline I1 any_Lane_Mask(Lane_Mask mask);
+Inline I1 all_Lane_Mask(Lane_Mask mask);
+Inline Lane_F32 min_Lane_F32(Lane_F32 a, Lane_F32 b);
+Inline Lane_F32 max_Lane_F32(Lane_F32 a, Lane_F32 b);
+Inline Lane_F32 abs_Lane_F32(Lane_F32 v);
+Inline Lane_F32 sqrt_Lane_F32(Lane_F32 v);
+Inline Lane_V3 broadcast_Lane_V3(V3 v);
+// Extraction and insertion require lane < LANE_COUNT; packing reads LANE_COUNT V3s.
+Inline V3 extract_lane_V3(Lane_V3 v, L1 lane);
+Inline void set_lane_V3(Lane_V3 *v, L1 lane, V3 value);
+Inline Lane_V3 pack_Lane_V3(const V3 *values);
+Inline Lane_V3 add_Lane_V3(Lane_V3 a, Lane_V3 b);
+Inline Lane_V3 sub_Lane_V3(Lane_V3 a, Lane_V3 b);
+Inline Lane_V3 scale_Lane_V3(Lane_V3 v, Lane_F32 scale);
+Inline Lane_F32 dot_Lane_V3(Lane_V3 a, Lane_V3 b);
+Inline Lane_V3 cross_Lane_V3(Lane_V3 a, Lane_V3 b);
+Inline Lane_V3 normalize_Lane_V3(Lane_V3 v);
+
+////////////////////////////////
+//~ Fixed four-component SIMD helpers
 
 enum
 {

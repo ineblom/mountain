@@ -13,8 +13,8 @@ struct RT_Material
 typedef struct RT_Camera RT_Camera;
 struct RT_Camera
 {
-  V3 pos;
-  V3 forward;
+  F3 pos;
+  F3 forward;
   F1 vertical_fov;
   F1 aperture_radius;
   F1 focal_distance;

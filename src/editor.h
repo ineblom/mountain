@@ -7,7 +7,7 @@
 typedef struct Camera Camera;
 struct Camera
 {
-  V3 pos;
+  F3 pos;
   F1 yaw;
   F1 pitch;
   F1 fov;
@@ -61,7 +61,7 @@ struct Gizmo_Drag
 {
   F1 applied_amount;
   F2 axis_screen;
-  V3 rotation_direction;
+  F3 rotation_direction;
 };
 
 typedef struct View View;
@@ -86,7 +86,7 @@ struct View
   Gizmo_Drag   gizmo_drag;
   I1           gizmo_has_kind[GIZMO_KIND_COUNT];
   I1           gizmo_visible;
-  V3           gizmo_pos;
+  F3           gizmo_pos;
   F1           gizmo_world_per_pixel;
 
   //- kti: Image result

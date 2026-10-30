@@ -3,7 +3,7 @@
 // Coordinate system:
 // +x right, +y up, +z forwards
 
-Inline V3 sample_cosine_hemisphere(Random_State *rng, V3 n)
+Inline F3 sample_cosine_hemisphere(Random_State *rng, F3 n)
 {
   F1 x, y;
   do
@@ -13,15 +13,15 @@ Inline V3 sample_cosine_hemisphere(Random_State *rng, V3 n)
   } while (x * x + y * y > 1.0f);
 
   F1 z        =  sqrtf(1.0f - x * x - y * y);
-  V3 tangent  =  (abs_F1(n.x) > 0.9f) ? v3(0, 1, 0) : v3(1, 0, 0);
+  F3 tangent  =  (abs_F1(n.x) > 0.9f) ? f3(0, 1, 0) : f3(1, 0, 0);
 
-  tangent = normalize_V3(cross_V3(tangent, n));
+  tangent = normalize_F3(cross_F3(tangent, n));
 
-  V3 bitangent = cross_V3(n, tangent);
+  F3 bitangent = cross_F3(n, tangent);
 
   // local -> world
-  V3 local_xy = add_V3(scale_V3(tangent, x), scale_V3(bitangent, y));
-  return normalize_V3(add_scaled_V3(local_xy, z, n));
+  F3 local_xy = add_F3(scale_F3(tangent, x), scale_F3(bitangent, y));
+  return normalize_F3(add_scaled_F3(local_xy, z, n));
 }
 
 Inline F4 fresnel_schlick(F1 cos_theta, F4 F0)
@@ -52,7 +52,7 @@ Inline F1 G_Smith(F1 NoV, F1 NoL, F1 alpha)
   return G1_GGX(NoV, alpha) * G1_GGX(NoL, alpha);
 }
 
-Inline V3 sample_GGX_half(Random_State *rng, V3 n, float alpha)
+Inline F3 sample_GGX_half(Random_State *rng, F3 n, float alpha)
 {
   F1  r1  =  random_unilateral(rng);
   F1  r2  =  random_unilateral(rng);
@@ -66,21 +66,21 @@ Inline V3 sample_GGX_half(Random_State *rng, V3 n, float alpha)
   F1  z  =  cosTheta;
 
   // build ONB
-  V3 tangent = (abs_F1(n.x) > 0.9f) ? v3(0, 1, 0) : v3(1, 0, 0);
+  F3 tangent = (abs_F1(n.x) > 0.9f) ? f3(0, 1, 0) : f3(1, 0, 0);
 
-  tangent = normalize_V3(cross_V3(tangent, n));
+  tangent = normalize_F3(cross_F3(tangent, n));
 
-  V3 bitangent = cross_V3(n, tangent);
+  F3 bitangent = cross_F3(n, tangent);
 
   // local -> world
-  V3 local_xy = add_V3(scale_V3(tangent, x), scale_V3(bitangent, y));
-  return normalize_V3(add_scaled_V3(local_xy, z, n));
+  F3 local_xy = add_F3(scale_F3(tangent, x), scale_F3(bitangent, y));
+  return normalize_F3(add_scaled_F3(local_xy, z, n));
 }
 
-Inline F1 pdf_GGX(V3 n, V3 h, V3 v, F1 alpha)
+Inline F1 pdf_GGX(F3 n, F3 h, F3 v, F1 alpha)
 {
-  F1  NoH     =  saturate_F1(dot_V3(n, h));
-  F1  VoH     =  saturate_F1(dot_V3(v, h));
+  F1  NoH     =  saturate_F1(dot_F3(n, h));
+  F1  VoH     =  saturate_F1(dot_F3(v, h));
   F1  D       =  D_GGX(NoH, alpha);
   F1  result  =  D * NoH / (4.0f * VoH);
 
@@ -179,44 +179,44 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
       RT_Material  material     =  scene.materials[material_base_index + primitive_index];
 
-      V3 next_origin = add_scaled_V3(ray.pos, hit_distance, ray.dir);
-      V3 next_normal = {0};
+      F3 next_origin = add_scaled_F3(ray.pos, hit_distance, ray.dir);
+      F3 next_normal = {0};
 
       switch (hit_kind)
       {
         case SHAPE_KIND__SPHERE:
         {
           Lane_Sphere spheres = scene.spheres[hit_packet_index];
-          V3 pos = extract_lane_V3(spheres.pos, hit_lane);
+          F3 pos = extract_lane_F3(spheres.pos, hit_lane);
 
-          next_normal = normalize_V3(sub_V3(next_origin, pos));
+          next_normal = normalize_F3(sub_F3(next_origin, pos));
         } break;
 
         case SHAPE_KIND__PLANE:
         {
           Lane_Plane planes = scene.planes[hit_packet_index];
-          V3 normal = extract_lane_V3(planes.normal, hit_lane);
+          F3 normal = extract_lane_F3(planes.normal, hit_lane);
 
-          next_normal = dot_V3(normal, ray.dir) < 0.0f ? normal : neg_V3(normal);
+          next_normal = dot_F3(normal, ray.dir) < 0.0f ? normal : neg_F3(normal);
         } break;
 
         case SHAPE_KIND__BOX:
         {
           Lane_Box boxes = scene.boxes[hit_packet_index];
-          V3 min = extract_lane_V3(boxes.min, hit_lane);
-          V3 max = extract_lane_V3(boxes.max, hit_lane);
+          F3 min = extract_lane_F3(boxes.min, hit_lane);
+          F3 max = extract_lane_F3(boxes.max, hit_lane);
 
-          V3  center     =  scale_V3(add_V3(min, max), 0.5f);
-          V3  local_hit  =  sub_V3(next_origin, center);
-          V3  box_size   =  sub_V3(max, min);
-          V3  d          =  div_V3(abs_V3(local_hit), scale_V3(box_size, 0.5f));
+          F3  center     =  scale_F3(add_F3(min, max), 0.5f);
+          F3  local_hit  =  sub_F3(next_origin, center);
+          F3  box_size   =  sub_F3(max, min);
+          F3  d          =  div_F3(abs_F3(local_hit), scale_F3(box_size, 0.5f));
 
           if (d.x > d.y && d.x > d.z)
-            next_normal = scale_V3(v3(1, 0, 0), sign_F1(local_hit.x));
+            next_normal = scale_F3(f3(1, 0, 0), sign_F1(local_hit.x));
           else if (d.y > d.z)
-            next_normal = scale_V3(v3(0, 1, 0), sign_F1(local_hit.y));
+            next_normal = scale_F3(f3(0, 1, 0), sign_F1(local_hit.y));
           else
-            next_normal = scale_V3(v3(0, 0, 1), sign_F1(local_hit.z));
+            next_normal = scale_F3(f3(0, 0, 1), sign_F1(local_hit.z));
         } break;
 
         default: break;
@@ -232,14 +232,14 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
       if (random_unilateral(rng) < specular_prob)
       {
-        V3  v  =  neg_V3(ray.dir);
-        V3  h  =  sample_GGX_half(rng, next_normal, alpha);
-        V3  l  =  reflect_V3(neg_V3(v), h);
+        F3  v  =  neg_F3(ray.dir);
+        F3  h  =  sample_GGX_half(rng, next_normal, alpha);
+        F3  l  =  reflect_F3(neg_F3(v), h);
 
-        F1  NoL  =  saturate_F1(dot_V3(next_normal, l));
-        F1  NoV  =  saturate_F1(dot_V3(next_normal, v));
-        F1  NoH  =  saturate_F1(dot_V3(next_normal, h));
-        F1  VoH  =  saturate_F1(dot_V3(v, h));
+        F1  NoL  =  saturate_F1(dot_F3(next_normal, l));
+        F1  NoV  =  saturate_F1(dot_F3(next_normal, v));
+        F1  NoH  =  saturate_F1(dot_F3(next_normal, h));
+        F1  VoH  =  saturate_F1(dot_F3(v, h));
 
         if (NoL > 0.0f)
         {
@@ -269,16 +269,16 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
       }
       else
       {
-        V3  v    =  neg_V3(ray.dir);
-        V3  l    =  sample_cosine_hemisphere(rng, next_normal);
-        F1  NoL  =  saturate_F1(dot_V3(next_normal, l));
+        F3  v    =  neg_F3(ray.dir);
+        F3  l    =  sample_cosine_hemisphere(rng, next_normal);
+        F1  NoL  =  saturate_F1(dot_F3(next_normal, l));
 
         if (NoL > 0.0f)
         {
-          V3  h    =  normalize_V3(add_V3(v, l));
-          F1  NoV  =  saturate_F1(dot_V3(next_normal, v));
-          F1  NoH  =  saturate_F1(dot_V3(next_normal, h));
-          F1  VoH  =  saturate_F1(dot_V3(v, h));
+          F3  h    =  normalize_F3(add_F3(v, l));
+          F1  NoV  =  saturate_F1(dot_F3(next_normal, v));
+          F1  NoH  =  saturate_F1(dot_F3(next_normal, h));
+          F1  VoH  =  saturate_F1(dot_F3(v, h));
 
           F1  D  =  D_GGX(NoH, alpha);
           F1  G  =  G_Smith(NoV, NoL, alpha);
@@ -304,8 +304,8 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         }
       }
 
-      ray.inv_dir  =  safe_inv_dir_V3(ray.dir);
-      ray.pos      =  add_scaled_V3(next_origin, min_hit_distance, next_normal);
+      ray.inv_dir  =  safe_inv_dir_F3(ray.dir);
+      ray.pos      =  add_scaled_F3(next_origin, min_hit_distance, next_normal);
     }
     else
     {
@@ -322,17 +322,17 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
 Internal void rt_trace_scene(RT_Scene scene, Image output, Range pixel_range)
 {
-  V3  camera_p        =  scene.camera.pos;
-  V3  camera_forward  =  normalize_V3(scene.camera.forward);
-  V3  world_up        =  v3(0, 1, 0);
-  V3  camera_right    =  normalize_V3(cross_V3(world_up, camera_forward));
-  V3  camera_up       =  normalize_V3(cross_V3(camera_forward, camera_right));
+  F3  camera_p        =  scene.camera.pos;
+  F3  camera_forward  =  normalize_F3(scene.camera.forward);
+  F3  world_up        =  f3(0, 1, 0);
+  F3  camera_right    =  normalize_F3(cross_F3(world_up, camera_forward));
+  F3  camera_up       =  normalize_F3(cross_F3(camera_forward, camera_right));
 
   F1  film_dist    =  1.0f;
   F1  aspect       =  (F1)output.width / (F1)output.height;
   F1  half_film_h  =  tan_F1(scene.camera.vertical_fov * 0.5f) * film_dist;
   F1  half_film_w  =  aspect * half_film_h;
-  V3  film_center  =  add_scaled_V3(camera_p, film_dist, camera_forward);
+  F3  film_center  =  add_scaled_F3(camera_p, film_dist, camera_forward);
 
   F4 *pixels = (F4 *)output.pixels;
 
@@ -357,20 +357,20 @@ Internal void rt_trace_scene(RT_Scene scene, Image output, Range pixel_range)
       F1  sample_y  =  (F1)y + random_unilateral(&rng);
       F1  film_x    =  -1.0f + 2.0f * sample_x / (F1)output.width;
       F1  film_y    =  -1.0f + 2.0f * sample_y / (F1)output.height;
-      V3 film_p = add_scaled_V3(film_center, film_x * half_film_w, camera_right);
-      film_p = add_scaled_V3(film_p, film_y * half_film_h, camera_up);
+      F3 film_p = add_scaled_F3(film_center, film_x * half_film_w, camera_right);
+      film_p = add_scaled_F3(film_p, film_y * half_film_h, camera_up);
 
       F1  r                =  scene.camera.aperture_radius * sqrt_F1(random_unilateral(&rng));
       F1  theta            =  2.0f * PI * random_unilateral(&rng);
-      V3  aperture_offset  =  add_V3(scale_V3(camera_right, r * cos_F1(theta)), scale_V3(camera_up, r * sin_F1(theta)));
+      F3  aperture_offset  =  add_F3(scale_F3(camera_right, r * cos_F1(theta)), scale_F3(camera_up, r * sin_F1(theta)));
 
-      ray.pos = add_V3(camera_p, aperture_offset);
+      ray.pos = add_F3(camera_p, aperture_offset);
 
-      V3 focus_direction = normalize_V3(sub_V3(film_p, camera_p));
-      V3 focus_point = add_scaled_V3(camera_p, scene.camera.focal_distance, focus_direction);
+      F3 focus_direction = normalize_F3(sub_F3(film_p, camera_p));
+      F3 focus_point = add_scaled_F3(camera_p, scene.camera.focal_distance, focus_direction);
 
-      ray.dir     = normalize_V3(sub_V3(focus_point, ray.pos));
-      ray.inv_dir = safe_inv_dir_V3(ray.dir);
+      ray.dir     = normalize_F3(sub_F3(focus_point, ray.pos));
+      ray.inv_dir = safe_inv_dir_F3(ray.dir);
 
       color += ray_cast(scene, &rng, ray) * contrib;
     }

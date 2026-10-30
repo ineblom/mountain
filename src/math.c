@@ -97,71 +97,71 @@ Inline F2 F2_from_F4(F4 v)
 }
 
 ////////////////////////////////
-//~ kti: V3
+//~ kti: F3
 
-Inline V3 v3(F1 x, F1 y, F1 z)
+Inline F3 f3(F1 x, F1 y, F1 z)
 {
-  return (V3){.x = x, .y = y, .z = z};
+  return (F3){.x = x, .y = y, .z = z};
 }
 
-Inline F1 component_V3(V3 v, Axis axis)
+Inline F1 component_F3(F3 v, Axis axis)
 {
   return axis == AXIS__X ? v.x : axis == AXIS__Y ? v.y : v.z;
 }
 
-Inline F1 *component_ptr_V3(V3 *v, Axis axis)
+Inline F1 *component_ptr_F3(F3 *v, Axis axis)
 {
   return axis == AXIS__X ? &v->x : axis == AXIS__Y ? &v->y : &v->z;
 }
 
-Inline V3 V3_from_F4(F4 v)
+Inline F3 F3_from_F4(F4 v)
 {
-  return v3(v[0], v[1], v[2]);
+  return f3(v[0], v[1], v[2]);
 }
 
-Inline V3 add_V3(V3 a, V3 b) { return v3(a.x+b.x, a.y+b.y, a.z+b.z); }
-Inline V3 sub_V3(V3 a, V3 b) { return v3(a.x-b.x, a.y-b.y, a.z-b.z); }
-Inline V3 mul_V3(V3 a, V3 b) { return v3(a.x*b.x, a.y*b.y, a.z*b.z); }
-Inline V3 div_V3(V3 a, V3 b) { return v3(a.x/b.x, a.y/b.y, a.z/b.z); }
-Inline V3 scale_V3(V3 v, F1 s) { return v3(v.x*s, v.y*s, v.z*s); }
-Inline V3 add_scaled_V3(V3 a, F1 s, V3 b) { return add_V3(a, scale_V3(b, s)); }
-Inline V3 neg_V3(V3 v) { return scale_V3(v, -1.0f); }
-Inline V3 abs_V3(V3 v) { return v3(abs_F1(v.x), abs_F1(v.y), abs_F1(v.z)); }
+Inline F3 add_F3(F3 a, F3 b) { return f3(a.x+b.x, a.y+b.y, a.z+b.z); }
+Inline F3 sub_F3(F3 a, F3 b) { return f3(a.x-b.x, a.y-b.y, a.z-b.z); }
+Inline F3 mul_F3(F3 a, F3 b) { return f3(a.x*b.x, a.y*b.y, a.z*b.z); }
+Inline F3 div_F3(F3 a, F3 b) { return f3(a.x/b.x, a.y/b.y, a.z/b.z); }
+Inline F3 scale_F3(F3 v, F1 s) { return f3(v.x*s, v.y*s, v.z*s); }
+Inline F3 add_scaled_F3(F3 a, F1 s, F3 b) { return add_F3(a, scale_F3(b, s)); }
+Inline F3 neg_F3(F3 v) { return scale_F3(v, -1.0f); }
+Inline F3 abs_F3(F3 v) { return f3(abs_F1(v.x), abs_F1(v.y), abs_F1(v.z)); }
 
-Inline F1 dot_V3(V3 a, V3 b)
+Inline F1 dot_F3(F3 a, F3 b)
 {
   return a.x*b.x + a.y*b.y + a.z*b.z;
 }
 
-Inline F1 length_sq_V3(V3 v) { return dot_V3(v, v); }
-Inline F1 length_V3(V3 v) { return sqrt_F1(length_sq_V3(v)); }
-Inline V3 normalize_V3(V3 v) { return scale_V3(v, 1.0f/length_V3(v)); }
+Inline F1 length_sq_F3(F3 v) { return dot_F3(v, v); }
+Inline F1 length_F3(F3 v) { return sqrt_F1(length_sq_F3(v)); }
+Inline F3 normalize_F3(F3 v) { return scale_F3(v, 1.0f/length_F3(v)); }
 
-Inline V3 cross_V3(V3 a, V3 b)
+Inline F3 cross_F3(F3 a, F3 b)
 {
-  return v3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x);
+  return f3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x);
 }
 
-Inline V3 reflect_V3(V3 v, V3 normal)
+Inline F3 reflect_F3(F3 v, F3 normal)
 {
-  return sub_V3(v, scale_V3(normal, 2.0f*dot_V3(v, normal)));
+  return sub_F3(v, scale_F3(normal, 2.0f*dot_F3(v, normal)));
 }
 
-Inline V3 lerp_V3(V3 a, F1 t, V3 b)
+Inline F3 lerp_F3(F3 a, F1 t, F3 b)
 {
-  return add_V3(scale_V3(a, 1.0f-t), scale_V3(b, t));
+  return add_F3(scale_F3(a, 1.0f-t), scale_F3(b, t));
 }
 
-Inline V3 lerp_snap_V3(V3 a, F1 t, V3 b, F1 min_dist)
+Inline F3 lerp_snap_F3(F3 a, F1 t, F3 b, F1 min_dist)
 {
-  V3 result = lerp_V3(a, t, b);
-  if (length_sq_V3(sub_V3(a, b)) < Square(min_dist)) result = b;
+  F3 result = lerp_F3(a, t, b);
+  if (length_sq_F3(sub_F3(a, b)) < Square(min_dist)) result = b;
   return result;
 }
 
-Inline V3 safe_inv_dir_V3(V3 v)
+Inline F3 safe_inv_dir_F3(F3 v)
 {
-  return v3(1.0f/(v.x == 0.0f ? 1.0f : v.x),
+  return f3(1.0f/(v.x == 0.0f ? 1.0f : v.x),
             1.0f/(v.y == 0.0f ? 1.0f : v.y),
             1.0f/(v.z == 0.0f ? 1.0f : v.z));
 }
@@ -224,13 +224,13 @@ Inline F4 min_F4(F4 a, F4 b)
 #endif
 }
 
-Inline F4 F4_from_V3(V3 v)
+Inline F4 F4_from_F3(F3 v)
 {
   F4 result = {v.x, v.y, v.z, 0.0f};
   return result;
 }
 
-Inline F4 point_F4_from_V3(V3 v)
+Inline F4 point_F4_from_F3(F3 v)
 {
   return (F4){v.x, v.y, v.z, 1.0f};
 }
@@ -377,43 +377,43 @@ Inline Lane_F32 sqrt_Lane_F32(Lane_F32 v)
 #endif
 }
 
-Inline Lane_V3 broadcast_Lane_V3(V3 v)
+Inline Lane_F3 broadcast_Lane_F3(F3 v)
 {
-  return (Lane_V3){splat_Lane_F32(v.x), splat_Lane_F32(v.y), splat_Lane_F32(v.z)};
+  return (Lane_F3){splat_Lane_F32(v.x), splat_Lane_F32(v.y), splat_Lane_F32(v.z)};
 }
 
-Inline V3 extract_lane_V3(Lane_V3 v, L1 lane)
+Inline F3 extract_lane_F3(Lane_F3 v, L1 lane)
 {
-  return v3(v.x[lane], v.y[lane], v.z[lane]);
+  return f3(v.x[lane], v.y[lane], v.z[lane]);
 }
 
-Inline void set_lane_V3(Lane_V3 *v, L1 lane, V3 value)
+Inline void set_lane_F3(Lane_F3 *v, L1 lane, F3 value)
 {
   v->x[lane] = value.x;
   v->y[lane] = value.y;
   v->z[lane] = value.z;
 }
 
-Inline Lane_V3 pack_Lane_V3(const V3 *values)
+Inline Lane_F3 pack_Lane_F3(const F3 *values)
 {
-  Lane_V3 result = {0};
-  for (L1 i = 0; i < LANE_COUNT; i += 1) set_lane_V3(&result, i, values[i]);
+  Lane_F3 result = {0};
+  for (L1 i = 0; i < LANE_COUNT; i += 1) set_lane_F3(&result, i, values[i]);
   return result;
 }
 
-Inline Lane_V3 add_Lane_V3(Lane_V3 a, Lane_V3 b) { return (Lane_V3){a.x+b.x, a.y+b.y, a.z+b.z}; }
-Inline Lane_V3 sub_Lane_V3(Lane_V3 a, Lane_V3 b) { return (Lane_V3){a.x-b.x, a.y-b.y, a.z-b.z}; }
-Inline Lane_V3 scale_Lane_V3(Lane_V3 v, Lane_F32 s) { return (Lane_V3){v.x*s, v.y*s, v.z*s}; }
-Inline Lane_F32 dot_Lane_V3(Lane_V3 a, Lane_V3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+Inline Lane_F3 add_Lane_F3(Lane_F3 a, Lane_F3 b) { return (Lane_F3){a.x+b.x, a.y+b.y, a.z+b.z}; }
+Inline Lane_F3 sub_Lane_F3(Lane_F3 a, Lane_F3 b) { return (Lane_F3){a.x-b.x, a.y-b.y, a.z-b.z}; }
+Inline Lane_F3 scale_Lane_F3(Lane_F3 v, Lane_F32 s) { return (Lane_F3){v.x*s, v.y*s, v.z*s}; }
+Inline Lane_F32 dot_Lane_F3(Lane_F3 a, Lane_F3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 
-Inline Lane_V3 cross_Lane_V3(Lane_V3 a, Lane_V3 b)
+Inline Lane_F3 cross_Lane_F3(Lane_F3 a, Lane_F3 b)
 {
-  return (Lane_V3){a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x};
+  return (Lane_F3){a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x};
 }
 
-Inline Lane_V3 normalize_Lane_V3(Lane_V3 v)
+Inline Lane_F3 normalize_Lane_F3(Lane_F3 v)
 {
-  return scale_Lane_V3(v, 1.0f/sqrt_Lane_F32(dot_Lane_V3(v, v)));
+  return scale_Lane_F3(v, 1.0f/sqrt_Lane_F32(dot_Lane_F3(v, v)));
 }
 
 ////////////////////////////////
@@ -563,7 +563,7 @@ Inline F4x4 mul_F4x4(F4x4 a, F4x4 b)
   return result;
 }
 
-Inline F4x4 translate_F4x4(V3 p)
+Inline F4x4 translate_F4x4(F3 p)
 {
   F4x4 result = identity_F4x4();
 
@@ -574,7 +574,7 @@ Inline F4x4 translate_F4x4(V3 p)
   return result;
 }
 
-Inline F4x4 scale_F4x4(V3 s)
+Inline F4x4 scale_F4x4(F3 s)
 {
   F4x4 result = identity_F4x4();
 
@@ -658,14 +658,14 @@ Inline F4 mul_F4x4_F4(F4x4 m, F4 v)
   return result;
 }
 
-Inline V3 transform_direction_F4x4(F4x4 m, V3 direction)
+Inline F3 transform_direction_F4x4(F4x4 m, F3 direction)
 {
-  return V3_from_F4(mul_F4x4_F4(m, F4_from_V3(direction)));
+  return F3_from_F4(mul_F4x4_F4(m, F4_from_F3(direction)));
 }
 
-Inline F4 project_point_F4x4(F4x4 m, V3 point)
+Inline F4 project_point_F4x4(F4x4 m, F3 point)
 {
-  return mul_F4x4_F4(m, point_F4_from_V3(point));
+  return mul_F4x4_F4(m, point_F4_from_F3(point));
 }
 
 ////////////////////////////////
@@ -693,12 +693,12 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane)
 {
   F1  min_t         =  0.001f;
   F1  result        =  F1_MAX;
-  V3  plane_normal  =  plane.normal;
-  F1  denom         =  dot_V3(plane_normal, ray.dir);
+  F3  plane_normal  =  plane.normal;
+  F1  denom         =  dot_F3(plane_normal, ray.dir);
 
   if (abs_F1(denom) > 0.0001f)
   {
-    F1 t = (-plane.d - dot_V3(plane_normal, ray.pos)) / denom;
+    F1 t = (-plane.d - dot_F3(plane_normal, ray.pos)) / denom;
 
     if (t > min_t)
     {
@@ -713,12 +713,12 @@ Internal Lane_F32 ray_lane_plane_intersect(Ray ray, Lane_Plane planes)
 {
   F1 min_t = 0.001f;
 
-  Lane_V3 ray_pos = broadcast_Lane_V3(ray.pos);
-  Lane_V3 ray_dir = broadcast_Lane_V3(ray.dir);
+  Lane_F3 ray_pos = broadcast_Lane_F3(ray.pos);
+  Lane_F3 ray_dir = broadcast_Lane_F3(ray.dir);
 
-  Lane_F32 denom = dot_Lane_V3(planes.normal, ray_dir);
+  Lane_F32 denom = dot_Lane_F3(planes.normal, ray_dir);
 
-  Lane_F32 t = (-planes.d - dot_Lane_V3(planes.normal, ray_pos)) / denom;
+  Lane_F32 t = (-planes.d - dot_Lane_F3(planes.normal, ray_pos)) / denom;
 
   Lane_Mask valid  = (abs_Lane_F32(denom) > 0.0001f) & (t > min_t);
   Lane_F32  result = select_Lane_F32(valid, t, splat_Lane_F32(F1_MAX));
@@ -730,10 +730,10 @@ Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
 {
   F1  min_t                    =  0.001f;
   F1  result                   =  F1_MAX;
-  V3  sphere_pos               =  sphere.pos;
-  V3  sphere_relative_ray_pos  =  sub_V3(ray.pos, sphere_pos);
-  F1  half_b                   =  dot_V3(ray.dir, sphere_relative_ray_pos);
-  F1  c                        =  dot_V3(sphere_relative_ray_pos, sphere_relative_ray_pos) - Square(sphere.radius);
+  F3  sphere_pos               =  sphere.pos;
+  F3  sphere_relative_ray_pos  =  sub_F3(ray.pos, sphere_pos);
+  F1  half_b                   =  dot_F3(ray.dir, sphere_relative_ray_pos);
+  F1  c                        =  dot_F3(sphere_relative_ray_pos, sphere_relative_ray_pos) - Square(sphere.radius);
   F1  discriminant             =  Square(half_b) - c;
 
   if (discriminant > 0.0f)
@@ -758,12 +758,12 @@ Internal Lane_F32 ray_lane_sphere_intersect(Ray ray, Lane_Sphere spheres)
 {
   F1 min_t = 0.001f;
 
-  Lane_V3 ray_pos = broadcast_Lane_V3(ray.pos);
-  Lane_V3 ray_dir = broadcast_Lane_V3(ray.dir);
-  Lane_V3 rel     = sub_Lane_V3(ray_pos, spheres.pos);
+  Lane_F3 ray_pos = broadcast_Lane_F3(ray.pos);
+  Lane_F3 ray_dir = broadcast_Lane_F3(ray.dir);
+  Lane_F3 rel     = sub_Lane_F3(ray_pos, spheres.pos);
 
-  Lane_F32 half_b       = dot_Lane_V3(ray_dir, rel);
-  Lane_F32 c            = dot_Lane_V3(rel, rel) - Square(spheres.radius);
+  Lane_F32 half_b       = dot_Lane_F3(ray_dir, rel);
+  Lane_F32 c            = dot_Lane_F3(rel, rel) - Square(spheres.radius);
   Lane_F32 discriminant = Square(half_b) - c;
 
   Lane_F32 root_term = sqrt_Lane_F32(max_Lane_F32(discriminant, splat_Lane_F32(0.0f)));
@@ -784,17 +784,17 @@ Internal Lane_F32 ray_lane_sphere_intersect(Ray ray, Lane_Sphere spheres)
 Internal F1 ray_box_intersect(Ray ray, Box box)
 {
   F1  min_t     =  0.001f;
-  V3  aabb_min  =  box.min;
-  V3  aabb_max  =  box.max;
+  F3  aabb_min  =  box.min;
+  F3  aabb_max  =  box.max;
   F1  t_min     =  -F1_MAX;
   F1  t_max     =  F1_MAX;
 
   for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
   {
-    F1 origin = component_V3(ray.pos, axis);
-    F1 direction = component_V3(ray.dir, axis);
-    F1 low = component_V3(aabb_min, axis);
-    F1 high = component_V3(aabb_max, axis);
+    F1 origin = component_F3(ray.pos, axis);
+    F1 direction = component_F3(ray.dir, axis);
+    F1 low = component_F3(aabb_min, axis);
+    F1 high = component_F3(aabb_max, axis);
 
     if (direction == 0.0f)
     {
@@ -804,7 +804,7 @@ Internal F1 ray_box_intersect(Ray ray, Box box)
       continue;
     }
 
-    F1 inv_dir = component_V3(ray.inv_dir, axis);
+    F1 inv_dir = component_F3(ray.inv_dir, axis);
     F1 near_t = (low - origin) * inv_dir;
     F1 far_t  = (high - origin) * inv_dir;
 

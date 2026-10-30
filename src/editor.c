@@ -1038,7 +1038,7 @@ Internal void view_set_kind(View *view, View_Kind kind)
   if (kind == VIEW_KIND__VIEWPORT)
   {
     view->camera = (Camera){
-      .pos     =  v3(0.0f, 1.0f, -7.0f),
+      .pos     =  f3(0.0f, 1.0f, -7.0f),
       .fov     =  70.0f * PI / 180.0f,
       .near_z  =  0.1f,
       .far_z   =  100.0f,
@@ -1285,8 +1285,8 @@ Internal Entity *entity_create(L1 flags, String8 name)
   DLLPushBack(state->first_entity, state->last_entity, entity);
 
   entity->flags                  =  flags;
-  entity->size                   =  v3(1.0f, 1.0f, 1.0f);
-  entity->direction              =  v3(0.0f, 1.0f, 0.0f);
+  entity->size                   =  f3(1.0f, 1.0f, 1.0f);
+  entity->direction              =  f3(0.0f, 1.0f, 0.0f);
   entity->sphere_diameter        =  1.0f;
   entity->name_len               =  Min(name.len, sizeof(entity->name));
   entity->material.base_color    =  (F4){0.9f, 0.9f, 0.9f, 1.0f};
@@ -1329,16 +1329,16 @@ Internal Shape shape_from_entity(Entity *entity)
 
     case SHAPE_KIND__BOX:
     {
-      result.box.min  =  sub_V3(entity->pos, scale_V3(entity->size, 0.5f));
-      result.box.max  =  add_V3(entity->pos, scale_V3(entity->size, 0.5f));
+      result.box.min  =  sub_F3(entity->pos, scale_F3(entity->size, 0.5f));
+      result.box.max  =  add_F3(entity->pos, scale_F3(entity->size, 0.5f));
     } break;
 
     case SHAPE_KIND__PLANE:
     {
-      V3 normal = normalize_V3(entity->direction);
+      F3 normal = normalize_F3(entity->direction);
 
       result.plane.normal  =  normal;
-      result.plane.d       =  -dot_V3(normal, entity->pos);
+      result.plane.d       =  -dot_F3(normal, entity->pos);
     } break;
 
     default: break;
@@ -1347,13 +1347,13 @@ Internal Shape shape_from_entity(Entity *entity)
   return result;
 }
 
-Internal V3 entity_mesh_size(Entity *entity)
+Internal F3 entity_mesh_size(Entity *entity)
 {
-  V3 result = entity->size;
+  F3 result = entity->size;
 
   if (entity->shape_kind == SHAPE_KIND__SPHERE)
   {
-    result = v3(entity->sphere_diameter, entity->sphere_diameter, entity->sphere_diameter);
+    result = f3(entity->sphere_diameter, entity->sphere_diameter, entity->sphere_diameter);
   }
 
   return result;
@@ -1394,7 +1394,7 @@ Internal F4x4 camera_view_projection(Camera camera, F1 width, F1 height)
 {
   F1    aspect      =  width / height;
   F4x4  projection  =  perspective_fov_F4x4(camera.fov, aspect, camera.near_z, camera.far_z);
-  F4x4  view        =  translate_F4x4(neg_V3(camera.pos));
+  F4x4  view        =  translate_F4x4(neg_F3(camera.pos));
 
   view  =  mul_F4x4(view, rotate_y_F4x4(-camera.yaw));
   view  =  mul_F4x4(view, rotate_x_F4x4(-camera.pitch));
@@ -1404,30 +1404,30 @@ Internal F4x4 camera_view_projection(Camera camera, F1 width, F1 height)
   return view_projection;
 }
 
-Internal F4x4 line_transform_F4x4(V3 begin, V3 direction, F1 thickness)
+Internal F4x4 line_transform_F4x4(F3 begin, F3 direction, F1 thickness)
 {
   F4x4  result          =  identity_F4x4();
-  V3    line_axis       =  direction;
-  V3    line_direction  =  normalize_V3(line_axis);
-  V3    up              =  v3(0.0f, 1.0f, 0.0f);
-  V3    right           =  v3(1.0f, 0.0f, 0.0f);
-  V3    reference_axis  =  (abs_F1(line_direction.y) < 0.99f) ? up : right;
-  V3    side_axis       =  normalize_V3(cross_V3(line_direction, reference_axis));
-  V3    up_axis         =  normalize_V3(cross_V3(side_axis, line_direction));
+  F3    line_axis       =  direction;
+  F3    line_direction  =  normalize_F3(line_axis);
+  F3    up              =  f3(0.0f, 1.0f, 0.0f);
+  F3    right           =  f3(1.0f, 0.0f, 0.0f);
+  F3    reference_axis  =  (abs_F1(line_direction.y) < 0.99f) ? up : right;
+  F3    side_axis       =  normalize_F3(cross_F3(line_direction, reference_axis));
+  F3    up_axis         =  normalize_F3(cross_F3(side_axis, line_direction));
 
-  result.r[0]  =  F4_from_V3(line_axis);
-  result.r[1]  =  F4_from_V3(scale_V3(side_axis, thickness));
-  result.r[2]  =  F4_from_V3(scale_V3(up_axis, thickness));
-  result.r[3]  =  point_F4_from_V3(add_scaled_V3(begin, 0.5f, line_axis));
+  result.r[0]  =  F4_from_F3(line_axis);
+  result.r[1]  =  F4_from_F3(scale_F3(side_axis, thickness));
+  result.r[2]  =  F4_from_F3(scale_F3(up_axis, thickness));
+  result.r[3]  =  point_F4_from_F3(add_scaled_F3(begin, 0.5f, line_axis));
 
   return result;
 }
 
-Internal void plane_axes_from_normal(V3 normal, V3 *tangent_out, V3 *bitangent_out)
+Internal void plane_axes_from_normal(F3 normal, F3 *tangent_out, F3 *bitangent_out)
 {
-  V3  reference_axis  =  abs_F1(normal.y) < 0.99f ? v3(0.0f, 1.0f, 0.0f) : v3(0.0f, 0.0f, 1.0f);
-  V3  tangent         =  normalize_V3(cross_V3(normal, reference_axis));
-  V3  bitangent       =  cross_V3(tangent, normal);
+  F3  reference_axis  =  abs_F1(normal.y) < 0.99f ? f3(0.0f, 1.0f, 0.0f) : f3(0.0f, 0.0f, 1.0f);
+  F3  tangent         =  normalize_F3(cross_F3(normal, reference_axis));
+  F3  bitangent       =  cross_F3(tangent, normal);
 
   tangent_out[0]    =  tangent;
   bitangent_out[0]  =  bitangent;
@@ -1436,19 +1436,19 @@ Internal void plane_axes_from_normal(V3 normal, V3 *tangent_out, V3 *bitangent_o
 Internal F4x4 plane_transform_F4x4(Entity *entity, Camera camera)
 {
   F4x4  result           =  identity_F4x4();
-  V3    normal           =  normalize_V3(entity->direction);
-  V3    camera_to_plane  =  sub_V3(camera.pos, entity->pos);
-  V3    preview_center   =  sub_V3(camera.pos, scale_V3(normal, dot_V3(normal, camera_to_plane)));
+  F3    normal           =  normalize_F3(entity->direction);
+  F3    camera_to_plane  =  sub_F3(camera.pos, entity->pos);
+  F3    preview_center   =  sub_F3(camera.pos, scale_F3(normal, dot_F3(normal, camera_to_plane)));
   F1    preview_size     =  2.0f * camera.far_z;
 
-  V3 tangent;
-  V3 bitangent;
+  F3 tangent;
+  F3 bitangent;
   plane_axes_from_normal(normal, &tangent, &bitangent);
 
-  result.r[0]  =  F4_from_V3(scale_V3(tangent, preview_size));
-  result.r[1]  =  F4_from_V3(normal);
-  result.r[2]  =  F4_from_V3(scale_V3(bitangent, preview_size));
-  result.r[3]  =  point_F4_from_V3(preview_center);
+  result.r[0]  =  F4_from_F3(scale_F3(tangent, preview_size));
+  result.r[1]  =  F4_from_F3(normal);
+  result.r[2]  =  F4_from_F3(scale_F3(bitangent, preview_size));
+  result.r[3]  =  point_F4_from_F3(preview_center);
 
   return result;
 }
@@ -1465,7 +1465,7 @@ Internal F1 *gizmo_scale_target(Entity *entity, Axis axis)
 {
   if (entity->flags & ENTITY_FLAG__SHAPE)
   {
-    if (entity->shape_kind == SHAPE_KIND__BOX)    return component_ptr_V3(&entity->size, axis);
+    if (entity->shape_kind == SHAPE_KIND__BOX)    return component_ptr_F3(&entity->size, axis);
     if (entity->shape_kind == SHAPE_KIND__SPHERE) return &entity->sphere_diameter;
   }
   return 0;
@@ -1480,7 +1480,7 @@ Internal I1 gizmo_can_rotate(Entity *entity)
 //- kti: Recompute pivot, scale and which handle kinds the selection supports.
 Internal void gizmo_update(View *view, F4 rect)
 {
-  V3 position_sum   = {0};
+  F3 position_sum   = {0};
   L1 selected_count = 0;
 
   MemoryZeroArray(view->gizmo_has_kind);
@@ -1489,7 +1489,7 @@ Internal void gizmo_update(View *view, F4 rect)
   {
     if (!(entity->flags & ENTITY_FLAG__SELECTED)) continue;
 
-    position_sum    = add_V3(position_sum, entity->pos);
+    position_sum    = add_F3(position_sum, entity->pos);
     selected_count += 1;
 
     view->gizmo_has_kind[GIZMO_KIND__TRANSLATE]  = 1;
@@ -1501,7 +1501,7 @@ Internal void gizmo_update(View *view, F4 rect)
 
   if (selected_count == 0 || rect[2] <= 0.0f || rect[3] <= 0.0f) return;
 
-  view->gizmo_pos = scale_V3(position_sum, 1.0f/(F1)selected_count);
+  view->gizmo_pos = scale_F3(position_sum, 1.0f/(F1)selected_count);
 
   F4x4 view_projection = camera_view_projection(view->camera, rect[2], rect[3]);
   F4   pivot_clip      = project_point_F4x4(view_projection, view->gizmo_pos);
@@ -1510,21 +1510,21 @@ Internal void gizmo_update(View *view, F4 rect)
   view->gizmo_world_per_pixel = 2.0f * pivot_clip[3] * tan_F1(0.5f * view->camera.fov) / rect[3];
 }
 
-Internal V3 gizmo_ring_point(View *view, Axis axis, L1 index)
+Internal F3 gizmo_ring_point(View *view, Axis axis, L1 index)
 {
-  V3 basis_a = {0};
-  V3 basis_b = {0};
+  F3 basis_a = {0};
+  F3 basis_b = {0};
   F1 angle   = 2.0f * PI * (F1)index / (F1)GIZMO_ROTATION_SEGMENT_COUNT;
   F1 radius  = GIZMO_ROTATION_RADIUS_PX * view->gizmo_world_per_pixel;
 
-  *component_ptr_V3(&basis_a, (axis + 1) % AXIS3_COUNT) = 1.0f;
-  *component_ptr_V3(&basis_b, (axis + 2) % AXIS3_COUNT) = 1.0f;
+  *component_ptr_F3(&basis_a, (axis + 1) % AXIS3_COUNT) = 1.0f;
+  *component_ptr_F3(&basis_b, (axis + 2) % AXIS3_COUNT) = 1.0f;
 
-  V3 radial_direction = add_V3(scale_V3(basis_a, cos_F1(angle)), scale_V3(basis_b, sin_F1(angle)));
-  return add_scaled_V3(view->gizmo_pos, radius, radial_direction);
+  F3 radial_direction = add_F3(scale_F3(basis_a, cos_F1(angle)), scale_F3(basis_b, sin_F1(angle)));
+  return add_scaled_F3(view->gizmo_pos, radius, radial_direction);
 }
 
-Internal I1 gizmo_project(View *view, F4x4 view_projection, F4 rect, V3 point, F2 *screen)
+Internal I1 gizmo_project(View *view, F4x4 view_projection, F4 rect, F3 point, F2 *screen)
 {
   F4 clip = project_point_F4x4(view_projection, point);
 
@@ -1541,8 +1541,8 @@ Internal I1 gizmo_project(View *view, F4x4 view_projection, F4 rect, V3 point, F
 //- kti: Screen-space endpoints of an axis shaft; fails if either end is behind the camera.
 Internal I1 gizmo_axis_screen(View *view, F4x4 view_projection, F4 rect, Axis axis, F2 *begin, F2 *end)
 {
-  V3 end_world = view->gizmo_pos;
-  *component_ptr_V3(&end_world, axis) += GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel;
+  F3 end_world = view->gizmo_pos;
+  *component_ptr_F3(&end_world, axis) += GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel;
 
   return gizmo_project(view, view_projection, rect, view->gizmo_pos, begin)
       && gizmo_project(view, view_projection, rect, end_world, end);
@@ -1591,14 +1591,14 @@ Internal Ray camera_ray(Camera camera, F4 rect, F2 mouse)
   F1 tan_half_fov = tan_F1(0.5f * camera.fov);
   F4x4 rotation = mul_F4x4(rotate_x_F4x4(camera.pitch), rotate_y_F4x4(camera.yaw));
 
-  V3 camera_direction = normalize_V3(v3(
+  F3 camera_direction = normalize_F3(f3(
     (2.0f * u - 1.0f) * aspect * tan_half_fov,
     (1.0f - 2.0f * v) * tan_half_fov,
     1.0f
   ));
 
-  V3 dir = transform_direction_F4x4(rotation, camera_direction);
-  V3 inv_dir = safe_inv_dir_V3(dir);
+  F3 dir = transform_direction_F4x4(rotation, camera_direction);
+  F3 inv_dir = safe_inv_dir_F3(dir);
 
   Ray ray = {
     .pos = camera.pos,
@@ -1609,21 +1609,21 @@ Internal Ray camera_ray(Camera camera, F4 rect, F2 mouse)
 }
 
 //- kti: Unit vector from the pivot to where the mouse ray hits the ring's plane.
-Internal I1 gizmo_rotation_direction(View *view, F4 rect, Axis axis, F2 mouse, V3 *direction)
+Internal I1 gizmo_rotation_direction(View *view, F4 rect, Axis axis, F2 mouse, F3 *direction)
 {
-  V3 rotation_axis = {0};
-  *component_ptr_V3(&rotation_axis, axis) = 1.0f;
+  F3 rotation_axis = {0};
+  *component_ptr_F3(&rotation_axis, axis) = 1.0f;
 
   Plane plane = {
     .normal = rotation_axis,
-    .d = -dot_V3(rotation_axis, view->gizmo_pos),
+    .d = -dot_F3(rotation_axis, view->gizmo_pos),
   };
   Ray ray = camera_ray(view->camera, rect, mouse);
   F1 t = ray_plane_intersect(ray, plane);
 
   if (t <= 0.0f || t == F1_MAX) return 0;
 
-  direction[0] = normalize_V3(sub_V3(add_scaled_V3(ray.pos, t, ray.dir), view->gizmo_pos));
+  direction[0] = normalize_F3(sub_F3(add_scaled_F3(ray.pos, t, ray.dir), view->gizmo_pos));
   return 1;
 }
 
@@ -1993,7 +1993,7 @@ Internal void lane(void *user_data)
                      .pixels_per_unit  =  50.0f,
                      .min              =  -1.0f,
                      .max              =  1.0f,
-                     .flags            =  LISTER_ENTRY_FLAG__NORMALIZE_V3);
+                     .flags            =  LISTER_ENTRY_FLAG__NORMALIZE_F3);
 
           //- kti: For all shapes.
 
@@ -2016,7 +2016,7 @@ Internal void lane(void *user_data)
                        .pixels_per_unit  =  50.0f,
                        .min              =  -1.0f,
                        .max              =  1.0f,
-                       .flags            =  LISTER_ENTRY_FLAG__NORMALIZE_V3);
+                       .flags            =  LISTER_ENTRY_FLAG__NORMALIZE_F3);
             lister_F1(str8("Vertical FOV"),
                       &entity->camera_vertical_fov,
                       .default_value  =  70.0f * PI / 180.0f,
@@ -2479,14 +2479,14 @@ Internal void lane(void *user_data)
                   case VIEW_KIND__VIEWPORT:
                   {
                     //- kti: Animate camera.
-                    view->camera.pos     =  lerp_snap_V3(view->camera.pos, 0.2f, view->target_camera.pos, 0.001f);
+                    view->camera.pos     =  lerp_snap_F3(view->camera.pos, 0.2f, view->target_camera.pos, 0.001f);
                     view->camera.pitch   =  lerp_snap_F1(view->camera.pitch, 0.3f, view->target_camera.pitch, 0.001f);
                     view->camera.yaw     =  lerp_snap_F1(view->camera.yaw, 0.3f, view->target_camera.yaw, 0.001f);
                     view->camera.fov     =  lerp_snap_F1(view->camera.fov, 0.15f, view->target_camera.fov, 0.001f);
                     view->camera.near_z  =  lerp_snap_F1(view->camera.near_z, 0.15f, view->target_camera.near_z, 0.001f);
                     view->camera.far_z   =  lerp_snap_F1(view->camera.far_z, 0.15f, view->target_camera.far_z, 0.001f);
 
-                    if (length_sq_V3(sub_V3(view->camera.pos, view->target_camera.pos)) != 0.0f
+                    if (length_sq_F3(sub_F3(view->camera.pos, view->target_camera.pos)) != 0.0f
                         || view->camera.pitch   !=  view->target_camera.pitch
                         || view->camera.yaw     !=  view->target_camera.yaw
                         || view->camera.fov     !=  view->target_camera.fov
@@ -2590,7 +2590,7 @@ Internal void lane(void *user_data)
 
                       for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
                       {
-                        if (entity->flags & ENTITY_FLAG__SELECTED) *component_ptr_V3(&entity->pos, axis) -= component_V3(view->gizmo_pos, axis);
+                        if (entity->flags & ENTITY_FLAG__SELECTED) *component_ptr_F3(&entity->pos, axis) -= component_F3(view->gizmo_pos, axis);
                       }
 
                       gizmo_moved = 1;
@@ -2606,15 +2606,15 @@ Internal void lane(void *user_data)
 
                       if (kind == GIZMO_KIND__ROTATE)
                       {
-                        V3 direction;
+                        F3 direction;
 
                         if (gizmo_rotation_direction(view, rect, axis, ui_mouse(), &direction))
                         {
-                          V3 rotation_axis = {0};
-                          *component_ptr_V3(&rotation_axis, axis) = 1.0f;
+                          F3 rotation_axis = {0};
+                          *component_ptr_F3(&rotation_axis, axis) = 1.0f;
 
-                          F1    angle     =  atan2f(dot_V3(rotation_axis, cross_V3(drag->rotation_direction, direction)),
-                                                    dot_V3(drag->rotation_direction, direction));
+                          F1    angle     =  atan2f(dot_F3(rotation_axis, cross_F3(drag->rotation_direction, direction)),
+                                                    dot_F3(drag->rotation_direction, direction));
                           F4x4  rotation  =  axis == AXIS__X ? rotate_x_F4x4(angle)
                                            : axis == AXIS__Y ? rotate_y_F4x4(angle)
                                                              : rotate_z_F4x4(angle);
@@ -2623,7 +2623,7 @@ Internal void lane(void *user_data)
                           {
                             if (entity->flags & ENTITY_FLAG__SELECTED && gizmo_can_rotate(entity))
                             {
-                              entity->direction = normalize_V3(transform_direction_F4x4(rotation, entity->direction));
+                              entity->direction = normalize_F3(transform_direction_F4x4(rotation, entity->direction));
                             }
                           }
 
@@ -2641,7 +2641,7 @@ Internal void lane(void *user_data)
 
                           if (kind == GIZMO_KIND__TRANSLATE)
                           {
-                            *component_ptr_V3(&entity->pos, axis) += change;
+                            *component_ptr_F3(&entity->pos, axis) += change;
                           }
                           else
                           {
@@ -2662,10 +2662,10 @@ Internal void lane(void *user_data)
                     if (viewport_signal.scroll[1] != 0.0f)
                     {
                       F4x4  camera_rotation  =  mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
-                      V3    camera_forward   =  transform_direction_F4x4(camera_rotation, v3(0.0f, 0.0f, 1.0f));
+                      F3    camera_forward   =  transform_direction_F4x4(camera_rotation, f3(0.0f, 0.0f, 1.0f));
                       F1    dolly_speed      =  0.025f;
 
-                      view->target_camera.pos = sub_V3(view->target_camera.pos, scale_V3(camera_forward, viewport_signal.scroll[1] * dolly_speed));
+                      view->target_camera.pos = sub_F3(view->target_camera.pos, scale_F3(camera_forward, viewport_signal.scroll[1] * dolly_speed));
                     }
 
                     I1 left_is_click = dot_F2(left_drag_delta, left_drag_delta) <= Square(4.0f);
@@ -2673,7 +2673,7 @@ Internal void lane(void *user_data)
                     //- kti: Panning
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_PRESSED && !mouse_captured)
                     {
-                      V3 camera_drag_start_pos = view->camera.pos;
+                      F3 camera_drag_start_pos = view->camera.pos;
 
                       ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &camera_drag_start_pos);
 
@@ -2682,15 +2682,15 @@ Internal void lane(void *user_data)
 
                     if (viewport_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING && !left_is_click && !mouse_captured)
                     {
-                      V3    camera_drag_start_pos  =  ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, V3)[0];
+                      F3    camera_drag_start_pos  =  ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F3)[0];
                       F4x4  camera_rotation        =  mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
-                      V3    camera_right           =  transform_direction_F4x4(camera_rotation, v3(1.0f, 0.0f, 0.0f));
-                      V3    camera_up              =  transform_direction_F4x4(camera_rotation, v3(0.0f, 1.0f, 0.0f));
+                      F3    camera_right           =  transform_direction_F4x4(camera_rotation, f3(1.0f, 0.0f, 0.0f));
+                      F3    camera_up              =  transform_direction_F4x4(camera_rotation, f3(0.0f, 1.0f, 0.0f));
                       F1    pan_speed              =  0.01f;
 
-                      V3 horizontal = scale_V3(camera_right, left_drag_delta[0] * pan_speed);
-                      V3 vertical = scale_V3(camera_up, left_drag_delta[1] * pan_speed);
-                      view->target_camera.pos = add_V3(sub_V3(camera_drag_start_pos, horizontal), vertical);
+                      F3 horizontal = scale_F3(camera_right, left_drag_delta[0] * pan_speed);
+                      F3 vertical = scale_F3(camera_up, left_drag_delta[1] * pan_speed);
+                      view->target_camera.pos = add_F3(sub_F3(camera_drag_start_pos, horizontal), vertical);
                     }
 
                     //- kti: Rotating
@@ -2966,13 +2966,13 @@ Internal void lane(void *user_data)
                 dr_clear_depth();
 
                 Mesh  *mesh  =  &state->meshes[SHAPE_KIND__BOX];
-                V3     pos   =  view->gizmo_pos;
+                F3     pos   =  view->gizmo_pos;
                 F1     px    =  view->gizmo_world_per_pixel;
 
                 for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
                 {
-                  V3 axis_dir = {0};
-                  *component_ptr_V3(&axis_dir, axis) = 1.0f;
+                  F3 axis_dir = {0};
+                  *component_ptr_F3(&axis_dir, axis) = 1.0f;
 
                   //- kti: Shaft.
                   {
@@ -2980,7 +2980,7 @@ Internal void lane(void *user_data)
                     F1  length     =  (GIZMO_AXIS_LENGTH_PX - 0.5f * GIZMO_SIZE_HANDLE_SIZE_PX) * px;
                     F1  thickness  =  GIZMO_SHAFT_THICKNESS_PX * px * (hot ? 1.3f : 1.0f);
 
-                    gizmo_draw_mesh(mesh, line_transform_F4x4(pos, scale_V3(axis_dir, length), thickness), gizmo_color(view, GIZMO_KIND__TRANSLATE, axis));
+                    gizmo_draw_mesh(mesh, line_transform_F4x4(pos, scale_F3(axis_dir, length), thickness), gizmo_color(view, GIZMO_KIND__TRANSLATE, axis));
                   }
 
                   //- kti: Scale knob.
@@ -2988,8 +2988,8 @@ Internal void lane(void *user_data)
                   {
                     I1    hot        =  gizmo_handle_match(view->gizmo_hot, GIZMO_KIND__SCALE, axis);
                     F1    size       =  GIZMO_SIZE_HANDLE_SIZE_PX * px * (hot ? 1.2f : 1.0f);
-                    F4x4  transform  =  mul_F4x4(scale_F4x4(v3(size, size, size)),
-                                                 translate_F4x4(add_V3(pos, scale_V3(axis_dir, GIZMO_AXIS_LENGTH_PX * px))));
+                    F4x4  transform  =  mul_F4x4(scale_F4x4(f3(size, size, size)),
+                                                 translate_F4x4(add_F3(pos, scale_F3(axis_dir, GIZMO_AXIS_LENGTH_PX * px))));
 
                     gizmo_draw_mesh(mesh, transform, gizmo_color(view, GIZMO_KIND__SCALE, axis));
                   }
@@ -3003,10 +3003,10 @@ Internal void lane(void *user_data)
 
                     for (L1 i = 0; i < GIZMO_ROTATION_SEGMENT_COUNT; i += 1)
                     {
-                      V3 a = gizmo_ring_point(view, axis, i);
-                      V3 b = gizmo_ring_point(view, axis, i + 1);
+                      F3 a = gizmo_ring_point(view, axis, i);
+                      F3 b = gizmo_ring_point(view, axis, i + 1);
 
-                      gizmo_draw_mesh(mesh, line_transform_F4x4(a, sub_V3(b, a), thickness), color);
+                      gizmo_draw_mesh(mesh, line_transform_F4x4(a, sub_F3(b, a), thickness), color);
                     }
                   }
                 }
@@ -3234,7 +3234,7 @@ Internal void lane(void *user_data)
 
                 if (it->shape_kind == SHAPE_KIND__SPHERE)
                 {
-                  set_lane_V3(&spheres[packet_idx].pos, lane_idx, it->pos);
+                  set_lane_F3(&spheres[packet_idx].pos, lane_idx, it->pos);
 
                   spheres[packet_idx].radius[lane_idx] = it->sphere_diameter*0.5f;
 
@@ -3242,20 +3242,20 @@ Internal void lane(void *user_data)
                 }
                 else if (it->shape_kind == SHAPE_KIND__BOX)
                 {
-                  V3 half_size = scale_V3(it->size, 0.5f);
+                  F3 half_size = scale_F3(it->size, 0.5f);
 
-                  set_lane_V3(&boxes[packet_idx].min, lane_idx, sub_V3(it->pos, half_size));
-                  set_lane_V3(&boxes[packet_idx].max, lane_idx, add_V3(it->pos, half_size));
+                  set_lane_F3(&boxes[packet_idx].min, lane_idx, sub_F3(it->pos, half_size));
+                  set_lane_F3(&boxes[packet_idx].max, lane_idx, add_F3(it->pos, half_size));
 
                   L1 base_idx = shape_counts[SHAPE_KIND__SPHERE];
                   materials[base_idx + idx] = it->material;
                 }
                 else if (it->shape_kind == SHAPE_KIND__PLANE)
                 {
-                  V3 normal = normalize_V3(it->direction);
-                  F1 d      = -dot_V3(normal, it->pos);
+                  F3 normal = normalize_F3(it->direction);
+                  F1 d      = -dot_F3(normal, it->pos);
 
-                  set_lane_V3(&planes[packet_idx].normal, lane_idx, normal);
+                  set_lane_F3(&planes[packet_idx].normal, lane_idx, normal);
 
                   planes[packet_idx].d[lane_idx]        = d;
 

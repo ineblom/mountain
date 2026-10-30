@@ -397,7 +397,7 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label)
   I1                 is_scalar        =  entry->kind == LISTER_ENTRY_KIND__F1;
   I1                 is_xyz           =  entry->kind == LISTER_ENTRY_KIND__XYZ;
   F1                 before           =  is_scalar ? as(entry->first_value, F1)[0]
-                                         : is_xyz ? component_V3(*as(entry->first_value, V3), component)
+                                         : is_xyz ? component_F3(*as(entry->first_value, F3), component)
                                                   : as(entry->first_value, F4)[0][component];
   F1                 after            =  before;
   F1                 pixels_per_unit  =  options.pixels_per_unit;
@@ -457,12 +457,12 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label)
       }
       else if (is_xyz)
       {
-        V3 *v = as(value, V3);
-        *component_ptr_V3(v, component) += delta;
+        F3 *v = as(value, F3);
+        *component_ptr_F3(v, component) += delta;
 
-        if (options.flags & LISTER_ENTRY_FLAG__NORMALIZE_V3)
+        if (options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F3)
         {
-          *v = normalize_V3(*v);
+          *v = normalize_F3(*v);
         }
       }
       else

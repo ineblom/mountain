@@ -14,14 +14,14 @@ struct Random_State
 };
 
 // One xyz value. Keep this a plain struct so loops can auto-vectorize.
-typedef struct V3 V3;
-struct V3
+typedef struct F3 F3;
+struct F3
 {
   F1 x, y, z;
 };
 
-typedef struct Lane_V3 Lane_V3;
-struct Lane_V3
+typedef struct Lane_F3 Lane_F3;
+struct Lane_F3
 {
   Lane_F32 x, y, z;
 };
@@ -86,42 +86,42 @@ typedef enum Shape_Kind
 typedef struct Sphere Sphere;
 struct Sphere
 {
-  V3 pos;
+  F3 pos;
   F1 radius;
 };
 
 typedef struct Lane_Sphere Lane_Sphere;
 struct Lane_Sphere
 {
-  Lane_V3 pos;
+  Lane_F3 pos;
   Lane_F32 radius;
 };
 
 typedef struct Box Box;
 struct Box
 {
-  V3 min;
-  V3 max;
+  F3 min;
+  F3 max;
 };
 
 typedef struct Lane_Box Lane_Box;
 struct Lane_Box
 {
-  Lane_V3 min;
-  Lane_V3 max;
+  Lane_F3 min;
+  Lane_F3 max;
 };
 
 typedef struct Plane Plane;
 struct Plane
 {
-  V3 normal;
+  F3 normal;
   F1 d;
 };
 
 typedef struct Lane_Plane Lane_Plane;
 struct Lane_Plane
 {
-  Lane_V3 normal;
+  Lane_F3 normal;
   Lane_F32 d;
 };
 
@@ -140,9 +140,9 @@ struct Shape
 typedef struct Ray Ray;
 struct Ray
 {
-  V3 pos;
-  V3 dir;
-  V3 inv_dir;
+  F3 pos;
+  F3 dir;
+  F3 inv_dir;
 };
 
 #define Square(x) ((x) * (x))
@@ -162,30 +162,30 @@ struct Ray
 ////////////////////////////////
 //~ Scalar geometry
 
-Inline V3 v3(F1 x, F1 y, F1 z);
+Inline F3 f3(F1 x, F1 y, F1 z);
 // Axis access without treating a struct as an array. Axis must be X, Y, or Z.
-Inline F1 component_V3(V3 v, Axis axis);
-Inline F1 *component_ptr_V3(V3 *v, Axis axis);
-Inline V3 V3_from_F4(F4 v);
-Inline F4 F4_from_V3(V3 v);       // xyz with w = 0 (direction).
-Inline F4 point_F4_from_V3(V3 v); // xyz with w = 1 (point).
-Inline V3 add_V3(V3 a, V3 b);
-Inline V3 sub_V3(V3 a, V3 b);
-Inline V3 mul_V3(V3 a, V3 b);
-Inline V3 div_V3(V3 a, V3 b);
-Inline V3 scale_V3(V3 v, F1 scale);
-Inline V3 add_scaled_V3(V3 a, F1 scale, V3 b); // a + scale*b
-Inline V3 neg_V3(V3 v);
-Inline V3 abs_V3(V3 v);
-Inline F1 dot_V3(V3 a, V3 b);
-Inline F1 length_sq_V3(V3 v);
-Inline F1 length_V3(V3 v);
-Inline V3 normalize_V3(V3 v);
-Inline V3 cross_V3(V3 a, V3 b);
-Inline V3 reflect_V3(V3 v, V3 normal);
-Inline V3 lerp_V3(V3 a, F1 t, V3 b);
-Inline V3 lerp_snap_V3(V3 a, F1 t, V3 b, F1 min_dist);
-Inline V3 safe_inv_dir_V3(V3 v);
+Inline F1 component_F3(F3 v, Axis axis);
+Inline F1 *component_ptr_F3(F3 *v, Axis axis);
+Inline F3 F3_from_F4(F4 v);
+Inline F4 F4_from_F3(F3 v);       // xyz with w = 0 (direction).
+Inline F4 point_F4_from_F3(F3 v); // xyz with w = 1 (point).
+Inline F3 add_F3(F3 a, F3 b);
+Inline F3 sub_F3(F3 a, F3 b);
+Inline F3 mul_F3(F3 a, F3 b);
+Inline F3 div_F3(F3 a, F3 b);
+Inline F3 scale_F3(F3 v, F1 scale);
+Inline F3 add_scaled_F3(F3 a, F1 scale, F3 b); // a + scale*b
+Inline F3 neg_F3(F3 v);
+Inline F3 abs_F3(F3 v);
+Inline F1 dot_F3(F3 a, F3 b);
+Inline F1 length_sq_F3(F3 v);
+Inline F1 length_F3(F3 v);
+Inline F3 normalize_F3(F3 v);
+Inline F3 cross_F3(F3 a, F3 b);
+Inline F3 reflect_F3(F3 v, F3 normal);
+Inline F3 lerp_F3(F3 a, F1 t, F3 b);
+Inline F3 lerp_snap_F3(F3 a, F1 t, F3 b, F1 min_dist);
+Inline F3 safe_inv_dir_F3(F3 v);
 
 ////////////////////////////////
 //~ Geometry lanes
@@ -202,17 +202,17 @@ Inline Lane_F32 min_Lane_F32(Lane_F32 a, Lane_F32 b);
 Inline Lane_F32 max_Lane_F32(Lane_F32 a, Lane_F32 b);
 Inline Lane_F32 abs_Lane_F32(Lane_F32 v);
 Inline Lane_F32 sqrt_Lane_F32(Lane_F32 v);
-Inline Lane_V3 broadcast_Lane_V3(V3 v);
-// Extraction and insertion require lane < LANE_COUNT; packing reads LANE_COUNT V3s.
-Inline V3 extract_lane_V3(Lane_V3 v, L1 lane);
-Inline void set_lane_V3(Lane_V3 *v, L1 lane, V3 value);
-Inline Lane_V3 pack_Lane_V3(const V3 *values);
-Inline Lane_V3 add_Lane_V3(Lane_V3 a, Lane_V3 b);
-Inline Lane_V3 sub_Lane_V3(Lane_V3 a, Lane_V3 b);
-Inline Lane_V3 scale_Lane_V3(Lane_V3 v, Lane_F32 scale);
-Inline Lane_F32 dot_Lane_V3(Lane_V3 a, Lane_V3 b);
-Inline Lane_V3 cross_Lane_V3(Lane_V3 a, Lane_V3 b);
-Inline Lane_V3 normalize_Lane_V3(Lane_V3 v);
+Inline Lane_F3 broadcast_Lane_F3(F3 v);
+// Extraction and insertion require lane < LANE_COUNT; packing reads LANE_COUNT F3s.
+Inline F3 extract_lane_F3(Lane_F3 v, L1 lane);
+Inline void set_lane_F3(Lane_F3 *v, L1 lane, F3 value);
+Inline Lane_F3 pack_Lane_F3(const F3 *values);
+Inline Lane_F3 add_Lane_F3(Lane_F3 a, Lane_F3 b);
+Inline Lane_F3 sub_Lane_F3(Lane_F3 a, Lane_F3 b);
+Inline Lane_F3 scale_Lane_F3(Lane_F3 v, Lane_F32 scale);
+Inline Lane_F32 dot_Lane_F3(Lane_F3 a, Lane_F3 b);
+Inline Lane_F3 cross_Lane_F3(Lane_F3 a, Lane_F3 b);
+Inline Lane_F3 normalize_Lane_F3(Lane_F3 v);
 
 ////////////////////////////////
 //~ Fixed four-component SIMD helpers

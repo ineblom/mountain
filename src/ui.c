@@ -1232,14 +1232,14 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
         && (e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT)
         && evt_mouse_in_bounds)
     {
-      F2 delta = scale_F2((F2){{e->delta_x, e->delta_y}}, scroll_mult);
+      F2 delta = scale(((F2){{e->delta_x, e->delta_y}}), scroll_mult);
 
       if (e->modifiers == OS_MODIFIER_FLAG__SHIFT)
       {
         Swap(delta.x, delta.y);
       }
 
-      signal.scroll = add_F2(signal.scroll, delta);
+      signal.scroll = add(signal.scroll, delta);
       taken = 1;
     }
 
@@ -1249,7 +1249,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
         && (e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT)
         && evt_mouse_in_bounds)
     {
-      F2 delta = scale_F2((F2){{e->delta_x, e->delta_y}}, scroll_mult);
+      F2 delta = scale(((F2){{e->delta_x, e->delta_y}}), scroll_mult);
 
       if (e->modifiers == OS_MODIFIER_FLAG__SHIFT)
       {
@@ -1276,7 +1276,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
         delta.y = 0;
       }
 
-      box->view_off_target  =  add_F2(box->view_off_target, delta);
+      box->view_off_target  =  add(box->view_off_target, delta);
       view_scrolled         =   1;
       taken                 =   1;
     }
@@ -1304,13 +1304,13 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
         if (ui_key_match(box->key, ui_state->press_key_history[k][0]) &&
             ui_key_match(box->key, ui_state->press_key_history[k][1]) &&
             ui_state->press_timestamp_history[k][0] - ui_state->press_timestamp_history[k][1] <= double_click_time &&
-            length_sq_F2(sub_F2(ui_state->press_pos_history[k][0], ui_state->press_pos_history[k][1])) < 10 * 10)
+            length_sq(sub(ui_state->press_pos_history[k][0], ui_state->press_pos_history[k][1])) < 10 * 10)
         {
           signal.flags |= (UI_SIGNAL_FLAG__LEFT_DOUBLE_DRAGGING << k);
 
           if (ui_key_match(box->key, ui_state->press_key_history[k][2]) &&
               ui_state->press_timestamp_history[k][1] - ui_state->press_timestamp_history[k][2] <= double_click_time &&
-              length_sq_F2(sub_F2(ui_state->press_pos_history[k][1], ui_state->press_pos_history[k][2])) < 10 * 10)
+              length_sq(sub(ui_state->press_pos_history[k][1], ui_state->press_pos_history[k][2])) < 10 * 10)
           {
             signal.flags |= (UI_SIGNAL_FLAG__LEFT_TRIPPLE_DRAGGING << k);
           }
@@ -1643,7 +1643,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
             if (axis_lock != AXIS__INVALID)
             {
-              distance_from_start = abs_F1(rect_center(box->rect).v[axis2_flip(axis_lock)] - rect_center(focus_box->rect).v[axis2_flip(axis_lock)]);
+              distance_from_start = abs(rect_center(box->rect).v[axis2_flip(axis_lock)] - rect_center(focus_box->rect).v[axis2_flip(axis_lock)]);
             }
 
             if (distance_from_start < best_distance_from_start && box != focus_box)
@@ -2082,14 +2082,14 @@ Internal void ui_end_build(void)
       //- kti: Animate view offset
       F1 scroll_animation_rate = 0.2f;
 
-      b->view_off = add_F2(b->view_off, scale_F2(sub_F2(b->view_off_target, b->view_off), scroll_animation_rate));
+      b->view_off = add(b->view_off, scale(sub(b->view_off_target, b->view_off), scroll_animation_rate));
 
-      if (abs_F1(b->view_off_target.x - b->view_off.x) < 2.0f)
+      if (abs(b->view_off_target.x - b->view_off.x) < 2.0f)
       {
         b->view_off.x = b->view_off_target.x;
       }
 
-      if (abs_F1(b->view_off_target.y - b->view_off.y) < 2.0f)
+      if (abs(b->view_off_target.y - b->view_off.y) < 2.0f)
       {
         b->view_off.y = b->view_off_target.y;
       }
@@ -2111,7 +2111,7 @@ Internal void ui_end_build(void)
       {
         node->current_rgba.v[idx] += (node->target_rgba.v[idx] - node->current_rgba.v[idx]) * slow_rate;
 
-        if (abs_F1(node->target_rgba.v[idx] - node->current_rgba.v[idx]) < 0.001f)
+        if (abs(node->target_rgba.v[idx] - node->current_rgba.v[idx]) < 0.001f)
         {
           node->current_rgba.v[idx] = node->target_rgba.v[idx];
         }
@@ -2212,7 +2212,7 @@ Internal F2 ui_drag_delta(I1 button)
 
   if (idx < OS_MOUSE_BUTTON_COUNT)
   {
-    delta = sub_F2(ui_mouse(), ui_state->drag_start_mouse[idx]);
+    delta = sub(ui_mouse(), ui_state->drag_start_mouse[idx]);
   }
 
   return delta;
@@ -2978,7 +2978,7 @@ Internal void ui_draw(void)
       F4                 shadow_color  =  ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
       GFX_Rect_Instance  *shadow_inst  =  dr_rect(shadow, shadow_color, 0.0f, 8.0f);
 
-      shadow_inst->corner_radii = add_F4(box->corner_radii, (F4){{4.0f, 4.0f, 4.0f, 4.0f}});
+      shadow_inst->corner_radii = add(box->corner_radii, ((F4){{4.0f, 4.0f, 4.0f, 4.0f}}));
     }
 
     if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND)
@@ -2992,7 +2992,7 @@ Internal void ui_draw(void)
 
         GFX_Rect_Instance *shadow_inst = dr_rect(shadow, shadow_color, 0.0f, 8.0f);
 
-        shadow_inst->corner_radii = add_F4(box->corner_radii, (F4){{4.0f, 4.0f, 4.0f, 4.0f}});
+        shadow_inst->corner_radii = add(box->corner_radii, ((F4){{4.0f, 4.0f, 4.0f, 4.0f}}));
       }
 
       GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_colors[0], 0.0f, softness);

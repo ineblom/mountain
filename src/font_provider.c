@@ -64,7 +64,7 @@ Internal void fp_select_size(FT_Face face, FT_UInt pixel_size)
 
     for (L1 i = 0; i < face->num_fixed_sizes; i += 1)
     {
-      I1 diff = abs_SI1((SI1)face->available_sizes[i].height - (SI1)pixel_size);
+      I1 diff = abs((SI1)face->available_sizes[i].height - (SI1)pixel_size);
 
       if (diff < best_diff)
       {
@@ -179,7 +179,7 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
     fp_select_size(face, pixel_size);
 
     SL1  ascent   =  face->size->metrics.ascender >> 6;
-    SL1  descent  =  abs_SL1(face->size->metrics.descender >> 6);
+    SL1  descent  =  abs(face->size->metrics.descender >> 6);
     SL1  height   =  face->size->metrics.height >> 6;
 
     //- kti: Unpack string

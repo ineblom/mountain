@@ -276,7 +276,7 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
     }
 
     SW2 two        = splat_SW2(2);
-    SW2 child_size = div_SW2(n_size, two);
+    SW2 child_size = div(n_size, two);
 
     FC_Atlas_Region_Node *best_child = 0;
 
@@ -288,10 +288,10 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
         {
           n->children[corner]                    =  push_array(arena, FC_Atlas_Region_Node, 1);
           n->children[corner]->parent            =  n;
-          n->children[corner]->max_free_size[0]  =  div_SW2(child_size, two);
-          n->children[corner]->max_free_size[1]  =  div_SW2(child_size, two);
-          n->children[corner]->max_free_size[2]  =  div_SW2(child_size, two);
-          n->children[corner]->max_free_size[3]  =  div_SW2(child_size, two);
+          n->children[corner]->max_free_size[0]  =  div(child_size, two);
+          n->children[corner]->max_free_size[1]  =  div(child_size, two);
+          n->children[corner]->max_free_size[2]  =  div(child_size, two);
+          n->children[corner]->max_free_size[3]  =  div(child_size, two);
         }
 
         if (n->max_free_size[corner].x >= needed_size.x && n->max_free_size[corner].y >= needed_size.y)
@@ -524,10 +524,10 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
 
               atlas->root_dim                =  (SW2){{1024, 1024}};
               atlas->root                    =  push_array(fc_state->raster_arena, FC_Atlas_Region_Node, 1);
-              atlas->root->max_free_size[0]  =  div_SW2(atlas->root_dim, two);
-              atlas->root->max_free_size[1]  =  div_SW2(atlas->root_dim, two);
-              atlas->root->max_free_size[2]  =  div_SW2(atlas->root_dim, two);
-              atlas->root->max_free_size[3]  =  div_SW2(atlas->root_dim, two);
+              atlas->root->max_free_size[0]  =  div(atlas->root_dim, two);
+              atlas->root->max_free_size[1]  =  div(atlas->root_dim, two);
+              atlas->root->max_free_size[2]  =  div(atlas->root_dim, two);
+              atlas->root->max_free_size[3]  =  div(atlas->root_dim, two);
               atlas->texture                 =  gfx_tex2d_alloc(GFX_TEXTURE_USAGE__DYNAMIC,
                                                                 atlas->root_dim.x,
                                                                 atlas->root_dim.y,
@@ -745,7 +745,7 @@ Internal L1 fc_byte_offset_from_tag_size_string_x_offset(FC_Tag tag, F1 size, F1
 
   for (L1 idx = 0; idx <= run.pieces.count; idx += 1)
   {
-    F1 distance_px = abs_F1(current_x_offset_px - x_offset_px);
+    F1 distance_px = abs(current_x_offset_px - x_offset_px);
 
     if (distance_px < nearest_distance_px)
     {

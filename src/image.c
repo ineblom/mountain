@@ -205,8 +205,8 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v)
 
   if (!image_is_nil(image))
   {
-    u  =  clamp01_F1(u);
-    v  =  clamp01_F1(v);
+    u  =  clamp01(u);
+    v  =  clamp01(v);
 
     F1  tex_x  =  u * (F1)(image.width - 1);
     F1  tex_y  =  v * (F1)(image.height - 1);
@@ -226,10 +226,10 @@ Inline F4 image_sample_bilinear_F4(Image image, F1 u, F1 v)
     F4  c01   =  bot[x0];
     F4  c11   =  bot[x1];
 
-    F4  top_row  =  lerp_F4(c00, fx, c10);
-    F4  bot_row  =  lerp_F4(c01, fx, c11);
+    F4  top_row  =  lerp(c00, fx, c10);
+    F4  bot_row  =  lerp(c01, fx, c11);
 
-    result = lerp_F4(top_row, fy, bot_row);
+    result = lerp(top_row, fy, bot_row);
   }
 
   return result;
@@ -451,9 +451,9 @@ Inline B1 srgb8_from_lottes_linear(F1 v)
 
 Inline F4 image_tonemap_saturation(F4 color, F1 saturation)
 {
-  color = clamp01_F4(color);
-  F1 gray = luminance_F4(color);
-  F4 result = add_F4(splat_F4(gray), scale_F4(sub_F4(color, splat_F4(gray)), saturation));
+  color = clamp01(color);
+  F1 gray = luminance(color);
+  F4 result = add(splat_F4(gray), scale(sub(color, splat_F4(gray)), saturation));
 
   return result;
 }
@@ -476,7 +476,7 @@ Internal void image_tonemap(Image_RGBA8 dst, Image src, Image_Tonemap_Params par
 
       for (L1 x = 0; x < src.width; ++x)
       {
-        F4 color = scale_F4(src_row[x], exposure_scale);
+        F4 color = scale(src_row[x], exposure_scale);
 
         if (!needs_adjustments)
         {

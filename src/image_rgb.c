@@ -69,26 +69,26 @@ Internal void image_rgb_bloom_threshold(Image_RGB dst, Image src, Image_Bloom_Pa
     {
       L1        first_pixel         =  block * LANE_COUNT;
       Lane_F4   color               =  rgb_load_pixels(src_row, first_pixel, src.width);
-      Lane_F1  luminance           =  luminance_Lane_F4(color);
+      Lane_F1  luminance           =  luminance(color);
       Lane_F1  distance_into_knee  =  luminance - knee_start;
       Lane_F1  knee_contribution   =  Square(distance_into_knee) * inv_knee_normalization;
-      Lane_F1  soft_contribution   =  select_Lane_F1(luminance > knee_start, knee_contribution, zero);
-      Lane_F1  contribution        =  select_Lane_F1(luminance > knee_end, one, soft_contribution);
+      Lane_F1  soft_contribution   =  select(luminance > knee_start, knee_contribution, zero);
+      Lane_F1  contribution        =  select(luminance > knee_end, one, soft_contribution);
       Lane_Mask active_pixels       =  (contribution > zero) & (luminance > splat_Lane_F1(1e-6f));
-      Lane_F1  safe_luminance      =  select_Lane_F1(active_pixels, luminance, one);
-      Lane_F1  excess_luminance    =  max_Lane_F1(zero, luminance - threshold);
+      Lane_F1  safe_luminance      =  select(active_pixels, luminance, one);
+      Lane_F1  excess_luminance    =  max(zero, luminance - threshold);
       Lane_F1  excess_fraction     =  excess_luminance / safe_luminance;
       Lane_F1  bloom_scale         =  excess_fraction * contribution;
 
-      color = scale_Lane_F4(color, bloom_scale);
+      color = scale(color, bloom_scale);
 
       // The selects double as NaN masks for degenerate input pixels:
       // bloom_scale is zero there, but 0 * NaN would still be NaN.
       dst_row[block] = (Lane_F4){
-        select_Lane_F1(active_pixels, color.x, zero),
-        select_Lane_F1(active_pixels, color.y, zero),
-        select_Lane_F1(active_pixels, color.z, zero),
-        select_Lane_F1(active_pixels, color.w, zero)
+        select(active_pixels, color.x, zero),
+        select(active_pixels, color.y, zero),
+        select(active_pixels, color.z, zero),
+        select(active_pixels, color.w, zero)
       };
     }
   }
@@ -226,7 +226,7 @@ Internal void image_rgb_resample_x(Image_RGB dst, Image_RGB src, Range rows, Are
         {
           F1  source_position      =  first_source_pixel + (F1)tap_offset;
           F1  normalized_distance  =  (source_position - source_center) / filter_radius;
-          F1  weight               =  Max(0, 1.0f - abs_F1(normalized_distance));
+          F1  weight               =  Max(0, 1.0f - abs(normalized_distance));
           L1  index                =  (L1)Clamp(0.0f, source_position, (F1)src.width - 1);
 
           taps[spans[x].offset + tap_offset]  =   (RGB_Filter_Tap){ index, weight };
@@ -321,9 +321,9 @@ Internal void image_rgb_resample_x(Image_RGB dst, Image_RGB src, Range rows, Are
             }
 
             Lane_F4  samples           =  gather_Lane_F4(src_row, indices);
-            Lane_F4  weighted_samples  =  scale_Lane_F4(samples, weights);
+            Lane_F4  weighted_samples  =  scale(samples, weights);
 
-            result = add_Lane_F4(result, weighted_samples);
+            result = add(result, weighted_samples);
           }
 
           Lane_F1 weight_sums = {0};
@@ -335,7 +335,7 @@ Internal void image_rgb_resample_x(Image_RGB dst, Image_RGB src, Range rows, Are
 
           Lane_F1 inv_weight_sums = splat_Lane_F1(1.0f) / weight_sums;
 
-          result = scale_Lane_F4(result, inv_weight_sums);
+          result = scale(result, inv_weight_sums);
         }
 
         L1  remaining_pixels  =  (L1)dst.width - block * LANE_COUNT;
@@ -429,7 +429,7 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
         {
           F1  source_position      =  first_source_row + (F1)tap_offset;
           F1  normalized_distance  =  (source_position - source_center) / filter_radius;
-          F1  weight               =  Max(0, 1.0f - abs_F1(normalized_distance));
+          F1  weight               =  Max(0, 1.0f - abs(normalized_distance));
           L1  source_sample        =  (L1)Clamp(0.0f, source_position, (F1)src.height - 1);
 
           Lane_F4 *sample_row = image_rgb_row(src, source_sample);
@@ -445,15 +445,15 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
 
         if (is_downsample_2x)
         {
-          Lane_F4  far_top_contribution     =  scale_Lane_F4(first_row[block], splat_Lane_F1(0.25f));
-          Lane_F4  top_contribution         =  scale_Lane_F4(second_row[block], splat_Lane_F1(0.75f));
-          Lane_F4  bottom_contribution      =  scale_Lane_F4(third_row[block], splat_Lane_F1(0.75f));
-          Lane_F4  far_bottom_contribution  =  scale_Lane_F4(fourth_row[block], splat_Lane_F1(0.25f));
+          Lane_F4  far_top_contribution     =  scale(first_row[block], splat_Lane_F1(0.25f));
+          Lane_F4  top_contribution         =  scale(second_row[block], splat_Lane_F1(0.75f));
+          Lane_F4  bottom_contribution      =  scale(third_row[block], splat_Lane_F1(0.75f));
+          Lane_F4  far_bottom_contribution  =  scale(fourth_row[block], splat_Lane_F1(0.25f));
 
-          result = add_Lane_F4(far_top_contribution, top_contribution);
-          result = add_Lane_F4(result, bottom_contribution);
-          result = add_Lane_F4(result, far_bottom_contribution);
-          result = scale_Lane_F4(result, splat_Lane_F1(0.5f));
+          result = add(far_top_contribution, top_contribution);
+          result = add(result, bottom_contribution);
+          result = add(result, far_bottom_contribution);
+          result = scale(result, splat_Lane_F1(0.5f));
         }
         else if (is_upsample_2x)
         {
@@ -461,36 +461,36 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
           Lane_F1  top_weight  =  splat_Lane_F1(is_odd_row ? 0.75f : 0.25f);
           Lane_F1  bot_weight  =  splat_Lane_F1(is_odd_row ? 0.25f : 0.75f);
 
-          Lane_F4  top_contribution     =  scale_Lane_F4(first_row[block], top_weight);
-          Lane_F4  bottom_contribution  =  scale_Lane_F4(second_row[block], bot_weight);
+          Lane_F4  top_contribution     =  scale(first_row[block], top_weight);
+          Lane_F4  bottom_contribution  =  scale(second_row[block], bot_weight);
 
-          result = add_Lane_F4(top_contribution, bottom_contribution);
+          result = add(top_contribution, bottom_contribution);
         }
         else
         {
           for (L1 tap_offset = 0; tap_offset < tap_count; ++tap_offset)
           {
             Lane_F4  source_sample    =  taps[tap_offset].row[block];
-            Lane_F4  weighted_sample  =  scale_Lane_F4(source_sample, taps[tap_offset].weight);
+            Lane_F4  weighted_sample  =  scale(source_sample, taps[tap_offset].weight);
 
-            result = add_Lane_F4(result, weighted_sample);
+            result = add(result, weighted_sample);
           }
 
           Lane_F1 inv_weight_sum = splat_Lane_F1(1.0f / weight_sum);
 
-          result = scale_Lane_F4(result, inv_weight_sum);
+          result = scale(result, inv_weight_sum);
         }
         if (karis)
         {
-          Lane_F1  luminance     =  luminance_Lane_F4(result);
+          Lane_F1  luminance     =  luminance(result);
           Lane_F1  inv_karis     =  splat_Lane_F1(1.0f) / (1.0f + luminance);
 
-          result = scale_Lane_F4(result, inv_karis);
+          result = scale(result, inv_karis);
         }
 
         if (accumulate)
         {
-          result = add_Lane_F4(dst_row[block], result);
+          result = add(dst_row[block], result);
         }
 
         dst_row[block] = result;
@@ -506,8 +506,8 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
 Inline Lane_F1 image_table_lookup(Lane_F1 values, F1 *table, I1 count, F1 maximum)
 {
   Lane_F1  zero              =  splat_Lane_F1(0);
-  Lane_F1  positive_values   =  select_Lane_F1(values > zero, values, zero);
-  Lane_F1  clamped_values    =  min_Lane_F1(positive_values, splat_Lane_F1(maximum));
+  Lane_F1  positive_values   =  select(values > zero, values, zero);
+  Lane_F1  clamped_values    =  min(positive_values, splat_Lane_F1(maximum));
   F1        entries_per_unit  =  count / maximum;
   Lane_F1  table_positions   =  clamped_values * entries_per_unit;
   Lane_SI1  lower_indices     =  __builtin_convertvector(table_positions, Lane_SI1);
@@ -602,12 +602,12 @@ Inline Lane_F1 rgb_overlay_luminance(Image overlay, Lane_F1 u, F1 v)
     Lane_F4   top_right       =  pack_Lane_F4(top_right_pixels);
     Lane_F4   bottom_left     =  pack_Lane_F4(bottom_left_pixels);
     Lane_F4   bottom_right    =  pack_Lane_F4(bottom_right_pixels);
-    Lane_F4   top_color       =  lerp_Lane_F4(top_left, horizontal_blend, top_right);
-    Lane_F4   bottom_color    =  lerp_Lane_F4(bottom_left, horizontal_blend, bottom_right);
+    Lane_F4   top_color       =  lerp(top_left, horizontal_blend, top_right);
+    Lane_F4   bottom_color    =  lerp(bottom_left, horizontal_blend, bottom_right);
     Lane_F1  vertical_blend  =  splat_Lane_F1(source_y - (F1)top_y);
-    Lane_F4   sampled_color   =  lerp_Lane_F4(top_color, vertical_blend, bottom_color);
+    Lane_F4   sampled_color   =  lerp(top_color, vertical_blend, bottom_color);
 
-    result = luminance_Lane_F4(sampled_color);
+    result = luminance(sampled_color);
   }
 
   return result;
@@ -658,11 +658,11 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
       }
 
       Lane_F4  hdr_color           =  rgb_load_pixels(hdr_row, x, hdr.width);
-      Lane_F4  hdr_contribution    =  scale_Lane_F4(hdr_color, hdr_weight);
-      Lane_F4  modulated_bloom     =  scale_Lane_F4(bloom_row[block], bloom_modulation);
-      Lane_F4  bloom_contribution  =  scale_Lane_F4(modulated_bloom, bloom_weight);
-      Lane_F4  combined_color      =  add_Lane_F4(hdr_contribution, bloom_contribution);
-      Lane_F4  color               =  scale_Lane_F4(combined_color, splat_Lane_F1(exposure_scale));
+      Lane_F4  hdr_contribution    =  scale(hdr_color, hdr_weight);
+      Lane_F4  modulated_bloom     =  scale(bloom_row[block], bloom_modulation);
+      Lane_F4  bloom_contribution  =  scale(modulated_bloom, bloom_weight);
+      Lane_F4  combined_color      =  add(hdr_contribution, bloom_contribution);
+      Lane_F4  color               =  scale(combined_color, splat_Lane_F1(exposure_scale));
 
       if (!needs_adjustments)
       {
@@ -682,13 +682,13 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
         };
 
         color = (Lane_F4){
-          min_Lane_F1(max_Lane_F1(color.x, splat_Lane_F1(0)), splat_Lane_F1(1)),
-          min_Lane_F1(max_Lane_F1(color.y, splat_Lane_F1(0)), splat_Lane_F1(1)),
-          min_Lane_F1(max_Lane_F1(color.z, splat_Lane_F1(0)), splat_Lane_F1(1)),
+          min(max(color.x, splat_Lane_F1(0)), splat_Lane_F1(1)),
+          min(max(color.y, splat_Lane_F1(0)), splat_Lane_F1(1)),
+          min(max(color.z, splat_Lane_F1(0)), splat_Lane_F1(1)),
           color.w
         };
 
-        Lane_F1 gray = luminance_Lane_F4(color);
+        Lane_F1 gray = luminance(color);
 
         Lane_F4 chroma = {
           color.x - gray,
@@ -697,7 +697,7 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
           splat_Lane_F1(0)
         };
 
-        Lane_F4 saturated_chroma = scale_Lane_F4(chroma, splat_Lane_F1(tonemap.saturation));
+        Lane_F4 saturated_chroma = scale(chroma, splat_Lane_F1(tonemap.saturation));
 
         color = (Lane_F4){
           gray + saturated_chroma.x,

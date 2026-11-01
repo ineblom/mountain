@@ -2297,7 +2297,7 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
 
             for (L1 direction_idx = 0; direction_idx < ArrayCount(outline_directions); direction_idx += 1)
             {
-              mesh_push.outline_offset = scale_F2(outline_directions[direction_idx], batch->outline_width);
+              mesh_push.outline_offset = scale(outline_directions[direction_idx], batch->outline_width);
 
               vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
               vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);

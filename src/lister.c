@@ -217,7 +217,7 @@ Internal F4 lister_rgb_from_hsv(F4 hsv)
   if (hue < 0.0f)
     hue += 1.0f;
 
-  F1  saturation  =  clamp01_F1(hsv.y);
+  F1  saturation  =  clamp01(hsv.y);
   F1  value       =  Max(0.0f, hsv.z);
   F1  h           =  hue * 6.0f;
   L1  sector      =  (L1)floor_F1(h);
@@ -267,8 +267,8 @@ Internal void lister_color_apply(Lister_Entry *entry, F4 hsv)
 
 Internal void lister_color_sv_marker(UI_Box *box, F1 saturation, F1 value)
 {
-  saturation  =  clamp01_F1(saturation);
-  value       =  clamp01_F1(value);
+  saturation  =  clamp01(saturation);
+  value       =  clamp01(value);
 
   F1  marker_size =  12.0f;
   F1  x           =  saturation * box->rect.z - marker_size * 0.5f;
@@ -296,7 +296,7 @@ Internal void lister_color_sv_marker(UI_Box *box, F1 saturation, F1 value)
 
 Internal void lister_color_hue_marker(UI_Box *box, F1 hue)
 {
-  hue = clamp01_F1(hue);
+  hue = clamp01(hue);
 
   F1  marker_height  =  6.0f;
   F1  y              =  hue * box->rect.w - marker_height * 0.5f;
@@ -462,7 +462,7 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label)
 
         if (options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F3)
         {
-          *v = normalize_F3(*v);
+          *v = normalize(*v);
         }
       }
       else
@@ -699,8 +699,8 @@ Internal void lister_ui(void)
 
                 if (sv_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING)
                 {
-                  hsv.y  =  clamp01_F1((ui_mouse().x - sv_box->rect.x) / Max(sv_box->rect.z, 1.0f));
-                  hsv.z  =  1.0f - clamp01_F1((ui_mouse().y - sv_box->rect.y) / Max(sv_box->rect.w, 1.0f));
+                  hsv.y  =  clamp01((ui_mouse().x - sv_box->rect.x) / Max(sv_box->rect.z, 1.0f));
+                  hsv.z  =  1.0f - clamp01((ui_mouse().y - sv_box->rect.y) / Max(sv_box->rect.w, 1.0f));
                   hsv.x  =  lister_state.color_hue;
 
                   lister_color_apply(entry, hsv);
@@ -720,7 +720,7 @@ Internal void lister_ui(void)
 
                 if (hue_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING)
                 {
-                  lister_state.color_hue  =  clamp01_F1((ui_mouse().y - hue_box->rect.y) / Max(hue_box->rect.w, 1.0f));
+                  lister_state.color_hue  =  clamp01((ui_mouse().y - hue_box->rect.y) / Max(hue_box->rect.w, 1.0f));
                   hsv.x                  =  lister_state.color_hue;
 
                   lister_color_apply(entry, hsv);

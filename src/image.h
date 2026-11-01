@@ -38,7 +38,7 @@ struct Image_RGB
   I1 width;
   I1 height;
   L1 block_stride;
-  Lane_F4 *blocks;
+  Simd_F4 *blocks;
 };
 
 typedef struct RGBA8 RGBA8;

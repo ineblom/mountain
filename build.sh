@@ -6,21 +6,21 @@ OPT="-O0"
 
 META=0
 NATIVE=0
-LANES=4
+SIMD_WIDTH=4
 for ARG in "$@"; do
   case "$ARG" in
     release) OPT="-O2" ;;
     native) NATIVE=1 ;;
-    lanes=4|lanes=8|lanes=16) LANES="${ARG#lanes=}" ;;
+    simd=4|simd=8|simd=16) SIMD_WIDTH="${ARG#simd=}" ;;
     META) META=1 ;;
     *)
-      echo "Usage: $0 [META] [release] [native] [lanes=4|8|16]" >&2
+      echo "Usage: $0 [META] [release] [native] [simd=4|8|16]" >&2
       exit 1
       ;;
   esac
 done
 
-DEFS="$DEFS -DLANE_COUNT=$LANES"
+DEFS="$DEFS -DSIMD_WIDTH=$SIMD_WIDTH"
 if [ "$NATIVE" -eq 1 ]; then
   OPT="$OPT -march=native"
 fi

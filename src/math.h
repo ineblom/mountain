@@ -79,16 +79,16 @@ union SW4
   SW1 v[4];
 };
 
-typedef struct Lane_F3 Lane_F3;
-struct Lane_F3
+typedef struct Simd_F3 Simd_F3;
+struct Simd_F3
 {
-  Lane_F1 x, y, z;
+  Simd_F1 x, y, z;
 };
 
-typedef struct Lane_F4 Lane_F4;
-struct Lane_F4
+typedef struct Simd_F4 Simd_F4;
+struct Simd_F4
 {
-  Lane_F1 x, y, z, w;
+  Simd_F1 x, y, z, w;
 };
 
 typedef union F4x4 F4x4;
@@ -148,11 +148,11 @@ struct Sphere
   F1 radius;
 };
 
-typedef struct Lane_Sphere Lane_Sphere;
-struct Lane_Sphere
+typedef struct Simd_Sphere Simd_Sphere;
+struct Simd_Sphere
 {
-  Lane_F3 pos;
-  Lane_F1 radius;
+  Simd_F3 pos;
+  Simd_F1 radius;
 };
 
 typedef struct Box Box;
@@ -162,11 +162,11 @@ struct Box
   F3 max;
 };
 
-typedef struct Lane_Box Lane_Box;
-struct Lane_Box
+typedef struct Simd_Box Simd_Box;
+struct Simd_Box
 {
-  Lane_F3 min;
-  Lane_F3 max;
+  Simd_F3 min;
+  Simd_F3 max;
 };
 
 typedef struct Plane Plane;
@@ -176,11 +176,11 @@ struct Plane
   F1 d;
 };
 
-typedef struct Lane_Plane Lane_Plane;
-struct Lane_Plane
+typedef struct Simd_Plane Simd_Plane;
+struct Simd_Plane
 {
-  Lane_F3 normal;
-  Lane_F1 d;
+  Simd_F3 normal;
+  Simd_F1 d;
 };
 
 typedef struct Shape Shape;

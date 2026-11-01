@@ -29,7 +29,7 @@ Global String8 view_kind_names[VIEW_KIND_COUNT] = {
 
 Global State        *state  =  0;
 Global Async_State  async   =  {0};
-Global I1           async_lanes_completed;
+Global I1           async_workers_completed;
 
 #define UI_THEME_COLOR(r, g, b, a, ...)                              \
   {                                                                  \
@@ -183,7 +183,7 @@ Internal I1 async_event_pop(Async_Event *out)
   return result;
 }
 
-Internal void async_lane(void *)
+Internal void async_worker(void *)
 {
   //- kti: Loop
 
@@ -191,7 +191,7 @@ Internal void async_lane(void *)
   {
     //- kti: Wait for message.
 
-    if (lane_idx() == 0)
+    if (worker_idx() == 0)
     {
       os_mutex_take(async.mutex);
 
@@ -205,7 +205,7 @@ Internal void async_lane(void *)
       os_mutex_drop(async.mutex);
     }
 
-    lane_sync();
+    worker_sync();
 
     if (atomic_load_I1(&async.exit) == 1)
     {
@@ -214,12 +214,12 @@ Internal void async_lane(void *)
 
     //- kti: Do async ticks.
 
-    if (lane_idx() == 0)
+    if (worker_idx() == 0)
     {
       async.request_valid = async_request_pop(&async.active_request);
     }
 
-    lane_sync();
+    worker_sync();
 
     if (async.request_valid)
     {
@@ -237,7 +237,7 @@ Internal void async_lane(void *)
           ProfBegin("Render");
 
           //- kti: Result image alloc and progress reset.
-          if (lane_idx() == 0)
+          if (worker_idx() == 0)
           {
             L1  width         =  req.render_settings.width;
             L1  height        =  req.render_settings.height;
@@ -250,7 +250,7 @@ Internal void async_lane(void *)
             atomic_swap_L1(&req.render_progress->pixels_total, pixels_total);
           }
 
-          lane_sync();
+          worker_sync();
 
           Image  hdr               =  async.active_request.hdr;
           L1     pixels_total      =  hdr.width * hdr.height;
@@ -270,9 +270,9 @@ Internal void async_lane(void *)
             atomic_add_L1(&req.render_progress->pixels_completed, range.max - range.min);
           }
 
-          lane_sync();
+          worker_sync();
 
-          if (lane_idx() == 0)
+          if (worker_idx() == 0)
           {
             Async_Event event = {
               .kind        =  ASYNC_EVENT_KIND__RENDER_COMPLETE,
@@ -298,7 +298,7 @@ Internal void async_lane(void *)
 
           //- kti: Narrow setup.
 
-          if (lane_idx() == 0)
+          if (worker_idx() == 0)
           {
             ProfBegin("Narrow Setup");
 
@@ -347,7 +347,7 @@ Internal void async_lane(void *)
               L1 horizontal_count = Max(image_rgb_block_count(low.width) * high.height,
                                         image_rgb_block_count(high.width) * low.height);
 
-              work.horizontal_blocks = push_array_no_zero(scratch.arena, Lane_F4, horizontal_count);
+              work.horizontal_blocks = push_array_no_zero(scratch.arena, Simd_F4, horizontal_count);
             }
 
             async.active_request.bloom_work = work;
@@ -355,7 +355,7 @@ Internal void async_lane(void *)
             ProfEnd();
           }
 
-          lane_sync();
+          worker_sync();
 
           Image_Bloom_Work work = async.active_request.bloom_work;
 
@@ -363,11 +363,11 @@ Internal void async_lane(void *)
         
           ProfBegin("Fill Level 0");
 
-          Range range = lane_range(req.hdr.height);
+          Range range = worker_range(req.hdr.height);
 
           image_rgb_bloom_threshold(work.levels[0], req.hdr, params, range);
           ProfEnd();
-          lane_sync();
+          worker_sync();
 
           //- kti: Downsample
 
@@ -384,13 +384,13 @@ Internal void async_lane(void *)
               .blocks       = work.horizontal_blocks,
             };
 
-            Range  x_range  =  lane_range(horizontal.height);
-            Range  y_range  =  lane_range(out.height);
+            Range  x_range  =  worker_range(horizontal.height);
+            Range  y_range  =  worker_range(out.height);
 
             image_rgb_resample_x(horizontal, in, x_range, scratch.arena);
-            lane_sync();
+            worker_sync();
             image_rgb_resample_y(out, horizontal, y_range, i == 0, 0, scratch.arena);
-            lane_sync();
+            worker_sync();
           }
           ProfEnd();
 
@@ -409,34 +409,34 @@ Internal void async_lane(void *)
               .blocks       = work.horizontal_blocks,
             };
 
-            Range  x_range  =  lane_range(horizontal.height);
-            Range  y_range  =  lane_range(out.height);
+            Range  x_range  =  worker_range(horizontal.height);
+            Range  y_range  =  worker_range(out.height);
 
             image_rgb_resample_x(horizontal, in, x_range, scratch.arena);
-            lane_sync();
-            // Accumulate consumes only the rows this lane just resampled.
+            worker_sync();
+            // Accumulate consumes only the rows this worker just resampled.
             image_rgb_resample_y(out, horizontal, y_range, 0, 1, scratch.arena);
             if (i > 1)
             {
               // The next resample reads neighboring rows and reuses horizontal.
-              lane_sync();
+              worker_sync();
             }
           }
 
           ProfEnd();
 
-          // Final add and output consume only this lane's own rows.
-          Range combine_range = lane_range(work.levels[0].height);
+          // Final add and output consume only this worker's own rows.
+          Range combine_range = worker_range(work.levels[0].height);
           Image_RGBA8 result = async.active_request.ldr;
 
           image_rgb_bloom_tonemap(result, req.hdr, work.levels[0], params,
                                   req.postprocess_settings.tonemap, combine_range);
 
-          lane_sync();
+          worker_sync();
 
           //- kti: Push complete event
 
-          if (lane_idx() == 0)
+          if (worker_idx() == 0)
           {
             ProfBegin("Publish");
 
@@ -459,7 +459,7 @@ Internal void async_lane(void *)
       ProfFlush();
     }
 
-    lane_sync();
+    worker_sync();
   }
 
   ProfFlush();
@@ -1675,9 +1675,9 @@ Internal void user_code_reload(void)
 ////////////////////////////////
 //~ kti: Main
 
-Internal void lane(void *user_data)
+Internal void editor_main(void *user_data)
 {
-  Arena *arena = lane_arena();
+  Arena *arena = worker_arena();
 
   L1  frame_count       =  0;
   L1  total_frame_time  =  0;
@@ -3214,13 +3214,13 @@ Internal void lane(void *user_data)
 
             L1 shape_indices[SHAPE_KIND_COUNT] = {0};
 
-            L1 sphere_packet_count = (shape_counts[SHAPE_KIND__SPHERE] + LANE_COUNT - 1) / LANE_COUNT;
-            L1 box_packet_count    = (shape_counts[SHAPE_KIND__BOX] + LANE_COUNT - 1) / LANE_COUNT;
-            L1 plane_packet_count  = (shape_counts[SHAPE_KIND__PLANE] + LANE_COUNT - 1) / LANE_COUNT;
+            L1 sphere_packet_count = (shape_counts[SHAPE_KIND__SPHERE] + SIMD_WIDTH - 1) / SIMD_WIDTH;
+            L1 box_packet_count    = (shape_counts[SHAPE_KIND__BOX] + SIMD_WIDTH - 1) / SIMD_WIDTH;
+            L1 plane_packet_count  = (shape_counts[SHAPE_KIND__PLANE] + SIMD_WIDTH - 1) / SIMD_WIDTH;
 
-            Lane_Sphere *spheres = push_array(render_arena, Lane_Sphere, sphere_packet_count);
-            Lane_Box    *boxes   = push_array(render_arena, Lane_Box, box_packet_count);
-            Lane_Plane  *planes  = push_array(render_arena, Lane_Plane, plane_packet_count);
+            Simd_Sphere *spheres = push_array(render_arena, Simd_Sphere, sphere_packet_count);
+            Simd_Box    *boxes   = push_array(render_arena, Simd_Box, box_packet_count);
+            Simd_Plane  *planes  = push_array(render_arena, Simd_Plane, plane_packet_count);
 
             RT_Material *materials = push_array(render_arena, RT_Material, shape_count);
 
@@ -3229,8 +3229,8 @@ Internal void lane(void *user_data)
               if (it->flags & ENTITY_FLAG__SHAPE)
               {
                 L1 idx = shape_indices[it->shape_kind];
-                L1 packet_idx = idx / LANE_COUNT;
-                L1 lane_idx = idx % LANE_COUNT;
+                L1 packet_idx = idx / SIMD_WIDTH;
+                L1 lane_idx = idx % SIMD_WIDTH;
 
                 if (it->shape_kind == SHAPE_KIND__SPHERE)
                 {
@@ -3435,7 +3435,7 @@ Internal void lane(void *user_data)
   atomic_swap_I1(&async.exit, 1);
   async_signal();
 
-  while (!atomic_load_I1(&async_lanes_completed))
+  while (!atomic_load_I1(&async_workers_completed))
   {
     Pause();
   }
@@ -3454,27 +3454,27 @@ SI1 main(void)
   async.request_queue.mutex  =  os_mutex_alloc();
   async.event_queue.mutex    =  os_mutex_alloc();
 
-  Lane_Group_Params async_group_params = {
+  Worker_Group_Params async_group_params = {
     .count      =  Max(1, os_core_count() - 1),
-    .completed  =  &async_lanes_completed,
-    .proc       =  async_lane,
+    .completed  =  &async_workers_completed,
+    .proc       =  async_worker,
 
     .arena_size    =  MiB(64),
     .scratch_size  =  MiB(64),
   };
 
-  Lane_Group_Params main_group_params = {
+  Worker_Group_Params main_group_params = {
     .count  =  1,
-    .proc   =  lane,
+    .proc   =  editor_main,
 
     .arena_size    =  GiB(1),
     .scratch_size  =  MiB(64),
 
-    .lane_zero_on_caller = 1,
+    .worker_zero_on_caller = 1,
   };
 
-  lane_group_launch(async_group_params);
-  lane_group_launch(main_group_params);
+  worker_group_launch(async_group_params);
+  worker_group_launch(main_group_params);
 
   return 0;
 }

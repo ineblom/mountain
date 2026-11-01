@@ -27,27 +27,27 @@ Inline W4 splat_W4(W1 x) { return w4(x, x, x, x); }
 Inline SW2 splat_SW2(SW1 x) { return sw2(x, x); }
 Inline SW4 splat_SW4(SW1 x) { return sw4(x, x, x, x); }
 
-#define Lane_Repeat4(v) (v), (v), (v), (v)
-#if LANE_COUNT == 4
-#define Lane_Values(v) Lane_Repeat4(v)
-#elif LANE_COUNT == 8
-#define Lane_Values(v) Lane_Repeat4(v), Lane_Repeat4(v)
+#define Simd_Repeat4(v) (v), (v), (v), (v)
+#if SIMD_WIDTH == 4
+#define Simd_Values(v) Simd_Repeat4(v)
+#elif SIMD_WIDTH == 8
+#define Simd_Values(v) Simd_Repeat4(v), Simd_Repeat4(v)
 #else
-#define Lane_Values(v) Lane_Repeat4(v), Lane_Repeat4(v), Lane_Repeat4(v), Lane_Repeat4(v)
+#define Simd_Values(v) Simd_Repeat4(v), Simd_Repeat4(v), Simd_Repeat4(v), Simd_Repeat4(v)
 #endif
 
-Inline Lane_F1 splat_Lane_F1(F1 value)
+Inline Simd_F1 splat_Simd_F1(F1 value)
 {
-  return (Lane_F1){Lane_Values(value)};
+  return (Simd_F1){Simd_Values(value)};
 }
 
-Inline Lane_SI1 splat_Lane_SI1(SI1 value)
+Inline Simd_SI1 splat_Simd_SI1(SI1 value)
 {
-  return (Lane_SI1){Lane_Values(value)};
+  return (Simd_SI1){Simd_Values(value)};
 }
 
-#undef Lane_Values
-#undef Lane_Repeat4
+#undef Simd_Values
+#undef Simd_Repeat4
 
 //- kti: Add.
 Inline F2 add_F2(F2 a, F2 b) { return f2(a.x+b.x, a.y+b.y); }
@@ -57,8 +57,8 @@ Inline W2 add_W2(W2 a, W2 b) { return w2(a.x+b.x, a.y+b.y); }
 Inline W4 add_W4(W4 a, W4 b) { return w4(a.x+b.x, a.y+b.y, a.z+b.z, a.w+b.w); }
 Inline SW2 add_SW2(SW2 a, SW2 b) { return sw2(a.x+b.x, a.y+b.y); }
 Inline SW4 add_SW4(SW4 a, SW4 b) { return sw4(a.x+b.x, a.y+b.y, a.z + b.z, a.w + b.w); }
-Inline Lane_F3 add_Lane_F3(Lane_F3 a, Lane_F3 b) { return (Lane_F3){a.x+b.x, a.y+b.y, a.z+b.z}; }
-Inline Lane_F4 add_Lane_F4(Lane_F4 a, Lane_F4 b) { return (Lane_F4){a.x+b.x, a.y+b.y, a.z+b.z, a.w+b.w}; }
+Inline Simd_F3 add_Simd_F3(Simd_F3 a, Simd_F3 b) { return (Simd_F3){a.x+b.x, a.y+b.y, a.z+b.z}; }
+Inline Simd_F4 add_Simd_F4(Simd_F4 a, Simd_F4 b) { return (Simd_F4){a.x+b.x, a.y+b.y, a.z+b.z, a.w+b.w}; }
 
 #define add(a, b) _Generic((a), \
   F2: add_F2, \
@@ -68,8 +68,8 @@ Inline Lane_F4 add_Lane_F4(Lane_F4 a, Lane_F4 b) { return (Lane_F4){a.x+b.x, a.y
   W4: add_W4, \
   SW2: add_SW2, \
   SW4: add_SW4, \
-  Lane_F3: add_Lane_F3, \
-  Lane_F4: add_Lane_F4 \
+  Simd_F3: add_Simd_F3, \
+  Simd_F4: add_Simd_F4 \
 )((a), (b))
 
 //- kti: Sub.
@@ -80,8 +80,8 @@ Inline W2 sub_W2(W2 a, W2 b) { return w2(a.x - b.x, a.y - b.y); }
 Inline W4 sub_W4(W4 a, W4 b) { return w4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w); }
 Inline SW2 sub_SW2(SW2 a, SW2 b) { return sw2(a.x - b.x, a.y - b.y); }
 Inline SW4 sub_SW4(SW4 a, SW4 b) { return sw4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w); }
-Inline Lane_F3 sub_Lane_F3(Lane_F3 a, Lane_F3 b) { return (Lane_F3){a.x-b.x, a.y-b.y, a.z-b.z}; }
-Inline Lane_F4 sub_Lane_F4(Lane_F4 a, Lane_F4 b) { return (Lane_F4){a.x-b.x, a.y-b.y, a.z-b.z, a.w-b.w}; }
+Inline Simd_F3 sub_Simd_F3(Simd_F3 a, Simd_F3 b) { return (Simd_F3){a.x-b.x, a.y-b.y, a.z-b.z}; }
+Inline Simd_F4 sub_Simd_F4(Simd_F4 a, Simd_F4 b) { return (Simd_F4){a.x-b.x, a.y-b.y, a.z-b.z, a.w-b.w}; }
 
 #define sub(a, b) _Generic((a), \
   F2: sub_F2, \
@@ -91,8 +91,8 @@ Inline Lane_F4 sub_Lane_F4(Lane_F4 a, Lane_F4 b) { return (Lane_F4){a.x-b.x, a.y
   W4: sub_W4, \
   SW2: sub_SW2, \
   SW4: sub_SW4, \
-  Lane_F3: sub_Lane_F3, \
-  Lane_F4: sub_Lane_F4 \
+  Simd_F3: sub_Simd_F3, \
+  Simd_F4: sub_Simd_F4 \
 )((a), (b))
 
 //- kti: Mul.
@@ -141,8 +141,8 @@ Inline W2 scale_W2(W2 v, W1 s) { return w2(v.x * s, v.y * s); }
 Inline W4 scale_W4(W4 v, W1 s) { return w4(v.x * s, v.y * s, v.z * s, v.w * s); }
 Inline SW2 scale_SW2(SW2 v, SW1 s) { return sw2(v.x * s, v.y * s); }
 Inline SW4 scale_SW4(SW4 v, SW1 s) { return sw4(v.x * s, v.y * s, v.z * s, v.w * s); }
-Inline Lane_F3 scale_Lane_F3(Lane_F3 v, Lane_F1 s) { return (Lane_F3){v.x*s, v.y*s, v.z*s}; }
-Inline Lane_F4 scale_Lane_F4(Lane_F4 v, Lane_F1 s) { return (Lane_F4){v.x*s, v.y*s, v.z*s, v.w*s}; }
+Inline Simd_F3 scale_Simd_F3(Simd_F3 v, Simd_F1 s) { return (Simd_F3){v.x*s, v.y*s, v.z*s}; }
+Inline Simd_F4 scale_Simd_F4(Simd_F4 v, Simd_F1 s) { return (Simd_F4){v.x*s, v.y*s, v.z*s, v.w*s}; }
 
 #define scale(a, b) _Generic((a), \
   F2: scale_F2, \
@@ -152,8 +152,8 @@ Inline Lane_F4 scale_Lane_F4(Lane_F4 v, Lane_F1 s) { return (Lane_F4){v.x*s, v.y
   W4: scale_W4, \
   SW2: scale_SW2, \
   SW4: scale_SW4, \
-  Lane_F3: scale_Lane_F3, \
-  Lane_F4: scale_Lane_F4 \
+  Simd_F3: scale_Simd_F3, \
+  Simd_F4: scale_Simd_F4 \
 )((a), (b))
 
 //- kti: Add scaled.
@@ -187,10 +187,10 @@ Inline F3 abs_F3(F3 v) { return f3(fabsf(v.x), fabsf(v.y), fabsf(v.z)); }
 Inline F4 abs_F4(F4 v) { return f4(fabsf(v.x), fabsf(v.y), fabsf(v.z), fabsf(v.w)); }
 Inline SW2 abs_SW2(SW2 v) { return sw2(abs(v.x), abs(v.y)); }
 Inline SW4 abs_SW4(SW4 v) { return sw4(abs(v.x), abs(v.y), abs(v.z), abs(v.w)); }
-Inline Lane_F1 abs_Lane_F1(Lane_F1 v)
+Inline Simd_F1 abs_Simd_F1(Simd_F1 v)
 {
-  union { Lane_F1 f; Lane_SI1 i; } bits = {.f = v};
-  bits.i &= splat_Lane_SI1(0x7fffffff);
+  union { Simd_F1 f; Simd_SI1 i; } bits = {.f = v};
+  bits.i &= splat_Simd_SI1(0x7fffffff);
   return bits.f;
 }
 
@@ -206,7 +206,7 @@ Inline Lane_F1 abs_Lane_F1(Lane_F1 v)
   F4: abs_F4, \
   SW2: abs_SW2, \
   SW4: abs_SW4, \
-  Lane_F1: abs_Lane_F1 \
+  Simd_F1: abs_Simd_F1 \
 )((v))
 
 //- kti: Dot.
@@ -221,13 +221,13 @@ Inline F1 dot_F4(F4 a, F4 b)
 {
   return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
 }
-Inline Lane_F1 dot_Lane_F3(Lane_F3 a, Lane_F3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+Inline Simd_F1 dot_Simd_F3(Simd_F3 a, Simd_F3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 
 #define dot(a, b) _Generic((a), \
   F2: dot_F2, \
   F3: dot_F3, \
   F4: dot_F4, \
-  Lane_F3: dot_Lane_F3 \
+  Simd_F3: dot_Simd_F3 \
 )((a), (b))
 
 //- kti: Sqrt.
@@ -235,19 +235,19 @@ Inline F4 sqrt_F4(F4 v)
 {
   return f4(sqrtf(v.x), sqrtf(v.y), sqrtf(v.z), sqrtf(v.w));
 }
-Inline Lane_F1 sqrt_Lane_F1(Lane_F1 v)
+Inline Simd_F1 sqrt_Simd_F1(Simd_F1 v)
 {
-#if LANE_COUNT == 4 && defined(__SSE__)
-  return (Lane_F1)_mm_sqrt_ps((__m128)v);
-#elif LANE_COUNT == 4 && defined(__ARM_NEON)
-  return (Lane_F1)vsqrtq_f32((float32x4_t)v);
-#elif LANE_COUNT == 16 && defined(__AVX512F__)
-  return (Lane_F1)_mm512_sqrt_ps((__m512)v);
-#elif LANE_COUNT == 8 && defined(__AVX__)
-  return (Lane_F1)_mm256_sqrt_ps((__m256)v);
+#if SIMD_WIDTH == 4 && defined(__SSE__)
+  return (Simd_F1)_mm_sqrt_ps((__m128)v);
+#elif SIMD_WIDTH == 4 && defined(__ARM_NEON)
+  return (Simd_F1)vsqrtq_f32((float32x4_t)v);
+#elif SIMD_WIDTH == 16 && defined(__AVX512F__)
+  return (Simd_F1)_mm512_sqrt_ps((__m512)v);
+#elif SIMD_WIDTH == 8 && defined(__AVX__)
+  return (Simd_F1)_mm256_sqrt_ps((__m256)v);
 #else
-  Lane_F1 result = {0};
-  for (L1 i = 0; i < LANE_COUNT; i += 1)
+  Simd_F1 result = {0};
+  for (L1 i = 0; i < SIMD_WIDTH; i += 1)
   {
     result[i] = sqrtf(v[i]);
   }
@@ -258,25 +258,25 @@ Inline Lane_F1 sqrt_Lane_F1(Lane_F1 v)
 #define sqrt(v) _Generic((v), \
   F1: sqrtf, \
   F4: sqrt_F4, \
-  Lane_F1: sqrt_Lane_F1, \
+  Simd_F1: sqrt_Simd_F1, \
   D1: sqrt \
 )((v))
 
 //- kti: Select.
-Inline Lane_SI1 select_Lane_SI1(Lane_Mask mask, Lane_SI1 yes, Lane_SI1 no)
+Inline Simd_SI1 select_Simd_SI1(Simd_Mask mask, Simd_SI1 yes, Simd_SI1 no)
 {
   return (mask & yes) | (~mask & no);
 }
-Inline Lane_F1 select_Lane_F1(Lane_Mask mask, Lane_F1 yes, Lane_F1 no)
+Inline Simd_F1 select_Simd_F1(Simd_Mask mask, Simd_F1 yes, Simd_F1 no)
 {
-  union { Lane_F1 f; Lane_SI1 i; } a = {.f = yes}, b = {.f = no}, result;
-  result.i = select_Lane_SI1(mask, a.i, b.i);
+  union { Simd_F1 f; Simd_SI1 i; } a = {.f = yes}, b = {.f = no}, result;
+  result.i = select_Simd_SI1(mask, a.i, b.i);
   return result.f;
 }
 
 #define select(mask, yes, no) _Generic((yes), \
-  Lane_SI1: select_Lane_SI1, \
-  Lane_F1: select_Lane_F1 \
+  Simd_SI1: select_Simd_SI1, \
+  Simd_F1: select_Simd_F1 \
 )((mask), (yes), (no))
 
 //- kti: Min.
@@ -291,16 +291,16 @@ Inline F3 min_F3(F3 a, F3 b) { return (F3){{Min(a.x, b.x), Min(a.y, b.y), Min(a.
 Inline F4 min_F4(F4 a, F4 b) {
   return f4(Min(a.x, b.x), Min(a.y, b.y), Min(a.z, b.z), Min(a.w, b.w));
 }
-Inline Lane_F1 min_Lane_F1(Lane_F1 a, Lane_F1 b)
+Inline Simd_F1 min_Simd_F1(Simd_F1 a, Simd_F1 b)
 {
-#if LANE_COUNT == 4 && defined(__SSE__)
-  return (Lane_F1)_mm_min_ps((__m128)a, (__m128)b);
-#elif LANE_COUNT == 4 && defined(__ARM_NEON)
-  return (Lane_F1)vminq_f32((float32x4_t)a, (float32x4_t)b);
-#elif LANE_COUNT == 8 && defined(__AVX__)
-  return (Lane_F1)_mm256_min_ps((__m256)a, (__m256)b);
-#elif LANE_COUNT == 16 && defined(__AVX512F__)
-  return (Lane_F1)_mm512_min_ps((__m512)a, (__m512)b);
+#if SIMD_WIDTH == 4 && defined(__SSE__)
+  return (Simd_F1)_mm_min_ps((__m128)a, (__m128)b);
+#elif SIMD_WIDTH == 4 && defined(__ARM_NEON)
+  return (Simd_F1)vminq_f32((float32x4_t)a, (float32x4_t)b);
+#elif SIMD_WIDTH == 8 && defined(__AVX__)
+  return (Simd_F1)_mm256_min_ps((__m256)a, (__m256)b);
+#elif SIMD_WIDTH == 16 && defined(__AVX512F__)
+  return (Simd_F1)_mm512_min_ps((__m512)a, (__m512)b);
 #else
   return select(a < b, a, b);
 #endif
@@ -316,7 +316,7 @@ Inline Lane_F1 min_Lane_F1(Lane_F1 a, Lane_F1 b)
   F2: min_F2, \
   F3: min_F3, \
   F4: min_F4, \
-  Lane_F1: min_Lane_F1 \
+  Simd_F1: min_Simd_F1 \
 )((a), (b))
 
 //- kti: Max.
@@ -331,16 +331,16 @@ Inline F3 max_F3(F3 a, F3 b) { return (F3){{Max(a.x, b.x), Max(a.y, b.y), Max(a.
 Inline F4 max_F4(F4 a, F4 b) {
   return f4(Max(a.x, b.x), Max(a.y, b.y), Max(a.z, b.z), Max(a.w, b.w));
 }
-Inline Lane_F1 max_Lane_F1(Lane_F1 a, Lane_F1 b)
+Inline Simd_F1 max_Simd_F1(Simd_F1 a, Simd_F1 b)
 {
-#if LANE_COUNT == 4 && defined(__SSE__)
-  return (Lane_F1)_mm_max_ps((__m128)a, (__m128)b);
-#elif LANE_COUNT == 4 && defined(__ARM_NEON)
-  return (Lane_F1)vmaxq_f32((float32x4_t)a, (float32x4_t)b);
-#elif LANE_COUNT == 8 && defined(__AVX__)
-  return (Lane_F1)_mm256_max_ps((__m256)a, (__m256)b);
-#elif LANE_COUNT == 16 && defined(__AVX512F__)
-  return (Lane_F1)_mm512_max_ps((__m512)a, (__m512)b);
+#if SIMD_WIDTH == 4 && defined(__SSE__)
+  return (Simd_F1)_mm_max_ps((__m128)a, (__m128)b);
+#elif SIMD_WIDTH == 4 && defined(__ARM_NEON)
+  return (Simd_F1)vmaxq_f32((float32x4_t)a, (float32x4_t)b);
+#elif SIMD_WIDTH == 8 && defined(__AVX__)
+  return (Simd_F1)_mm256_max_ps((__m256)a, (__m256)b);
+#elif SIMD_WIDTH == 16 && defined(__AVX512F__)
+  return (Simd_F1)_mm512_max_ps((__m512)a, (__m512)b);
 #else
   return select(a > b, a, b);
 #endif
@@ -356,7 +356,7 @@ Inline Lane_F1 max_Lane_F1(Lane_F1 a, Lane_F1 b)
   F2: max_F2, \
   F3: max_F3, \
   F4: max_F4, \
-  Lane_F1: max_Lane_F1 \
+  Simd_F1: max_Simd_F1 \
 )((a), (b))
 
 //- kti: Clamp01.
@@ -388,14 +388,14 @@ Inline F1 length_F3(F3 v) { return sqrt(length_sq(v)); }
 
 //- kti: Normalize.
 Inline F3 normalize_F3(F3 v) { return scale(v, 1.0f/length(v)); }
-Inline Lane_F3 normalize_Lane_F3(Lane_F3 v)
+Inline Simd_F3 normalize_Simd_F3(Simd_F3 v)
 {
   return scale(v, 1.0f/sqrt(dot(v, v)));
 }
 
 #define normalize(v) _Generic((v), \
   F3: normalize_F3, \
-  Lane_F3: normalize_Lane_F3 \
+  Simd_F3: normalize_Simd_F3 \
 )((v))
 
 //- kti: Sign.
@@ -431,11 +431,11 @@ Inline F4 lerp_F4(F4 a, F1 t, F4 b)
 {
   return add(scale(a, 1.0f-t), scale(b, t));
 }
-Inline Lane_F4 lerp_Lane_F4(Lane_F4 a, Lane_F1 t, Lane_F4 b)
+Inline Simd_F4 lerp_Simd_F4(Simd_F4 a, Simd_F1 t, Simd_F4 b)
 {
-  Lane_F4  left_contribution   =  scale(a, 1.0f - t);
-  Lane_F4  right_contribution  =  scale(b, t);
-  Lane_F4  result              =  add(left_contribution, right_contribution);
+  Simd_F4  left_contribution   =  scale(a, 1.0f - t);
+  Simd_F4  right_contribution  =  scale(b, t);
+  Simd_F4  result              =  add(left_contribution, right_contribution);
 
   return result;
 }
@@ -445,7 +445,7 @@ Inline Lane_F4 lerp_Lane_F4(Lane_F4 a, Lane_F1 t, Lane_F4 b)
   F2: lerp_F2, \
   F3: lerp_F3, \
   F4: lerp_F4, \
-  Lane_F4: lerp_Lane_F4 \
+  Simd_F4: lerp_Simd_F4 \
 )((a), (t), (b))
 
 //- kti: Lerp snap.
@@ -477,14 +477,14 @@ Inline F3 cross_F3(F3 a, F3 b)
 {
   return f3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x);
 }
-Inline Lane_F3 cross_Lane_F3(Lane_F3 a, Lane_F3 b)
+Inline Simd_F3 cross_Simd_F3(Simd_F3 a, Simd_F3 b)
 {
-  return (Lane_F3){a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x};
+  return (Simd_F3){a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x};
 }
 
 #define cross(a, b) _Generic((a), \
   F3: cross_F3, \
-  Lane_F3: cross_Lane_F3 \
+  Simd_F3: cross_Simd_F3 \
 )((a), (b))
 
 //- kti: Reflect.
@@ -503,14 +503,14 @@ Inline F1 luminance_F4(F4 v)
   F1 result = 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
   return result;
 }
-Inline Lane_F1 luminance_Lane_F4(Lane_F4 c)
+Inline Simd_F1 luminance_Simd_F4(Simd_F4 c)
 {
   return 0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z;
 }
 
 #define luminance(v) _Generic((v), \
   F4: luminance_F4, \
-  Lane_F4: luminance_Lane_F4 \
+  Simd_F4: luminance_Simd_F4 \
 )((v))
 
 //- kti: Pow.
@@ -573,59 +573,59 @@ Inline F4 F4_from_F3(F3 v, F1 w)
 }
 
 ////////////////////////////////
-//~ Lanes
+//~ SIMD
 
-Inline I1 any_Lane_Mask(Lane_Mask mask)
+Inline I1 any_Simd_Mask(Simd_Mask mask)
 {
-  for (L1 i = 0; i < LANE_COUNT; i += 1) if (mask[i]) return 1;
+  for (L1 i = 0; i < SIMD_WIDTH; i += 1) if (mask[i]) return 1;
   return 0;
 }
 
-Inline I1 all_Lane_Mask(Lane_Mask mask)
+Inline I1 all_Simd_Mask(Simd_Mask mask)
 {
-  for (L1 i = 0; i < LANE_COUNT; i += 1) if (!mask[i]) return 0;
+  for (L1 i = 0; i < SIMD_WIDTH; i += 1) if (!mask[i]) return 0;
   return 1;
 }
 
-Inline Lane_F3 broadcast_Lane_F3(F3 v)
+Inline Simd_F3 broadcast_Simd_F3(F3 v)
 {
-  return (Lane_F3){splat_Lane_F1(v.x), splat_Lane_F1(v.y), splat_Lane_F1(v.z)};
+  return (Simd_F3){splat_Simd_F1(v.x), splat_Simd_F1(v.y), splat_Simd_F1(v.z)};
 }
 
-Inline F3 extract_lane_F3(Lane_F3 v, L1 lane)
+Inline F3 extract_lane_F3(Simd_F3 v, L1 lane)
 {
   return f3(v.x[lane], v.y[lane], v.z[lane]);
 }
 
-Inline void set_lane_F3(Lane_F3 *v, L1 lane, F3 value)
+Inline void set_lane_F3(Simd_F3 *v, L1 lane, F3 value)
 {
   v->x[lane] = value.x;
   v->y[lane] = value.y;
   v->z[lane] = value.z;
 }
 
-Inline Lane_F3 pack_Lane_F3(const F3 *values)
+Inline Simd_F3 pack_Simd_F3(const F3 *values)
 {
-  Lane_F3 result = {0};
-  for (L1 i = 0; i < LANE_COUNT; i += 1) set_lane_F3(&result, i, values[i]);
+  Simd_F3 result = {0};
+  for (L1 i = 0; i < SIMD_WIDTH; i += 1) set_lane_F3(&result, i, values[i]);
   return result;
 }
 
 ////////////////////////////////
-//~ kti: Lane_F4
+//~ kti: Simd_F4
 
-Inline Lane_F4 broadcast_Lane_F4(F4 v)
+Inline Simd_F4 broadcast_Simd_F4(F4 v)
 {
-  Lane_F4 result = {splat_Lane_F1(v.x), splat_Lane_F1(v.y), splat_Lane_F1(v.z), splat_Lane_F1(v.w)};
+  Simd_F4 result = {splat_Simd_F1(v.x), splat_Simd_F1(v.y), splat_Simd_F1(v.z), splat_Simd_F1(v.w)};
   return result;
 }
 
-Inline F4 extract_lane_F4(Lane_F4 v, L1 lane)
+Inline F4 extract_lane_F4(Simd_F4 v, L1 lane)
 {
   return f4(v.x[lane], v.y[lane], v.z[lane], v.w[lane]);
 }
 
-Inline void set_lane_F4(Lane_F4 *v, L1 lane, F4 value)
+Inline void set_lane_F4(Simd_F4 *v, L1 lane, F4 value)
 {
   v->x[lane] = value.x;
   v->y[lane] = value.y;
@@ -633,16 +633,16 @@ Inline void set_lane_F4(Lane_F4 *v, L1 lane, F4 value)
   v->w[lane] = value.w;
 }
 
-Inline Lane_F4 pack_Lane_F4(const F4 *values)
+Inline Simd_F4 pack_Simd_F4(const F4 *values)
 {
-  Lane_F4 result = {0};
-  for (L1 i = 0; i < LANE_COUNT; i += 1) set_lane_F4(&result, i, values[i]);
+  Simd_F4 result = {0};
+  for (L1 i = 0; i < SIMD_WIDTH; i += 1) set_lane_F4(&result, i, values[i]);
   return result;
 }
 
-Inline Lane_F4 pad_Lane_F4(Lane_F4 v, L1 count)
+Inline Simd_F4 pad_Simd_F4(Simd_F4 v, L1 count)
 {
-  for (L1 i = count; i < LANE_COUNT; ++i)
+  for (L1 i = count; i < SIMD_WIDTH; ++i)
   {
     v.x[i] = v.x[count - 1];
     v.y[i] = v.y[count - 1];
@@ -652,14 +652,14 @@ Inline Lane_F4 pad_Lane_F4(Lane_F4 v, L1 count)
   return v;
 }
 
-Inline Lane_F4 gather_Lane_F4(const Lane_F4 *blocks, const L1 *indices)
+Inline Simd_F4 gather_Simd_F4(const Simd_F4 *blocks, const L1 *indices)
 {
-  Lane_F4 result = {0};
+  Simd_F4 result = {0};
 
-  for (L1 i = 0; i < LANE_COUNT; ++i)
+  for (L1 i = 0; i < SIMD_WIDTH; ++i)
   {
-    const Lane_F4  *block  =  &blocks[indices[i] / LANE_COUNT];
-    L1             lane    =  indices[i] % LANE_COUNT;
+    const Simd_F4  *block  =  &blocks[indices[i] / SIMD_WIDTH];
+    L1             lane    =  indices[i] % SIMD_WIDTH;
 
     result.x[i] = block->x[lane];
     result.y[i] = block->y[lane];
@@ -852,19 +852,19 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane)
   return result;
 }
 
-Internal Lane_F1 ray_lane_plane_intersect(Ray ray, Lane_Plane planes)
+Internal Simd_F1 ray_simd_plane_intersect(Ray ray, Simd_Plane planes)
 {
   F1 min_t = 0.001f;
 
-  Lane_F3 ray_pos = broadcast_Lane_F3(ray.pos);
-  Lane_F3 ray_dir = broadcast_Lane_F3(ray.dir);
+  Simd_F3 ray_pos = broadcast_Simd_F3(ray.pos);
+  Simd_F3 ray_dir = broadcast_Simd_F3(ray.dir);
 
-  Lane_F1 denom = dot(planes.normal, ray_dir);
+  Simd_F1 denom = dot(planes.normal, ray_dir);
 
-  Lane_F1 t = (-planes.d - dot(planes.normal, ray_pos)) / denom;
+  Simd_F1 t = (-planes.d - dot(planes.normal, ray_pos)) / denom;
 
-  Lane_Mask valid  = (abs(denom) > 0.0001f) & (t > min_t);
-  Lane_F1  result = select(valid, t, splat_Lane_F1(F1_MAX));
+  Simd_Mask valid  = (abs(denom) > 0.0001f) & (t > min_t);
+  Simd_F1  result = select(valid, t, splat_Simd_F1(F1_MAX));
 
   return result;
 }
@@ -897,29 +897,29 @@ Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
   return result;
 }
 
-Internal Lane_F1 ray_lane_sphere_intersect(Ray ray, Lane_Sphere spheres)
+Internal Simd_F1 ray_simd_sphere_intersect(Ray ray, Simd_Sphere spheres)
 {
   F1 min_t = 0.001f;
 
-  Lane_F3 ray_pos = broadcast_Lane_F3(ray.pos);
-  Lane_F3 ray_dir = broadcast_Lane_F3(ray.dir);
-  Lane_F3 rel     = sub(ray_pos, spheres.pos);
+  Simd_F3 ray_pos = broadcast_Simd_F3(ray.pos);
+  Simd_F3 ray_dir = broadcast_Simd_F3(ray.dir);
+  Simd_F3 rel     = sub(ray_pos, spheres.pos);
 
-  Lane_F1 half_b       = dot(ray_dir, rel);
-  Lane_F1 c            = dot(rel, rel) - Square(spheres.radius);
-  Lane_F1 discriminant = Square(half_b) - c;
+  Simd_F1 half_b       = dot(ray_dir, rel);
+  Simd_F1 c            = dot(rel, rel) - Square(spheres.radius);
+  Simd_F1 discriminant = Square(half_b) - c;
 
-  Lane_F1 root_term = sqrt(max(discriminant, splat_Lane_F1(0.0f)));
+  Simd_F1 root_term = sqrt(max(discriminant, splat_Simd_F1(0.0f)));
 
-  Lane_F1 far_t  = -half_b + root_term;
-  Lane_F1 near_t = -half_b - root_term;
-  Lane_F1 t      = select(near_t > min_t, near_t, far_t);
+  Simd_F1 far_t  = -half_b + root_term;
+  Simd_F1 near_t = -half_b - root_term;
+  Simd_F1 t      = select(near_t > min_t, near_t, far_t);
 
-  Lane_Mask valid_discriminant = discriminant > 0;
-  Lane_Mask valid_root         = root_term > 0.0001f;
-  Lane_Mask is_valid           = valid_discriminant & valid_root & (t > min_t);
+  Simd_Mask valid_discriminant = discriminant > 0;
+  Simd_Mask valid_root         = root_term > 0.0001f;
+  Simd_Mask is_valid           = valid_discriminant & valid_root & (t > min_t);
 
-  Lane_F1 result = select(is_valid, t, splat_Lane_F1(F1_MAX));
+  Simd_F1 result = select(is_valid, t, splat_Simd_F1(F1_MAX));
 
   return result;
 }
@@ -965,46 +965,46 @@ Internal F1 ray_box_intersect(Ray ray, Box box)
   return t > min_t ? t : F1_MAX;
 }
 
-Inline Lane_Mask ray_lane_slab_intersect(Lane_F1 low, Lane_F1 high, F1 origin_scalar, F1 dir_scalar, F1 inv_dir, Lane_F1 *near_t, Lane_F1 *far_t)
+Inline Simd_Mask ray_simd_slab_intersect(Simd_F1 low, Simd_F1 high, F1 origin_scalar, F1 dir_scalar, F1 inv_dir, Simd_F1 *near_t, Simd_F1 *far_t)
 {
-  Lane_F1 origin = splat_Lane_F1(origin_scalar);
-  Lane_F1 dir = splat_Lane_F1(dir_scalar);
+  Simd_F1 origin = splat_Simd_F1(origin_scalar);
+  Simd_F1 dir = splat_Simd_F1(dir_scalar);
 
-  Lane_Mask parallel = dir == 0.0f;
-  Lane_Mask inside = (low <= origin) & (origin <= high);
+  Simd_Mask parallel = dir == 0.0f;
+  Simd_Mask inside = (low <= origin) & (origin <= high);
 
-  Lane_F1 t0 = (low - origin) * inv_dir;
-  Lane_F1 t1 = (high - origin) * inv_dir;
+  Simd_F1 t0 = (low - origin) * inv_dir;
+  Simd_F1 t1 = (high - origin) * inv_dir;
 
-  Lane_F1 min = min(t0, t1);
-  Lane_F1 max = max(t0, t1);
+  Simd_F1 min = min(t0, t1);
+  Simd_F1 max = max(t0, t1);
 
-  near_t[0] = select(parallel, splat_Lane_F1(-INFINITY), min);
-  far_t[0]  = select(parallel, splat_Lane_F1(INFINITY), max);
+  near_t[0] = select(parallel, splat_Simd_F1(-INFINITY), min);
+  far_t[0]  = select(parallel, splat_Simd_F1(INFINITY), max);
 
-  Lane_Mask can_intersect = ~parallel | inside;
+  Simd_Mask can_intersect = ~parallel | inside;
 
   return can_intersect;
 }
 
-Internal Lane_F1 ray_lane_box_intersect(Ray ray, Lane_Box boxes)
+Internal Simd_F1 ray_simd_box_intersect(Ray ray, Simd_Box boxes)
 {
   F1 min_t = 0.001f;
 
-  Lane_F1 near_x, far_x, near_y, far_y, near_z, far_z;
+  Simd_F1 near_x, far_x, near_y, far_y, near_z, far_z;
 
-  Lane_Mask valid_x = ray_lane_slab_intersect(boxes.min.x, boxes.max.x, ray.pos.x, ray.dir.x, ray.inv_dir.x, &near_x, &far_x);
-  Lane_Mask valid_y = ray_lane_slab_intersect(boxes.min.y, boxes.max.y, ray.pos.y, ray.dir.y, ray.inv_dir.y, &near_y, &far_y);
-  Lane_Mask valid_z = ray_lane_slab_intersect(boxes.min.z, boxes.max.z, ray.pos.z, ray.dir.z, ray.inv_dir.z, &near_z, &far_z);
+  Simd_Mask valid_x = ray_simd_slab_intersect(boxes.min.x, boxes.max.x, ray.pos.x, ray.dir.x, ray.inv_dir.x, &near_x, &far_x);
+  Simd_Mask valid_y = ray_simd_slab_intersect(boxes.min.y, boxes.max.y, ray.pos.y, ray.dir.y, ray.inv_dir.y, &near_y, &far_y);
+  Simd_Mask valid_z = ray_simd_slab_intersect(boxes.min.z, boxes.max.z, ray.pos.z, ray.dir.z, ray.inv_dir.z, &near_z, &far_z);
 
-  Lane_F1 t_min = max(max(near_x, near_y), near_z);
-  Lane_F1 t_max = min(min(far_x, far_y), far_z);
+  Simd_F1 t_min = max(max(near_x, near_y), near_z);
+  Simd_F1 t_max = min(min(far_x, far_y), far_z);
 
-  Lane_F1 t = select(t_min > min_t, t_min, t_max);
+  Simd_F1 t = select(t_min > min_t, t_min, t_max);
 
-  Lane_Mask valid = valid_x & valid_y & valid_z & (t_min <= t_max) & (t > min_t);
+  Simd_Mask valid = valid_x & valid_y & valid_z & (t_min <= t_max) & (t > min_t);
 
-  Lane_F1 result = select(valid, t, splat_Lane_F1(F1_MAX));
+  Simd_F1 result = select(valid, t, splat_Simd_F1(F1_MAX));
 
   return result;
 }

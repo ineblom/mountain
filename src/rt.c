@@ -101,14 +101,14 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     L1         hit_lane         = 0;
 
     //- kti: Spheres
-    L1 sphere_packet_count = (scene.sphere_count + LANE_COUNT - 1) / LANE_COUNT;
+    L1 sphere_packet_count = (scene.sphere_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
     for (L1 sphere_packet_index = 0; sphere_packet_index < sphere_packet_count; sphere_packet_index += 1)
     {
-      Lane_Sphere spheres = scene.spheres[sphere_packet_index];
+      Simd_Sphere spheres = scene.spheres[sphere_packet_index];
 
-      Lane_F1 distances = ray_lane_sphere_intersect(ray, spheres);
+      Simd_F1 distances = ray_simd_sphere_intersect(ray, spheres);
 
-      L1 lane_count = Min(scene.sphere_count - sphere_packet_index * LANE_COUNT, LANE_COUNT);
+      L1 lane_count = Min(scene.sphere_count - sphere_packet_index * SIMD_WIDTH, SIMD_WIDTH);
       for (L1 i = 0; i < lane_count; i += 1)
       {
         F1 t = distances[i];
@@ -124,14 +124,14 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     }
 
     //- kti: Boxes
-    L1 box_packet_count = (scene.box_count + LANE_COUNT - 1) / LANE_COUNT;
+    L1 box_packet_count = (scene.box_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
     for (L1 box_packet_index = 0; box_packet_index < box_packet_count; box_packet_index += 1)
     {
-      Lane_Box boxes = scene.boxes[box_packet_index];
+      Simd_Box boxes = scene.boxes[box_packet_index];
 
-      Lane_F1 distances = ray_lane_box_intersect(ray, boxes);
+      Simd_F1 distances = ray_simd_box_intersect(ray, boxes);
 
-      L1 lane_count = Min(scene.box_count - box_packet_index * LANE_COUNT, LANE_COUNT);
+      L1 lane_count = Min(scene.box_count - box_packet_index * SIMD_WIDTH, SIMD_WIDTH);
       for (L1 i = 0; i < lane_count; i += 1)
       {
         F1 t = distances[i];
@@ -147,14 +147,14 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     }
 
     //- kti: Planes
-    L1 plane_packet_count = (scene.plane_count + LANE_COUNT - 1) / LANE_COUNT;
+    L1 plane_packet_count = (scene.plane_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
     for (L1 plane_packet_index = 0; plane_packet_index < plane_packet_count; plane_packet_index += 1)
     {
-      Lane_Plane planes = scene.planes[plane_packet_index];
+      Simd_Plane planes = scene.planes[plane_packet_index];
 
-      Lane_F1 distances = ray_lane_plane_intersect(ray, planes);
+      Simd_F1 distances = ray_simd_plane_intersect(ray, planes);
 
-      L1 lane_count = Min(scene.plane_count - plane_packet_index * LANE_COUNT, LANE_COUNT);
+      L1 lane_count = Min(scene.plane_count - plane_packet_index * SIMD_WIDTH, SIMD_WIDTH);
       for (L1 i = 0; i < lane_count; i += 1)
       {
         F1 t = distances[i];
@@ -171,7 +171,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
     if (hit_kind != SHAPE_KIND_COUNT)
     {
-      L1 primitive_index = hit_packet_index * LANE_COUNT + hit_lane;
+      L1 primitive_index = hit_packet_index * SIMD_WIDTH + hit_lane;
 
       L1 material_base_index = hit_kind   == SHAPE_KIND__SPHERE ? 0
                                : hit_kind == SHAPE_KIND__BOX    ? scene.sphere_count
@@ -186,7 +186,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
       {
         case SHAPE_KIND__SPHERE:
         {
-          Lane_Sphere spheres = scene.spheres[hit_packet_index];
+          Simd_Sphere spheres = scene.spheres[hit_packet_index];
           F3 pos = extract_lane_F3(spheres.pos, hit_lane);
 
           next_normal = normalize(sub(next_origin, pos));
@@ -194,7 +194,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
         case SHAPE_KIND__PLANE:
         {
-          Lane_Plane planes = scene.planes[hit_packet_index];
+          Simd_Plane planes = scene.planes[hit_packet_index];
           F3 normal = extract_lane_F3(planes.normal, hit_lane);
 
           next_normal = dot(normal, ray.dir) < 0.0f ? normal : neg(normal);
@@ -202,7 +202,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
         case SHAPE_KIND__BOX:
         {
-          Lane_Box boxes = scene.boxes[hit_packet_index];
+          Simd_Box boxes = scene.boxes[hit_packet_index];
           F3 min = extract_lane_F3(boxes.min, hit_lane);
           F3 max = extract_lane_F3(boxes.max, hit_lane);
 

@@ -29,13 +29,13 @@ struct RT_Scene
   RT_Camera camera;
 
   L1           sphere_count;
-  Lane_Sphere *spheres;
+  Simd_Sphere *spheres;
 
   L1        box_count;
-  Lane_Box *boxes;
+  Simd_Box *boxes;
 
   L1          plane_count;
-  Lane_Plane *planes;
+  Simd_Plane *planes;
 
   L1           material_count;
   RT_Material *materials;

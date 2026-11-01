@@ -20,7 +20,7 @@
 #else
 #include "os_wayland.h"
 #endif
-#include "lane.h"
+#include "worker.h"
 #include "profile.h"
 #include "math.h"
 #include "image.h"
@@ -57,7 +57,7 @@ NoInline void WrmBas(void)
 #else
 #include "os_wayland.c"
 #endif
-#include "lane.c"
+#include "worker.c"
 #include "profile.c"
 #include "math.c"
 #include "image.c"

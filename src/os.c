@@ -287,7 +287,7 @@ Internal void os_barrier_wait(OS_Barrier *barrier)
 
   if (remaining == 1)
   {
-    // Arrival acquire/release operations collect every lane's writes. Publish
+    // Arrival acquire/release operations collect every worker's writes. Publish
     // them through generation only after resetting the next round's count.
     os_mutex_take(barrier->mutex);
     __atomic_store_n(&barrier->count, barrier->threshold, __ATOMIC_RELAXED);
@@ -299,7 +299,7 @@ Internal void os_barrier_wait(OS_Barrier *barrier)
   else
   {
     // Short compute stages usually finish before parking would pay off. Bound
-    // the spin so idle or descheduled lanes do not keep other CPUs busy forever.
+    // the spin so idle or descheduled workers do not keep other CPUs busy forever.
     for (I1 spin = 0; spin < 1024; spin += 1)
     {
       if (atomic_load_I1(&barrier->generation) != generation)

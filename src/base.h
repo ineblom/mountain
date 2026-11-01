@@ -35,16 +35,16 @@ typedef unsigned long long  L1;
 #define VEC_TYPE(x, T)  __attribute__((vector_size(x * sizeof(T))))
 #endif
 
-#ifndef LANE_COUNT
-#define LANE_COUNT 4
+#ifndef SIMD_WIDTH
+#define SIMD_WIDTH 4
 #endif
-#if LANE_COUNT != 4 && LANE_COUNT != 8 && LANE_COUNT != 16
-#error LANE_COUNT must be 4, 8, or 16
+#if SIMD_WIDTH != 4 && SIMD_WIDTH != 8 && SIMD_WIDTH != 16
+#error SIMD_WIDTH must be 4, 8, or 16
 #endif
-typedef float        Lane_F1  VEC_TYPE(LANE_COUNT, float);
-typedef int          Lane_SI1 VEC_TYPE(LANE_COUNT, int);
+typedef float        Simd_F1  VEC_TYPE(SIMD_WIDTH, float);
+typedef int          Simd_SI1 VEC_TYPE(SIMD_WIDTH, int);
 // Comparisons produce signed lanes: false is zero, true is all one bits.
-typedef Lane_SI1 Lane_Mask;
+typedef Simd_SI1 Simd_Mask;
 
 typedef void VoidProc(void);
 

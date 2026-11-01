@@ -26,7 +26,7 @@ Inline F3 sample_cosine_hemisphere(Random_State *rng, F3 n)
 
 Inline F4 fresnel_schlick(F1 cos_theta, F4 F0)
 {
-  return F0 + ((F4){1, 1, 1} - F0) * powf(1.0f - cos_theta, 5.0f);
+  return add_F4(F0, scale_F4(sub_F4((F4){{1, 1, 1}}, F0), powf(1.0f - cos_theta, 5.0f)));
 }
 
 Inline F1 D_GGX(F1 NoH, F1 alpha)
@@ -39,7 +39,7 @@ Inline F1 D_GGX(F1 NoH, F1 alpha)
 
 Inline F1 G1_GGX(F1 NoX, F1 alpha)
 {
-  NoX = saturate_F1(NoX);
+  NoX = clamp01_F1(NoX);
 
   F1  a2     =  alpha * alpha;
   F1  denom  =  NoX + sqrtf(a2 + (1.0f - a2) * NoX * NoX);
@@ -79,8 +79,8 @@ Inline F3 sample_GGX_half(Random_State *rng, F3 n, float alpha)
 
 Inline F1 pdf_GGX(F3 n, F3 h, F3 v, F1 alpha)
 {
-  F1  NoH     =  saturate_F1(dot_F3(n, h));
-  F1  VoH     =  saturate_F1(dot_F3(v, h));
+  F1  NoH     =  clamp01_F1(dot_F3(n, h));
+  F1  VoH     =  clamp01_F1(dot_F3(v, h));
   F1  D       =  D_GGX(NoH, alpha);
   F1  result  =  D * NoH / (4.0f * VoH);
 
@@ -91,7 +91,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 {
   F1  min_hit_distance  =  0.001f;
   F4  result            =  {0};
-  F4  attenuation       =  {1, 1, 1};
+  F4  attenuation       =  {{1, 1, 1}};
 
   for (L1 ray_index = 0; ray_index < scene.max_num_bounces; ray_index += 1)
   {
@@ -106,7 +106,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     {
       Lane_Sphere spheres = scene.spheres[sphere_packet_index];
 
-      Lane_F32 distances = ray_lane_sphere_intersect(ray, spheres);
+      Lane_F1 distances = ray_lane_sphere_intersect(ray, spheres);
 
       L1 lane_count = Min(scene.sphere_count - sphere_packet_index * LANE_COUNT, LANE_COUNT);
       for (L1 i = 0; i < lane_count; i += 1)
@@ -129,7 +129,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     {
       Lane_Box boxes = scene.boxes[box_packet_index];
 
-      Lane_F32 distances = ray_lane_box_intersect(ray, boxes);
+      Lane_F1 distances = ray_lane_box_intersect(ray, boxes);
 
       L1 lane_count = Min(scene.box_count - box_packet_index * LANE_COUNT, LANE_COUNT);
       for (L1 i = 0; i < lane_count; i += 1)
@@ -152,7 +152,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     {
       Lane_Plane planes = scene.planes[plane_packet_index];
 
-      Lane_F32 distances = ray_lane_plane_intersect(ray, planes);
+      Lane_F1 distances = ray_lane_plane_intersect(ray, planes);
 
       L1 lane_count = Min(scene.plane_count - plane_packet_index * LANE_COUNT, LANE_COUNT);
       for (L1 i = 0; i < lane_count; i += 1)
@@ -222,12 +222,12 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         default: break;
       }
 
-      result += attenuation * material.emissive;
+      result = add_F4(result, mul_F4(attenuation, material.emissive));
 
       F1  roughness     =  Max(0.05f, clamp01_F1(material.roughness));
       F1  alpha         =  roughness * roughness;
       F1  metallic      =  clamp01_F1(material.metallic);
-      F4  f0            =  lerp_F4((F4){0.04f, 0.04f, 0.04f}, metallic, material.base_color);
+      F4  f0            =  lerp_F4((F4){{0.04f, 0.04f, 0.04f}}, metallic, material.base_color);
       F1 specular_prob  =  0.5f; // keep constant; MIS handles weighting
 
       if (random_unilateral(rng) < specular_prob)
@@ -236,10 +236,10 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
         F3  h  =  sample_GGX_half(rng, next_normal, alpha);
         F3  l  =  reflect_F3(neg_F3(v), h);
 
-        F1  NoL  =  saturate_F1(dot_F3(next_normal, l));
-        F1  NoV  =  saturate_F1(dot_F3(next_normal, v));
-        F1  NoH  =  saturate_F1(dot_F3(next_normal, h));
-        F1  VoH  =  saturate_F1(dot_F3(v, h));
+        F1  NoL  =  clamp01_F1(dot_F3(next_normal, l));
+        F1  NoV  =  clamp01_F1(dot_F3(next_normal, v));
+        F1  NoH  =  clamp01_F1(dot_F3(next_normal, h));
+        F1  VoH  =  clamp01_F1(dot_F3(v, h));
 
         if (NoL > 0.0f)
         {
@@ -248,18 +248,18 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
           F4  F  =  fresnel_schlick(VoH, f0);
 
           F1  denom   =  Max(4.0f * NoV * NoL, 1e-6f);
-          F4  f_spec  =  (F * (D * G)) / denom;
+          F4  f_spec  =  scale_F4(F, (D * G) / denom);
 
           // Fresnel-weighted diffuse with metallic energy conservation
-          F4  kd_color  =  (1.0f - metallic) * (((F4){1, 1, 1}) - F);
-          F4  f_diff    =  (kd_color * material.base_color) / PI;
+          F4  kd_color  =  scale_F4(sub_F4((F4){{1, 1, 1}}, F), 1.0f - metallic);
+          F4  f_diff    =  scale_F4(mul_F4(kd_color, material.base_color), 1.0f / PI);
 
           F1  pdf_spec   =  pdf_GGX(next_normal, h, v, alpha);
           F1  pdf_diff   =  NoL / PI;
           F1  pdf_total  =  specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
           F1  inv_pdf    =  1.0f / Max(pdf_total, 1e-6f);
 
-          attenuation  *=  (f_spec + f_diff) * (NoL * inv_pdf);
+          attenuation  =  mul_F4(attenuation, scale_F4(add_F4(f_spec, f_diff), NoL * inv_pdf));
           ray.dir      =   l;
         }
         else
@@ -271,31 +271,31 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
       {
         F3  v    =  neg_F3(ray.dir);
         F3  l    =  sample_cosine_hemisphere(rng, next_normal);
-        F1  NoL  =  saturate_F1(dot_F3(next_normal, l));
+        F1  NoL  =  clamp01_F1(dot_F3(next_normal, l));
 
         if (NoL > 0.0f)
         {
           F3  h    =  normalize_F3(add_F3(v, l));
-          F1  NoV  =  saturate_F1(dot_F3(next_normal, v));
-          F1  NoH  =  saturate_F1(dot_F3(next_normal, h));
-          F1  VoH  =  saturate_F1(dot_F3(v, h));
+          F1  NoV  =  clamp01_F1(dot_F3(next_normal, v));
+          F1  NoH  =  clamp01_F1(dot_F3(next_normal, h));
+          F1  VoH  =  clamp01_F1(dot_F3(v, h));
 
           F1  D  =  D_GGX(NoH, alpha);
           F1  G  =  G_Smith(NoV, NoL, alpha);
           F4  F  =  fresnel_schlick(VoH, f0);
 
           F1  denom   =  Max(4.0f * NoV * NoL, 1e-6f);
-          F4  f_spec  =  (F * (D * G)) / denom;
+          F4  f_spec  =  scale_F4(F, (D * G) / denom);
 
-          F4  kd_color  =  (1.0f - metallic) * (((F4){1, 1, 1}) - F);
-          F4  f_diff    =  (kd_color * material.base_color) / PI;
+          F4  kd_color  =  scale_F4(sub_F4((F4){{1, 1, 1}}, F), 1.0f - metallic);
+          F4  f_diff    =  scale_F4(mul_F4(kd_color, material.base_color), 1.0f / PI);
 
           F1  pdf_spec   =  pdf_GGX(next_normal, h, v, alpha);
           F1  pdf_diff   =  NoL / PI;
           F1  pdf_total  =  specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
           F1  inv_pdf    =  1.0f / Max(pdf_total, 1e-6f);
 
-          attenuation *= (f_spec + f_diff) * (NoL * inv_pdf);
+          attenuation = mul_F4(attenuation, scale_F4(add_F4(f_spec, f_diff), NoL * inv_pdf));
           ray.dir = l;
         }
         else
@@ -372,7 +372,7 @@ Internal void rt_trace_scene(RT_Scene scene, Image output, Range pixel_range)
       ray.dir     = normalize_F3(sub_F3(focus_point, ray.pos));
       ray.inv_dir = safe_inv_dir_F3(ray.dir);
 
-      color += ray_cast(scene, &rng, ray) * contrib;
+      color = add_scaled_F4(color, contrib, ray_cast(scene, &rng, ray));
     }
 
     pixels[i] = color;

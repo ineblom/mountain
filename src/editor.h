@@ -230,9 +230,9 @@ typedef enum Async_Request_Kind
 typedef struct Image_Bloom_Work Image_Bloom_Work;
 struct Image_Bloom_Work
 {
-  L1     level_count;
+  L1         level_count;
   Image_RGB *levels;
-  F4x3     *horizontal_blocks;
+  Lane_F4   *horizontal_blocks;
 };
 
 typedef struct Async_Request Async_Request;

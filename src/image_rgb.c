@@ -1,21 +1,36 @@
 Inline L1 image_rgb_block_count(I1 width)
 {
-  return ((L1)width + 3) / 4;
+  return ((L1)width + LANE_COUNT - 1) / LANE_COUNT;
 }
 
-Inline F4x3 *image_rgb_row(Image_RGB image, L1 y)
+Inline Lane_F4 *image_rgb_row(Image_RGB image, L1 y)
 {
   return image.blocks + y * image.block_stride;
 }
 
-Inline F4x3 rgb_load_pixels(F4 *row, L1 x, I1 width)
+Inline Lane_F4 rgb_load_pixels(const F4 *row, L1 x, I1 width)
 {
-  F4 a = row[x];
-  F4 b = row[Min(x + 1, width - 1)];
-  F4 c = row[Min(x + 2, width - 1)];
-  F4 d = row[Min(x + 3, width - 1)];
+  Lane_F4  result  =  {0};
+  L1       last_x  =  (L1)width - 1;
 
-  return F4x3_from_F4(a, b, c, d);
+  for (L1 lane = 0; lane < LANE_COUNT; ++lane)
+  {
+    set_lane_F4(&result, lane, row[Min(x + lane, last_x)]);
+  }
+
+  return result;
+}
+
+// Replicate a single lane across the whole block, for edge clamping.
+Inline Lane_F4 rgb_splat_lane(Lane_F4 v, L1 lane)
+{
+  Lane_F4 result = {
+    splat_Lane_F1(v.x[lane]),
+    splat_Lane_F1(v.y[lane]),
+    splat_Lane_F1(v.z[lane]),
+    splat_Lane_F1(v.w[lane]),
+  };
+  return result;
 }
 
 Internal Image_RGB image_rgb_alloc(Arena *arena, I1 width, I1 height)
@@ -25,7 +40,7 @@ Internal Image_RGB image_rgb_alloc(Arena *arena, I1 width, I1 height)
   if (width && height)
   {
     result         =  (Image_RGB){width, height, image_rgb_block_count(width), 0};
-    result.blocks  =  push_array_no_zero(arena, F4x3, result.block_stride * height);
+    result.blocks  =  push_array_no_zero(arena, Lane_F4, result.block_stride * height);
   }
 
   return result;
@@ -35,46 +50,45 @@ Internal void image_rgb_bloom_threshold(Image_RGB dst, Image src, Image_Bloom_Pa
 {
   ProfBeginFunc();
 
-  F4  zero                =  splat_F4(0);
-  F4  one                 =  splat_F4(1);
-  F4  threshold           =  splat_F4(params.threshold);
-  F4  knee_start          =  splat_F4(params.threshold - params.knee);
-  F4  knee_end            =  splat_F4(params.threshold + params.knee);
-  F1  knee_width              =  2.0f * params.knee;
+  Lane_F1  zero                =  splat_Lane_F1(0);
+  Lane_F1  one                 =  splat_Lane_F1(1);
+  Lane_F1  threshold           =  splat_Lane_F1(params.threshold);
+  Lane_F1  knee_start          =  splat_Lane_F1(params.threshold - params.knee);
+  Lane_F1  knee_end            =  splat_Lane_F1(params.threshold + params.knee);
+  F1        knee_width               =  2.0f * params.knee;
   // Normalized so the quadratic reaches one at knee_end, where the piecewise
   // select switches to full contribution, keeping the soft knee continuous.
-  F1  inv_knee_normalization  =  knee_width != 0 ? 1.0f / Square(knee_width) : 1.0f;
+  F1        inv_knee_normalization   =  knee_width != 0 ? 1.0f / Square(knee_width) : 1.0f;
 
   for (L1 y = rows.min; y < rows.max; ++y)
   {
-    F4    *src_row  =  image_row(src, y);
-    F4x3  *dst_row  =  image_rgb_row(dst, y);
+    F4       *src_row  =  image_row(src, y);
+    Lane_F4  *dst_row  =  image_rgb_row(dst, y);
 
     for (L1 block = 0; block < image_rgb_block_count(src.width); ++block)
     {
-      L1    first_pixel         =  block * 4;
-      F4x3  color               =  rgb_load_pixels(src_row, first_pixel, src.width);
-      F4    luminance           =  luminance_F4x3(color);
-      F4    distance_into_knee  =  luminance - knee_start;
-      F4    knee_contribution   =  Square(distance_into_knee) * inv_knee_normalization;
-      F4    soft_contribution   =  select_F4(luminance > knee_start, knee_contribution, zero);
-      F4    contribution        =  select_F4(luminance > knee_end, one, soft_contribution);
-      SI4   has_contribution    =  contribution > zero;
-      SI4   has_luminance       =  luminance > splat_F4(1e-6f);
-      SI4   active_pixels       =  has_contribution & has_luminance;
-      F4    safe_luminance      =  select_F4(active_pixels, luminance, one);
-      F4    excess_luminance    =  max_F4(zero, luminance - threshold);
-      F4    excess_fraction     =  excess_luminance / safe_luminance;
-      F4    bloom_scale         =  excess_fraction * contribution;
+      L1        first_pixel         =  block * LANE_COUNT;
+      Lane_F4   color               =  rgb_load_pixels(src_row, first_pixel, src.width);
+      Lane_F1  luminance           =  luminance_Lane_F4(color);
+      Lane_F1  distance_into_knee  =  luminance - knee_start;
+      Lane_F1  knee_contribution   =  Square(distance_into_knee) * inv_knee_normalization;
+      Lane_F1  soft_contribution   =  select_Lane_F1(luminance > knee_start, knee_contribution, zero);
+      Lane_F1  contribution        =  select_Lane_F1(luminance > knee_end, one, soft_contribution);
+      Lane_Mask active_pixels       =  (contribution > zero) & (luminance > splat_Lane_F1(1e-6f));
+      Lane_F1  safe_luminance      =  select_Lane_F1(active_pixels, luminance, one);
+      Lane_F1  excess_luminance    =  max_Lane_F1(zero, luminance - threshold);
+      Lane_F1  excess_fraction     =  excess_luminance / safe_luminance;
+      Lane_F1  bloom_scale         =  excess_fraction * contribution;
 
-      color = scale_F4x3(color, bloom_scale);
+      color = scale_Lane_F4(color, bloom_scale);
 
       // The selects double as NaN masks for degenerate input pixels:
       // bloom_scale is zero there, but 0 * NaN would still be NaN.
-      dst_row[block] = (F4x3){
-        select_F4(active_pixels, color.x, zero),
-        select_F4(active_pixels, color.y, zero),
-        select_F4(active_pixels, color.z, zero)
+      dst_row[block] = (Lane_F4){
+        select_Lane_F1(active_pixels, color.x, zero),
+        select_Lane_F1(active_pixels, color.y, zero),
+        select_Lane_F1(active_pixels, color.z, zero),
+        select_Lane_F1(active_pixels, color.w, zero)
       };
     }
   }
@@ -82,39 +96,69 @@ Internal void image_rgb_bloom_threshold(Image_RGB dst, Image src, Image_Bloom_Pa
   ProfEnd();
 }
 
-Inline F4 rgb_down2_channel(F4 previous, F4 first, F4 second, F4 following)
+// Input pixels are indexed relative to [first | second]: negatives read from
+// the tail of previous, values past the end read from the head of following.
+Inline F1 rgb_pixel_at(SL1 index, Lane_F1 previous, Lane_F1 first, Lane_F1 second, Lane_F1 following)
 {
-  F4  first_shifted_left    =  shuffle_F4(previous, first,     F4_A3, F4_B0, F4_B1, F4_B2);
-  F4  second_shifted_left   =  shuffle_F4(first,    second,    F4_A3, F4_B0, F4_B1, F4_B2);
-  F4  first_shifted_right   =  shuffle_F4(first,    second,    F4_A2, F4_A3, F4_B0, F4_B1);
-  F4  second_shifted_right  =  shuffle_F4(second,   following, F4_A2, F4_A3, F4_B0, F4_B1);
+  Lane_F1  source  =  first;
+  SL1       lane    =  index;
 
-  F4  far_left   =  shuffle_F4(first_shifted_left,  second_shifted_left,  F4_A0, F4_A2, F4_B0, F4_B2);
-  F4  left       =  shuffle_F4(first,               second,               F4_A0, F4_A2, F4_B0, F4_B2);
-  F4  right      =  shuffle_F4(first,               second,               F4_A1, F4_A3, F4_B1, F4_B3);
-  F4  far_right  =  shuffle_F4(first_shifted_right, second_shifted_right, F4_A0, F4_A2, F4_B0, F4_B2);
+  if (index < 0)
+  {
+    source  =  previous;
+    lane    +=  LANE_COUNT;
+  }
+  else if (index >= 2 * LANE_COUNT)
+  {
+    source  =  following;
+    lane    -=  2 * LANE_COUNT;
+  }
+  else if (index >= LANE_COUNT)
+  {
+    source  =  second;
+    lane    -=  LANE_COUNT;
+  }
 
-  F4  weighted_far_left   =  0.25f * far_left;
-  F4  weighted_left       =  0.75f * left;
-  F4  weighted_right      =  0.75f * right;
-  F4  weighted_far_right  =  0.25f * far_right;
-  F4  weighted_sum        =  weighted_far_left + weighted_left + weighted_right + weighted_far_right;
-  F4  normalized_sum      =  weighted_sum * 0.5f;
-
-  return normalized_sum;
+  return source[lane];
 }
 
-Inline F4 rgb_up2_channel(F4 previous, F4 center, F4 next, I1 output_half)
+Inline Lane_F1 rgb_down2_channel(Lane_F1 previous, Lane_F1 first, Lane_F1 second, Lane_F1 following)
 {
-  F4  left_neighbors   =  shuffle_F4(previous, center, F4_A3, F4_B0, F4_B1, F4_B2);
-  F4  right_neighbors  =  shuffle_F4(center,   next,   F4_A1, F4_A2, F4_A3, F4_B0);
-  F4  even_samples     =  0.25f * left_neighbors + 0.75f * center;
-  F4  odd_samples      =  0.75f * center + 0.25f * right_neighbors;
+  Lane_F1 result = {0};
 
-  // Interleave the filtered samples into the first or second four-pixel block.
-  F4 result =  output_half
-               ? shuffle_F4(even_samples, odd_samples, F4_A2, F4_B2, F4_A3, F4_B3)  // {even[2], odd[2], even[3], odd[3]}
-               : shuffle_F4(even_samples, odd_samples, F4_A0, F4_B0, F4_A1, F4_B1); // {even[0], odd[0], even[1], odd[1]}
+  for (L1 i = 0; i < LANE_COUNT; ++i)
+  {
+    SL1 center = 2 * (SL1)i;
+
+    F1  far_left   =  rgb_pixel_at(center - 1, previous, first, second, following);
+    F1  left       =  rgb_pixel_at(center,     previous, first, second, following);
+    F1  right      =  rgb_pixel_at(center + 1, previous, first, second, following);
+    F1  far_right  =  rgb_pixel_at(center + 2, previous, first, second, following);
+
+    result[i] = 0.5f * (0.25f * far_left + 0.75f * left + 0.75f * right + 0.25f * far_right);
+  }
+
+  return result;
+}
+
+Inline Lane_F1 rgb_up2_channel(Lane_F1 previous, Lane_F1 center, Lane_F1 next, I1 output_half)
+{
+  Lane_F1 result = {0};
+
+  for (L1 i = 0; i < LANE_COUNT; ++i)
+  {
+    L1   output_pixel  =  output_half * LANE_COUNT + i;
+    SL1  src_index     =  (SL1)(output_pixel / 2);
+
+    F1  in              =  center[src_index];
+    F1  left_neighbor   =  src_index > 0                ? center[src_index - 1] : previous[LANE_COUNT - 1];
+    F1  right_neighbor  =  src_index < LANE_COUNT - 1   ? center[src_index + 1] : next[0];
+
+    F1  even_sample  =  0.25f * left_neighbor + 0.75f * in;
+    F1  odd_sample   =  0.75f * in + 0.25f * right_neighbor;
+
+    result[i] = (output_pixel & 1) ? odd_sample : even_sample;
+  }
 
   return result;
 }
@@ -193,81 +237,79 @@ Internal void image_rgb_resample_x(Image_RGB dst, Image_RGB src, Range rows, Are
 
     for (L1 y = rows.min; y < rows.max; ++y)
     {
-      F4x3  *src_row  =  image_rgb_row(src, y);
-      F4x3  *dst_row  =  image_rgb_row(dst, y);
+      Lane_F4  *src_row  =  image_rgb_row(src, y);
+      Lane_F4  *dst_row  =  image_rgb_row(dst, y);
 
       for (L1 block = 0; block < dst_block_count; ++block)
       {
-        F4x3 result = {0};
+        Lane_F4 result = {0};
 
         if (is_downsample_2x || is_upsample_2x)
         {
-          L1    first_src_block  =  is_downsample_2x ? (2 * block) : (block / 2);
-          F4x3  first_block      =  src_row[first_src_block];
-          F4x3  previous_block   =  first_src_block ? src_row[first_src_block - 1] : first_block;
-          F4x3  next_block       =  src_row[Min(first_src_block + 1, src_block_count - 1)];
+          L1       first_src_block  =  is_downsample_2x ? (2 * block) : (block / 2);
+          Lane_F4  first_block      =  src_row[first_src_block];
+          Lane_F4  previous_block   =  first_src_block ? src_row[first_src_block - 1] : first_block;
+          Lane_F4  next_block       =  src_row[Min(first_src_block + 1, src_block_count - 1)];
 
           if (!first_src_block)
           {
-            previous_block = (F4x3){splat_F4(first_block.x[0]), splat_F4(first_block.y[0]), splat_F4(first_block.z[0])};
+            previous_block = rgb_splat_lane(first_block, 0);
           }
 
           if (first_src_block + 1 == src_block_count)
           {
-            next_block = (F4x3){
-              splat_F4(first_block.x[3]),
-              splat_F4(first_block.y[3]),
-              splat_F4(first_block.z[3])
-            };
+            next_block = rgb_splat_lane(first_block, LANE_COUNT - 1);
           }
 
           if (is_downsample_2x)
           {
-            F4x3 following_block = src_row[Min(first_src_block + 2, src_block_count - 1)];
+            Lane_F4 following_block = src_row[Min(first_src_block + 2, src_block_count - 1)];
 
             if (first_src_block + 2 >= src_block_count)
             {
-              following_block = (F4x3){splat_F4(next_block.x[3]), splat_F4(next_block.y[3]), splat_F4(next_block.z[3])};
+              following_block = rgb_splat_lane(next_block, LANE_COUNT - 1);
             }
 
-            result = (F4x3){
+            result = (Lane_F4){
               rgb_down2_channel(previous_block.x, first_block.x, next_block.x, following_block.x),
               rgb_down2_channel(previous_block.y, first_block.y, next_block.y, following_block.y),
-              rgb_down2_channel(previous_block.z, first_block.z, next_block.z, following_block.z)
+              rgb_down2_channel(previous_block.z, first_block.z, next_block.z, following_block.z),
+              rgb_down2_channel(previous_block.w, first_block.w, next_block.w, following_block.w)
             };
           }
           else
           {
             I1 output_half = block & 1;
 
-            result = (F4x3){
+            result = (Lane_F4){
               rgb_up2_channel(previous_block.x, first_block.x, next_block.x, output_half),
               rgb_up2_channel(previous_block.y, first_block.y, next_block.y, output_half),
-              rgb_up2_channel(previous_block.z, first_block.z, next_block.z, output_half)
+              rgb_up2_channel(previous_block.z, first_block.z, next_block.z, output_half),
+              rgb_up2_channel(previous_block.w, first_block.w, next_block.w, output_half)
             };
           }
         }
         else
         {
-          RGB_Filter_Span  span[4]        =  {0};
-          L1               max_tap_count  =  0;
+          RGB_Filter_Span  span[LANE_COUNT]  =  {0};
+          L1               max_tap_count     =  0;
 
-          for (L1 lane = 0; lane < 4; ++lane)
+          for (L1 lane = 0; lane < LANE_COUNT; ++lane)
           {
-            L1 output_pixel = Min(block * 4 + lane, dst.width - 1);
+            L1 output_pixel = Min(block * LANE_COUNT + lane, (L1)dst.width - 1);
 
             span[lane] = spans[output_pixel];
             max_tap_count = Max(max_tap_count, span[lane].count);
           }
 
-          result = (F4x3){0};
+          result = (Lane_F4){0};
 
           for (L1 tap_offset = 0; tap_offset < max_tap_count; ++tap_offset)
           {
-            L1  indices[4]  =  {0};
-            F4  weights     =  {0};
+            L1        indices[LANE_COUNT]  =  {0};
+            Lane_F1  weights              =  {0};
 
-            for (L1 lane = 0; lane < 4; ++lane)
+            for (L1 lane = 0; lane < LANE_COUNT; ++lane)
             {
               L1  tap_in_span  =  Min(tap_offset, span[lane].count - 1);
               L1  tap_index    =  span[lane].offset + tap_in_span;
@@ -278,32 +320,28 @@ Internal void image_rgb_resample_x(Image_RGB dst, Image_RGB src, Range rows, Are
               weights[lane] = tap_offset < span[lane].count ? tap.weight : 0;
             }
 
-            F4x3  samples           =  gather_F4x3(src_row, indices);
-            F4x3  weighted_samples  =  scale_F4x3(samples, weights);
+            Lane_F4  samples           =  gather_Lane_F4(src_row, indices);
+            Lane_F4  weighted_samples  =  scale_Lane_F4(samples, weights);
 
-            result = add_F4x3(result, weighted_samples);
+            result = add_Lane_F4(result, weighted_samples);
           }
 
-          F4 weight_sums = {
-            span[0].weight_sum,
-            span[1].weight_sum,
-            span[2].weight_sum,
-            span[3].weight_sum
-          };
+          Lane_F1 weight_sums = {0};
 
-          F4 inv_weight_sums = splat_F4(1.0f) / weight_sums;
+          for (L1 lane = 0; lane < LANE_COUNT; ++lane)
+          {
+            weight_sums[lane] = span[lane].weight_sum;
+          }
 
-          result = (F4x3){
-            result.x * inv_weight_sums,
-            result.y * inv_weight_sums,
-            result.z * inv_weight_sums
-          };
+          Lane_F1 inv_weight_sums = splat_Lane_F1(1.0f) / weight_sums;
+
+          result = scale_Lane_F4(result, inv_weight_sums);
         }
 
-        L1  remaining_pixels  =  dst.width - block * 4;
-        L1  valid_lanes       =  Min((L1)4, remaining_pixels);
+        L1  remaining_pixels  =  (L1)dst.width - block * LANE_COUNT;
+        L1  valid_lanes       =  Min((L1)LANE_COUNT, remaining_pixels);
 
-        dst_row[block] = pad_F4x3(result, valid_lanes);
+        dst_row[block] = pad_Lane_F4(result, valid_lanes);
       }
     }
 
@@ -315,8 +353,8 @@ Internal void image_rgb_resample_x(Image_RGB dst, Image_RGB src, Range rows, Are
 
 typedef struct RGB_Row_Tap
 {
-  F4x3 *row;
-  F4 weight; // Splatted once per row instead of once per block.
+  Lane_F4  *row;
+  Lane_F1 weight; // Splatted once per row instead of once per block.
 } RGB_Row_Tap;
 
 // NOTE(kti): With accumulate set, dst is read and summed into rather than
@@ -343,13 +381,13 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
 
     for (L1 y = rows.min; y < rows.max; ++y)
     {
-      F4x3  *dst_row     =  image_rgb_row(dst, y);
-      F4x3  *first_row   =  0;
-      F4x3  *second_row  =  0;
-      F4x3  *third_row   =  0;
-      F4x3  *fourth_row  =  0;
-      F1    weight_sum   =  0;
-      L1    tap_count    =  0;
+      Lane_F4  *dst_row     =  image_rgb_row(dst, y);
+      Lane_F4  *first_row   =  0;
+      Lane_F4  *second_row  =  0;
+      Lane_F4  *third_row   =  0;
+      Lane_F4  *fourth_row  =  0;
+      F1       weight_sum   =  0;
+      L1       tap_count    =  0;
 
       if (is_downsample_2x)
       {
@@ -394,73 +432,65 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
           F1  weight               =  Max(0, 1.0f - abs_F1(normalized_distance));
           L1  source_sample        =  (L1)Clamp(0.0f, source_position, (F1)src.height - 1);
 
-          F4x3 *sample_row = image_rgb_row(src, source_sample);
+          Lane_F4 *sample_row = image_rgb_row(src, source_sample);
 
-          taps[tap_offset]  =   (RGB_Row_Tap){sample_row, splat_F4(weight)};
+          taps[tap_offset]  =   (RGB_Row_Tap){sample_row, splat_Lane_F1(weight)};
           weight_sum      +=  weight;
         }
       }
 
       for (L1 block = 0; block < image_rgb_block_count(dst.width); ++block)
       {
-        F4x3 result = {0};
+        Lane_F4 result = {0};
 
         if (is_downsample_2x)
         {
-          F4x3  far_top_contribution     =  scale_F4x3(first_row[block], splat_F4(0.25f));
-          F4x3  top_contribution         =  scale_F4x3(second_row[block], splat_F4(0.75f));
-          F4x3  bottom_contribution      =  scale_F4x3(third_row[block], splat_F4(0.75f));
-          F4x3  far_bottom_contribution  =  scale_F4x3(fourth_row[block], splat_F4(0.25f));
+          Lane_F4  far_top_contribution     =  scale_Lane_F4(first_row[block], splat_Lane_F1(0.25f));
+          Lane_F4  top_contribution         =  scale_Lane_F4(second_row[block], splat_Lane_F1(0.75f));
+          Lane_F4  bottom_contribution      =  scale_Lane_F4(third_row[block], splat_Lane_F1(0.75f));
+          Lane_F4  far_bottom_contribution  =  scale_Lane_F4(fourth_row[block], splat_Lane_F1(0.25f));
 
-          result = add_F4x3(far_top_contribution, top_contribution);
-          result = add_F4x3(result, bottom_contribution);
-          result = add_F4x3(result, far_bottom_contribution);
-          result = scale_F4x3(result, splat_F4(0.5f));
+          result = add_Lane_F4(far_top_contribution, top_contribution);
+          result = add_Lane_F4(result, bottom_contribution);
+          result = add_Lane_F4(result, far_bottom_contribution);
+          result = scale_Lane_F4(result, splat_Lane_F1(0.5f));
         }
         else if (is_upsample_2x)
         {
-          I1  is_odd_row  =  y & 1;
-          F4  top_weight  =  splat_F4(is_odd_row ? 0.75f : 0.25f);
-          F4  bot_weight  =  splat_F4(is_odd_row ? 0.25f : 0.75f);
+          I1        is_odd_row  =  y & 1;
+          Lane_F1  top_weight  =  splat_Lane_F1(is_odd_row ? 0.75f : 0.25f);
+          Lane_F1  bot_weight  =  splat_Lane_F1(is_odd_row ? 0.25f : 0.75f);
 
-          F4x3  top_contribution     =  scale_F4x3(first_row[block], top_weight);
-          F4x3  bottom_contribution  =  scale_F4x3(second_row[block], bot_weight);
+          Lane_F4  top_contribution     =  scale_Lane_F4(first_row[block], top_weight);
+          Lane_F4  bottom_contribution  =  scale_Lane_F4(second_row[block], bot_weight);
 
-          result = add_F4x3(top_contribution, bottom_contribution);
+          result = add_Lane_F4(top_contribution, bottom_contribution);
         }
         else
         {
           for (L1 tap_offset = 0; tap_offset < tap_count; ++tap_offset)
           {
-            F4x3  source_sample    =  taps[tap_offset].row[block];
-            F4x3  weighted_sample  =  scale_F4x3(source_sample, taps[tap_offset].weight);
+            Lane_F4  source_sample    =  taps[tap_offset].row[block];
+            Lane_F4  weighted_sample  =  scale_Lane_F4(source_sample, taps[tap_offset].weight);
 
-            result = add_F4x3(result, weighted_sample);
+            result = add_Lane_F4(result, weighted_sample);
           }
 
-          F4 inv_weight_sum = splat_F4(1.0f / weight_sum);
+          Lane_F1 inv_weight_sum = splat_Lane_F1(1.0f / weight_sum);
 
-          result = (F4x3){
-            result.x * inv_weight_sum,
-            result.y * inv_weight_sum,
-            result.z * inv_weight_sum
-          };
+          result = scale_Lane_F4(result, inv_weight_sum);
         }
         if (karis)
         {
-          F4  luminance     =  luminance_F4x3(result);
-          F4  inv_karis     =  splat_F4(1.0f) / (1.0f + luminance);
+          Lane_F1  luminance     =  luminance_Lane_F4(result);
+          Lane_F1  inv_karis     =  splat_Lane_F1(1.0f) / (1.0f + luminance);
 
-          result = (F4x3){
-            result.x * inv_karis,
-            result.y * inv_karis,
-            result.z * inv_karis
-          };
+          result = scale_Lane_F4(result, inv_karis);
         }
 
         if (accumulate)
         {
-          result = add_F4x3(dst_row[block], result);
+          result = add_Lane_F4(dst_row[block], result);
         }
 
         dst_row[block] = result;
@@ -473,18 +503,18 @@ Internal void image_rgb_resample_y(Image_RGB dst, Image_RGB src, Range rows, I1 
   ProfEnd();
 }
 
-Inline F4 image_table_lookup(F4 values, F1 *table, I1 count, F1 maximum)
+Inline Lane_F1 image_table_lookup(Lane_F1 values, F1 *table, I1 count, F1 maximum)
 {
-  F4   zero              =  splat_F4(0);
-  F4   positive_values   =  select_F4(values > zero, values, zero);
-  F4   clamped_values    =  min_F4(positive_values, splat_F4(maximum));
-  F1   entries_per_unit  =  count / maximum;
-  F4   table_positions   =  clamped_values * entries_per_unit;
-  SI4  lower_indices     =  __builtin_convertvector(table_positions, SI4);
-  F4   lower_values      =  {0};
-  F4   upper_values      =  {0};
+  Lane_F1  zero              =  splat_Lane_F1(0);
+  Lane_F1  positive_values   =  select_Lane_F1(values > zero, values, zero);
+  Lane_F1  clamped_values    =  min_Lane_F1(positive_values, splat_Lane_F1(maximum));
+  F1        entries_per_unit  =  count / maximum;
+  Lane_F1  table_positions   =  clamped_values * entries_per_unit;
+  Lane_SI1  lower_indices     =  __builtin_convertvector(table_positions, Lane_SI1);
+  Lane_F1  lower_values      =  {0};
+  Lane_F1  upper_values      =  {0};
 
-  for (L1 lane = 0; lane < 4; ++lane)
+  for (L1 lane = 0; lane < LANE_COUNT; ++lane)
   {
     I1  lower_index  =  lower_indices[lane];
     I1  upper_index  =  Min(lower_index + 1, count);
@@ -493,91 +523,91 @@ Inline F4 image_table_lookup(F4 values, F1 *table, I1 count, F1 maximum)
     upper_values[lane] = table[upper_index];
   }
 
-  F4  lower_positions  =  __builtin_convertvector(lower_indices, F4);
-  F4  blend_fractions  =  table_positions - lower_positions;
-  F4  value_deltas     =  upper_values - lower_values;
-  F4  interpolated     =  lower_values + blend_fractions * value_deltas;
+  Lane_F1  lower_positions  =  __builtin_convertvector(lower_indices, Lane_F1);
+  Lane_F1  blend_fractions  =  table_positions - lower_positions;
+  Lane_F1  value_deltas     =  upper_values - lower_values;
+  Lane_F1  interpolated     =  lower_values + blend_fractions * value_deltas;
 
   return interpolated;
 }
 
-Inline F4 rgb_tonemap_lottes(F4 values)
+Inline Lane_F1 rgb_tonemap_lottes(Lane_F1 values)
 {
-  F4 result = image_table_lookup(values, image_lottes_table, IMAGE_LOTTES_TABLE_COUNT, image_lottes_table_params.hdr_max);
+  Lane_F1 result = image_table_lookup(values, image_lottes_table, IMAGE_LOTTES_TABLE_COUNT, image_lottes_table_params.hdr_max);
   return result;
 }
 
-Inline void rgb_pack_srgb8(RGBA8 *out, F4 srgb_red, F4 srgb_green, F4 srgb_blue, L1 count)
+Inline void rgb_pack_srgb8(RGBA8 *out, Lane_F1 srgb_red, Lane_F1 srgb_green, Lane_F1 srgb_blue, L1 count)
 {
-  F4   half         =  splat_F4(0.5f);
-  SI4  red_bytes    =  __builtin_convertvector(srgb_red + half, SI4);
-  SI4  green_bytes  =  __builtin_convertvector(srgb_green + half, SI4);
-  SI4  blue_bytes   =  __builtin_convertvector(srgb_blue + half, SI4);
+  Lane_F1  half         =  splat_Lane_F1(0.5f);
+  Lane_SI1  red_bytes    =  __builtin_convertvector(srgb_red + half, Lane_SI1);
+  Lane_SI1  green_bytes  =  __builtin_convertvector(srgb_green + half, Lane_SI1);
+  Lane_SI1  blue_bytes   =  __builtin_convertvector(srgb_blue + half, Lane_SI1);
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-  SI4  packed_red    =  red_bytes << 24;
-  SI4  packed_green  =  green_bytes << 16;
-  SI4  packed_blue   =  blue_bytes << 8;
-  SI4  packed_alpha  =  (SI4){255, 255, 255, 255};
+  Lane_SI1  packed_red    =  red_bytes << 24;
+  Lane_SI1  packed_green  =  green_bytes << 16;
+  Lane_SI1  packed_blue   =  blue_bytes << 8;
+  Lane_SI1  packed_alpha  =  splat_Lane_SI1(255);
 #else
-  SI4  packed_red    =  red_bytes;
-  SI4  packed_green  =  green_bytes << 8;
-  SI4  packed_blue   =  blue_bytes << 16;
-  SI4  packed_alpha  =  (SI4){-16777216, -16777216, -16777216, -16777216};
+  Lane_SI1  packed_red    =  red_bytes;
+  Lane_SI1  packed_green  =  green_bytes << 8;
+  Lane_SI1  packed_blue   =  blue_bytes << 16;
+  Lane_SI1  packed_alpha  =  splat_Lane_SI1(-16777216);
 #endif
-  SI4  packed_pixels  =  packed_red | packed_green | packed_blue | packed_alpha;
-  L1   output_size    =  count * sizeof(RGBA8);
+  Lane_SI1  packed_pixels  =  packed_red | packed_green | packed_blue | packed_alpha;
+  L1        output_size    =  count * sizeof(RGBA8);
 
   memcpy(out, &packed_pixels, output_size);
 }
 
-Inline void rgb_store_srgb8(RGBA8 *out, F4x3 color, L1 count)
+Inline void rgb_store_srgb8(RGBA8 *out, Lane_F4 color, L1 count)
 {
-  F4  srgb_red    =  image_table_lookup(color.x, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
-  F4  srgb_green  =  image_table_lookup(color.y, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
-  F4  srgb_blue   =  image_table_lookup(color.z, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
+  Lane_F1  srgb_red    =  image_table_lookup(color.x, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
+  Lane_F1  srgb_green  =  image_table_lookup(color.y, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
+  Lane_F1  srgb_blue   =  image_table_lookup(color.z, image_srgb_table, IMAGE_SRGB_TABLE_COUNT, 1);
 
   rgb_pack_srgb8(out, srgb_red, srgb_green, srgb_blue, count);
 }
 
-Inline F4 rgb_overlay_luminance(Image overlay, F4 u, F1 v)
+Inline Lane_F1 rgb_overlay_luminance(Image overlay, Lane_F1 u, F1 v)
 {
-  F4 result = {0};
+  Lane_F1 result = {0};
 
   if (!image_is_nil(overlay))
   {
-    F4  source_x  =  u * (F1)(overlay.width - 1);
-    F1  source_y  =  v * (F1)(overlay.height - 1);
-    L1  top_y     =  Min((L1)source_y, overlay.height - 1);
-    L1  bottom_y  =  Min(top_y + 1, overlay.height - 1);
+    Lane_F1  source_x  =  u * (F1)(overlay.width - 1);
+    F1        source_y  =  v * (F1)(overlay.height - 1);
+    L1        top_y     =  Min((L1)source_y, (L1)overlay.height - 1);
+    L1        bottom_y  =  Min(top_y + 1, (L1)overlay.height - 1);
 
-    F4  *top_row          =  image_row(overlay, top_y);
-    F4  *bottom_row       =  image_row(overlay, bottom_y);
-    F4  horizontal_blend  =  {0};
+    F4        *top_row          =  image_row(overlay, top_y);
+    F4        *bottom_row       =  image_row(overlay, bottom_y);
+    Lane_F1  horizontal_blend  =  {0};
 
-    F4 top_left_pixels[4], top_right_pixels[4], bottom_left_pixels[4], bottom_right_pixels[4];
+    F4 top_left_pixels[LANE_COUNT], top_right_pixels[LANE_COUNT], bottom_left_pixels[LANE_COUNT], bottom_right_pixels[LANE_COUNT];
 
-    for (L1 lane = 0; lane < 4; ++lane)
+    for (L1 lane = 0; lane < LANE_COUNT; ++lane)
     {
-      L1  left_x   =  Min((L1)source_x[lane], overlay.width - 1);
-      L1  right_x  =  Min(left_x + 1, overlay.width - 1);
+      L1  left_x   =  Min((L1)source_x[lane], (L1)overlay.width - 1);
+      L1  right_x  =  Min(left_x + 1, (L1)overlay.width - 1);
 
-      horizontal_blend[lane]   =  source_x[lane] - (F1)left_x;
-      top_left_pixels[lane]    =  top_row[left_x];
-      top_right_pixels[lane]   =  top_row[right_x];
-      bottom_left_pixels[lane] =  bottom_row[left_x];
-      bottom_right_pixels[lane] =  bottom_row[right_x];
+      horizontal_blend[lane]     =  source_x[lane] - (F1)left_x;
+      top_left_pixels[lane]      =  top_row[left_x];
+      top_right_pixels[lane]     =  top_row[right_x];
+      bottom_left_pixels[lane]   =  bottom_row[left_x];
+      bottom_right_pixels[lane]  =  bottom_row[right_x];
     }
 
-    F4x3  top_left        =  rgb_load_pixels(top_left_pixels, 0, 4);
-    F4x3  top_right       =  rgb_load_pixels(top_right_pixels, 0, 4);
-    F4x3  bottom_left     =  rgb_load_pixels(bottom_left_pixels, 0, 4);
-    F4x3  bottom_right    =  rgb_load_pixels(bottom_right_pixels, 0, 4);
-    F4x3  top_color       =  lerp_F4x3(top_left, horizontal_blend, top_right);
-    F4x3  bottom_color    =  lerp_F4x3(bottom_left, horizontal_blend, bottom_right);
-    F4    vertical_blend  =  splat_F4(source_y - (F1)top_y);
-    F4x3  sampled_color   =  lerp_F4x3(top_color, vertical_blend, bottom_color);
+    Lane_F4   top_left        =  pack_Lane_F4(top_left_pixels);
+    Lane_F4   top_right       =  pack_Lane_F4(top_right_pixels);
+    Lane_F4   bottom_left     =  pack_Lane_F4(bottom_left_pixels);
+    Lane_F4   bottom_right    =  pack_Lane_F4(bottom_right_pixels);
+    Lane_F4   top_color       =  lerp_Lane_F4(top_left, horizontal_blend, top_right);
+    Lane_F4   bottom_color    =  lerp_Lane_F4(bottom_left, horizontal_blend, bottom_right);
+    Lane_F1  vertical_blend  =  splat_Lane_F1(source_y - (F1)top_y);
+    Lane_F4   sampled_color   =  lerp_Lane_F4(top_color, vertical_blend, bottom_color);
 
-    result = luminance_F4x3(sampled_color);
+    result = luminance_Lane_F4(sampled_color);
   }
 
   return result;
@@ -597,75 +627,83 @@ Internal void image_rgb_bloom_tonemap(Image_RGBA8 dst, Image hdr, Image_RGB bloo
 
   for (L1 y = rows.min; y < rows.max; ++y)
   {
-    F4     *hdr_row    =  image_row(hdr, y);
-    F4x3   *bloom_row  =  image_rgb_row(bloom, y);
-    RGBA8  *dst_row    =  image_rgba8_row(dst, y);
-    F1     overlay_v   =  dst.height > 1 ? (F1)y / (F1)(dst.height - 1) : 0;
+    F4       *hdr_row    =  image_row(hdr, y);
+    Lane_F4  *bloom_row  =  image_rgb_row(bloom, y);
+    RGBA8    *dst_row    =  image_rgba8_row(dst, y);
+    F1       overlay_v   =  dst.height > 1 ? (F1)y / (F1)(dst.height - 1) : 0;
 
     for (L1 block = 0; block < image_rgb_block_count(dst.width); ++block)
     {
-      L1  x             =  block * 4;
-      L1  valid_pixels  =  Min((L1)4, dst.width - x);
-      F4  hdr_weight    =  splat_F4(1.0f - 0.5f * params.strength);
-      F4  bloom_weight  =  splat_F4(params.strength);
+      L1        x             =  block * LANE_COUNT;
+      L1        valid_pixels  =  Min((L1)LANE_COUNT, (L1)dst.width - x);
+      Lane_F1  hdr_weight    =  splat_Lane_F1(1.0f - 0.5f * params.strength);
+      Lane_F1  bloom_weight  =  splat_Lane_F1(params.strength);
 
-      F4  bloom_modulation  =  splat_F4(1.0f);
+      Lane_F1  bloom_modulation  =  splat_Lane_F1(1.0f);
 
       if (has_overlay)
       {
-        F4  overlay_u  =  {
-          (F1)x,
-          (F1)Min(x + 1, dst.width - 1),
-          (F1)Min(x + 2, dst.width - 1),
-          (F1)Min(x + 3, dst.width - 1)
-        };
+        Lane_F1 overlay_u = {0};
 
-        overlay_u /= (F1)Max(dst.width - 1, 1);
+        for (L1 lane = 0; lane < LANE_COUNT; ++lane)
+        {
+          overlay_u[lane] = (F1)Min(x + lane, (L1)dst.width - 1);
+        }
 
-        F4 overlay_luminance = rgb_overlay_luminance(params.overlay, overlay_u, overlay_v);
+        overlay_u /= (F1)Max((SL1)dst.width - 1, 1);
+
+        Lane_F1 overlay_luminance = rgb_overlay_luminance(params.overlay, overlay_u, overlay_v);
 
         bloom_modulation = 1.0f + overlay_luminance * params.overlay_strength;
       }
 
-      F4x3  hdr_color           =  rgb_load_pixels(hdr_row, x, hdr.width);
-      F4x3  hdr_contribution    =  scale_F4x3(hdr_color, hdr_weight);
-      F4x3  modulated_bloom     =  scale_F4x3(bloom_row[block], bloom_modulation);
-      F4x3  bloom_contribution  =  scale_F4x3(modulated_bloom, bloom_weight);
-      F4x3  combined_color      =  add_F4x3(hdr_contribution, bloom_contribution);
-      F4x3  color               =  scale_F4x3(combined_color, splat_F4(exposure_scale));
+      Lane_F4  hdr_color           =  rgb_load_pixels(hdr_row, x, hdr.width);
+      Lane_F4  hdr_contribution    =  scale_Lane_F4(hdr_color, hdr_weight);
+      Lane_F4  modulated_bloom     =  scale_Lane_F4(bloom_row[block], bloom_modulation);
+      Lane_F4  bloom_contribution  =  scale_Lane_F4(modulated_bloom, bloom_weight);
+      Lane_F4  combined_color      =  add_Lane_F4(hdr_contribution, bloom_contribution);
+      Lane_F4  color               =  scale_Lane_F4(combined_color, splat_Lane_F1(exposure_scale));
 
       if (!needs_adjustments)
       {
-        F4  srgb_red    =  image_table_lookup(color.x, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
-        F4  srgb_green  =  image_table_lookup(color.y, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
-        F4  srgb_blue   =  image_table_lookup(color.z, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
+        Lane_F1  srgb_red    =  image_table_lookup(color.x, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
+        Lane_F1  srgb_green  =  image_table_lookup(color.y, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
+        Lane_F1  srgb_blue   =  image_table_lookup(color.z, image_lottes_srgb_table, IMAGE_LOTTES_TABLE_COUNT, lottes_hdr_max);
 
         rgb_pack_srgb8(dst_row + x, srgb_red, srgb_green, srgb_blue, valid_pixels);
       }
       else
       {
-        color = (F4x3){
+        color = (Lane_F4){
           rgb_tonemap_lottes(color.x),
           rgb_tonemap_lottes(color.y),
-          rgb_tonemap_lottes(color.z)
+          rgb_tonemap_lottes(color.z),
+          color.w
         };
 
-        color = (F4x3){clamp01_F4(color.x), clamp01_F4(color.y), clamp01_F4(color.z)};
+        color = (Lane_F4){
+          min_Lane_F1(max_Lane_F1(color.x, splat_Lane_F1(0)), splat_Lane_F1(1)),
+          min_Lane_F1(max_Lane_F1(color.y, splat_Lane_F1(0)), splat_Lane_F1(1)),
+          min_Lane_F1(max_Lane_F1(color.z, splat_Lane_F1(0)), splat_Lane_F1(1)),
+          color.w
+        };
 
-        F4 gray = luminance_F4x3(color);
+        Lane_F1 gray = luminance_Lane_F4(color);
 
-        F4x3 chroma = {
+        Lane_F4 chroma = {
           color.x - gray,
           color.y - gray,
-          color.z - gray
+          color.z - gray,
+          splat_Lane_F1(0)
         };
 
-        F4x3 saturated_chroma = scale_F4x3(chroma, splat_F4(tonemap.saturation));
+        Lane_F4 saturated_chroma = scale_Lane_F4(chroma, splat_Lane_F1(tonemap.saturation));
 
-        color = (F4x3){
+        color = (Lane_F4){
           gray + saturated_chroma.x,
           gray + saturated_chroma.y,
-          gray + saturated_chroma.z
+          gray + saturated_chroma.z,
+          color.w
         };
 
         rgb_store_srgb8(dst_row + x, color, valid_pixels);

@@ -115,7 +115,7 @@ Internal void tc_set(TC_Key key, Image_RGBA8 image)
   }
   else
   {
-    gfx_fill_tex2d_region(n->texture, (SI4){0, 0, image.width, image.height}, image.pixels);
+    gfx_fill_tex2d_region(n->texture, (SI4){{0, 0, image.width, image.height}}, image.pixels);
   }
 
   scratch_end(scratch);

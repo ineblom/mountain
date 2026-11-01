@@ -31,9 +31,9 @@ Internal F4 ui_brighten(F4 color)
 {
   F4 oklch = oklch_from_linear_rgba(color);
 
-  oklch[0] = Clamp(0.22f, oklch[0] + 0.1f, 1.0f);
+  oklch.x = Clamp(0.22f, oklch.x + 0.1f, 1.0f);
 
-  F4 result = linear_rgba_from_oklch(oklch[0], oklch[1], oklch[2], oklch[3]);
+  F4 result = linear_rgba_from_oklch(oklch.x, oklch.y, oklch.z, oklch.w);
 
   return result;
 }
@@ -42,9 +42,9 @@ Internal F4 ui_darken(F4 color)
 {
   F4 oklch = oklch_from_linear_rgba(color);
 
-  oklch[0] = Clamp(0.0f, oklch[0] - 0.1f, 1.0f);
+  oklch.x = Clamp(0.0f, oklch.x - 0.1f, 1.0f);
 
-  F4 result = linear_rgba_from_oklch(oklch[0], oklch[1], oklch[2], oklch[3]);
+  F4 result = linear_rgba_from_oklch(oklch.x, oklch.y, oklch.z, oklch.w);
 
   return result;
 }
@@ -822,19 +822,19 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key)
   if (ui_state->fixed_x_stack.top != &ui_state->nil_fixed_x)
   {
     box->flags |= UI_BOX_FLAG__FLOATING_X;
-    box->fixed_pos[0] = ui_top_fixed_x();
+    box->fixed_pos.x = ui_top_fixed_x();
   }
 
   if (ui_state->fixed_y_stack.top != &ui_state->nil_fixed_y)
   {
     box->flags |= UI_BOX_FLAG__FLOATING_Y;
-    box->fixed_pos[1] = ui_top_fixed_y();
+    box->fixed_pos.y = ui_top_fixed_y();
   }
 
   if (ui_state->fixed_width_stack.top != &ui_state->nil_fixed_width)
   {
     box->flags |= UI_BOX_FLAG__FIXED_WIDTH;
-    box->fixed_size[0] = ui_top_fixed_width();
+    box->fixed_size.x = ui_top_fixed_width();
   }
   else
   {
@@ -844,15 +844,15 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key)
   if (ui_state->fixed_height_stack.top != &ui_state->nil_fixed_height)
   {
     box->flags |= UI_BOX_FLAG__FIXED_HEIGHT;
-    box->fixed_size[1] = ui_top_fixed_height();
+    box->fixed_size.y = ui_top_fixed_height();
   }
   else
   {
     box->pref_size[AXIS__Y] = ui_top_pref_height();
   }
 
-  box->min_size[0]  =  ui_top_min_width();
-  box->min_size[1]  =  ui_top_min_height();
+  box->min_size.x  =  ui_top_min_width();
+  box->min_size.y  =  ui_top_min_height();
 
   I1  is_auto_focus_active  =  ui_is_key_auto_focus_active(key);
   I1  is_auto_focus_hot     =  ui_is_key_auto_focus_hot(key);
@@ -886,10 +886,10 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key)
   box->text_padding       =  ui_top_text_padding();
   box->font               =  ui_top_font();
   box->font_size          =  ui_top_font_size();
-  box->corner_radii[0]    =  ui_top_tl_corner_radius();
-  box->corner_radii[1]    =  ui_top_tr_corner_radius();
-  box->corner_radii[2]    =  ui_top_bl_corner_radius();
-  box->corner_radii[3]    =  ui_top_br_corner_radius();
+  box->corner_radii.x    =  ui_top_tl_corner_radius();
+  box->corner_radii.y    =  ui_top_tr_corner_radius();
+  box->corner_radii.z    =  ui_top_bl_corner_radius();
+  box->corner_radii.w    =  ui_top_br_corner_radius();
 
   if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND)
   {
@@ -1090,19 +1090,19 @@ Internal void box_view_clamp(UI_Box *box)
 {
   if (box->flags & UI_BOX_FLAG__VIEW_CLAMP)
   {
-    F2 max_view_off_target = {
-      Max(0, box->view_bounds[0] - box->fixed_size[0]),
-      Max(0, box->view_bounds[1] - box->fixed_size[1]),
-    };
+    F2 max_view_off_target = {{
+      Max(0, box->view_bounds.x - box->fixed_size.x),
+      Max(0, box->view_bounds.y - box->fixed_size.y),
+    }};
 
     if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_X)
     {
-      box->view_off_target[0] = Clamp(0, box->view_off_target[0], max_view_off_target[0]);
+      box->view_off_target.x = Clamp(0, box->view_off_target.x, max_view_off_target.x);
     }
 
     if (box->flags & UI_BOX_FLAG__VIEW_CLAMP_Y)
     {
-      box->view_off_target[1] = Clamp(0, box->view_off_target[1], max_view_off_target[1]);
+      box->view_off_target.y = Clamp(0, box->view_off_target.y, max_view_off_target.y);
     }
   }
 }
@@ -1136,7 +1136,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
 
     signal.modifiers |= e->modifiers;
 
-    F2  evt_mouse            =  {floor_F1(e->x), floor_F1(e->y)};
+    F2  evt_mouse            =  {{floor_F1(e->x), floor_F1(e->y)}};
     I1  evt_mouse_in_bounds  =  rect_contains(rect, evt_mouse);
     I1  evt_key_is_mouse     =  (e->key == OS_MOUSE_BUTTON__LEFT || e->key == OS_MOUSE_BUTTON__MIDDLE || e->key == OS_MOUSE_BUTTON__RIGHT);
     I1  evt_mouse_idx        =  evt_key_is_mouse ? e->key - OS_MOUSE_BUTTON__LEFT : 0;
@@ -1182,7 +1182,7 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
 
       ui_state->press_key_history[evt_mouse_idx][0]        =  box->key;
       ui_state->press_timestamp_history[evt_mouse_idx][0]  =  e->timestamp_ns;
-      ui_state->press_pos_history[evt_mouse_idx][0]        =  (F2){e->x, e->y};
+      ui_state->press_pos_history[evt_mouse_idx][0]        =  (F2){{e->x, e->y}};
 
       taken = 1;
     }
@@ -1232,14 +1232,14 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
         && (e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT)
         && evt_mouse_in_bounds)
     {
-      F2 delta = (F2){e->delta_x, e->delta_y} * scroll_mult;
+      F2 delta = scale_F2((F2){{e->delta_x, e->delta_y}}, scroll_mult);
 
       if (e->modifiers == OS_MODIFIER_FLAG__SHIFT)
       {
-        Swap(delta[0], delta[1]);
+        Swap(delta.x, delta.y);
       }
 
-      signal.scroll += delta;
+      signal.scroll = add_F2(signal.scroll, delta);
       taken = 1;
     }
 
@@ -1249,34 +1249,34 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
         && (e->modifiers == 0 || e->modifiers == OS_MODIFIER_FLAG__SHIFT)
         && evt_mouse_in_bounds)
     {
-      F2 delta = (F2){e->delta_x, e->delta_y} * scroll_mult;
+      F2 delta = scale_F2((F2){{e->delta_x, e->delta_y}}, scroll_mult);
 
       if (e->modifiers == OS_MODIFIER_FLAG__SHIFT)
       {
-        Swap(delta[0], delta[1]);
+        Swap(delta.x, delta.y);
       }
 
       if (!(box->flags & UI_BOX_FLAG__VIEW_SCROLL_X))
       {
-        if (delta[1] == 0)
+        if (delta.y == 0)
         {
-          delta[1] = delta[0];
+          delta.y = delta.x;
         }
 
-        delta[0] = 0;
+        delta.x = 0;
       }
 
       if (!(box->flags & UI_BOX_FLAG__VIEW_SCROLL_Y))
       {
-        if (delta[0] == 0)
+        if (delta.x == 0)
         {
-          delta[0] = delta[1];
+          delta.x = delta.y;
         }
 
-        delta[1] = 0;
+        delta.y = 0;
       }
 
-      box->view_off_target  +=  delta;
+      box->view_off_target  =  add_F2(box->view_off_target, delta);
       view_scrolled         =   1;
       taken                 =   1;
     }
@@ -1304,13 +1304,13 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
         if (ui_key_match(box->key, ui_state->press_key_history[k][0]) &&
             ui_key_match(box->key, ui_state->press_key_history[k][1]) &&
             ui_state->press_timestamp_history[k][0] - ui_state->press_timestamp_history[k][1] <= double_click_time &&
-            length_sq_F2(ui_state->press_pos_history[k][0] - ui_state->press_pos_history[k][1]) < 10 * 10)
+            length_sq_F2(sub_F2(ui_state->press_pos_history[k][0], ui_state->press_pos_history[k][1])) < 10 * 10)
         {
           signal.flags |= (UI_SIGNAL_FLAG__LEFT_DOUBLE_DRAGGING << k);
 
           if (ui_key_match(box->key, ui_state->press_key_history[k][2]) &&
               ui_state->press_timestamp_history[k][1] - ui_state->press_timestamp_history[k][2] <= double_click_time &&
-              length_sq_F2(ui_state->press_pos_history[k][1] - ui_state->press_pos_history[k][2]) < 10 * 10)
+              length_sq_F2(sub_F2(ui_state->press_pos_history[k][1], ui_state->press_pos_history[k][2])) < 10 * 10)
           {
             signal.flags |= (UI_SIGNAL_FLAG__LEFT_TRIPPLE_DRAGGING << k);
           }
@@ -1427,8 +1427,8 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
   {
     if (e->kind == OS_EVENT_KIND__MOUSE_MOVE)
     {
-      ui_state->mouse[0]               =  floor_F1(e->x);
-      ui_state->mouse[1]               =  floor_F1(e->y);
+      ui_state->mouse.x               =  floor_F1(e->x);
+      ui_state->mouse.y               =  floor_F1(e->y);
       ui_state->last_time_mouse_moved  =  e->timestamp_ns;
       break;
     }
@@ -1438,8 +1438,8 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
   if (os_hovered_window() != window && now - ui_state->last_time_mouse_moved > 500000000)
   {
-    ui_state->mouse[0]  =  -100.0f;
-    ui_state->mouse[1]  =  -100.0f;
+    ui_state->mouse.x  =  -100.0f;
+    ui_state->mouse.y  =  -100.0f;
   }
 
   for (L1 k = 0; k < OS_MOUSE_BUTTON_COUNT; k += 1)
@@ -1492,20 +1492,20 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
             I1 taken = 0;
 
-            if (cmd->delta_si2[0] == 0 && cmd->delta_si2[1] == 0)
+            if (cmd->delta_si2.x == 0 && cmd->delta_si2.y == 0)
             {
               continue;
             }
 
-            if (((cmd->delta_si2[0] > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X) || cmd->delta_si2[0] == 0) &&
-                ((cmd->delta_si2[1] > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2[1] == 0))
+            if (((cmd->delta_si2.x > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X) || cmd->delta_si2.x == 0) &&
+                ((cmd->delta_si2.y > 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2.y == 0))
             {
               taken     =  1;
               nav_next  =  1;
             }
 
-            if (((cmd->delta_si2[0] < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X) || cmd->delta_si2[0] == 0) &&
-                ((cmd->delta_si2[1] < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2[1] == 0))
+            if (((cmd->delta_si2.x < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_X) || cmd->delta_si2.x == 0) &&
+                ((cmd->delta_si2.y < 0 && nav_root->flags & UI_BOX_FLAG__DEFAULT_FOCUS_NAV_Y) || cmd->delta_si2.y == 0))
             {
               taken     =  1;
               nav_prev  =  1;
@@ -1513,7 +1513,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
             if (cmd->flags & UI_CMD_FLAG__EXPLICIT_DIRECTIONAL)
             {
-              axis_lock = cmd->delta_si2[0] != 0 ? AXIS__X : AXIS__Y;
+              axis_lock = cmd->delta_si2.x != 0 ? AXIS__X : AXIS__Y;
             }
 
             if (taken)
@@ -1643,7 +1643,7 @@ Internal void ui_begin_build(OS_Window *window, OS_Event_List events, UI_Cmd_Lis
 
             if (axis_lock != AXIS__INVALID)
             {
-              distance_from_start = abs_F1(rect_center(box->rect)[axis2_flip(axis_lock)] - rect_center(focus_box->rect)[axis2_flip(axis_lock)]);
+              distance_from_start = abs_F1(rect_center(box->rect).v[axis2_flip(axis_lock)] - rect_center(focus_box->rect).v[axis2_flip(axis_lock)]);
             }
 
             if (distance_from_start < best_distance_from_start && box != focus_box)
@@ -1795,15 +1795,15 @@ Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, Axis axis)
 
       case UI_SIZE_KIND__PIXELS:
       {
-        b->fixed_size[axis] = b->pref_size[axis].value;
+        b->fixed_size.v[axis] = b->pref_size[axis].value;
       } break;
 
       case UI_SIZE_KIND__TEXT_CONTENT:
       {
         F1  padding    =  b->pref_size[axis].value;
-        F1  text_size  =  b->display_fruns.dim[axis];
+        F1  text_size  =  b->display_fruns.dim.v[axis];
 
-        b->fixed_size[axis] = padding + text_size + b->text_padding * 2;
+        b->fixed_size.v[axis] = padding + text_size + b->text_padding * 2;
       } break;
     }
   }
@@ -1833,9 +1833,9 @@ Internal void ui_calc_sizes_upwards_dependent__in_place(UI_Box *root, Axis axis)
           }
         }
 
-        F1 size = fixed_parent->fixed_size[axis] * b->pref_size[axis].value;
+        F1 size = fixed_parent->fixed_size.v[axis] * b->pref_size[axis].value;
 
-        b->fixed_size[axis] = size;
+        b->fixed_size.v[axis] = size;
       } break;
     }
   }
@@ -1863,16 +1863,16 @@ Internal void ui_calc_sizes_downwards_dependent__in_place(UI_Box *root, Axis axi
           {
             if (axis == b->child_layout_axis)
             {
-              sum += child->fixed_size[axis];
+              sum += child->fixed_size.v[axis];
             }
             else
             {
-              sum = Max(sum, child->fixed_size[axis]);
+              sum = Max(sum, child->fixed_size.v[axis]);
             }
           }
         }
 
-        b->fixed_size[axis] = sum;
+        b->fixed_size.v[axis] = sum;
       }
     }
   }
@@ -1888,18 +1888,18 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis)
     //- kti: Non layout axis
     if (axis != box->child_layout_axis && !(box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X << axis)))
     {
-      F1 allowed_size = box->fixed_size[axis];
+      F1 allowed_size = box->fixed_size.v[axis];
 
       for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next)
       {
         if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
         {
-          F1  child_size  =  child->fixed_size[axis];
+          F1  child_size  =  child->fixed_size.v[axis];
           F1  violation   =  child_size - allowed_size;
           F1  max_fixup   =  child_size;
           F1  fixup       =  Clamp(0, violation, max_fixup);
 
-          child->fixed_size[axis] -= fixup;
+          child->fixed_size.v[axis] -= fixup;
         }
       }
     }
@@ -1907,7 +1907,7 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis)
     //- kti: Layout axis
     if (axis == box->child_layout_axis && !(box->flags & (UI_BOX_FLAG__ALLOW_OVERFLOW_X << axis)))
     {
-      F1  total_allowed_size   =  box->fixed_size[axis];
+      F1  total_allowed_size   =  box->fixed_size.v[axis];
       F1  total_size           =  0;
       F1  total_weighted_size  =  0;
 
@@ -1915,8 +1915,8 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis)
       {
         if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
         {
-          total_size           +=  child->fixed_size[axis];
-          total_weighted_size  +=  child->fixed_size[axis] * (1 - child->pref_size[axis].strictness);
+          total_size           +=  child->fixed_size.v[axis];
+          total_weighted_size  +=  child->fixed_size.v[axis] * (1 - child->pref_size[axis].strictness);
         }
       }
 
@@ -1928,12 +1928,12 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis)
         {
           if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
           {
-            F1 fixup_size_this_child  =  child->fixed_size[axis] * (1 - child->pref_size[axis].strictness);
+            F1 fixup_size_this_child  =  child->fixed_size.v[axis] * (1 - child->pref_size[axis].strictness);
             F1 fixup_pct              =  (violation / total_weighted_size);
 
             fixup_size_this_child    =   Max(0, fixup_size_this_child);
             fixup_pct                =   Clamp(0, fixup_pct, 1);
-            child->fixed_size[axis]  -=  fixup_size_this_child * fixup_pct;
+            child->fixed_size.v[axis]  -=  fixup_size_this_child * fixup_pct;
           }
         }
       }
@@ -1946,7 +1946,7 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis)
       {
         if (child->pref_size[axis].kind == UI_SIZE_KIND__PERCENT_OF_PARENT)
         {
-          child->fixed_size[axis] = box->fixed_size[axis] * child->pref_size[axis].value;
+          child->fixed_size.v[axis] = box->fixed_size.v[axis] * child->pref_size[axis].value;
         }
       }
     }
@@ -1954,7 +1954,7 @@ Internal void ui_layout_enforce_constraints__in_place(UI_Box *root, Axis axis)
     //- kti: enforce clamps
     for (UI_Box *child = box->first; !ui_box_is_nil(child); child = child->next)
     {
-      child->fixed_size[axis] = Max(child->min_size[axis], child->fixed_size[axis]);
+      child->fixed_size.v[axis] = Max(child->min_size.v[axis], child->fixed_size.v[axis]);
     }
   }
 
@@ -1972,30 +1972,30 @@ Internal void ui_layout_position__in_place(UI_Box *root, Axis axis)
     {
       if (!(child->flags & (UI_BOX_FLAG__FLOATING_X << axis)))
       {
-        child->fixed_pos[axis] = layout_position;
+        child->fixed_pos.v[axis] = layout_position;
 
         if (box->child_layout_axis == axis)
         {
-          layout_position += child->fixed_size[axis];
-          bounds += child->fixed_size[axis];
+          layout_position += child->fixed_size.v[axis];
+          bounds += child->fixed_size.v[axis];
         }
         else
         {
-          bounds = Max(bounds, child->fixed_size[axis]);
+          bounds = Max(bounds, child->fixed_size.v[axis]);
         }
       }
 
-      F1  view_off     =  !(child->flags & (UI_BOX_FLAG__SKIP_VIEW_OFF_X << axis)) ? floor_F1(box->view_off[axis]) : 0.0f;
-      F1  rect_min     =  box->rect[axis] + child->fixed_pos[axis] - view_off;
-      F1  rect_max     =  rect_min + child->fixed_size[axis];
+      F1  view_off     =  !(child->flags & (UI_BOX_FLAG__SKIP_VIEW_OFF_X << axis)) ? floor_F1(box->view_off.v[axis]) : 0.0f;
+      F1  rect_min     =  box->rect.v[axis] + child->fixed_pos.v[axis] - view_off;
+      F1  rect_max     =  rect_min + child->fixed_size.v[axis];
       F1  rect_min_px  =  floor_F1(rect_min);
       F1  rect_max_px  =  floor_F1(rect_max);
 
-      child->rect[axis]      =  rect_min_px;
-      child->rect[2 + axis]  =  rect_max_px - rect_min_px;
+      child->rect.v[axis]      =  rect_min_px;
+      child->rect.v[2 + axis]  =  rect_max_px - rect_min_px;
     }
 
-    box->view_bounds[axis] = bounds;
+    box->view_bounds.v[axis] = bounds;
   }
 }
 
@@ -2039,34 +2039,34 @@ Internal void ui_end_build(void)
       {
         for (UI_Box *b = box; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, box).next)
         {
-          if (floor_F1(b->rect[0]) <= floor_F1(box->rect[0]) && floor_F1(b->rect[1]) <= floor_F1(box->rect[1]))
+          if (floor_F1(b->rect.x) <= floor_F1(box->rect.x) && floor_F1(b->rect.y) <= floor_F1(box->rect.y))
           {
-            b->corner_radii[0] = box->corner_radii[0];
+            b->corner_radii.x = box->corner_radii.x;
           }
 
-          if (   floor_F1(b->rect[0] + b->rect[2])  >=  floor_F1(box->rect[0] + box->rect[2])
-              && floor_F1(b->rect[1])               <=  floor_F1(box->rect[1]))
+          if (   floor_F1(b->rect.x + b->rect.z)  >=  floor_F1(box->rect.x + box->rect.z)
+              && floor_F1(b->rect.y)               <=  floor_F1(box->rect.y))
           {
-            b->corner_radii[1] = box->corner_radii[1];
+            b->corner_radii.y = box->corner_radii.y;
           }
 
-          if (   floor_F1(b->rect[0])               <=  floor_F1(box->rect[0])
-              && floor_F1(b->rect[1] + b->rect[3])  >=  floor_F1(box->rect[1] + box->rect[3]))
+          if (   floor_F1(b->rect.x)               <=  floor_F1(box->rect.x)
+              && floor_F1(b->rect.y + b->rect.w)  >=  floor_F1(box->rect.y + box->rect.w))
           {
-            b->corner_radii[2] = box->corner_radii[2];
+            b->corner_radii.z = box->corner_radii.z;
           }
 
-          if (   floor_F1(b->rect[0] + b->rect[2]) >= floor_F1(box->rect[0] + box->rect[2])
-              && floor_F1(b->rect[1] + b->rect[3]) >= floor_F1(box->rect[1] + box->rect[3]))
+          if (   floor_F1(b->rect.x + b->rect.z) >= floor_F1(box->rect.x + box->rect.z)
+              && floor_F1(b->rect.y + b->rect.w) >= floor_F1(box->rect.y + box->rect.w))
           {
-            b->corner_radii[3] = box->corner_radii[3];
+            b->corner_radii.w = box->corner_radii.w;
           }
         }
 
-        box->first->corner_radii[0]  =  box->corner_radii[0];
-        box->first->corner_radii[1]  =  box->corner_radii[1];
-        box->last->corner_radii[2]   =  box->corner_radii[2];
-        box->last->corner_radii[3]   =  box->corner_radii[3];
+        box->first->corner_radii.x  =  box->corner_radii.x;
+        box->first->corner_radii.y  =  box->corner_radii.y;
+        box->last->corner_radii.z   =  box->corner_radii.z;
+        box->last->corner_radii.w   =  box->corner_radii.w;
       }
     }
   }
@@ -2082,19 +2082,19 @@ Internal void ui_end_build(void)
       //- kti: Animate view offset
       F1 scroll_animation_rate = 0.2f;
 
-      b->view_off += scroll_animation_rate * (b->view_off_target - b->view_off);
+      b->view_off = add_F2(b->view_off, scale_F2(sub_F2(b->view_off_target, b->view_off), scroll_animation_rate));
 
-      if (abs_F1(b->view_off_target[0] - b->view_off[0]) < 2.0f)
+      if (abs_F1(b->view_off_target.x - b->view_off.x) < 2.0f)
       {
-        b->view_off[0] = b->view_off_target[0];
+        b->view_off.x = b->view_off_target.x;
       }
 
-      if (abs_F1(b->view_off_target[1] - b->view_off[1]) < 2.0f)
+      if (abs_F1(b->view_off_target.y - b->view_off.y) < 2.0f)
       {
-        b->view_off[1] = b->view_off_target[1];
+        b->view_off.y = b->view_off_target.y;
       }
 
-      if (b->view_off[0] != b->view_off_target[0] || b->view_off[1] != b->view_off_target[1])
+      if (b->view_off.x != b->view_off_target.x || b->view_off.y != b->view_off_target.y)
       {
         ui_state->animation_active = 1;
       }
@@ -2109,11 +2109,11 @@ Internal void ui_end_build(void)
     {
       for (L1 idx = 0; idx < 4; idx += 1)
       {
-        node->current_rgba[idx] += (node->target_rgba[idx] - node->current_rgba[idx]) * slow_rate;
+        node->current_rgba.v[idx] += (node->target_rgba.v[idx] - node->current_rgba.v[idx]) * slow_rate;
 
-        if (abs_F1(node->target_rgba[idx] - node->current_rgba[idx]) < 0.001f)
+        if (abs_F1(node->target_rgba.v[idx] - node->current_rgba.v[idx]) < 0.001f)
         {
-          node->current_rgba[idx] = node->target_rgba[idx];
+          node->current_rgba.v[idx] = node->target_rgba.v[idx];
         }
         else
         {
@@ -2135,34 +2135,34 @@ Internal F2 ui_box_text_pos(UI_Box *box)
   F1          font_size     =  box->font_size;
   FP_Metrics  font_metrics  =  fc_metrics_from_tag_size(font, font_size);
 
-  result[1] = floor_F1((box->rect[1] + box->rect[3] * 0.5f) + font_metrics.ascent * 0.5f - font_metrics.descent * 0.5f);
+  result.y = floor_F1((box->rect.y + box->rect.w * 0.5f) + font_metrics.ascent * 0.5f - font_metrics.descent * 0.5f);
 
   switch (box->text_align)
   {
     default:
     case UI_TEXT_ALIGN__LEFT:
     {
-      result[0] = box->rect[0] + box->text_padding;
+      result.x = box->rect.x + box->text_padding;
     } break;
 
     case UI_TEXT_ALIGN__CENTER:
     {
       F2 text_dim = box->display_fruns.dim;
 
-      result[0]  =  round_F1(box->rect[0] + box->rect[2] * 0.5f - text_dim[0] * 0.5f);
-      result[0]  =  Max(result[0], box->rect[0]);
+      result.x  =  round_F1(box->rect.x + box->rect.z * 0.5f - text_dim.x * 0.5f);
+      result.x  =  Max(result.x, box->rect.x);
     } break;
 
     case UI_TEXT_ALIGN__RIGHT:
     {
       F2 text_dim = box->display_fruns.dim;
 
-      result[0]  =  round_F1(box->rect[0] + box->rect[2] - text_dim[0] - box->text_padding);
-      result[0]  =  Max(result[0], box->rect[0]);
+      result.x  =  round_F1(box->rect.x + box->rect.z - text_dim.x - box->text_padding);
+      result.x  =  Max(result.x, box->rect.x);
     } break;
   }
 
-  result[0] = floor_F1(result[0]);
+  result.x = floor_F1(result.x);
 
   return result;
 }
@@ -2176,7 +2176,7 @@ Internal L1 ui_box_byte_offset_from_xy(UI_Box *box, F2 mouse_pos)
                                                        0,
                                                        box->tab_size,
                                                        string,
-                                                       mouse_pos[0] - ui_box_text_pos(box)[0]);
+                                                       mouse_pos.x - ui_box_text_pos(box).x);
 }
 
 Internal void ui_kill_action(void)
@@ -2212,7 +2212,7 @@ Internal F2 ui_drag_delta(I1 button)
 
   if (idx < OS_MOUSE_BUTTON_COUNT)
   {
-    delta = ui_mouse() - ui_state->drag_start_mouse[idx];
+    delta = sub_F2(ui_mouse(), ui_state->drag_start_mouse[idx]);
   }
 
   return delta;
@@ -2313,10 +2313,10 @@ Internal void ui_pop_corner_radius(void)
 
 Internal void ui_set_next_fixed_rect(F4 rect)
 {
-  ui_set_next_fixed_x(rect[0]);
-  ui_set_next_fixed_y(rect[1]);
-  ui_set_next_fixed_width(rect[2]);
-  ui_set_next_fixed_height(rect[3]);
+  ui_set_next_fixed_x(rect.x);
+  ui_set_next_fixed_y(rect.y);
+  ui_set_next_fixed_width(rect.z);
+  ui_set_next_fixed_height(rect.w);
 }
 
 Internal void ui_push_pref_size(Axis axis, UI_Size size)
@@ -2617,27 +2617,27 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
     {
       L1 new_column = cursor.column;
 
-      if (delta[0] < 0)
+      if (delta.x < 0)
       {
-        for (SL1 step = 0; step > delta[0]; step -= 1)
+        for (SL1 step = 0; step > delta.x; step -= 1)
         {
           new_column = utf8_boundary_left_from_column(string, new_column);
         }
       }
-      else if (delta[0] > 0)
+      else if (delta.x > 0)
       {
-        for (SL1 step = 0; step < delta[0]; step += 1)
+        for (SL1 step = 0; step < delta.x; step += 1)
         {
           new_column = utf8_boundary_right_from_column(string, new_column);
         }
       }
 
-      delta[0] = (SL1)new_column - (SL1)cursor.column;
+      delta.x = (SL1)new_column - (SL1)cursor.column;
     } break;
 
     case UI_CMD_DELTA_UNIT__WORD:
     {
-      delta[0] = (SL1)ui_scanned_column_from_column(string, cursor.column, delta[0] > 0 ? SIDE__MAX : SIDE__MIN) - (SL1)cursor.column;
+      delta.x = (SL1)ui_scanned_column_from_column(string, cursor.column, delta.x > 0 ? SIDE__MAX : SIDE__MIN) - (SL1)cursor.column;
     } break;
     case UI_CMD_DELTA_UNIT__LINE:
     case UI_CMD_DELTA_UNIT__WHOLE:
@@ -2656,7 +2656,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 
       L1 home_dest_column = (cursor.column == first_nonwhitespace_column) ? 0 : first_nonwhitespace_column;
 
-      delta[0] = (SL1)((delta[0] > 0) ? string.len : home_dest_column) - (SL1)cursor.column;
+      delta.x = (SL1)((delta.x > 0) ? string.len : home_dest_column) - (SL1)cursor.column;
     } break;
   }
 
@@ -2667,7 +2667,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 
   if (txt_pt_match(cursor, mark) || !(cmd->flags & UI_CMD_FLAG__ZERO_DELTA_ON_SELECT))
   {
-    SL1 next_column = (SL1)next_cursor.column + delta[0];
+    SL1 next_column = (SL1)next_cursor.column + delta.x;
 
     next_cursor.column = (L1)Max(0, next_column);
   }
@@ -2679,11 +2679,11 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 
   if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__PICK_SELECT_SIDE)
   {
-    if (original_delta[0] < 0 || original_delta[1] < 0)
+    if (original_delta.x < 0 || original_delta.y < 0)
     {
       next_cursor = next_mark = txt_pt_min(cursor, mark);
     }
-    else if (original_delta[0] > 0 || original_delta[1] > 0)
+    else if (original_delta.x > 0 || original_delta.y > 0)
     {
       next_cursor = next_mark = txt_pt_max(cursor, mark);
     }
@@ -2730,7 +2730,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
     next_cursor  =  next_mark = (Txt_Pt){range.min.line, range.min.column + cmd->string.len};
   }
 
-  if (next_cursor.column > string.len || cmd->delta_si2[1] != 0)
+  if (next_cursor.column > string.len || cmd->delta_si2.y != 0)
   {
     flags |= UI_TXT_OP_FLAG__INVALID;
   }
@@ -2800,7 +2800,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
 
       //- kti: Skip non single-line operations.
       if ((cmd->kind != UI_CMD_KIND__EDIT && cmd->kind != UI_CMD_KIND__NAVIGATE && cmd->kind != UI_CMD_KIND__TEXT)
-          || cmd->delta_si2[1] != 0)
+          || cmd->delta_si2.y != 0)
       {
         continue;
       }
@@ -2854,7 +2854,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
                                                         (F1)ui_state->window->pixel_ratio,
                                                         0,
                                                         ui_top_tab_size(),
-                                                        edit_string)[0];
+                                                        edit_string).x;
 
       ui_set_next_pref_width(ui_px(total_text_width + ui_top_font_size() * 5, 1.0f));
 
@@ -2919,25 +2919,25 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
   }
 
   //- kti: Focus cursor.
-  if (is_focus_active && !focus_cleared_this_frame && box->rect[0] > 0)
+  if (is_focus_active && !focus_cleared_this_frame && box->rect.x > 0)
   {
-    F1  cursor_margin     =  Min(ui_top_font_size() * 2.0f, box->rect[2] * 0.5f);
-    F2  cursor_range_px   =  {cursor_x_offset - cursor_margin, cursor_x_offset + cursor_margin};
-    F2  visible_range_px  =  {box->view_off_target[0], box->view_off_target[0] + box->rect[2]};
+    F1  cursor_margin     =  Min(ui_top_font_size() * 2.0f, box->rect.z * 0.5f);
+    F2  cursor_range_px   =  {{cursor_x_offset - cursor_margin, cursor_x_offset + cursor_margin}};
+    F2  visible_range_px  =  {{box->view_off_target.x, box->view_off_target.x + box->rect.z}};
 
-    cursor_range_px[0]  =  Max(0, cursor_range_px[0]);
-    cursor_range_px[1]  =  Max(0, cursor_range_px[1]);
+    cursor_range_px.x  =  Max(0, cursor_range_px.x);
+    cursor_range_px.y  =  Max(0, cursor_range_px.y);
 
-    F1  min_delta  =  Min(0, cursor_range_px[0] - visible_range_px[0]);
-    F1  max_delta  =  Max(0, cursor_range_px[1] - visible_range_px[1]);
+    F1  min_delta  =  Min(0, cursor_range_px.x - visible_range_px.x);
+    F1  max_delta  =  Max(0, cursor_range_px.y - visible_range_px.y);
 
-    box->view_off_target[0] += min_delta;
-    box->view_off_target[0] += max_delta;
+    box->view_off_target.x += min_delta;
+    box->view_off_target.x += max_delta;
   }
   else
   {
-    box->view_off[0]         =  0;
-    box->view_off_target[0]  =  0;
+    box->view_off.x         =  0;
+    box->view_off_target.x  =  0;
   }
 
   ui_pop_focus_hot();
@@ -2973,12 +2973,12 @@ Internal void ui_draw(void)
     {
       F4 shadow = rect_pad(box->rect, 4.0f);
 
-      shadow[1] += 4.0f;
+      shadow.y += 4.0f;
 
       F4                 shadow_color  =  ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
       GFX_Rect_Instance  *shadow_inst  =  dr_rect(shadow, shadow_color, 0.0f, 8.0f);
 
-      shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
+      shadow_inst->corner_radii = add_F4(box->corner_radii, (F4){{4.0f, 4.0f, 4.0f, 4.0f}});
     }
 
     if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND)
@@ -2988,11 +2988,11 @@ Internal void ui_draw(void)
         F4  shadow        =  rect_pad(box->rect, 4.0f);
         F4  shadow_color  =  ui_color_from_tags_key_name(box->tags_key, str8("drop_shadow"));
 
-        shadow_color[3] *= 0.8f;
+        shadow_color.w *= 0.8f;
 
         GFX_Rect_Instance *shadow_inst = dr_rect(shadow, shadow_color, 0.0f, 8.0f);
 
-        shadow_inst->corner_radii = box->corner_radii + (F4){4.0f, 4.0f, 4.0f, 4.0f};
+        shadow_inst->corner_radii = add_F4(box->corner_radii, (F4){{4.0f, 4.0f, 4.0f, 4.0f}});
       }
 
       GFX_Rect_Instance *inst = dr_rect(box->rect, box->background_colors[0], 0.0f, softness);
@@ -3027,7 +3027,7 @@ Internal void ui_draw(void)
         F4  text_clip  =  box->rect;
         F4  top_clip   =  dr_top_clip();
 
-        if (top_clip[2] != 0 || top_clip[3] != 0)
+        if (top_clip.z != 0 || top_clip.w != 0)
         {
           text_clip = rect_overlap(text_clip, top_clip);
         }
@@ -3061,9 +3061,9 @@ Internal void ui_draw(void)
     if (box->flags & UI_BOX_FLAG__CLIP)
     {
       F4  top_clip  =  dr_top_clip();
-      F4  new_clip  =  (F4){box->rect[0] + 1, box->rect[1] + 1, box->rect[2] - 2, box->rect[3] - 2};
+      F4  new_clip  =  (F4){{box->rect.x + 1, box->rect.y + 1, box->rect.z - 2, box->rect.w - 2}};
 
-      if (top_clip[2] != 0 || top_clip[3] != 0)
+      if (top_clip.z != 0 || top_clip.w != 0)
       {
         new_clip = rect_overlap(new_clip, top_clip);
       }
@@ -3088,25 +3088,25 @@ Internal void ui_draw(void)
         F1                      mark_x_offset     =  fc_x_offset_from_tag_size_string_byte_offset(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, edited_string, mark.column);
         F1                      cursor_thickness  =  Max(1.0f, floor_F1(font_size / 10.0f));
         UI_Box                  *edit_box         =  box->parent;
-        F1                      cursor_top        =  edit_box->rect[1] + font_size * 0.5f;
-        F1                      cursor_height     =  edit_box->rect[3] - font_size;
-        F1                      cursor_x          =  text_pos[0] + cursor_x_offset;
-        F1                      mark_x            =  text_pos[0] + mark_x_offset - cursor_thickness;
+        F1                      cursor_top        =  edit_box->rect.y + font_size * 0.5f;
+        F1                      cursor_height     =  edit_box->rect.w - font_size;
+        F1                      cursor_x          =  text_pos.x + cursor_x_offset;
+        F1                      mark_x            =  text_pos.x + mark_x_offset - cursor_thickness;
         F4                      cursor_color      =  ui_color_from_tags_key_name(box->tags_key, str8("cursor"));
         F4                      select_color      =  ui_color_from_tags_key_name(box->tags_key, str8("selection"));
 
         F4 cursor_rect = {
-          cursor_x,
+          {cursor_x,
           cursor_top,
           cursor_thickness,
           cursor_height,
-        };
-        F4 select_rect = {
+        }};
+        F4 select_rect = {{
           Min(cursor_x, mark_x),
           cursor_top,
           Max(cursor_x + cursor_thickness, mark_x + cursor_thickness * 2.0f) - Min(cursor_x, mark_x),
           cursor_height,
-        };
+        }};
 
         dr_rect(select_rect, select_color, font_size * 0.25f, 1.0f);
         dr_rect(cursor_rect, cursor_color, 0.0f, 0.0f);
@@ -3150,15 +3150,15 @@ Internal void ui_draw(void)
       {
         F1                 border_pad   =  (draw_focus_border && b->flags & UI_BOX_FLAG__INSET_FOCUS_BORDER) ? -2.0f : 1.0f;
         F4                 border_rect  =  rect_pad(b->rect, border_pad);
-        GFX_Rect_Instance  *inst        =  dr_rect(border_rect, (F4){0.0f}, 0.0f, b_softness);
+        GFX_Rect_Instance  *inst        =  dr_rect(border_rect, (F4){{0.0f}}, 0.0f, b_softness);
 
         inst->corner_radii = b->corner_radii;
 
         for (L1 corner_idx = 0; corner_idx < 4; corner_idx += 1)
         {
-          if (inst->corner_radii[corner_idx] > 0.0f)
+          if (inst->corner_radii.v[corner_idx] > 0.0f)
           {
-            inst->corner_radii[corner_idx] += 1.0f;
+            inst->corner_radii.v[corner_idx] += 1.0f;
           }
         }
 
@@ -3184,26 +3184,26 @@ Internal void ui_draw(void)
         F4  color      =  b->border_color;
         F1  thickness  =  1.0f;
 
-        if (r[2] > 0.0f && r[3] > 0.0f)
+        if (r.z > 0.0f && r.w > 0.0f)
         {
           if (b->flags & UI_BOX_FLAG__DRAW_SIDE_TOP)
           {
-            dr_rect((F4){r[0], r[1], r[2], thickness}, color, 0.0f, 0.0f);
+            dr_rect((F4){{r.x, r.y, r.z, thickness}}, color, 0.0f, 0.0f);
           }
 
           if (b->flags & UI_BOX_FLAG__DRAW_SIDE_BOTTOM)
           {
-            dr_rect((F4){r[0], r[1] + r[3] - thickness, r[2], thickness}, color, 0.0f, 0.0f);
+            dr_rect((F4){{r.x, r.y + r.w - thickness, r.z, thickness}}, color, 0.0f, 0.0f);
           }
 
           if (b->flags & UI_BOX_FLAG__DRAW_SIDE_LEFT)
           {
-            dr_rect((F4){r[0], r[1], thickness, r[3]}, color, 0.0f, 0.0f);
+            dr_rect((F4){{r.x, r.y, thickness, r.w}}, color, 0.0f, 0.0f);
           }
 
           if (b->flags & UI_BOX_FLAG__DRAW_SIDE_RIGHT)
           {
-            dr_rect((F4){r[0] + r[2] - thickness, r[1], thickness, r[3]}, color, 0.0f, 0.0f);
+            dr_rect((F4){{r.x + r.z - thickness, r.y, thickness, r.w}}, color, 0.0f, 0.0f);
           }
         }
       }

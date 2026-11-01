@@ -176,9 +176,9 @@ Internal L1 lister_color_key(Lister_Entry *entry)
 
 Internal F4 lister_hsv_from_rgb(F4 color)
 {
-  F1  r              =  color[0];
-  F1  g              =  color[1];
-  F1  b              =  color[2];
+  F1  r              =  color.x;
+  F1  g              =  color.y;
+  F1  b              =  color.z;
   F1  max_component  =  Max(r, Max(g, b));
   F1  min_component  =  Min(r, Min(g, b));
   F1  delta          =  max_component - min_component;
@@ -205,47 +205,47 @@ Internal F4 lister_hsv_from_rgb(F4 color)
   }
 
   F1  saturation  =  max_component > 0.00001f ? delta / max_component : 0.0f;
-  F4  result      =  {hue, saturation, max_component, color[3]};
+  F4  result      =  {{hue, saturation, max_component, color.w}};
 
   return result;
 }
 
 Internal F4 lister_rgb_from_hsv(F4 hsv)
 {
-  F1 hue = mod_F1(hsv[0], 1.0f);
+  F1 hue = mod_F1(hsv.x, 1.0f);
 
   if (hue < 0.0f)
     hue += 1.0f;
 
-  F1  saturation  =  clamp01_F1(hsv[1]);
-  F1  value       =  Max(0.0f, hsv[2]);
+  F1  saturation  =  clamp01_F1(hsv.y);
+  F1  value       =  Max(0.0f, hsv.z);
   F1  h           =  hue * 6.0f;
   L1  sector      =  (L1)floor_F1(h);
   F1  fraction    =  h - floor_F1(h);
   F1  p           =  value * (1.0f - saturation);
   F1  q           =  value * (1.0f - saturation * fraction);
   F1  t           =  value * (1.0f - saturation * (1.0f - fraction));
-  F4  result      =  {0.0f, 0.0f, 0.0f, hsv[3]};
+  F4  result      =  {{0.0f, 0.0f, 0.0f, hsv.w}};
 
   switch (sector % 6)
   {
     case 0:
-      result = (F4){value, t, p, hsv[3]};
+      result = (F4){{value, t, p, hsv.w}};
       break;
     case 1:
-      result = (F4){q, value, p, hsv[3]};
+      result = (F4){{q, value, p, hsv.w}};
       break;
     case 2:
-      result = (F4){p, value, t, hsv[3]};
+      result = (F4){{p, value, t, hsv.w}};
       break;
     case 3:
-      result = (F4){p, q, value, hsv[3]};
+      result = (F4){{p, q, value, hsv.w}};
       break;
     case 4:
-      result = (F4){t, p, value, hsv[3]};
+      result = (F4){{t, p, value, hsv.w}};
       break;
     case 5:
-      result = (F4){value, p, q, hsv[3]};
+      result = (F4){{value, p, q, hsv.w}};
       break;
   }
 
@@ -258,10 +258,10 @@ Internal void lister_color_apply(Lister_Entry *entry, F4 hsv)
 
   for (Lister_Value *value = entry->first_value; value != 0; value = value->next)
   {
-    F1 alpha = as(value, F4)[0][3];
+    F1 alpha = as(value, F4)->w;
 
-    as(value, F4)[0]     =  rgb;
-    as(value, F4)[0][3]  =  alpha;
+    *as(value, F4)  =  rgb;
+    as(value, F4)->w  =  alpha;
   }
 }
 
@@ -271,8 +271,8 @@ Internal void lister_color_sv_marker(UI_Box *box, F1 saturation, F1 value)
   value       =  clamp01_F1(value);
 
   F1  marker_size =  12.0f;
-  F1  x           =  saturation * box->rect[2] - marker_size * 0.5f;
-  F1  y           =  (1.0f - value) * box->rect[3] - marker_size * 0.5f;
+  F1  x           =  saturation * box->rect.z - marker_size * 0.5f;
+  F1  y           =  (1.0f - value) * box->rect.w - marker_size * 0.5f;
 
   UI_Parent(box)
   {
@@ -281,7 +281,7 @@ Internal void lister_color_sv_marker(UI_Box *box, F1 saturation, F1 value)
     ui_set_next_fixed_width(marker_size);
     ui_set_next_fixed_height(marker_size);
     ui_set_next_corner_radius(marker_size * 0.5f);
-    ui_set_next_border_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
+    ui_set_next_border_color((F4){{0.0f, 0.0f, 0.0f, 1.0f}});
     ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, str8("sv_marker_outer"));
 
     ui_set_next_fixed_x(x + 1.0f);
@@ -289,7 +289,7 @@ Internal void lister_color_sv_marker(UI_Box *box, F1 saturation, F1 value)
     ui_set_next_fixed_width(marker_size - 2.0f);
     ui_set_next_fixed_height(marker_size - 2.0f);
     ui_set_next_corner_radius((marker_size - 2.0f) * 0.5f);
-    ui_set_next_border_color((F4){1.0f, 1.0f, 1.0f, 1.0f});
+    ui_set_next_border_color((F4){{1.0f, 1.0f, 1.0f, 1.0f}});
     ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, str8("sv_marker_inner"));
   }
 }
@@ -299,24 +299,24 @@ Internal void lister_color_hue_marker(UI_Box *box, F1 hue)
   hue = clamp01_F1(hue);
 
   F1  marker_height  =  6.0f;
-  F1  y              =  hue * box->rect[3] - marker_height * 0.5f;
+  F1  y              =  hue * box->rect.w - marker_height * 0.5f;
 
   UI_Parent(box)
   {
     ui_set_next_fixed_x(-2.0f);
     ui_set_next_fixed_y(y);
-    ui_set_next_fixed_width(box->rect[2] + 4.0f);
+    ui_set_next_fixed_width(box->rect.z + 4.0f);
     ui_set_next_fixed_height(marker_height);
     ui_set_next_corner_radius(2.0f);
-    ui_set_next_border_color((F4){0.0f, 0.0f, 0.0f, 1.0f});
+    ui_set_next_border_color((F4){{0.0f, 0.0f, 0.0f, 1.0f}});
     ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, str8("hue_marker_outer"));
 
     ui_set_next_fixed_x(-1.0f);
     ui_set_next_fixed_y(y + 1.0f);
-    ui_set_next_fixed_width(box->rect[2] + 2.0f);
+    ui_set_next_fixed_width(box->rect.z + 2.0f);
     ui_set_next_fixed_height(marker_height - 2.0f);
     ui_set_next_corner_radius(1.0f);
-    ui_set_next_border_color((F4){1.0f, 1.0f, 1.0f, 1.0f});
+    ui_set_next_border_color((F4){{1.0f, 1.0f, 1.0f, 1.0f}});
     ui_build_box_from_string(UI_BOX_FLAG__DRAW_BORDER, str8("hue_marker_inner"));
   }
 }
@@ -335,11 +335,11 @@ Internal void lister_drag_L1(Lister_Entry *entry)
     pixels_per_unit = 5.0f;
 
     // Auto-calculate pixels per unit when possible.
-    if (options.max > options.min && drag.box->rect[2] > 0.0f)
+    if (options.max > options.min && drag.box->rect.z > 0.0f)
     {
       L1 range = options.max - options.min;
 
-      pixels_per_unit = (F1)((D1)drag.box->rect[2] / (D1)range);
+      pixels_per_unit = (F1)((D1)drag.box->rect.z / (D1)range);
     }
   }
 
@@ -351,7 +351,7 @@ Internal void lister_drag_L1(Lister_Entry *entry)
     }
 
     L1   initial_value  =  ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, L1)[0];
-    SL1  delta          =  (SL1)(ui_drag_delta(OS_MOUSE_BUTTON__LEFT)[0] / pixels_per_unit);
+    SL1  delta          =  (SL1)(ui_drag_delta(OS_MOUSE_BUTTON__LEFT).x / pixels_per_unit);
 
     initial_value = Clamp(options.min, initial_value, true_max);
 
@@ -397,8 +397,8 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label)
   I1                 is_scalar        =  entry->kind == LISTER_ENTRY_KIND__F1;
   I1                 is_xyz           =  entry->kind == LISTER_ENTRY_KIND__XYZ;
   F1                 before           =  is_scalar ? as(entry->first_value, F1)[0]
-                                         : is_xyz ? component_F3(*as(entry->first_value, F3), component)
-                                                  : as(entry->first_value, F4)[0][component];
+                                         : is_xyz ? as(entry->first_value, F3)->v[component]
+                                                  : as(entry->first_value, F4)->v[component];
   F1                 after            =  before;
   F1                 pixels_per_unit  =  options.pixels_per_unit;
 
@@ -409,11 +409,11 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label)
     pixels_per_unit = 50.0f;
 
     // Auto-calculate pixels per unit when possible.
-    if (options.max > options.min && drag.box->rect[2] > 0.0f)
+    if (options.max > options.min && drag.box->rect.z > 0.0f)
     {
       D1 range = (D1)options.max - (D1)options.min;
 
-      pixels_per_unit = (F1)((D1)drag.box->rect[2] / range);
+      pixels_per_unit = (F1)((D1)drag.box->rect.z / range);
     }
   }
 
@@ -427,7 +427,7 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label)
 
     F1 initial_value = ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F1)[0];
 
-    after = initial_value + ui_drag_delta(OS_MOUSE_BUTTON__LEFT)[0] / pixels_per_unit;
+    after = initial_value + ui_drag_delta(OS_MOUSE_BUTTON__LEFT).x / pixels_per_unit;
   }
 
   // default value
@@ -458,7 +458,7 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label)
       else if (is_xyz)
       {
         F3 *v = as(value, F3);
-        *component_ptr_F3(v, component) += delta;
+        v->v[component] += delta;
 
         if (options.flags & LISTER_ENTRY_FLAG__NORMALIZE_F3)
         {
@@ -467,7 +467,7 @@ Internal void lister_drag_F1(Lister_Entry *entry, L1 component, String8 label)
       }
       else
       {
-        as(value, F4)[0][component] += delta;
+        as(value, F4)->v[component] += delta;
       }
     }
   }
@@ -637,9 +637,9 @@ Internal void lister_ui(void)
               {
                 lister_state.open_color_key = color_key;
 
-                if (hsv[1] > 0.00001f && hsv[2] > 0.00001f)
+                if (hsv.y > 0.00001f && hsv.z > 0.00001f)
                 {
-                  lister_state.color_hue = hsv[0];
+                  lister_state.color_hue = hsv.x;
                 }
               }
             }
@@ -662,13 +662,13 @@ Internal void lister_ui(void)
 
           if (lister_state.open_color_key == color_key)
           {
-            if (hsv[1] > 0.00001f && hsv[2] > 0.00001f)
+            if (hsv.y > 0.00001f && hsv.z > 0.00001f)
             {
-              lister_state.color_hue = hsv[0];
+              lister_state.color_hue = hsv.x;
             }
             else
             {
-              hsv[0] = lister_state.color_hue;
+              hsv.x = lister_state.color_hue;
             }
 
             ui_set_next_child_layout_axis(AXIS__Y);
@@ -699,14 +699,14 @@ Internal void lister_ui(void)
 
                 if (sv_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING)
                 {
-                  hsv[1]  =  clamp01_F1((ui_mouse()[0] - sv_box->rect[0]) / Max(sv_box->rect[2], 1.0f));
-                  hsv[2]  =  1.0f - clamp01_F1((ui_mouse()[1] - sv_box->rect[1]) / Max(sv_box->rect[3], 1.0f));
-                  hsv[0]  =  lister_state.color_hue;
+                  hsv.y  =  clamp01_F1((ui_mouse().x - sv_box->rect.x) / Max(sv_box->rect.z, 1.0f));
+                  hsv.z  =  1.0f - clamp01_F1((ui_mouse().y - sv_box->rect.y) / Max(sv_box->rect.w, 1.0f));
+                  hsv.x  =  lister_state.color_hue;
 
                   lister_color_apply(entry, hsv);
                 }
 
-                lister_color_sv_marker(sv_box, hsv[1], hsv[2]);
+                lister_color_sv_marker(sv_box, hsv.y, hsv.z);
 
                 ui_spacer(ui_px(8.0f, 1.0f));
 
@@ -720,8 +720,8 @@ Internal void lister_ui(void)
 
                 if (hue_signal.flags & UI_SIGNAL_FLAG__LEFT_DRAGGING)
                 {
-                  lister_state.color_hue  =  clamp01_F1((ui_mouse()[1] - hue_box->rect[1]) / Max(hue_box->rect[3], 1.0f));
-                  hsv[0]                  =  lister_state.color_hue;
+                  lister_state.color_hue  =  clamp01_F1((ui_mouse().y - hue_box->rect.y) / Max(hue_box->rect.w, 1.0f));
+                  hsv.x                  =  lister_state.color_hue;
 
                   lister_color_apply(entry, hsv);
                 }
@@ -732,8 +732,8 @@ Internal void lister_ui(void)
 
                   for (L1 segment_idx = 0; segment_idx < 6; segment_idx += 1)
                   {
-                    F4  segment_top     =  lister_rgb_from_hsv((F4){(F1)segment_idx / 6.0f, 1.0f, 1.0f, 1.0f});
-                    F4  segment_bottom  =  lister_rgb_from_hsv((F4){(F1)(segment_idx + 1) / 6.0f, 1.0f, 1.0f, 1.0f});
+                    F4  segment_top     =  lister_rgb_from_hsv((F4){{(F1)segment_idx / 6.0f, 1.0f, 1.0f, 1.0f}});
+                    F4  segment_bottom  =  lister_rgb_from_hsv((F4){{(F1)(segment_idx + 1) / 6.0f, 1.0f, 1.0f, 1.0f}});
 
                     ui_set_next_pref_width(ui_pct(1.0f, 1.0f));
                     ui_set_next_pref_height(ui_pct(1.0f / 6.0f, 1.0f));
@@ -750,15 +750,15 @@ Internal void lister_ui(void)
           }
         }
 
-        F4 hue_color = lister_rgb_from_hsv((F4){lister_state.color_hue, 1.0f, 1.0f, 1.0f});
+        F4 hue_color = lister_rgb_from_hsv((F4){{lister_state.color_hue, 1.0f, 1.0f, 1.0f}});
 
         if (sv_box != 0)
         {
           ui_box_equip_background_colors(sv_box,
-                                         (F4){1.0f, 1.0f, 1.0f, 1.0f},
+                                         (F4){{1.0f, 1.0f, 1.0f, 1.0f}},
                                          hue_color,
-                                         (F4){0.0f, 0.0f, 0.0f, 1.0f},
-                                         (F4){0.0f, 0.0f, 0.0f, 1.0f});
+                                         (F4){{0.0f, 0.0f, 0.0f, 1.0f}},
+                                         (F4){{0.0f, 0.0f, 0.0f, 1.0f}});
         }
 
         if (preview_box != 0)

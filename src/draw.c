@@ -1,4 +1,4 @@
-Global  DR_Clip_Node  dr_nil_clip_node  =  {0, (F4){0}};
+Global  DR_Clip_Node  dr_nil_clip_node  =  {0, (F4){{0}}};
 Global  DR_State      *dr_state         =  0;
 
 Internal void dr_push_clip(F4 rect)
@@ -156,7 +156,7 @@ Internal GFX_Rect_Instance *dr_rect(F4 dst, F4 color, F1 corner_radius, F1 edge_
       .dst_rect      = dst,
       .colors        = { color, color, color, color },
       .border_color  = color,
-      .corner_radii  = (F4){corner_radius, corner_radius, corner_radius, corner_radius},
+      .corner_radii  = (F4){{corner_radius, corner_radius, corner_radius, corner_radius}},
       .softness      = edge_softness,
       .omit_texture  = 1.0f,
     };
@@ -175,7 +175,7 @@ Internal GFX_Rect_Instance *dr_img(F4 dst, F4 src, GFX_Texture *texture, F4 colo
       .dst_rect      =  dst,
       .src_rect      =  src,
       .colors        =  { color, color, color, color },
-      .corner_radii  =  (F4){corner_radius, corner_radius, corner_radius, corner_radius},
+      .corner_radii  =  (F4){{corner_radius, corner_radius, corner_radius, corner_radius}},
       .softness      =  edge_softness,
     };
   }
@@ -364,20 +364,20 @@ Internal void dr_text_run(FC_Run run, F2 pos, F4 color)
     FC_Piece  *piece   =  &run.pieces.v[i];
     SW4       subrect  =  piece->subrect;
     F2        offset   =  piece->offset;
-    F1        dst_w    =  (F1)subrect[2] * piece->scale;
-    F1        dst_h    =  (F1)subrect[3] * piece->scale;
-    F1        x        =  pos[0]+offset[0];
-    F1        y        =  pos[1]+offset[1];
-    F4        rect     =  (F4){x, y, dst_w, dst_h};
+    F1        dst_w    =  (F1)subrect.z * piece->scale;
+    F1        dst_h    =  (F1)subrect.w * piece->scale;
+    F1        x        =  pos.x+offset.x;
+    F1        y        =  pos.y+offset.y;
+    F4        rect     =  (F4){{x, y, dst_w, dst_h}};
 
     dr_img(rect,
-           (F4){subrect[0], subrect[1], subrect[2], subrect[3]},
+           (F4){{subrect.x, subrect.y, subrect.z, subrect.w}},
            piece->texture,
            color,
            0.0f,
            0.0f);
 
-    pos[0] += piece->advance;
+    pos.x += piece->advance;
   }
 }
 
@@ -436,9 +436,9 @@ Internal DR_FRun_List dr_fruns_from_fstrs(Arena *arena, F1 tab_size, F1 raster_s
     SLLQueuePush(dst.first, dst.last, dst_n);
 
     dst.node_count  +=  1;
-    dst.dim[0]      +=  dst_n->value.run.dim[0];
-    dst.dim[1]      =   Max(dst.dim[1], dst_n->value.run.dim[1]);
-    base_align_px   +=  dst_n->value.run.dim[0];
+    dst.dim.x      +=  dst_n->value.run.dim.x;
+    dst.dim.y      =   Max(dst.dim.y, dst_n->value.run.dim.y);
+    base_align_px   +=  dst_n->value.run.dim.x;
   }
 
   return dst;

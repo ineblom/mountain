@@ -35,30 +35,16 @@ typedef unsigned long long  L1;
 #define VEC_TYPE(x, T)  __attribute__((vector_size(x * sizeof(T))))
 #endif
 
-typedef float  F2 VEC_TYPE(2, float);
-typedef float  F4 VEC_TYPE(4, float);
-
-typedef int  SI2 VEC_TYPE(2, int);
-typedef int  SI4 VEC_TYPE(4, int);
-
-// Geometry SIMD width. Fixed-size F4 values (RGBA, matrices, pixel shuffles)
-// remain four components independently of this backend choice.
 #ifndef LANE_COUNT
 #define LANE_COUNT 4
 #endif
 #if LANE_COUNT != 4 && LANE_COUNT != 8 && LANE_COUNT != 16
 #error LANE_COUNT must be 4, 8, or 16
 #endif
-typedef float        Lane_F32 VEC_TYPE(LANE_COUNT, float);
-typedef int          Lane_S32 VEC_TYPE(LANE_COUNT, int);
-typedef unsigned int Lane_U32 VEC_TYPE(LANE_COUNT, unsigned int);
+typedef float        Lane_F1  VEC_TYPE(LANE_COUNT, float);
+typedef int          Lane_SI1 VEC_TYPE(LANE_COUNT, int);
 // Comparisons produce signed lanes: false is zero, true is all one bits.
-typedef Lane_S32 Lane_Mask;
-
-typedef unsigned short  W2   VEC_TYPE(2, short);
-typedef unsigned short  W4   VEC_TYPE(4, short);
-typedef short           SW2  VEC_TYPE(2, short);
-typedef short           SW4  VEC_TYPE(4, short);
+typedef Lane_SI1 Lane_Mask;
 
 typedef void VoidProc(void);
 
@@ -189,23 +175,23 @@ Inline L1 atomic_swap_L1(L1 *a, L1 v)
 #define Crash(x)         __builtin_trap()
 #define StaticAssert(x)  _Static_assert(x, "")
 
-#define Assert(x)                                                                                                      \
-  do                                                                                                                   \
-  {                                                                                                                    \
-    if (!(x))                                                                                                          \
-    {                                                                                                                  \
-      fprintf(stderr, "Assert Failed (%s:%d) %s\n", __FILE__, __LINE__, #x);                                           \
-      fflush(stderr);                                                                                                  \
-      Crash(-1);                                                                                                       \
-    }                                                                                                                  \
+#define Assert(x)                                                             \
+  do                                                                          \
+  {                                                                           \
+    if (!(x))                                                                 \
+    {                                                                         \
+      fprintf(stderr, "Assert Failed (%s:%d) %s\n", __FILE__, __LINE__, #x);  \
+      fflush(stderr);                                                         \
+      Crash(-1);                                                              \
+    }                                                                         \
   } while (0)
 
-#define Swap(a, b)                                                                                                     \
-  do                                                                                                                   \
-  {                                                                                                                    \
-    typeof(a) temp  =  a;                                                                                              \
-    a               =  b;                                                                                              \
-    b               =  temp;                                                                                           \
+#define Swap(a, b)                                                            \
+  do                                                                          \
+  {                                                                           \
+    typeof(a) temp  =  a;                                                     \
+    a               =  b;                                                     \
+    b               =  temp;                                                  \
   } while (0)
 
 #define AlignOf(T)       __alignof(T)
@@ -267,13 +253,13 @@ done:
 #define SetNil(nil, p)    ((p) = nil)
 
 //- kti: doubly-linked-lists
-#define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                                                 \
-  (CheckNil(nil, f)   ? ((f) = (l) = (n), SetNil(nil, (n)->next), SetNil(nil, (n)->prev))                          \
-   : CheckNil(nil, p) ? ((n)->next  =  (f), (f)->prev = (n), (f) = (n), SetNil(nil, (n)->prev))                    \
-   : ((p) == (l))     ? ((l)->next  =  (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next))                    \
-                      : (((!CheckNil(nil, p) && CheckNil(nil, (p)->next)) ? (0) : ((p)->next->prev = (n))),        \
-                     ((n)->next  =  (p)->next),                                                                    \
-                     ((p)->next  =  (n)),                                                                          \
+#define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                                               \
+  (CheckNil(nil, f)   ? ((f) = (l) = (n), SetNil(nil, (n)->next), SetNil(nil, (n)->prev))                        \
+   : CheckNil(nil, p) ? ((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil, (n)->prev))                    \
+   : ((p) == (l))     ? ((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next))                    \
+                      : (((!CheckNil(nil, p) && CheckNil(nil, (p)->next)) ? (0) : ((p)->next->prev = (n))),      \
+                     ((n)->next  =  (p)->next),                                                                  \
+                     ((p)->next  =  (n)),                                                                        \
                      ((n)->prev  =  (p))))
 #define DLLPushBack_NPZ(nil, f, l, n, next, prev) DLLInsert_NPZ(nil, f, l, l, n, next, prev)
 #define DLLPushFront_NPZ(nil, f, l, n, next, prev) DLLInsert_NPZ(nil, l, f, f, n, prev, next)

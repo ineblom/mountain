@@ -8,21 +8,133 @@
 #include <arm_neon.h>
 #endif
 
-////////////////////////////////
-//~ General
+//- kti: Constructor.
+Inline F2 f2(F1 x, F1 y) { return (F2){.x = x, .y = y}; }
+Inline F3 f3(F1 x, F1 y, F1 z) { return (F3){.x = x, .y = y, .z = z}; }
+Inline F4 f4(F1 x, F1 y, F1 z, F1 w) { return (F4){.x = x, .y = y, .z = z, .w = w}; }
+Inline W2 w2(W1 x, W1 y) { return (W2){.x = x, .y = y}; }
+Inline W4 w4(W1 x, W1 y, W1 z, W1 w) { return (W4){.x = x, .y = y, .z = z, .w = w}; }
+Inline SW2 sw2(SW1 x, SW1 y) { return (SW2){.x = x, .y = y}; }
+Inline SW4 sw4(SW1 x, SW1 y, SW1 z, SW1 w) { return (SW4){.x = x, .y = y, .z = z, .w = w}; }
 
-////////////////////////////////
-//~ F1
+//- kti: Add.
+Inline F2 add_F2(F2 a, F2 b) { return f2(a.x + b.x, a.y + b.y); }
+Inline F3 add_F3(F3 a, F3 b) { return f3(a.x+b.x, a.y+b.y, a.z+b.z); }
+Inline F4 add_F4(F4 a, F4 b) { return f4(a.x+b.x, a.y+b.y, a.z+b.z, a.w+b.w); }
+Inline W2 add_W2(W2 a, W2 b) { return w2(a.x + b.x, a.y + b.y); }
+Inline W4 add_W4(W4 a, W4 b) { return w4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w); }
+Inline SW2 add_SW2(SW2 a, SW2 b) { return sw2(a.x + b.x, a.y + b.y); }
+Inline SW4 add_SW4(SW4 a, SW4 b) { return sw4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w); }
 
-Inline F1 clamp01_F1(F1 x)
-{
-  return Min(Max(x, 0.0f), 1.0f);
+//- kti: Subtract.
+Inline F2 sub_F2(F2 a, F2 b) { return f2(a.x - b.x, a.y - b.y); }
+Inline F3 sub_F3(F3 a, F3 b) { return f3(a.x-b.x, a.y-b.y, a.z-b.z); }
+Inline F4 sub_F4(F4 a, F4 b) { return f4(a.x-b.x, a.y-b.y, a.z-b.z, a.w-b.w); }
+Inline W2 sub_W2(W2 a, W2 b) { return w2(a.x - b.x, a.y - b.y); }
+Inline W4 sub_W4(W4 a, W4 b) { return w4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w); }
+Inline SW2 sub_SW2(SW2 a, SW2 b) { return sw2(a.x - b.x, a.y - b.y); }
+Inline SW4 sub_SW4(SW4 a, SW4 b) { return sw4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w); }
+
+//- kti: Multiply.
+Inline F2 mul_F2(F2 a, F2 b) { return f2(a.x * b.x, a.y * b.y); }
+Inline F3 mul_F3(F3 a, F3 b) { return f3(a.x*b.x, a.y*b.y, a.z*b.z); }
+Inline F4 mul_F4(F4 a, F4 b) { return f4(a.x*b.x, a.y*b.y, a.z*b.z, a.w*b.w); }
+Inline W2 mul_W2(W2 a, W2 b) { return w2(a.x * b.x, a.y * b.y); }
+Inline W4 mul_W4(W4 a, W4 b) { return w4(a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w); }
+Inline SW2 mul_SW2(SW2 a, SW2 b) { return sw2(a.x * b.x, a.y * b.y); }
+Inline SW4 mul_SW4(SW4 a, SW4 b) { return sw4(a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w); }
+
+//- kti: Divide.
+Inline F2 div_F2(F2 a, F2 b) { return f2(a.x / b.x, a.y / b.y); }
+Inline F3 div_F3(F3 a, F3 b) { return f3(a.x/b.x, a.y/b.y, a.z/b.z); }
+Inline F4 div_F4(F4 a, F4 b) { return f4(a.x/b.x, a.y/b.y, a.z/b.z, a.w/b.w); }
+Inline W2 div_W2(W2 a, W2 b) { return w2(a.x / b.x, a.y / b.y); }
+Inline W4 div_W4(W4 a, W4 b) { return w4(a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w); }
+Inline SW2 div_SW2(SW2 a, SW2 b) { return sw2(a.x / b.x, a.y / b.y); }
+Inline SW4 div_SW4(SW4 a, SW4 b) { return sw4(a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w); }
+ 
+//- kti: Scale.
+Inline F2 scale_F2(F2 v, F1 s) { return f2(v.x * s, v.y * s); }
+Inline F3 scale_F3(F3 v, F1 s) { return f3(v.x*s, v.y*s, v.z*s); }
+Inline F4 scale_F4(F4 v, F1 s) { return f4(v.x*s, v.y*s, v.z*s, v.w*s); }
+Inline W2 scale_W2(W2 v, W1 s) { return w2(v.x * s, v.y * s); }
+Inline W4 scale_W4(W4 v, W1 s) { return w4(v.x * s, v.y * s, v.z * s, v.w * s); }
+Inline SW2 scale_SW2(SW2 v, SW1 s) { return sw2(v.x * s, v.y * s); }
+Inline SW4 scale_SW4(SW4 v, SW1 s) { return sw4(v.x * s, v.y * s, v.z * s, v.w * s); }
+
+//- kti: Add scaled.
+Inline F2 add_scaled_F2(F2 a, F1 s, F2 b) { return add_F2(a, scale_F2(b, s)); }
+Inline F3 add_scaled_F3(F3 a, F1 s, F3 b) { return add_F3(a, scale_F3(b, s)); }
+Inline F4 add_scaled_F4(F4 a, F1 s, F4 b) { return add_F4(a, scale_F4(b, s)); }
+
+//- kti: Negate.
+Inline F2 neg_F2(F2 v) { return scale_F2(v, -1.0f); }
+Inline F3 neg_F3(F3 v) { return scale_F3(v, -1.0f); }
+Inline F4 neg_F4(F4 v) { return scale_F4(v, -1.0f); }
+Inline SW2 neg_SW2(SW2 v) { return sw2(-v.x, -v.y); }
+Inline SW4 neg_SW4(SW4 v) { return sw4(-v.x, -v.y, -v.z, -v.w); }
+
+//- kti: Absolute value.
+Inline F3 abs_F3(F3 v) { return f3(abs_F1(v.x), abs_F1(v.y), abs_F1(v.z)); }
+Inline F4 abs_F4(F4 v) { return f4(abs_F1(v.x), abs_F1(v.y), abs_F1(v.z), abs_F1(v.w)); }
+Inline SW2 abs_SW2(SW2 v) { return sw2(abs(v.x), abs(v.y)); }
+Inline SW4 abs_SW4(SW4 v) { return sw4(abs(v.x), abs(v.y), abs(v.z), abs(v.w)); }
+
+//- kti: Splat
+Inline F2 splat_F2(F1 x) { return f2(x, x); }
+Inline F3 splat_F3(F1 x) { return f3(x, x, x); }
+Inline F4 splat_F4(F1 x) { return f4(x, x, x, x); }
+Inline W2 splat_W2(W1 x) { return w2(x, x); }
+Inline W4 splat_W4(W1 x) { return w4(x, x, x, x); }
+Inline SW2 splat_SW2(SW1 x) { return sw2(x, x); }
+Inline SW4 splat_SW4(SW1 x) { return sw4(x, x, x, x); }
+
+//- kti: Dot
+
+Inline F1 dot_F2(F2 a, F2 b) {
+  return a.x * b.x + a.y * b.y;
 }
 
-Inline F1 saturate_F1(F1 x)
+Inline F1 dot_F3(F3 a, F3 b)
 {
-  return clamp01_F1(x);
+  return a.x*b.x + a.y*b.y + a.z*b.z;
 }
+
+Inline F1 dot_F4(F4 a, F4 b)
+{
+  return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
+}
+
+//- kti: Square Root
+Inline F4 sqrt_F4(F4 v)
+{
+  return f4(sqrt_F1(v.x), sqrt_F1(v.y), sqrt_F1(v.z), sqrt_F1(v.w));
+}
+
+//- kti: Min.
+Inline F4 min_F4(F4 a, F4 b) {
+  return f4(Min(a.x, b.x), Min(a.y, b.y), Min(a.z, b.z), Min(a.w, b.w));
+}
+
+//- kti: Max.
+Inline F4 max_F4(F4 a, F4 b) {
+  return f4(Max(a.x, b.x), Max(a.y, b.y), Max(a.z, b.z), Max(a.w, b.w));
+}
+
+//- kti: Clamp
+Inline F1 clamp01_F1(F1 x) { return Min(Max(x, 0.0f), 1.0f); }
+Inline F4 clamp01_F4(F4 v) { return min_F4(max_F4(v, splat_F4(0)), splat_F4(1)); }
+
+//- kti: Length
+
+Inline F1 length_sq_F2(F2 v) { return dot_F2(v, v); }
+Inline F1 length_F2(F2 v) { return sqrt_F1(length_sq_F2(v)); }
+
+Inline F1 length_sq_F3(F3 v) { return dot_F3(v, v); }
+Inline F1 length_F3(F3 v) { return sqrt_F1(length_sq_F3(v)); }
+Inline F3 normalize_F3(F3 v) { return scale_F3(v, 1.0f/length_F3(v)); }
+
+//- kti: Other
 
 Inline F1 sign_F1(F1 a)
 {
@@ -30,6 +142,7 @@ Inline F1 sign_F1(F1 a)
 
   if (a > 0.0f)
     result = 1.0f;
+
   return result;
 }
 
@@ -54,88 +167,37 @@ Inline F1 lerp_snap_F1(F1 a, F1 t, F1 b, F1 min_dist)
 ////////////////////////////////
 //~ F2
 
-Inline F1 dot_F2(F2 a, F2 b)
+Inline F2 lerp_F2(F2 a, F1 t, F2 b)
 {
-  F1 result = a[0] * b[0] + a[1] * b[1];
-  return result;
-}
-
-Inline F1 length_sq_F2(F2 v)
-{
-  F1 result = dot_F2(v, v);
-  return result;
-}
-
-Inline F1 length_F2(F2 v)
-{
-  F1 result = sqrt_F1(length_sq_F2(v));
-  return result;
+  return add_F2(scale_F2(a, 1.0f-t), scale_F2(b, t));
 }
 
 Internal F1 distance_to_segment_F2(F2 p, F2 a, F2 b)
 {
-  F2  ab         =  b - a;
-  F1  ab_len_sq  =  dot_F2(ab, ab);
+  F2  ab        = sub_F2(b, a);
+  F2  pa        = sub_F2(p, a);
+  F1  ab_len_sq = dot_F2(ab, ab);
 
   if (ab_len_sq <= 0.00001f)
   {
-    return length_F2(p - a);
+    return length_F2(pa);
   }
 
-  F1 t = dot_F2(p - a, ab) / ab_len_sq;
+  F1 t = dot_F2(pa, ab) / ab_len_sq;
 
   t = Clamp(0.0f, t, 1.0f);
 
-  F2 closest = a + t * ab;
-  return length_F2(p - closest);
-}
-
-Inline F2 F2_from_F4(F4 v)
-{
-  F2 result = {v[0], v[1]};
-  return result;
+  F2 closest = add_F2(a, scale_F2(ab, t));
+  return length_F2(sub_F2(p, closest));
 }
 
 ////////////////////////////////
 //~ kti: F3
 
-Inline F3 f3(F1 x, F1 y, F1 z)
-{
-  return (F3){.x = x, .y = y, .z = z};
-}
-
-Inline F1 component_F3(F3 v, Axis axis)
-{
-  return axis == AXIS__X ? v.x : axis == AXIS__Y ? v.y : v.z;
-}
-
-Inline F1 *component_ptr_F3(F3 *v, Axis axis)
-{
-  return axis == AXIS__X ? &v->x : axis == AXIS__Y ? &v->y : &v->z;
-}
-
 Inline F3 F3_from_F4(F4 v)
 {
-  return f3(v[0], v[1], v[2]);
+  return f3(v.x, v.y, v.z);
 }
-
-Inline F3 add_F3(F3 a, F3 b) { return f3(a.x+b.x, a.y+b.y, a.z+b.z); }
-Inline F3 sub_F3(F3 a, F3 b) { return f3(a.x-b.x, a.y-b.y, a.z-b.z); }
-Inline F3 mul_F3(F3 a, F3 b) { return f3(a.x*b.x, a.y*b.y, a.z*b.z); }
-Inline F3 div_F3(F3 a, F3 b) { return f3(a.x/b.x, a.y/b.y, a.z/b.z); }
-Inline F3 scale_F3(F3 v, F1 s) { return f3(v.x*s, v.y*s, v.z*s); }
-Inline F3 add_scaled_F3(F3 a, F1 s, F3 b) { return add_F3(a, scale_F3(b, s)); }
-Inline F3 neg_F3(F3 v) { return scale_F3(v, -1.0f); }
-Inline F3 abs_F3(F3 v) { return f3(abs_F1(v.x), abs_F1(v.y), abs_F1(v.z)); }
-
-Inline F1 dot_F3(F3 a, F3 b)
-{
-  return a.x*b.x + a.y*b.y + a.z*b.z;
-}
-
-Inline F1 length_sq_F3(F3 v) { return dot_F3(v, v); }
-Inline F1 length_F3(F3 v) { return sqrt_F1(length_sq_F3(v)); }
-Inline F3 normalize_F3(F3 v) { return scale_F3(v, 1.0f/length_F3(v)); }
 
 Inline F3 cross_F3(F3 a, F3 b)
 {
@@ -169,103 +231,31 @@ Inline F3 safe_inv_dir_F3(F3 v)
 ////////////////////////////////
 //~ kti: F4
 
-Inline F4 splat_F4(F1 x)
+Inline F4 F4_from_F3(F3 v, F1 w)
 {
-  return (F4){x, x, x, x};
-}
-
-Inline F4 select_F4(SI4 mask, F4 yes, F4 no)
-{
-  // Bitcasts preserve floating-point payloads (including signed zero).
-  union
-  {
-    F4 f;
-    SI4 i;
-  } a = {.f = yes}, b = {.f = no}, result;
-  result.i = (mask & a.i) | (~mask & b.i);
-  return result.f;
-}
-
-Inline F4 sqrt_F4(F4 v)
-{
-#if defined(__SSE__)
-  return (F4)_mm_sqrt_ps((__m128)v);
-#elif defined(__aarch64__) && defined(__ARM_NEON)
-  return (F4)vsqrtq_f32((float32x4_t)v);
-#else
-  return (F4){
-    sqrt_F1(v[0]),
-    sqrt_F1(v[1]),
-    sqrt_F1(v[2]),
-    sqrt_F1(v[3]),
-  };
-#endif
-}
-
-Inline F4 max_F4(F4 a, F4 b)
-{
-#if defined(__SSE__)
-  return (F4)_mm_max_ps((__m128)a, (__m128)b);
-#elif defined(__ARM_NEON)
-  return (F4)vmaxq_f32((float32x4_t)a, (float32x4_t)b);
-#else
-  return select_F4(a > b, a, b);
-#endif
-}
-
-Inline F4 min_F4(F4 a, F4 b)
-{
-#if defined(__SSE__)
-  return (F4)_mm_min_ps((__m128)a, (__m128)b);
-#elif defined(__ARM_NEON)
-  return (F4)vminq_f32((float32x4_t)a, (float32x4_t)b);
-#else
-  return select_F4(a < b, a, b);
-#endif
-}
-
-Inline F4 F4_from_F3(F3 v)
-{
-  F4 result = {v.x, v.y, v.z, 0.0f};
+  F4 result = {{v.x, v.y, v.z, w}};
   return result;
-}
-
-Inline F4 point_F4_from_F3(F3 v)
-{
-  return (F4){v.x, v.y, v.z, 1.0f};
 }
 
 Inline F4 lerp_F4(F4 a, F1 t, F4 b)
 {
-  F4 result = a * (1 - t) + b * t;
-  return result;
-}
-
-Inline F4 abs_F4(F4 v)
-{
-  F4 result = select_F4(v < 0, -v, v);
-  return result;
-}
-
-Inline F4 clamp01_F4(F4 v)
-{
-  return min_F4(max_F4(v, splat_F4(0)), splat_F4(1));
+  return add_F4(scale_F4(a, 1.0f-t), scale_F4(b, t));
 }
 
 Inline F1 luminance_F4(F4 v)
 {
-  F1 result = 0.2126f * v[0] + 0.7152f * v[1] + 0.0722f * v[2];
+  F1 result = 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
   return result;
 }
 
 Inline F4 pow_F4(F4 v, F1 exp)
 {
-  F4 result = {powf(v[0], exp), powf(v[1], exp), powf(v[2], exp), powf(v[3], exp)};
+  F4 result = {{powf(v.x, exp), powf(v.y, exp), powf(v.z, exp), powf(v.w, exp)}};
   return result;
 }
 
 ////////////////////////////////
-//~ Geometry lanes
+//~ Lanes
 
 #define Lane_Repeat4(v) (v), (v), (v), (v)
 #if LANE_COUNT == 4
@@ -276,39 +266,28 @@ Inline F4 pow_F4(F4 v, F1 exp)
 #define Lane_Values(v) Lane_Repeat4(v), Lane_Repeat4(v), Lane_Repeat4(v), Lane_Repeat4(v)
 #endif
 
-Inline Lane_F32 splat_Lane_F32(F1 value)
+Inline Lane_F1 splat_Lane_F1(F1 value)
 {
-  return (Lane_F32){Lane_Values(value)};
+  return (Lane_F1){Lane_Values(value)};
 }
 
-Inline Lane_S32 splat_Lane_S32(SI1 value)
+Inline Lane_SI1 splat_Lane_SI1(SI1 value)
 {
-  return (Lane_S32){Lane_Values(value)};
-}
-
-Inline Lane_U32 splat_Lane_U32(I1 value)
-{
-  return (Lane_U32){Lane_Values(value)};
+  return (Lane_SI1){Lane_Values(value)};
 }
 
 #undef Lane_Values
 #undef Lane_Repeat4
 
-Inline Lane_S32 select_Lane_S32(Lane_Mask mask, Lane_S32 yes, Lane_S32 no)
+Inline Lane_SI1 select_Lane_SI1(Lane_Mask mask, Lane_SI1 yes, Lane_SI1 no)
 {
   return (mask & yes) | (~mask & no);
 }
 
-Inline Lane_U32 select_Lane_U32(Lane_Mask mask, Lane_U32 yes, Lane_U32 no)
+Inline Lane_F1 select_Lane_F1(Lane_Mask mask, Lane_F1 yes, Lane_F1 no)
 {
-  Lane_U32 bits = (Lane_U32)mask;
-  return (bits & yes) | (~bits & no);
-}
-
-Inline Lane_F32 select_Lane_F32(Lane_Mask mask, Lane_F32 yes, Lane_F32 no)
-{
-  union { Lane_F32 f; Lane_S32 i; } a = {.f = yes}, b = {.f = no}, result;
-  result.i = select_Lane_S32(mask, a.i, b.i);
+  union { Lane_F1 f; Lane_SI1 i; } a = {.f = yes}, b = {.f = no}, result;
+  result.i = select_Lane_SI1(mask, a.i, b.i);
   return result.f;
 }
 
@@ -324,54 +303,58 @@ Inline I1 all_Lane_Mask(Lane_Mask mask)
   return 1;
 }
 
-Inline Lane_F32 min_Lane_F32(Lane_F32 a, Lane_F32 b)
+Inline Lane_F1 min_Lane_F1(Lane_F1 a, Lane_F1 b)
 {
-#if LANE_COUNT == 4
-  return min_F4(a, b);
+#if LANE_COUNT == 4 && defined(__SSE__)
+  return (Lane_F1)_mm_min_ps((__m128)a, (__m128)b);
+#elif LANE_COUNT == 4 && defined(__ARM_NEON)
+  return (Lane_F1)vminq_f32((float32x4_t)a, (float32x4_t)b);
 #elif LANE_COUNT == 8 && defined(__AVX__)
-  return (Lane_F32)_mm256_min_ps((__m256)a, (__m256)b);
+  return (Lane_F1)_mm256_min_ps((__m256)a, (__m256)b);
 #elif LANE_COUNT == 16 && defined(__AVX512F__)
-  return (Lane_F32)_mm512_min_ps((__m512)a, (__m512)b);
+  return (Lane_F1)_mm512_min_ps((__m512)a, (__m512)b);
 #else
-  return select_Lane_F32(a < b, a, b);
+  return select_Lane_F1(a < b, a, b);
 #endif
 }
 
-Inline Lane_F32 max_Lane_F32(Lane_F32 a, Lane_F32 b)
+Inline Lane_F1 max_Lane_F1(Lane_F1 a, Lane_F1 b)
 {
-#if LANE_COUNT == 4
-  return max_F4(a, b);
+#if LANE_COUNT == 4 && defined(__SSE__)
+  return (Lane_F1)_mm_max_ps((__m128)a, (__m128)b);
+#elif LANE_COUNT == 4 && defined(__ARM_NEON)
+  return (Lane_F1)vmaxq_f32((float32x4_t)a, (float32x4_t)b);
 #elif LANE_COUNT == 8 && defined(__AVX__)
-  return (Lane_F32)_mm256_max_ps((__m256)a, (__m256)b);
+  return (Lane_F1)_mm256_max_ps((__m256)a, (__m256)b);
 #elif LANE_COUNT == 16 && defined(__AVX512F__)
-  return (Lane_F32)_mm512_max_ps((__m512)a, (__m512)b);
+  return (Lane_F1)_mm512_max_ps((__m512)a, (__m512)b);
 #else
-  return select_Lane_F32(a > b, a, b);
+  return select_Lane_F1(a > b, a, b);
 #endif
 }
 
-Inline Lane_F32 abs_Lane_F32(Lane_F32 v)
+Inline Lane_F1 abs_Lane_F1(Lane_F1 v)
 {
-  union { Lane_F32 f; Lane_U32 u; } bits = {.f = v};
-  bits.u &= splat_Lane_U32(0x7fffffffu);
+  union { Lane_F1 f; Lane_SI1 i; } bits = {.f = v};
+  bits.i &= splat_Lane_SI1(0x7fffffff);
   return bits.f;
 }
 
-Inline Lane_F32 sqrt_Lane_F32(Lane_F32 v)
+Inline Lane_F1 sqrt_Lane_F1(Lane_F1 v)
 {
-#if LANE_COUNT == 4
-  return sqrt_F4(v);
+#if LANE_COUNT == 4 && defined(__SSE__)
+  return (Lane_F1)_mm_sqrt_ps((__m128)v);
+#elif LANE_COUNT == 4 && defined(__ARM_NEON)
+  return (Lane_F1)vsqrtq_f32((float32x4_t)v);
 #elif LANE_COUNT == 16 && defined(__AVX512F__)
-  return (Lane_F32)_mm512_sqrt_ps((__m512)v);
+  return (Lane_F1)_mm512_sqrt_ps((__m512)v);
 #elif LANE_COUNT == 8 && defined(__AVX__)
-  return (Lane_F32)_mm256_sqrt_ps((__m256)v);
+  return (Lane_F1)_mm256_sqrt_ps((__m256)v);
 #else
-  // SSE/NEON backends also support wider logical batches in four-lane pieces.
-  Lane_F32 result = {0};
-  for (L1 i = 0; i < LANE_COUNT; i += 4)
+  Lane_F1 result = {0};
+  for (L1 i = 0; i < LANE_COUNT; i += 1)
   {
-    F4 part = sqrt_F4((F4){v[i], v[i+1], v[i+2], v[i+3]});
-    for (L1 j = 0; j < 4; j += 1) result[i+j] = part[j];
+    result[i] = sqrt_F1(v[i]);
   }
   return result;
 #endif
@@ -379,7 +362,7 @@ Inline Lane_F32 sqrt_Lane_F32(Lane_F32 v)
 
 Inline Lane_F3 broadcast_Lane_F3(F3 v)
 {
-  return (Lane_F3){splat_Lane_F32(v.x), splat_Lane_F32(v.y), splat_Lane_F32(v.z)};
+  return (Lane_F3){splat_Lane_F1(v.x), splat_Lane_F1(v.y), splat_Lane_F1(v.z)};
 }
 
 Inline F3 extract_lane_F3(Lane_F3 v, L1 lane)
@@ -403,8 +386,8 @@ Inline Lane_F3 pack_Lane_F3(const F3 *values)
 
 Inline Lane_F3 add_Lane_F3(Lane_F3 a, Lane_F3 b) { return (Lane_F3){a.x+b.x, a.y+b.y, a.z+b.z}; }
 Inline Lane_F3 sub_Lane_F3(Lane_F3 a, Lane_F3 b) { return (Lane_F3){a.x-b.x, a.y-b.y, a.z-b.z}; }
-Inline Lane_F3 scale_Lane_F3(Lane_F3 v, Lane_F32 s) { return (Lane_F3){v.x*s, v.y*s, v.z*s}; }
-Inline Lane_F32 dot_Lane_F3(Lane_F3 a, Lane_F3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+Inline Lane_F3 scale_Lane_F3(Lane_F3 v, Lane_F1 s) { return (Lane_F3){v.x*s, v.y*s, v.z*s}; }
+Inline Lane_F1 dot_Lane_F3(Lane_F3 a, Lane_F3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 
 Inline Lane_F3 cross_Lane_F3(Lane_F3 a, Lane_F3 b)
 {
@@ -413,117 +396,83 @@ Inline Lane_F3 cross_Lane_F3(Lane_F3 a, Lane_F3 b)
 
 Inline Lane_F3 normalize_Lane_F3(Lane_F3 v)
 {
-  return scale_Lane_F3(v, 1.0f/sqrt_Lane_F32(dot_Lane_F3(v, v)));
+  return scale_Lane_F3(v, 1.0f/sqrt_Lane_F1(dot_Lane_F3(v, v)));
 }
 
 ////////////////////////////////
-//~ F4x3
+//~ kti: Lane_F4
 
-Inline F4x3 sub_F4x3(F4x3 a, F4x3 b)
+Inline Lane_F4 broadcast_Lane_F4(F4 v)
 {
-  F4x3 result = {
-    .x = a.x - b.x,
-    .y = a.y - b.y,
-    .z = a.z - b.z,
-  };
+  Lane_F4 result = {splat_Lane_F1(v.x), splat_Lane_F1(v.y), splat_Lane_F1(v.z), splat_Lane_F1(v.w)};
   return result;
 }
 
-Inline F4 dot_F4x3(F4x3 a, F4x3 b)
+Inline F4 extract_lane_F4(Lane_F4 v, L1 lane)
 {
-  F4 result = a.x*b.x + a.y*b.y + a.z*b.z;
+  return f4(v.x[lane], v.y[lane], v.z[lane], v.w[lane]);
+}
+
+Inline void set_lane_F4(Lane_F4 *v, L1 lane, F4 value)
+{
+  v->x[lane] = value.x;
+  v->y[lane] = value.y;
+  v->z[lane] = value.z;
+  v->w[lane] = value.w;
+}
+
+Inline Lane_F4 pack_Lane_F4(const F4 *values)
+{
+  Lane_F4 result = {0};
+  for (L1 i = 0; i < LANE_COUNT; i += 1) set_lane_F4(&result, i, values[i]);
   return result;
 }
 
-Inline F4 luminance_F4x3(F4x3 c)
+Inline Lane_F4 add_Lane_F4(Lane_F4 a, Lane_F4 b) { return (Lane_F4){a.x+b.x, a.y+b.y, a.z+b.z, a.w+b.w}; }
+Inline Lane_F4 sub_Lane_F4(Lane_F4 a, Lane_F4 b) { return (Lane_F4){a.x-b.x, a.y-b.y, a.z-b.z, a.w-b.w}; }
+Inline Lane_F4 scale_Lane_F4(Lane_F4 v, Lane_F1 s) { return (Lane_F4){v.x*s, v.y*s, v.z*s, v.w*s}; }
+
+Inline Lane_F4 lerp_Lane_F4(Lane_F4 a, Lane_F1 t, Lane_F4 b)
+{
+  Lane_F4  left_contribution   =  scale_Lane_F4(a, 1.0f - t);
+  Lane_F4  right_contribution  =  scale_Lane_F4(b, t);
+  Lane_F4  result              =  add_Lane_F4(left_contribution, right_contribution);
+
+  return result;
+}
+
+Inline Lane_F1 luminance_Lane_F4(Lane_F4 c)
 {
   return 0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z;
 }
 
-Inline F4x3 scale_F4x3(F4x3 c, F4 scale)
+Inline Lane_F4 pad_Lane_F4(Lane_F4 v, L1 count)
 {
-  return (F4x3){c.x * scale, c.y * scale, c.z * scale};
-}
-
-Inline F4x3 add_F4x3(F4x3 a, F4x3 b)
-{
-  return (F4x3){a.x + b.x, a.y + b.y, a.z + b.z};
-}
-
-Inline F4x3 lerp_F4x3(F4x3 a, F4 t, F4x3 b)
-{
-  F4x3  left_contribution   =  scale_F4x3(a, 1.0f - t);
-  F4x3  right_contribution  =  scale_F4x3(b, t);
-  F4x3  result              =  add_F4x3(left_contribution, right_contribution);
-
-  return result;
-}
-
-// Repeat the last valid lane; count must be between one and four.
-Inline F4x3 pad_F4x3(F4x3 c, L1 count)
-{
-  for (L1 i = count; i < 4; ++i)
+  for (L1 i = count; i < LANE_COUNT; ++i)
   {
-    c.x[i] = c.x[count - 1];
-    c.y[i] = c.y[count - 1];
-    c.z[i] = c.z[count - 1];
+    v.x[i] = v.x[count - 1];
+    v.y[i] = v.y[count - 1];
+    v.z[i] = v.z[count - 1];
+    v.w[i] = v.w[count - 1];
   }
-  return c;
+  return v;
 }
 
-Inline F4x3 F4x3_from_F4(F4 a, F4 b, F4 c, F4 d)
+Inline Lane_F4 gather_Lane_F4(const Lane_F4 *blocks, const L1 *indices)
 {
-  F4  first_xy   =  shuffle_F4(a, b, F4_A0, F4_A1, F4_B0, F4_B1); // {ax, ay, bx, by}
-  F4  second_xy  =  shuffle_F4(c, d, F4_A0, F4_A1, F4_B0, F4_B1); // {cx, cy, dx, dy}
-  F4  first_zw   =  shuffle_F4(a, b, F4_A2, F4_A3, F4_B2, F4_B3); // {az, aw, bz, bw}
-  F4  second_zw  =  shuffle_F4(c, d, F4_A2, F4_A3, F4_B2, F4_B3); // {cz, cw, dz, dw}
+  Lane_F4 result = {0};
 
-  return (F4x3){
-    shuffle_F4(first_xy, second_xy, F4_A0, F4_A2, F4_B0, F4_B2), // {ax, bx, cx, dx}
-    shuffle_F4(first_xy, second_xy, F4_A1, F4_A3, F4_B1, F4_B3), // {ay, by, cy, dy}
-    shuffle_F4(first_zw, second_zw, F4_A0, F4_A2, F4_B0, F4_B2)  // {az, bz, cz, dz}
-  };
-}
+  for (L1 i = 0; i < LANE_COUNT; ++i)
+  {
+    const Lane_F4  *block  =  &blocks[indices[i] / LANE_COUNT];
+    L1             lane    =  indices[i] % LANE_COUNT;
 
-// Gather is explicit because SSSE3 and NEON have no arbitrary memory gather.
-// The interpolation and filtering following these loads still process four pixels.
-Inline F4x3 gather_F4x3(const F4x3 *row, const L1 indices[4])
-{
-  L1  first_block_index   =  indices[0] / 4;
-  L1  second_block_index  =  indices[1] / 4;
-  L1  third_block_index   =  indices[2] / 4;
-  L1  fourth_block_index  =  indices[3] / 4;
+    result.x[i] = block->x[lane];
+    result.y[i] = block->y[lane];
+    result.z[i] = block->z[lane];
+    result.w[i] = block->w[lane];
+  }
 
-  L1  first_lane   =  indices[0] % 4;
-  L1  second_lane  =  indices[1] % 4;
-  L1  third_lane   =  indices[2] % 4;
-  L1  fourth_lane  =  indices[3] % 4;
-
-  const F4x3  *first_block   =  &row[first_block_index];
-  const F4x3  *second_block  =  &row[second_block_index];
-  const F4x3  *third_block   =  &row[third_block_index];
-  const F4x3  *fourth_block  =  &row[fourth_block_index];
-
-  F4 x = {
-    first_block->x[first_lane],
-    second_block->x[second_lane],
-    third_block->x[third_lane],
-    fourth_block->x[fourth_lane]
-  };
-  F4 y = {
-    first_block->y[first_lane],
-    second_block->y[second_lane],
-    third_block->y[third_lane],
-    fourth_block->y[fourth_lane]
-  };
-  F4 z = {
-    first_block->z[first_lane],
-    second_block->z[second_lane],
-    third_block->z[third_lane],
-    fourth_block->z[fourth_lane]
-  };
-
-  F4x3 result = {x, y, z};
   return result;
 }
 
@@ -652,7 +601,7 @@ Inline F4 mul_F4x4_F4(F4x4 m, F4 v)
 
   for (I1 col = 0; col < 4; col += 1)
   {
-    result[col] = v[0] * m.m[0][col] + v[1] * m.m[1][col] + v[2] * m.m[2][col] + v[3] * m.m[3][col];
+    result.v[col] = v.x * m.m[0][col] + v.y * m.m[1][col] + v.z * m.m[2][col] + v.w * m.m[3][col];
   }
 
   return result;
@@ -660,12 +609,12 @@ Inline F4 mul_F4x4_F4(F4x4 m, F4 v)
 
 Inline F3 transform_direction_F4x4(F4x4 m, F3 direction)
 {
-  return F3_from_F4(mul_F4x4_F4(m, F4_from_F3(direction)));
+  return F3_from_F4(mul_F4x4_F4(m, F4_from_F3(direction, 0.0f)));
 }
 
 Inline F4 project_point_F4x4(F4x4 m, F3 point)
 {
-  return mul_F4x4_F4(m, point_F4_from_F3(point));
+  return mul_F4x4_F4(m, F4_from_F3(point, 1.0f));
 }
 
 ////////////////////////////////
@@ -709,19 +658,19 @@ Internal F1 ray_plane_intersect(Ray ray, Plane plane)
   return result;
 }
 
-Internal Lane_F32 ray_lane_plane_intersect(Ray ray, Lane_Plane planes)
+Internal Lane_F1 ray_lane_plane_intersect(Ray ray, Lane_Plane planes)
 {
   F1 min_t = 0.001f;
 
   Lane_F3 ray_pos = broadcast_Lane_F3(ray.pos);
   Lane_F3 ray_dir = broadcast_Lane_F3(ray.dir);
 
-  Lane_F32 denom = dot_Lane_F3(planes.normal, ray_dir);
+  Lane_F1 denom = dot_Lane_F3(planes.normal, ray_dir);
 
-  Lane_F32 t = (-planes.d - dot_Lane_F3(planes.normal, ray_pos)) / denom;
+  Lane_F1 t = (-planes.d - dot_Lane_F3(planes.normal, ray_pos)) / denom;
 
-  Lane_Mask valid  = (abs_Lane_F32(denom) > 0.0001f) & (t > min_t);
-  Lane_F32  result = select_Lane_F32(valid, t, splat_Lane_F32(F1_MAX));
+  Lane_Mask valid  = (abs_Lane_F1(denom) > 0.0001f) & (t > min_t);
+  Lane_F1  result = select_Lane_F1(valid, t, splat_Lane_F1(F1_MAX));
 
   return result;
 }
@@ -754,7 +703,7 @@ Internal F1 ray_sphere_intersect(Ray ray, Sphere sphere)
   return result;
 }
 
-Internal Lane_F32 ray_lane_sphere_intersect(Ray ray, Lane_Sphere spheres)
+Internal Lane_F1 ray_lane_sphere_intersect(Ray ray, Lane_Sphere spheres)
 {
   F1 min_t = 0.001f;
 
@@ -762,21 +711,21 @@ Internal Lane_F32 ray_lane_sphere_intersect(Ray ray, Lane_Sphere spheres)
   Lane_F3 ray_dir = broadcast_Lane_F3(ray.dir);
   Lane_F3 rel     = sub_Lane_F3(ray_pos, spheres.pos);
 
-  Lane_F32 half_b       = dot_Lane_F3(ray_dir, rel);
-  Lane_F32 c            = dot_Lane_F3(rel, rel) - Square(spheres.radius);
-  Lane_F32 discriminant = Square(half_b) - c;
+  Lane_F1 half_b       = dot_Lane_F3(ray_dir, rel);
+  Lane_F1 c            = dot_Lane_F3(rel, rel) - Square(spheres.radius);
+  Lane_F1 discriminant = Square(half_b) - c;
 
-  Lane_F32 root_term = sqrt_Lane_F32(max_Lane_F32(discriminant, splat_Lane_F32(0.0f)));
+  Lane_F1 root_term = sqrt_Lane_F1(max_Lane_F1(discriminant, splat_Lane_F1(0.0f)));
 
-  Lane_F32 far_t  = -half_b + root_term;
-  Lane_F32 near_t = -half_b - root_term;
-  Lane_F32 t      = select_Lane_F32(near_t > min_t, near_t, far_t);
+  Lane_F1 far_t  = -half_b + root_term;
+  Lane_F1 near_t = -half_b - root_term;
+  Lane_F1 t      = select_Lane_F1(near_t > min_t, near_t, far_t);
 
   Lane_Mask valid_discriminant = discriminant > 0;
   Lane_Mask valid_root         = root_term > 0.0001f;
   Lane_Mask is_valid           = valid_discriminant & valid_root & (t > min_t);
 
-  Lane_F32 result = select_Lane_F32(is_valid, t, splat_Lane_F32(F1_MAX));
+  Lane_F1 result = select_Lane_F1(is_valid, t, splat_Lane_F1(F1_MAX));
 
   return result;
 }
@@ -791,10 +740,10 @@ Internal F1 ray_box_intersect(Ray ray, Box box)
 
   for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
   {
-    F1 origin = component_F3(ray.pos, axis);
-    F1 direction = component_F3(ray.dir, axis);
-    F1 low = component_F3(aabb_min, axis);
-    F1 high = component_F3(aabb_max, axis);
+    F1 origin = ray.pos.v[axis];
+    F1 direction = ray.dir.v[axis];
+    F1 low = aabb_min.v[axis];
+    F1 high = aabb_max.v[axis];
 
     if (direction == 0.0f)
     {
@@ -804,7 +753,7 @@ Internal F1 ray_box_intersect(Ray ray, Box box)
       continue;
     }
 
-    F1 inv_dir = component_F3(ray.inv_dir, axis);
+    F1 inv_dir = ray.inv_dir.v[axis];
     F1 near_t = (low - origin) * inv_dir;
     F1 far_t  = (high - origin) * inv_dir;
 
@@ -822,46 +771,46 @@ Internal F1 ray_box_intersect(Ray ray, Box box)
   return t > min_t ? t : F1_MAX;
 }
 
-Inline Lane_Mask ray_lane_slab_intersect(Lane_F32 low, Lane_F32 high, F1 origin_scalar, F1 dir_scalar, F1 inv_dir, Lane_F32 *near_t, Lane_F32 *far_t)
+Inline Lane_Mask ray_lane_slab_intersect(Lane_F1 low, Lane_F1 high, F1 origin_scalar, F1 dir_scalar, F1 inv_dir, Lane_F1 *near_t, Lane_F1 *far_t)
 {
-  Lane_F32 origin = splat_Lane_F32(origin_scalar);
-  Lane_F32 dir = splat_Lane_F32(dir_scalar);
+  Lane_F1 origin = splat_Lane_F1(origin_scalar);
+  Lane_F1 dir = splat_Lane_F1(dir_scalar);
 
   Lane_Mask parallel = dir == 0.0f;
   Lane_Mask inside = (low <= origin) & (origin <= high);
 
-  Lane_F32 t0 = (low - origin) * inv_dir;
-  Lane_F32 t1 = (high - origin) * inv_dir;
+  Lane_F1 t0 = (low - origin) * inv_dir;
+  Lane_F1 t1 = (high - origin) * inv_dir;
 
-  Lane_F32 min = min_Lane_F32(t0, t1);
-  Lane_F32 max = max_Lane_F32(t0, t1);
+  Lane_F1 min = min_Lane_F1(t0, t1);
+  Lane_F1 max = max_Lane_F1(t0, t1);
 
-  near_t[0] = select_Lane_F32(parallel, splat_Lane_F32(-INFINITY), min);
-  far_t[0] = select_Lane_F32(parallel, splat_Lane_F32(INFINITY), max);
+  near_t[0] = select_Lane_F1(parallel, splat_Lane_F1(-INFINITY), min);
+  far_t[0]  = select_Lane_F1(parallel, splat_Lane_F1(INFINITY), max);
 
   Lane_Mask can_intersect = ~parallel | inside;
 
   return can_intersect;
 }
 
-Internal Lane_F32 ray_lane_box_intersect(Ray ray, Lane_Box boxes)
+Internal Lane_F1 ray_lane_box_intersect(Ray ray, Lane_Box boxes)
 {
   F1 min_t = 0.001f;
 
-  Lane_F32 near_x, far_x, near_y, far_y, near_z, far_z;
+  Lane_F1 near_x, far_x, near_y, far_y, near_z, far_z;
 
   Lane_Mask valid_x = ray_lane_slab_intersect(boxes.min.x, boxes.max.x, ray.pos.x, ray.dir.x, ray.inv_dir.x, &near_x, &far_x);
   Lane_Mask valid_y = ray_lane_slab_intersect(boxes.min.y, boxes.max.y, ray.pos.y, ray.dir.y, ray.inv_dir.y, &near_y, &far_y);
   Lane_Mask valid_z = ray_lane_slab_intersect(boxes.min.z, boxes.max.z, ray.pos.z, ray.dir.z, ray.inv_dir.z, &near_z, &far_z);
 
-  Lane_F32 t_min = max_Lane_F32(max_Lane_F32(near_x, near_y), near_z);
-  Lane_F32 t_max = min_Lane_F32(min_Lane_F32(far_x, far_y), far_z);
+  Lane_F1 t_min = max_Lane_F1(max_Lane_F1(near_x, near_y), near_z);
+  Lane_F1 t_max = min_Lane_F1(min_Lane_F1(far_x, far_y), far_z);
 
-  Lane_F32 t = select_Lane_F32(t_min > min_t, t_min, t_max);
+  Lane_F1 t = select_Lane_F1(t_min > min_t, t_min, t_max);
 
   Lane_Mask valid = valid_x & valid_y & valid_z & (t_min <= t_max) & (t > min_t);
 
-  Lane_F32 result = select_Lane_F32(valid, t, splat_Lane_F32(F1_MAX));
+  Lane_F1 result = select_Lane_F1(valid, t, splat_Lane_F1(F1_MAX));
 
   return result;
 }
@@ -915,10 +864,10 @@ Inline F4 rect_overlap(F4 a, F4 b)
 {
   F4 result = {0};
 
-  result[0]  =  Max(a[0], b[0]);
-  result[1]  =  Max(a[1], b[1]);
-  result[2]  =  Min(a[0] + a[2], b[0] + b[2]) - result[0];
-  result[3]  =  Min(a[1] + a[3], b[1] + b[3]) - result[1];
+  result.x  =  Max(a.x, b.x);
+  result.y  =  Max(a.y, b.y);
+  result.z  =  Min(a.x + a.z, b.x + b.z) - result.x;
+  result.w  =  Min(a.y + a.w, b.y + b.w) - result.y;
 
   return result;
 }
@@ -927,10 +876,10 @@ Inline I1 rect_contains(F4 rect, F2 point)
 {
   I1 result = 0;
 
-  if (   point[0] >= rect[0]
-      && point[1] >= rect[1]
-      && point[0] <= rect[0] + rect[2]
-      && point[1] <= rect[1] + rect[3])
+  if (   point.x >= rect.x
+      && point.y >= rect.y
+      && point.x <= rect.x + rect.z
+      && point.y <= rect.y + rect.w)
   {
     result = 1;
   }
@@ -941,20 +890,20 @@ Inline I1 rect_contains(F4 rect, F2 point)
 Inline F4 rect_pad(F4 rect, F1 amt)
 {
   F4 result = {
-    rect[0] - amt,
-    rect[1] - amt,
-    rect[2] + amt * 2,
-    rect[3] + amt * 2,
-  };
+    {rect.x - amt,
+    rect.y - amt,
+    rect.z + amt * 2,
+    rect.w + amt * 2,
+  }};
   return result;
 }
 
 Inline F2 rect_center(F4 rect)
 {
   F2 result = {
-    rect[0] + rect[2] * 0.5,
-    rect[1] + rect[3] * 0.5,
-  };
+    {rect.x + rect.z * 0.5,
+    rect.y + rect.w * 0.5,
+  }};
   return result;
 }
 
@@ -963,9 +912,9 @@ Inline F2 rect_center(F4 rect)
 
 F4 oklch_from_linear_rgba(F4 rgba)
 {
-  F1  l  =  0.4122214708f * rgba[0] + 0.5363325363f * rgba[1] + 0.0514459929f * rgba[2];
-  F1  m  =  0.2119034982f * rgba[0] + 0.6806995451f * rgba[1] + 0.1073969566f * rgba[2];
-  F1  s  =  0.0883024619f * rgba[0] + 0.2817188376f * rgba[1] + 0.6299787005f * rgba[2];
+  F1  l  =  0.4122214708f * rgba.x + 0.5363325363f * rgba.y + 0.0514459929f * rgba.z;
+  F1  m  =  0.2119034982f * rgba.x + 0.6806995451f * rgba.y + 0.1073969566f * rgba.z;
+  F1  s  =  0.0883024619f * rgba.x + 0.2817188376f * rgba.y + 0.6299787005f * rgba.z;
 
   F1  l_  =  cbrtf(l);
   F1  m_  =  cbrtf(m);
@@ -983,7 +932,7 @@ F4 oklch_from_linear_rgba(F4 rgba)
     hue += PI * 2;
   }
 
-  F4 result = {ok_l, chroma, hue, rgba[3]};
+  F4 result = {{ok_l, chroma, hue, rgba.w}};
 
   return result;
 }
@@ -1003,11 +952,11 @@ F4 linear_rgba_from_oklch(F1 l, F1 c, F1 h, F1 alpha)
   F1  lms_s  =  s_ * s_ * s_;
 
   F4 result = {
-    +4.0767416621f * lms_l - 3.3077115913f * lms_m + 0.2309699292f * lms_s,
+    {+4.0767416621f * lms_l - 3.3077115913f * lms_m + 0.2309699292f * lms_s,
     -1.2684380046f * lms_l + 2.6097574011f * lms_m - 0.3413193965f * lms_s,
     -0.0041960863f * lms_l - 0.7034186147f * lms_m + 1.7076147010f * lms_s,
     alpha,
-  };
+  }};
 
   return result;
 }

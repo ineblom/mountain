@@ -34,7 +34,7 @@ Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time)
   e                      =   api.entity(str8("Floor"));
   e->flags               |=  ENTITY_FLAG__SHAPE;
   e->shape_kind          =   SHAPE_KIND__PLANE;
-  e->direction           =   v3(0.0f, 1.0f, 0.0f);
+  e->direction           =   f3(0.0f, 1.0f, 0.0f);
   e->material.metallic   =   0.5f;
   e->material.roughness  =   0.4f;
   e->pos.y              =   -0.5f;
@@ -44,14 +44,14 @@ Image render(User_API api, Arena *frame_arena, L1 frame_index, F1 time)
   e->flags              |=  ENTITY_FLAG__SHAPE;
   e->shape_kind         =   SHAPE_KIND__BOX;
   e->pos.y             =   5.0f;
-  e->size               =   v3(8.0f, 0.1f, 8.0f);
+  e->size               =   f3(8.0f, 0.1f, 8.0f);
   e->material.emissive  =   (F4){2.0f, 2.0f, 2.0f, 1.0f};
 
   //- kti: Camera
   e             =   api.entity(str8("Camera"));
   e->flags      |=  ENTITY_FLAG__CAMERA;
   e->pos.z     =   -2.0f;
-  e->direction  =   v3(0.0f, 0.0f, 1.0f);
+  e->direction  =   f3(0.0f, 0.0f, 1.0f);
 
   Image image = api.image_alloc(frame_arena, 320, 240);
 

@@ -37,7 +37,7 @@ Global I1           async_lanes_completed;
         .v      =  (String8[]){__VA_ARGS__},                         \
         .count  =  ArrayCount(((String8[]){__VA_ARGS__})),           \
       },                                                             \
-    .linear = (F4){(r), (g), (b), (a)},                              \
+    .linear = (F4){{(r), (g), (b), (a)}},                            \
   }
 
 Global UI_Theme_Pattern default_theme_patterns[] = {
@@ -347,7 +347,7 @@ Internal void async_lane(void *)
               L1 horizontal_count = Max(image_rgb_block_count(low.width) * high.height,
                                         image_rgb_block_count(high.width) * low.height);
 
-              work.horizontal_blocks = push_array_no_zero(scratch.arena, F4x3, horizontal_count);
+              work.horizontal_blocks = push_array_no_zero(scratch.arena, Lane_F4, horizontal_count);
             }
 
             async.active_request.bloom_work = work;
@@ -507,8 +507,8 @@ Internal Mesh mesh_alloc_sphere(I1 latitude_segments, I1 longitude_segments)
       F1  z          =  ring_radius * sinf(longitude);
 
       vertices[vertex_idx] = (GFX_Mesh_Vertex){
-        .pos     =  {0.5f * x, 0.5f * y, 0.5f * z, 1.0f},
-        .normal  =  {x, y, z, 0.0f},
+        .pos     =  {{0.5f * x, 0.5f * y, 0.5f * z, 1.0f}},
+        .normal  =  {{x, y, z, 0.0f}},
       };
 
       vertex_idx += 1;
@@ -545,7 +545,7 @@ Internal Mesh mesh_alloc_box(void)
 {
 #define BV(px, py, pz, nx, ny, nz)               \
   {                                              \
-    {px, py, pz, 1.0f}, {nx, ny, nz, 0.0f}       \
+    {{px, py, pz, 1.0f}}, {{nx, ny, nz, 0.0f}}   \
   }
 
   GFX_Mesh_Vertex vertices[] = {
@@ -574,10 +574,10 @@ Internal Mesh mesh_alloc_box(void)
 Internal Mesh mesh_alloc_plane(void)
 {
   GFX_Mesh_Vertex vertices[] = {
-    {{-0.5f, 0.0f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.0f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.0f, 0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
-    {{-0.5f, 0.0f, 0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}},
+    {{{-0.5f, 0.0f, -0.5f, 1.0f}}, {{0.0f, 1.0f, 0.0f, 0.0f}}},
+    {{{0.5f, 0.0f, -0.5f, 1.0f}}, {{0.0f, 1.0f, 0.0f, 0.0f}}},
+    {{{0.5f, 0.0f, 0.5f, 1.0f}}, {{0.0f, 1.0f, 0.0f, 0.0f}}},
+    {{{-0.5f, 0.0f, 0.5f, 1.0f}}, {{0.0f, 1.0f, 0.0f, 0.0f}}},
   };
 
   I1 indices[] = {
@@ -632,10 +632,10 @@ Internal F4 panel_rect_from_parent_rect(Panel *child, F4 parent_rect)
   {
     for (Panel *p = parent->first; p != child && p != 0; p = p->next)
     {
-      result[parent->split_axis] += p->pct_of_parent * parent_rect[2 + parent->split_axis];
+      result.v[parent->split_axis] += p->pct_of_parent * parent_rect.v[2 + parent->split_axis];
     }
 
-    result[2 + parent->split_axis] = child->pct_of_parent * parent_rect[2 + parent->split_axis];
+    result.v[2 + parent->split_axis] = child->pct_of_parent * parent_rect.v[2 + parent->split_axis];
   }
 
   return result;
@@ -702,19 +702,19 @@ Internal F4 panel_drop_zone_rect(F4 panel_rect, Dir dir, F1 start, F1 end, I1 sh
   {
     case DIR__LEFT:
     {
-      rect = (F4){panel_rect[0] - (shared ? depth * 0.5f : 0.0f), center - length * 0.5f, depth, length};
+      rect = (F4){{panel_rect.x - (shared ? depth * 0.5f : 0.0f), center - length * 0.5f, depth, length}};
     } break;
     case DIR__RIGHT:
     {
-      rect = (F4){panel_rect[0] + panel_rect[2] - (shared ? depth * 0.5f : depth), center - length * 0.5f, depth, length};
+      rect = (F4){{panel_rect.x + panel_rect.z - (shared ? depth * 0.5f : depth), center - length * 0.5f, depth, length}};
     } break;
     case DIR__UP:
     {
-      rect = (F4){center - length * 0.5f, panel_rect[1] - (shared ? depth * 0.5f : 0.0f), length, depth};
+      rect = (F4){{center - length * 0.5f, panel_rect.y - (shared ? depth * 0.5f : 0.0f), length, depth}};
     } break;
     case DIR__DOWN:
     {
-      rect = (F4){center - length * 0.5f, panel_rect[1] + panel_rect[3] - (shared ? depth * 0.5f : depth), length, depth};
+      rect = (F4){{center - length * 0.5f, panel_rect.y + panel_rect.w - (shared ? depth * 0.5f : depth), length, depth}};
     } break;
   }
 
@@ -724,18 +724,18 @@ Internal F4 panel_drop_zone_rect(F4 panel_rect, Dir dir, F1 start, F1 end, I1 sh
 Internal void panel_drop_zone_push(Arena *arena, Panel_Drop_Zone_List *list, Panel *panel, Dir dir, F4 rect, F4 root_rect)
 {
   I1  vertical  =  dir == DIR__LEFT || dir == DIR__RIGHT;
-  F1  start     =  rect[vertical ? 1 : 0];
-  F1  end       =  start + rect[vertical ? 3 : 2];
+  F1  start     =  rect.v[vertical ? 1 : 0];
+  F1  end       =  start + rect.v[vertical ? 3 : 2];
 
   if (end - start >= 16.0f)
   {
     F1 edge = (dir == DIR__LEFT || dir == DIR__UP)
-              ? rect[vertical ? 0 : 1]
-              : rect[vertical ? 0 : 1] + rect[vertical ? 2 : 3];
+              ? rect.v[vertical ? 0 : 1]
+              : rect.v[vertical ? 0 : 1] + rect.v[vertical ? 2 : 3];
 
     F1 root_edge = (dir == DIR__LEFT || dir == DIR__UP)
-                    ? root_rect[vertical ? 0 : 1]
-                    : root_rect[vertical ? 0 : 1] + root_rect[vertical ? 2 : 3];
+                    ? root_rect.v[vertical ? 0 : 1]
+                    : root_rect.v[vertical ? 0 : 1] + root_rect.v[vertical ? 2 : 3];
 
     I1               shared  =  fabsf(edge - root_edge) > 1.0f;
     Panel_Drop_Zone  *zone   =  push_array(arena, Panel_Drop_Zone, 1);
@@ -802,8 +802,8 @@ Internal Panel_Drop_Zone *panel_drop_zone_at(Panel_Drop_Zone_List zones, F2 mous
   {
     if (rect_contains(zone->rect, mouse))
     {
-      F2  center    =  (F2){zone->rect[0] + zone->rect[2] * 0.5f, zone->rect[1] + zone->rect[3] * 0.5f};
-      F1  distance  =  length_sq_F2(mouse - center);
+      F2  center    =  (F2){{zone->rect.x + zone->rect.z * 0.5f, zone->rect.y + zone->rect.w * 0.5f}};
+      F1  distance  =  length_sq_F2(sub_F2(mouse, center));
 
       if (distance < best_distance)
       {
@@ -849,7 +849,7 @@ Internal L1 panel_tab_insert_idx(Panel *panel, F2 mouse)
     {
       UI_Box *tab = panel->tab_boxes[i];
 
-      if (tab != 0 && mouse[0] < tab->rect[0] + tab->rect[2] * 0.5f)
+      if (tab != 0 && mouse.x < tab->rect.x + tab->rect.z * 0.5f)
       {
         return i;
       }
@@ -1289,8 +1289,8 @@ Internal Entity *entity_create(L1 flags, String8 name)
   entity->direction              =  f3(0.0f, 1.0f, 0.0f);
   entity->sphere_diameter        =  1.0f;
   entity->name_len               =  Min(name.len, sizeof(entity->name));
-  entity->material.base_color    =  (F4){0.9f, 0.9f, 0.9f, 1.0f};
-  entity->material.emissive      =  (F4){0.0f, 0.0f, 0.0f, 1.0f};
+  entity->material.base_color    =  (F4){{0.9f, 0.9f, 0.9f, 1.0f}};
+  entity->material.emissive      =  (F4){{0.0f, 0.0f, 0.0f, 1.0f}};
   entity->camera_vertical_fov    =  1.22f;
   entity->camera_focal_distance  =  2.0f;
 
@@ -1415,10 +1415,10 @@ Internal F4x4 line_transform_F4x4(F3 begin, F3 direction, F1 thickness)
   F3    side_axis       =  normalize_F3(cross_F3(line_direction, reference_axis));
   F3    up_axis         =  normalize_F3(cross_F3(side_axis, line_direction));
 
-  result.r[0]  =  F4_from_F3(line_axis);
-  result.r[1]  =  F4_from_F3(scale_F3(side_axis, thickness));
-  result.r[2]  =  F4_from_F3(scale_F3(up_axis, thickness));
-  result.r[3]  =  point_F4_from_F3(add_scaled_F3(begin, 0.5f, line_axis));
+  result.r[0]  =  F4_from_F3(line_axis, 0.0f);
+  result.r[1]  =  F4_from_F3(scale_F3(side_axis, thickness), 0.0f);
+  result.r[2]  =  F4_from_F3(scale_F3(up_axis, thickness), 0.0f);
+  result.r[3]  =  F4_from_F3(add_scaled_F3(begin, 0.5f, line_axis), 1.0f);
 
   return result;
 }
@@ -1445,10 +1445,10 @@ Internal F4x4 plane_transform_F4x4(Entity *entity, Camera camera)
   F3 bitangent;
   plane_axes_from_normal(normal, &tangent, &bitangent);
 
-  result.r[0]  =  F4_from_F3(scale_F3(tangent, preview_size));
-  result.r[1]  =  F4_from_F3(normal);
-  result.r[2]  =  F4_from_F3(scale_F3(bitangent, preview_size));
-  result.r[3]  =  point_F4_from_F3(preview_center);
+  result.r[0]  =  F4_from_F3(scale_F3(tangent, preview_size), 0.0f);
+  result.r[1]  =  F4_from_F3(normal, 0.0f);
+  result.r[2]  =  F4_from_F3(scale_F3(bitangent, preview_size), 0.0f);
+  result.r[3]  =  F4_from_F3(preview_center, 1.0f);
 
   return result;
 }
@@ -1465,7 +1465,7 @@ Internal F1 *gizmo_scale_target(Entity *entity, Axis axis)
 {
   if (entity->flags & ENTITY_FLAG__SHAPE)
   {
-    if (entity->shape_kind == SHAPE_KIND__BOX)    return component_ptr_F3(&entity->size, axis);
+    if (entity->shape_kind == SHAPE_KIND__BOX)    return &entity->size.v[axis];
     if (entity->shape_kind == SHAPE_KIND__SPHERE) return &entity->sphere_diameter;
   }
   return 0;
@@ -1499,15 +1499,15 @@ Internal void gizmo_update(View *view, F4 rect)
 
   view->gizmo_visible = 0;
 
-  if (selected_count == 0 || rect[2] <= 0.0f || rect[3] <= 0.0f) return;
+  if (selected_count == 0 || rect.z <= 0.0f || rect.w <= 0.0f) return;
 
   view->gizmo_pos = scale_F3(position_sum, 1.0f/(F1)selected_count);
 
-  F4x4 view_projection = camera_view_projection(view->camera, rect[2], rect[3]);
+  F4x4 view_projection = camera_view_projection(view->camera, rect.z, rect.w);
   F4   pivot_clip      = project_point_F4x4(view_projection, view->gizmo_pos);
 
-  view->gizmo_visible         = pivot_clip[3] > view->camera.near_z;
-  view->gizmo_world_per_pixel = 2.0f * pivot_clip[3] * tan_F1(0.5f * view->camera.fov) / rect[3];
+  view->gizmo_visible         = pivot_clip.w > view->camera.near_z;
+  view->gizmo_world_per_pixel = 2.0f * pivot_clip.w * tan_F1(0.5f * view->camera.fov) / rect.w;
 }
 
 Internal F3 gizmo_ring_point(View *view, Axis axis, L1 index)
@@ -1517,8 +1517,8 @@ Internal F3 gizmo_ring_point(View *view, Axis axis, L1 index)
   F1 angle   = 2.0f * PI * (F1)index / (F1)GIZMO_ROTATION_SEGMENT_COUNT;
   F1 radius  = GIZMO_ROTATION_RADIUS_PX * view->gizmo_world_per_pixel;
 
-  *component_ptr_F3(&basis_a, (axis + 1) % AXIS3_COUNT) = 1.0f;
-  *component_ptr_F3(&basis_b, (axis + 2) % AXIS3_COUNT) = 1.0f;
+  basis_a.v[(axis + 1) % AXIS3_COUNT] = 1.0f;
+  basis_b.v[(axis + 2) % AXIS3_COUNT] = 1.0f;
 
   F3 radial_direction = add_F3(scale_F3(basis_a, cos_F1(angle)), scale_F3(basis_b, sin_F1(angle)));
   return add_scaled_F3(view->gizmo_pos, radius, radial_direction);
@@ -1528,13 +1528,13 @@ Internal I1 gizmo_project(View *view, F4x4 view_projection, F4 rect, F3 point, F
 {
   F4 clip = project_point_F4x4(view_projection, point);
 
-  if (clip[3] <= view->camera.near_z) return 0;
+  if (clip.w <= view->camera.near_z) return 0;
 
-  F2 ndc = F2_from_F4(clip / clip[3]);
+  F4 ndc = scale_F4(clip, 1.0f / clip.w);
   screen[0] = (F2){
-    rect[0] + (ndc[0] * 0.5f + 0.5f) * rect[2],
-    rect[1] + (0.5f - ndc[1] * 0.5f) * rect[3],
-  };
+    {rect.x + (ndc.x * 0.5f + 0.5f) * rect.z,
+    rect.y + (0.5f - ndc.y * 0.5f) * rect.w,
+  }};
   return 1;
 }
 
@@ -1542,7 +1542,7 @@ Internal I1 gizmo_project(View *view, F4x4 view_projection, F4 rect, F3 point, F
 Internal I1 gizmo_axis_screen(View *view, F4x4 view_projection, F4 rect, Axis axis, F2 *begin, F2 *end)
 {
   F3 end_world = view->gizmo_pos;
-  *component_ptr_F3(&end_world, axis) += GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel;
+  end_world.v[axis] += GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel;
 
   return gizmo_project(view, view_projection, rect, view->gizmo_pos, begin)
       && gizmo_project(view, view_projection, rect, end_world, end);
@@ -1576,7 +1576,7 @@ Internal F1 gizmo_handle_distance(View *view, F4x4 view_projection, F4 rect, Giz
 
     if (gizmo_axis_screen(view, view_projection, rect, axis, &begin, &end))
     {
-      distance = kind == GIZMO_KIND__SCALE ? length_F2(mouse - end) : distance_to_segment_F2(mouse, begin, end);
+      distance = kind == GIZMO_KIND__SCALE ? length_F2(sub_F2(mouse, end)) : distance_to_segment_F2(mouse, begin, end);
     }
   }
 
@@ -1585,9 +1585,9 @@ Internal F1 gizmo_handle_distance(View *view, F4x4 view_projection, F4 rect, Giz
 
 Internal Ray camera_ray(Camera camera, F4 rect, F2 mouse)
 {
-  F1 aspect = rect[2] / rect[3];
-  F1 u = (mouse[0] - rect[0]) / rect[2];
-  F1 v = (mouse[1] - rect[1]) / rect[3];
+  F1 aspect = rect.z / rect.w;
+  F1 u = (mouse.x - rect.x) / rect.z;
+  F1 v = (mouse.y - rect.y) / rect.w;
   F1 tan_half_fov = tan_F1(0.5f * camera.fov);
   F4x4 rotation = mul_F4x4(rotate_x_F4x4(camera.pitch), rotate_y_F4x4(camera.yaw));
 
@@ -1612,7 +1612,7 @@ Internal Ray camera_ray(Camera camera, F4 rect, F2 mouse)
 Internal I1 gizmo_rotation_direction(View *view, F4 rect, Axis axis, F2 mouse, F3 *direction)
 {
   F3 rotation_axis = {0};
-  *component_ptr_F3(&rotation_axis, axis) = 1.0f;
+  rotation_axis.v[axis] = 1.0f;
 
   Plane plane = {
     .normal = rotation_axis,
@@ -1629,9 +1629,9 @@ Internal I1 gizmo_rotation_direction(View *view, F4 rect, Axis axis, F2 mouse, F
 
 //- kti: Blender's default axis colors.
 Read_Only Global F4 gizmo_axis_colors[AXIS3_COUNT] = {
-  {1.000f, 0.200f, 0.322f, 1.0f},
-  {0.545f, 0.863f, 0.000f, 1.0f},
-  {0.157f, 0.565f, 1.000f, 1.0f},
+  {{1.000f, 0.200f, 0.322f, 1.0f}},
+  {{0.545f, 0.863f, 0.000f, 1.0f}},
+  {{0.157f, 0.565f, 1.000f, 1.0f}},
 };
 
 //- kti: Axis color, lifted toward white while hot or dragged.
@@ -1640,7 +1640,7 @@ Internal F4 gizmo_color(View *view, Gizmo_Kind kind, Axis axis)
   F1 lift = gizmo_handle_match(view->gizmo_active, kind, axis) ? 0.65f
           : gizmo_handle_match(view->gizmo_hot, kind, axis)    ? 0.35f
                                                                 : 0.0f;
-  return lerp_F4(gizmo_axis_colors[axis], lift, (F4){1.0f, 1.0f, 1.0f, 1.0f});
+  return lerp_F4(gizmo_axis_colors[axis], lift, (F4){{1.0f, 1.0f, 1.0f, 1.0f}});
 }
 
 Internal void gizmo_draw_mesh(Mesh *mesh, F4x4 transform, F4 color)
@@ -1823,7 +1823,7 @@ Internal void lane(void *user_data)
           .kind          =  UI_CMD_KIND__NAVIGATE,
           .delta_unit    =  delta_unit,
           .flags         =  flags,
-          .delta_si2     =  {(e->key == OS_KEY__LEFT) ? -1 : 1, 0},
+          .delta_si2     =  {{(e->key == OS_KEY__LEFT) ? -1 : 1, 0}},
           .timestamp_ns  =  e->timestamp_ns,
         };
 
@@ -1846,7 +1846,7 @@ Internal void lane(void *user_data)
           .kind          =  UI_CMD_KIND__NAVIGATE,
           .delta_unit    =  UI_CMD_DELTA_UNIT__LINE,
           .flags         =  flags,
-          .delta_si2     =  {(e->key == OS_KEY__HOME) ? -1 : 1, 0},
+          .delta_si2     =  {{(e->key == OS_KEY__HOME) ? -1 : 1, 0}},
           .timestamp_ns  =  e->timestamp_ns,
         };
 
@@ -1869,7 +1869,7 @@ Internal void lane(void *user_data)
           .kind          =  UI_CMD_KIND__EDIT,
           .delta_unit    =  delta_unit,
           .flags         =  UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__ZERO_DELTA_ON_SELECT | UI_CMD_FLAG__DELETE,
-          .delta_si2     =  {(e->key == OS_KEY__BACKSPACE) ? -1 : 1, 0},
+          .delta_si2     =  {{(e->key == OS_KEY__BACKSPACE) ? -1 : 1, 0}},
           .timestamp_ns  =  e->timestamp_ns,
         };
 
@@ -2088,7 +2088,7 @@ Internal void lane(void *user_data)
                   .pixels_per_unit = 500.0f);
 
         lister_F1(str8("Middle Gray Output"), &lottes->mid_out,
-                  .default_value = 0.267f, .min = output_bounds[0], .max = output_bounds[1],
+                  .default_value = 0.267f, .min = output_bounds.x, .max = output_bounds.y,
                   .pixels_per_unit = 500.0f);
 
         lister_L1(str8("Passes"), &state->postprocess_settings.bloom.pass_count, .default_value = 8);
@@ -2159,7 +2159,7 @@ Internal void lane(void *user_data)
 
     for (Window *w = state->first_window; w != 0; w = w->next)
     {
-      F4                    root_plane_rect  =  {0, 0, w->os->width, w->os->height};
+      F4                    root_plane_rect  =  {{0, 0, w->os->width, w->os->height}};
       Panel_Drop_Zone_List  drop_zones       =  panel_drop_zones(scratch.arena, &w->root_panel, root_plane_rect);
 
       ui_state_equip(w->ui);
@@ -2187,8 +2187,8 @@ Internal void lane(void *user_data)
 
           //- kti: Boundray box.
 
-          boundary_rect[panel->split_axis]      +=  child_rect[2 + panel->split_axis] - resize_box_w * 0.5f;
-          boundary_rect[2 + panel->split_axis]  =   resize_box_w;
+          boundary_rect.v[panel->split_axis]      +=  child_rect.v[2 + panel->split_axis] - resize_box_w * 0.5f;
+          boundary_rect.v[2 + panel->split_axis]  =   resize_box_w;
 
           ui_set_next_fixed_rect(boundary_rect);
 
@@ -2208,22 +2208,22 @@ Internal void lane(void *user_data)
 
             if (sig.flags & UI_SIGNAL_FLAG__PRESSED)
             {
-              F2 drag_data = {min_child->pct_of_parent, max_child->pct_of_parent};
+              F2 drag_data = {{min_child->pct_of_parent, max_child->pct_of_parent}};
 
               ui_store_drag_struct(OS_MOUSE_BUTTON__LEFT, &drag_data);
             }
 
             F2  drag_data                =  ui_get_drag_struct(OS_MOUSE_BUTTON__LEFT, F2)[0];
             F2  drag_delta               =  ui_drag_delta(OS_MOUSE_BUTTON__LEFT);
-            F1  min_child_pct__pre_drag  =  drag_data[0];
-            F1  max_child_pct__pre_drag  =  drag_data[1];
-            F1  min_child_px__pre_drag   =  min_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
-            F1  max_child_px__pre_drag   =  max_child_pct__pre_drag * panel_rect[2 + panel->split_axis];
-            F1  min_child_px__post_drag  =  min_child_px__pre_drag + drag_delta[panel->split_axis];
-            F1  max_child_px__post_drag  =  max_child_px__pre_drag - drag_delta[panel->split_axis];
+            F1  min_child_pct__pre_drag  =  drag_data.x;
+            F1  max_child_pct__pre_drag  =  drag_data.y;
+            F1  min_child_px__pre_drag   =  min_child_pct__pre_drag * panel_rect.v[2 + panel->split_axis];
+            F1  max_child_px__pre_drag   =  max_child_pct__pre_drag * panel_rect.v[2 + panel->split_axis];
+            F1  min_child_px__post_drag  =  min_child_px__pre_drag + drag_delta.v[panel->split_axis];
+            F1  max_child_px__post_drag  =  max_child_px__pre_drag - drag_delta.v[panel->split_axis];
 
-            min_child->pct_of_parent  =  min_child_px__post_drag / panel_rect[2 + panel->split_axis];
-            max_child->pct_of_parent  =  max_child_px__post_drag / panel_rect[2 + panel->split_axis];
+            min_child->pct_of_parent  =  min_child_px__post_drag / panel_rect.v[2 + panel->split_axis];
+            max_child->pct_of_parent  =  max_child_px__post_drag / panel_rect.v[2 + panel->split_axis];
           }
         }
       }
@@ -2515,7 +2515,7 @@ Internal void lane(void *user_data)
                     F4         rect              =  view->viewport_box->rect;
 
                     //- kti: Gizmo: find the hot handle, testing knobs before shafts before rings.
-                    F4x4 view_projection = camera_view_projection(view->camera, rect[2], rect[3]);
+                    F4x4 view_projection = camera_view_projection(view->camera, rect.z, rect.w);
 
                     gizmo_update(view, rect);
 
@@ -2571,7 +2571,7 @@ Internal void lane(void *user_data)
                         F2 end   = {0};
 
                         gizmo_axis_screen(view, view_projection, rect, axis, &begin, &end);
-                        drag->axis_screen = (end - begin) / (GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel);
+                        drag->axis_screen = scale_F2(sub_F2(end, begin), 1.0f / (GIZMO_AXIS_LENGTH_PX * view->gizmo_world_per_pixel));
                       }
 
                       if (view->gizmo_active.kind != GIZMO_KIND__NONE)
@@ -2590,7 +2590,7 @@ Internal void lane(void *user_data)
 
                       for (Entity *entity = state->first_entity; !entity_is_nil(entity); entity = entity->next)
                       {
-                        if (entity->flags & ENTITY_FLAG__SELECTED) *component_ptr_F3(&entity->pos, axis) -= component_F3(view->gizmo_pos, axis);
+                        if (entity->flags & ENTITY_FLAG__SELECTED) entity->pos.v[axis] -= view->gizmo_pos.v[axis];
                       }
 
                       gizmo_moved = 1;
@@ -2611,7 +2611,7 @@ Internal void lane(void *user_data)
                         if (gizmo_rotation_direction(view, rect, axis, ui_mouse(), &direction))
                         {
                           F3 rotation_axis = {0};
-                          *component_ptr_F3(&rotation_axis, axis) = 1.0f;
+                          rotation_axis.v[axis] = 1.0f;
 
                           F1    angle     =  atan2f(dot_F3(rotation_axis, cross_F3(drag->rotation_direction, direction)),
                                                     dot_F3(drag->rotation_direction, direction));
@@ -2641,7 +2641,7 @@ Internal void lane(void *user_data)
 
                           if (kind == GIZMO_KIND__TRANSLATE)
                           {
-                            *component_ptr_F3(&entity->pos, axis) += change;
+                            entity->pos.v[axis] += change;
                           }
                           else
                           {
@@ -2659,13 +2659,13 @@ Internal void lane(void *user_data)
                     if (gizmo_moved) gizmo_update(view, rect);
 
                     //- kti: Dolly.
-                    if (viewport_signal.scroll[1] != 0.0f)
+                    if (viewport_signal.scroll.y != 0.0f)
                     {
                       F4x4  camera_rotation  =  mul_F4x4(rotate_x_F4x4(view->camera.pitch), rotate_y_F4x4(view->camera.yaw));
                       F3    camera_forward   =  transform_direction_F4x4(camera_rotation, f3(0.0f, 0.0f, 1.0f));
                       F1    dolly_speed      =  0.025f;
 
-                      view->target_camera.pos = sub_F3(view->target_camera.pos, scale_F3(camera_forward, viewport_signal.scroll[1] * dolly_speed));
+                      view->target_camera.pos = sub_F3(view->target_camera.pos, scale_F3(camera_forward, viewport_signal.scroll.y * dolly_speed));
                     }
 
                     I1 left_is_click = dot_F2(left_drag_delta, left_drag_delta) <= Square(4.0f);
@@ -2688,8 +2688,8 @@ Internal void lane(void *user_data)
                       F3    camera_up              =  transform_direction_F4x4(camera_rotation, f3(0.0f, 1.0f, 0.0f));
                       F1    pan_speed              =  0.01f;
 
-                      F3 horizontal = scale_F3(camera_right, left_drag_delta[0] * pan_speed);
-                      F3 vertical = scale_F3(camera_up, left_drag_delta[1] * pan_speed);
+                      F3 horizontal = scale_F3(camera_right, left_drag_delta.x * pan_speed);
+                      F3 vertical = scale_F3(camera_up, left_drag_delta.y * pan_speed);
                       view->target_camera.pos = add_F3(sub_F3(camera_drag_start_pos, horizontal), vertical);
                     }
 
@@ -2705,8 +2705,8 @@ Internal void lane(void *user_data)
                     {
                       F1 rotate_speed = 0.003f;
 
-                      view->target_camera.yaw    =  view->camera_drag_start_yaw + right_drag_delta[0] * rotate_speed;
-                      view->target_camera.pitch  =  Clamp(-0.49f * PI, view->camera_drag_start_pitch + right_drag_delta[1] * rotate_speed, 0.49f * PI);
+                      view->target_camera.yaw    =  view->camera_drag_start_yaw + right_drag_delta.x * rotate_speed;
+                      view->target_camera.pitch  =  Clamp(-0.49f * PI, view->camera_drag_start_pitch + right_drag_delta.y * rotate_speed, 0.49f * PI);
                     }
 
                     //- kti: Entity Selecting / Selection
@@ -2847,29 +2847,29 @@ Internal void lane(void *user_data)
             F4           bounds    =  view->render_result_box->rect;
             GFX_Texture  *texture  =  rendered_texture;
 
-            if (bounds[2] > 2.0f && bounds[3] > 2.0f && texture->width > 0 && texture->height > 0)
+            if (bounds.z > 2.0f && bounds.w > 2.0f && texture->width > 0 && texture->height > 0)
             {
-              F1  scale        =  Min(bounds[2] / (F1)texture->width, bounds[3] / (F1)texture->height);
+              F1  scale        =  Min(bounds.z / (F1)texture->width, bounds.w / (F1)texture->height);
               F2  fitted_size  =  {
-                scale * (F1)texture->width,
+                {scale * (F1)texture->width,
                 scale * (F1)texture->height,
-              };
+              }};
               F4 dst = {
-                bounds[0] + 0.5f * (bounds[2] - fitted_size[0]),
-                bounds[1] + 0.5f * (bounds[3] - fitted_size[1]),
-                fitted_size[0],
-                fitted_size[1],
-              };
+                {bounds.x + 0.5f * (bounds.z - fitted_size.x),
+                bounds.y + 0.5f * (bounds.w - fitted_size.y),
+                fitted_size.x,
+                fitted_size.y,
+              }};
               F4 src = {
-                0.0f,
+                {0.0f,
                 (F1)texture->height,
                 (F1)texture->width,
                 -(F1)texture->height,
-              };
+              }};
 
               // Match the UI box's inset clip so the image cannot cover the tab bar border.
               dr_push_clip(rect_pad(bounds, -1.0f));
-              dr_img(dst, src, texture, (F4){1.0f, 1.0f, 1.0f, 1.0f}, 0.0f, 0.0f);
+              dr_img(dst, src, texture, (F4){{1.0f, 1.0f, 1.0f, 1.0f}}, 0.0f, 0.0f);
               dr_pop_clip();
             }
           }
@@ -2881,12 +2881,12 @@ Internal void lane(void *user_data)
           {
             F4 viewport_rect = view->viewport_box->rect;
 
-            if (viewport_rect[2] > 0.0f && viewport_rect[3] > 0.0f)
+            if (viewport_rect.z > 0.0f && viewport_rect.w > 0.0f)
             {
               dr_mesh_viewport(viewport_rect);
 
               //- kti: Projection
-              F4x4 view_projection = camera_view_projection(view->camera, viewport_rect[2], viewport_rect[3]);
+              F4x4 view_projection = camera_view_projection(view->camera, viewport_rect.z, viewport_rect.w);
 
               dr_mesh_view_projection(view_projection);
 
@@ -2919,7 +2919,7 @@ Internal void lane(void *user_data)
                 if (entity->flags & ENTITY_FLAG__SELECTED && entity->flags & ENTITY_FLAG__SHAPE)
                 {
                   Mesh  *mesh      =  &state->meshes[entity->shape_kind];
-                  F4    color      =  {0.9f, 0.0f, 0.9f, 1.0f};
+                  F4    color      =  {{0.9f, 0.0f, 0.9f, 1.0f}};
                   F4x4  transform  =  entity->shape_kind == SHAPE_KIND__PLANE
                                       ? plane_transform_F4x4(entity, view->camera)
                                       : mul_F4x4(scale_F4x4(entity_mesh_size(entity)), translate_F4x4(entity->pos));
@@ -2946,7 +2946,7 @@ Internal void lane(void *user_data)
                   Mesh  *mesh      =  &state->meshes[SHAPE_KIND__BOX];
                   F1    thickness  =  0.025f;
                   F4x4  transform  =  line_transform_F4x4(entity->pos, entity->direction, thickness);
-                  F4    color      =  {0.9f, 0.75f, 0.15f, 1.0f};
+                  F4    color      =  {{0.9f, 0.75f, 0.15f, 1.0f}};
 
                   dr_mesh(mesh->vertex_buffer,
                           0,
@@ -2972,7 +2972,7 @@ Internal void lane(void *user_data)
                 for (Axis axis = AXIS__X; axis < AXIS3_COUNT; axis += 1)
                 {
                   F3 axis_dir = {0};
-                  *component_ptr_F3(&axis_dir, axis) = 1.0f;
+                  axis_dir.v[axis] = 1.0f;
 
                   //- kti: Shaft.
                   {
@@ -3029,28 +3029,28 @@ Internal void lane(void *user_data)
           {
             F4 target_rect = rect_pad(panel_rect_from_root_rect(dock_target, root_plane_rect), -6.0f);
             GFX_Rect_Instance *footprint = dr_rect(target_rect,
-                                                   (F4){0.25f, 0.58f, 0.95f, 0.10f}, 6.0f, 1.0f);
+                                                   (F4){{0.25f, 0.58f, 0.95f, 0.10f}}, 6.0f, 1.0f);
             footprint->border_width = 2.0f;
-            footprint->border_color = (F4){0.40f, 0.72f, 1.0f, 0.65f};
+            footprint->border_color = (F4){{0.40f, 0.72f, 1.0f, 0.65f}};
 
             if (dock_target->tab_bar_box != 0 && rect_contains(dock_target->tab_bar_box->rect, ui_mouse()))
             {
               L1 insert_idx = panel_tab_insert_idx(dock_target, ui_mouse());
               F4 bar_rect = dock_target->tab_bar_box->rect;
-              F1 x = bar_rect[0] + 6.0f;
+              F1 x = bar_rect.x + 6.0f;
 
               if (insert_idx < dock_target->view_count && dock_target->tab_boxes[insert_idx] != 0)
               {
-                x = dock_target->tab_boxes[insert_idx]->rect[0];
+                x = dock_target->tab_boxes[insert_idx]->rect.x;
               }
               else if (dock_target->view_count != 0 && dock_target->tab_boxes[dock_target->view_count - 1] != 0)
               {
                 UI_Box *last_tab = dock_target->tab_boxes[dock_target->view_count - 1];
-                x = last_tab->rect[0] + last_tab->rect[2];
+                x = last_tab->rect.x + last_tab->rect.z;
               }
 
-              dr_rect((F4){x - 2.0f, bar_rect[1] + 3.0f, 4.0f, Max(0.0f, bar_rect[3] - 6.0f)},
-                      (F4){0.40f, 0.72f, 1.0f, 0.95f}, 1.0f, 0.0f);
+              dr_rect((F4){{x - 2.0f, bar_rect.y + 3.0f, 4.0f, Max(0.0f, bar_rect.w - 6.0f)}},
+                      (F4){{0.40f, 0.72f, 1.0f, 0.95f}}, 1.0f, 0.0f);
             }
           }
         }
@@ -3059,29 +3059,29 @@ Internal void lane(void *user_data)
         {
           F4 preview = panel_rect_from_root_rect(hot_zone->panel, root_plane_rect);
           Axis axis = (hot_zone->dir == DIR__LEFT || hot_zone->dir == DIR__RIGHT) ? AXIS__X : AXIS__Y;
-          preview[2 + axis] *= 0.5f;
+          preview.v[2 + axis] *= 0.5f;
 
           if (hot_zone->dir == DIR__RIGHT || hot_zone->dir == DIR__DOWN)
           {
-            preview[axis] += preview[2 + axis];
+            preview.v[axis] += preview.v[2 + axis];
           }
 
           GFX_Rect_Instance *footprint = dr_rect(rect_pad(preview, -4.0f),
-                                                 (F4){0.25f, 0.58f, 0.95f, 0.20f},
+                                                 (F4){{0.25f, 0.58f, 0.95f, 0.20f}},
                                                  6.0f, 1.0f);
           footprint->border_width = 2.0f;
-          footprint->border_color = (F4){0.40f, 0.72f, 1.0f, 0.75f};
+          footprint->border_color = (F4){{0.40f, 0.72f, 1.0f, 0.75f}};
         }
 
         for (Panel_Drop_Zone *zone = drop_zones.first; zone != 0; zone = zone->next)
         {
           I1 hot = zone == hot_zone;
           GFX_Rect_Instance *highlight = dr_rect(zone->rect,
-                                                  hot ? (F4){0.25f, 0.58f, 0.95f, 0.48f}
-                                                      : (F4){0.25f, 0.58f, 0.95f, 0.16f},
+                                                  hot ? (F4){{0.25f, 0.58f, 0.95f, 0.48f}}
+                                                      : (F4){{0.25f, 0.58f, 0.95f, 0.16f}},
                                                   4.0f, 1.0f);
           highlight->border_width = hot ? 2.0f : 1.0f;
-          highlight->border_color = (F4){0.40f, 0.72f, 1.0f, hot ? 0.95f : 0.50f};
+          highlight->border_color = (F4){{0.40f, 0.72f, 1.0f, hot ? 0.95f : 0.50f}};
         }
       }
 

@@ -677,18 +677,18 @@ Internal GFX_Texture *gfx_tex2d_from_image(Image_RGBA8 image, GFX_Texture_Usage 
 
 Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels)
 {
-  if (tex           !=  0
-      && region[0]  <   tex->width
-      && region[1]  <   tex->height
-      && region[2]  <=  tex->width - region[0]
-      && region[3]  <=  tex->height - region[1]
-      && region[2]  >   0
-      && region[3]  >   0)
+  if (tex         !=  0
+      && region.x  <   tex->width
+      && region.y  <   tex->height
+      && region.z  <=  tex->width - region.x
+      && region.w  <=  tex->height - region.y
+      && region.z  >   0
+      && region.w  >   0)
   {
     ProfBeginFunc();
 
     //- kti: Use persistent staging buffer if available, otherwise create temporary.
-    L1             region_size       =  (L1)region[2] * region[3] * 4;
+    L1             region_size       =  (L1)region.z * region.w * 4;
     GFX_VK_Buffer  staging           =  tex->staging;
     I1             use_temp_staging  =  tex->staging.buffer == VK_NULL_HANDLE;
 
@@ -724,8 +724,8 @@ Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels)
           .baseArrayLayer  =  0,
           .layerCount      =  1,
         },
-        .imageOffset  =  {region[0], region[1], 0},
-        .imageExtent  =  {region[2], region[3], 1},
+        .imageOffset  =  {region.x, region.y, 0},
+        .imageExtent  =  {region.z, region.w, 1},
       };
 
       vkCmdCopyBufferToImage(cmd,
@@ -2071,21 +2071,21 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
               .height  =  vkw->swapchain_extent.height,
             },
           };
-          if (batch->clip_rect[0]     !=  0.0f
-              || batch->clip_rect[1]  !=  0.0f
-              || batch->clip_rect[2]  >   0.0f
-              || batch->clip_rect[3]  >   0.0f)
+          if (batch->clip_rect.x     !=  0.0f
+              || batch->clip_rect.y  !=  0.0f
+              || batch->clip_rect.z  >   0.0f
+              || batch->clip_rect.w  >   0.0f)
           {
-            F4  screen_rect   =  {0, 0, os_window->width, os_window->height};
+            F4  screen_rect   =  {{0, 0, os_window->width, os_window->height}};
             F4  intersection  =  rect_overlap(screen_rect, batch->clip_rect);
             D1  scale         =  os_window->pixel_ratio;
 
-            if (intersection[2] >= 0.0f && intersection[3] >= 0.0f)
+            if (intersection.z >= 0.0f && intersection.w >= 0.0f)
             {
-              scissor.offset.x       =  floor(intersection[0] * scale);
-              scissor.offset.y       =  floor(intersection[1] * scale);
-              scissor.extent.width   =  ceil((intersection[0] + intersection[2]) * scale) - scissor.offset.x;
-              scissor.extent.height  =  ceil((intersection[1] + intersection[3]) * scale) - scissor.offset.y;
+              scissor.offset.x       =  floor(intersection.x * scale);
+              scissor.offset.y       =  floor(intersection.y * scale);
+              scissor.extent.width   =  ceil((intersection.x + intersection.z) * scale) - scissor.offset.x;
+              scissor.extent.height  =  ceil((intersection.y + intersection.w) * scale) - scissor.offset.y;
             }
             else
             {
@@ -2145,9 +2145,9 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
       }
       else if (pass->kind == GFX_PASS_KIND__CLEAR_DEPTH)
       {
-        F4 clear_rect = rect_overlap((F4){0, 0, os_window->width, os_window->height}, pass->clear_depth.rect);
+        F4 clear_rect = rect_overlap((F4){{0, 0, os_window->width, os_window->height}}, pass->clear_depth.rect);
 
-        if (clear_rect[2] > 0.0f && clear_rect[3] > 0.0f)
+        if (clear_rect.z > 0.0f && clear_rect.w > 0.0f)
         {
           VkClearAttachment clear_attachment = {
             .aspectMask               =  VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -2156,12 +2156,12 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
           VkClearRect vk_clear_rect = {
             .rect = {
               .offset = {
-                .x  =  clear_rect[0] * os_window->pixel_ratio,
-                .y  =  clear_rect[1] * os_window->pixel_ratio,
+                .x  =  clear_rect.x * os_window->pixel_ratio,
+                .y  =  clear_rect.y * os_window->pixel_ratio,
               },
               .extent = {
-                .width   =  clear_rect[2] * os_window->pixel_ratio,
-                .height  =  clear_rect[3] * os_window->pixel_ratio,
+                .width   =  clear_rect.z * os_window->pixel_ratio,
+                .height  =  clear_rect.w * os_window->pixel_ratio,
               },
             },
             .baseArrayLayer  =  0,
@@ -2176,41 +2176,41 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
         GFX_Mesh_Pass  mesh_pass        =  pass->mesh;
         I1             is_outline_pass  =  pass->kind == GFX_PASS_KIND__MESH_OUTLINE;
         F4             viewport_rect    =  mesh_pass.viewport_rect;
-        F4             screen_rect      =  {0, 0, os_window->width, os_window->height};
+        F4             screen_rect      =  {{0, 0, os_window->width, os_window->height}};
 
-        if (viewport_rect[2] <= 0.0f || viewport_rect[3] <= 0.0f)
+        if (viewport_rect.z <= 0.0f || viewport_rect.w <= 0.0f)
         {
-          viewport_rect = (F4){0, 0, os_window->width, os_window->height};
+          viewport_rect = (F4){{0, 0, os_window->width, os_window->height}};
         }
 
         viewport_rect = rect_overlap(screen_rect, viewport_rect);
 
-        if (viewport_rect[2] <= 0.0f || viewport_rect[3] <= 0.0f)
+        if (viewport_rect.z <= 0.0f || viewport_rect.w <= 0.0f)
         {
           continue;
         }
 
         VkViewport viewport = {
-          .x         =  viewport_rect[0] * os_window->pixel_ratio,
-          .y         =  (viewport_rect[1] + viewport_rect[3]) * os_window->pixel_ratio,
-          .width     =  viewport_rect[2] * os_window->pixel_ratio,
-          .height    =  -viewport_rect[3] * os_window->pixel_ratio,
+          .x         =  viewport_rect.x * os_window->pixel_ratio,
+          .y         =  (viewport_rect.y + viewport_rect.w) * os_window->pixel_ratio,
+          .width     =  viewport_rect.z * os_window->pixel_ratio,
+          .height    =  -viewport_rect.w * os_window->pixel_ratio,
           .minDepth  =  0.0f,
           .maxDepth  =  1.0f,
         };
         VkRect2D scissor = {
           .offset = {
-            .x  =  viewport_rect[0] * os_window->pixel_ratio,
-            .y  =  viewport_rect[1] * os_window->pixel_ratio,
+            .x  =  viewport_rect.x * os_window->pixel_ratio,
+            .y  =  viewport_rect.y * os_window->pixel_ratio,
           },
           .extent = {
-            .width   =  viewport_rect[2] * os_window->pixel_ratio,
-            .height  =  viewport_rect[3] * os_window->pixel_ratio,
+            .width   =  viewport_rect.z * os_window->pixel_ratio,
+            .height  =  viewport_rect.w * os_window->pixel_ratio,
           },
         };
         GFX_Mesh_Push_Constants mesh_push = {
           .view_projection  =  mesh_pass.view_projection,
-          .viewport_size    =  {viewport_rect[2], viewport_rect[3]},
+          .viewport_size    =  {{viewport_rect.z, viewport_rect.w}},
         };
 
         VkPipeline       mesh_pipeline  =  is_outline_pass ? gfx_state->mesh_outline_pipeline : gfx_state->mesh_pipeline;
@@ -2277,27 +2277,27 @@ Internal void gfx_window_submit(OS_Window *os_window, GFX_Window *vkw, GFX_Pass_
             vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
 
             F2 outline_directions[] = {
-              {1.0000000f, 0.0000000f},
-              {0.9238795f, 0.3826834f},
-              {0.7071068f, 0.7071068f},
-              {0.3826834f, 0.9238795f},
-              {0.0000000f, 1.0000000f},
-              {-0.3826834f, 0.9238795f},
-              {-0.7071068f, 0.7071068f},
-              {-0.9238795f, 0.3826834f},
-              {-1.0000000f, 0.0000000f},
-              {-0.9238795f, -0.3826834f},
-              {-0.7071068f, -0.7071068f},
-              {-0.3826834f, -0.9238795f},
-              {0.0000000f, -1.0000000f},
-              {0.3826834f, -0.9238795f},
-              {0.7071068f, -0.7071068f},
-              {0.9238795f, -0.3826834f},
+              {{1.0000000f, 0.0000000f}},
+              {{0.9238795f, 0.3826834f}},
+              {{0.7071068f, 0.7071068f}},
+              {{0.3826834f, 0.9238795f}},
+              {{0.0000000f, 1.0000000f}},
+              {{-0.3826834f, 0.9238795f}},
+              {{-0.7071068f, 0.7071068f}},
+              {{-0.9238795f, 0.3826834f}},
+              {{-1.0000000f, 0.0000000f}},
+              {{-0.9238795f, -0.3826834f}},
+              {{-0.7071068f, -0.7071068f}},
+              {{-0.3826834f, -0.9238795f}},
+              {{0.0000000f, -1.0000000f}},
+              {{0.3826834f, -0.9238795f}},
+              {{0.7071068f, -0.7071068f}},
+              {{0.9238795f, -0.3826834f}},
             };
 
             for (L1 direction_idx = 0; direction_idx < ArrayCount(outline_directions); direction_idx += 1)
             {
-              mesh_push.outline_offset = batch->outline_width * outline_directions[direction_idx];
+              mesh_push.outline_offset = scale_F2(outline_directions[direction_idx], batch->outline_width);
 
               vkCmdPushConstants(cmd, gfx_state->mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mesh_push), &mesh_push);
               vkCmdDrawIndexed(cmd, batch->index_count, batch->instance_count, 0, 0, 0);

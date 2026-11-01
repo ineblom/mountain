@@ -1291,6 +1291,6 @@ Internal D1 os_mouse_y(void)
 
 Internal F2 os_mouse_pos(void)
 {
-  F2 result = {os_gfx_state->mouse_x, os_gfx_state->mouse_y};
+  F2 result = {{os_gfx_state->mouse_x, os_gfx_state->mouse_y}};
   return result;
 }

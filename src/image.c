@@ -269,7 +269,7 @@ Internal F2 image_lottes_mid_out_bounds(Image_Lottes_Params params)
   F1 maximum_output     =  powf(gray_to_white, shoulder_exponent) * 0.99f;
   F1 minimum_output     =  Min(0.001f, maximum_output * 0.01f);
 
-  F2 result = {minimum_output, maximum_output};
+  F2 result = {{minimum_output, maximum_output}};
   return result;
 }
 
@@ -296,7 +296,7 @@ Internal Image_Lottes_Params image_lottes_normalize_params(Image_Lottes_Params p
 
   F2 output_bounds = image_lottes_mid_out_bounds(params);
 
-  params.mid_out = Clamp(output_bounds[0], params.mid_out, output_bounds[1]);
+  params.mid_out = Clamp(output_bounds.x, params.mid_out, output_bounds.y);
 
   return params;
 }
@@ -390,11 +390,11 @@ Inline F1 lottes_from_linear(F1 v)
 Inline F4 tonemap_lottes(F4 v)
 {
   F4 result = {
-    lottes_from_linear(v[0]),
-    lottes_from_linear(v[1]),
-    lottes_from_linear(v[2]),
+    {lottes_from_linear(v.x),
+    lottes_from_linear(v.y),
+    lottes_from_linear(v.z),
     1.0f,
-  };
+  }};
 
   return result;
 }
@@ -453,7 +453,7 @@ Inline F4 image_tonemap_saturation(F4 color, F1 saturation)
 {
   color = clamp01_F4(color);
   F1 gray = luminance_F4(color);
-  F4 result = gray + (color - gray) * saturation;
+  F4 result = add_F4(splat_F4(gray), scale_F4(sub_F4(color, splat_F4(gray)), saturation));
 
   return result;
 }
@@ -476,15 +476,15 @@ Internal void image_tonemap(Image_RGBA8 dst, Image src, Image_Tonemap_Params par
 
       for (L1 x = 0; x < src.width; ++x)
       {
-        F4 color = src_row[x] * exposure_scale;
+        F4 color = scale_F4(src_row[x], exposure_scale);
 
         if (!needs_adjustments)
         {
           //- kti: Fast path: one composed table maps HDR linear straight to sRGB.
           dst_row[x] = (RGBA8){
-            srgb8_from_lottes_linear(color[0]),
-            srgb8_from_lottes_linear(color[1]),
-            srgb8_from_lottes_linear(color[2]),
+            srgb8_from_lottes_linear(color.x),
+            srgb8_from_lottes_linear(color.y),
+            srgb8_from_lottes_linear(color.z),
             255,
           };
         }
@@ -494,9 +494,9 @@ Internal void image_tonemap(Image_RGBA8 dst, Image src, Image_Tonemap_Params par
           color = image_tonemap_saturation(color, params.saturation);
 
           dst_row[x] = (RGBA8){
-            srgb8_from_linear(color[0]),
-            srgb8_from_linear(color[1]),
-            srgb8_from_linear(color[2]),
+            srgb8_from_linear(color.x),
+            srgb8_from_linear(color.y),
+            srgb8_from_linear(color.z),
             255,
           };
         }

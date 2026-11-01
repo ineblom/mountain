@@ -202,8 +202,8 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
     }
 
     //- kti: Allocate & fill atlas w/rasterization
-    SW2  dim            =  {(SW1)total_width, height};
-    L1   atlas_size     =  dim[0] * dim[1] * 4;
+    SW2  dim            =  {{(SW1)total_width, height}};
+    L1   atlas_size     =  dim.x * dim.y * 4;
     B1   *atlas         =  push_array(arena, B1, atlas_size);
     SI1  baseline       =  ascent;
     SI1  atlas_write_x  =  0;
@@ -227,9 +227,9 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
         {
           SI1 x = atlas_write_x + left + col;
 
-          if (x >= 0 && x < dim[0] && y >= 0 && y < dim[1])
+          if (x >= 0 && x < dim.x && y >= 0 && y < dim.y)
           {
-            L1 off = (y * dim[0] + x) * 4;
+            L1 off = (y * dim.x + x) * 4;
 
             if (bmp->pixel_mode == FT_PIXEL_MODE_MONO)
             {

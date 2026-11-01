@@ -234,10 +234,10 @@ Internal F1 fc_kerning_from_style_pair(FC_Style_Raster_HT_Node *style,
 Internal SI2 fc_vertex_from_corner(I1 corner)
 {
   Local_Persist SI2 vertices[4] = {
-    {0, 0},
-    {1, 0},
-    {1, 1},
-    {0, 1},
+    {{0, 0}},
+    {{1, 0}},
+    {{1, 1}},
+    {{0, 1}},
   };
   SI2 result = {0};
 
@@ -275,11 +275,12 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
       region_s = n_size;
     }
 
-    SW2 child_size = n_size / 2;
+    SW2 two        = splat_SW2(2);
+    SW2 child_size = div_SW2(n_size, two);
 
     FC_Atlas_Region_Node *best_child = 0;
 
-    if (child_size[0] >= needed_size[0] && child_size[1] >= needed_size[1])
+    if (child_size.x >= needed_size.x && child_size.y >= needed_size.y)
     {
       for (I1 corner = 0; corner < 4; corner += 1)
       {
@@ -287,20 +288,20 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
         {
           n->children[corner]                    =  push_array(arena, FC_Atlas_Region_Node, 1);
           n->children[corner]->parent            =  n;
-          n->children[corner]->max_free_size[0]  =  child_size / 2;
-          n->children[corner]->max_free_size[1]  =  child_size / 2;
-          n->children[corner]->max_free_size[2]  =  child_size / 2;
-          n->children[corner]->max_free_size[3]  =  child_size / 2;
+          n->children[corner]->max_free_size[0]  =  div_SW2(child_size, two);
+          n->children[corner]->max_free_size[1]  =  div_SW2(child_size, two);
+          n->children[corner]->max_free_size[2]  =  div_SW2(child_size, two);
+          n->children[corner]->max_free_size[3]  =  div_SW2(child_size, two);
         }
 
-        if (n->max_free_size[corner][0] >= needed_size[0] && n->max_free_size[corner][1] >= needed_size[1])
+        if (n->max_free_size[corner].x >= needed_size.x && n->max_free_size[corner].y >= needed_size.y)
         {
           SI2 side_vertex = fc_vertex_from_corner(corner);
 
           best_child   =   n->children[corner];
           node_corner  =   corner;
-          region_p[0]  +=  side_vertex[0] * child_size[0];
-          region_p[1]  +=  side_vertex[1] * child_size[1];
+          region_p.x   +=  side_vertex.x * child_size.x;
+          region_p.y   +=  side_vertex.y * child_size.y;
 
           break;
         }
@@ -344,15 +345,15 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
                                                   : I1_MAX);
         Assert(p_corner != I1_MAX);
 
-        parent->max_free_size[p_corner][0] = Max(Max(p->max_free_size[0][0], p->max_free_size[1][0]), Max(p->max_free_size[2][0], p->max_free_size[3][0]));
-        parent->max_free_size[p_corner][1] = Max(Max(p->max_free_size[0][1], p->max_free_size[1][1]), Max(p->max_free_size[2][1], p->max_free_size[3][1]));
+        parent->max_free_size[p_corner].x = Max(Max(p->max_free_size[0].x, p->max_free_size[1].x), Max(p->max_free_size[2].x, p->max_free_size[3].x));
+        parent->max_free_size[p_corner].y = Max(Max(p->max_free_size[0].y, p->max_free_size[1].y), Max(p->max_free_size[2].y, p->max_free_size[3].y));
       }
     }
   }
 
   ProfEnd();
 
-  SW4 result = {region_p[0], region_p[1], region_s[0], region_s[1]};
+  SW4 result = {{region_p.x, region_p.y, region_s.x, region_s.y}};
 
   return result;
 }
@@ -506,7 +507,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
         FC_Atlas  *chosen_atlas        =  0;
         SW4       chosen_atlas_region  =  {0};
 
-        if (raster.atlas_dim[0] != 0 && raster.atlas_dim[1] != 0)
+        if (raster.atlas_dim.x != 0 && raster.atlas_dim.y != 0)
         {
           L1 num_atlases = 0;
 
@@ -519,26 +520,28 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
 
               DLLPushBack(fc_state->first_atlas, fc_state->last_atlas, atlas);
 
-              atlas->root_dim                =  (SW2){1024, 1024};
+              SW2 two = splat_SW2(2);
+
+              atlas->root_dim                =  (SW2){{1024, 1024}};
               atlas->root                    =  push_array(fc_state->raster_arena, FC_Atlas_Region_Node, 1);
-              atlas->root->max_free_size[0]  =  atlas->root_dim / 2;
-              atlas->root->max_free_size[1]  =  atlas->root_dim / 2;
-              atlas->root->max_free_size[2]  =  atlas->root_dim / 2;
-              atlas->root->max_free_size[3]  =  atlas->root_dim / 2;
+              atlas->root->max_free_size[0]  =  div_SW2(atlas->root_dim, two);
+              atlas->root->max_free_size[1]  =  div_SW2(atlas->root_dim, two);
+              atlas->root->max_free_size[2]  =  div_SW2(atlas->root_dim, two);
+              atlas->root->max_free_size[3]  =  div_SW2(atlas->root_dim, two);
               atlas->texture                 =  gfx_tex2d_alloc(GFX_TEXTURE_USAGE__DYNAMIC,
-                                                                atlas->root_dim[0],
-                                                                atlas->root_dim[1],
+                                                                atlas->root_dim.x,
+                                                                atlas->root_dim.y,
                                                                 0);
             }
 
             // kti: Allocate from atlas.
             if (atlas != 0)
             {
-              SW2 needed_dimensions = {raster.atlas_dim[0] + 2, raster.atlas_dim[1] + 2};
+              SW2 needed_dimensions = {{raster.atlas_dim.x + 2, raster.atlas_dim.y + 2}};
 
               chosen_atlas_region = fc_atlas_region_alloc(fc_state->raster_arena, atlas, needed_dimensions);
 
-              if (chosen_atlas_region[2] != 0 && chosen_atlas_region[3] != 0)
+              if (chosen_atlas_region.z != 0 && chosen_atlas_region.w != 0)
               {
                 chosen_atlas      =  atlas;
                 chosen_atlas_num  =  (SW1)num_atlases;
@@ -555,11 +558,11 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
         if (chosen_atlas != 0)
         {
           SI4 subregion = {
-            chosen_atlas_region[0] + 1,
-            chosen_atlas_region[1] + 1,
-            raster.atlas_dim[0],
-            raster.atlas_dim[1],
-          };
+            {chosen_atlas_region.x + 1,
+            chosen_atlas_region.y + 1,
+            raster.atlas_dim.x,
+            raster.atlas_dim.y,
+          }};
 
           gfx_fill_tex2d_region(chosen_atlas->texture, subregion, raster.atlas);
         }
@@ -584,8 +587,8 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
         if (info != 0)
         {
           info->subrect       =   chosen_atlas_region;
-          info->subrect[0]    +=  1;
-          info->subrect[1]    +=  1;
+          info->subrect.x     +=  1;
+          info->subrect.y     +=  1;
           info->atlas_num     =   chosen_atlas_num;
           info->raster_dim    =   raster.atlas_dim;
           info->advance       =   raster.advance;
@@ -607,13 +610,13 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
 
           previous_piece->advance  +=  kerning;
           base_align_px            +=  kerning;
-          dim[0]                   +=  kerning;
+          dim.x                    +=  kerning;
         }
 
         //- kti: Find atlas.
         FC_Atlas *atlas = 0;
 
-        if (info->subrect[2] != 0 && info->subrect[3] != 0)
+        if (info->subrect.z != 0 && info->subrect.w != 0)
         {
           L1 atlas_num = 0;
 
@@ -639,31 +642,31 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
         F1        pixel_size  =  (96.0f / 72.0f) * size;
 
         piece->texture      =  atlas ? atlas->texture : 0;
-        piece->subrect      =  (SW4){info->subrect[0], info->subrect[1], info->raster_dim[0], info->raster_dim[1]};
+        piece->subrect      =  (SW4){{info->subrect.x, info->subrect.y, info->raster_dim.x, info->raster_dim.y}};
         piece->decode_size  =  piece_substring.len;
 
         if (info->raster_scale > 1.0f)
         {
           piece->scale    =  1.0f / info->raster_scale;
           piece->advance  =  is_tab ? advance : info->advance * piece->scale;
-          piece->offset   =  (F2){0, -info->baseline * piece->scale};
+          piece->offset   =  (F2){{0, -info->baseline * piece->scale}};
         }
-        else if (info->raster_dim[1] > 0 && (F1)info->raster_dim[1] > pixel_size * 1.5f)
+        else if (info->raster_dim.y > 0 && (F1)info->raster_dim.y > pixel_size * 1.5f)
         {
-          piece->scale    =  pixel_size / (F1)info->raster_dim[1];
+          piece->scale    =  pixel_size / (F1)info->raster_dim.y;
           piece->advance  =  info->advance * piece->scale;
-          piece->offset   =  (F2){0, -(pixel_size + style_raster_node->ascent - style_raster_node->descent) * 0.5f};
+          piece->offset   =  (F2){{0, -(pixel_size + style_raster_node->ascent - style_raster_node->descent) * 0.5f}};
         }
         else
         {
           piece->scale    =  1.0f;
           piece->advance  =  advance;
-          piece->offset   =  (F2){0, -info->baseline};
+          piece->offset   =  (F2){{0, -info->baseline}};
         }
 
         base_align_px       +=  piece->advance;
-        dim[0]              +=  piece->advance;
-        dim[1]              =   Max(dim[1], (SW1)(info->raster_dim[1] * piece->scale));
+        dim.x               +=  piece->advance;
+        dim.y               =   Max(dim.y, (SW1)(info->raster_dim.y * piece->scale));
         previous_codepoint  =   codepoint;
       }
     }

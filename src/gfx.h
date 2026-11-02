@@ -136,6 +136,8 @@ struct GFX_Per_Frame
   L1            mesh_instance_count;
 };
 
+#define GFX_MAX_SWAPCHAIN_IMAGES 32
+
 typedef struct GFX_Window GFX_Window;
 struct GFX_Window
 {
@@ -151,14 +153,15 @@ struct GFX_Window
   VkSwapchainKHR swapchain;
   VkExtent2D     swapchain_extent;
 
-  I1           image_count;
-  VkImage     *swapchain_images;
-  VkImageView *swapchain_image_views;
+  I1          image_count;
+  VkImage     swapchain_images[GFX_MAX_SWAPCHAIN_IMAGES];
+  VkImageView swapchain_image_views[GFX_MAX_SWAPCHAIN_IMAGES];
 
   GFX_VK_Image depth;
 
-  GFX_Per_Frame *per_frame;
-  I1             image_idx;
+  GFX_Per_Frame per_frame[GFX_MAX_SWAPCHAIN_IMAGES];
+  I1            per_frame_count; // Initialized slots, retained when the swapchain shrinks.
+  I1            image_idx;
 };
 
 typedef enum GFX_Texture_Usage

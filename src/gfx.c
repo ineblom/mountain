@@ -3,10 +3,8 @@ VK_CORE_FUNCTIONS
 VK_EXTENSION_FUNCTIONS
 #undef X
 
-#define GFX_MAX_SWAPCHAIN_IMAGES 8
-
-Global GFX_State                      *gfx_state                 =  0;
-Global PFN_vkCmdPushDescriptorSetKHR  vkCmdPushDescriptorSetKHR  =  0;
+Global GFX_State                     *gfx_state                 = 0;
+Global PFN_vkCmdPushDescriptorSetKHR  vkCmdPushDescriptorSetKHR = 0;
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT      flags,
                                                      VkDebugReportObjectTypeEXT object_type,
@@ -1633,23 +1631,55 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
   vkw->swapchain_extent = surface_resolution;
 
   ////////////////////////////////
-  //~ kti: Image Views
+  //~ kti: Per Frame
 
-  I1 prev_image_count = vkw->image_count;
+  I1 image_count = 0;
+  result = vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &image_count, 0);
+  Assert(result == VK_SUCCESS && image_count <= GFX_MAX_SWAPCHAIN_IMAGES);
 
-  vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, 0);
-
-  if (prev_image_count == 0)
+  for (L1 i = vkw->per_frame_count; i < image_count; i += 1)
   {
-    vkw->swapchain_images      = push_array(gfx_state->arena, VkImage, vkw->image_count);
-    vkw->swapchain_image_views = push_array(gfx_state->arena, VkImageView, vkw->image_count);
-  }
-  else if (prev_image_count != vkw->image_count)
-  {
-    Assert(0);
+    GFX_Per_Frame *frame = &vkw->per_frame[i];
+
+    //- kti: Fence
+
+    VkFenceCreateInfo fence_ci = {
+      .sType  =  VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .flags  =  VK_FENCE_CREATE_SIGNALED_BIT,
+    };
+
+    vkCreateFence(gfx_state->device, &fence_ci, 0, &frame->queue_submit_fence);
+
+    //- kti: Command Buffer
+
+    VkCommandPoolCreateInfo command_pool_ci = {
+      .sType             =  VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags             =  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+      .queueFamilyIndex  =  gfx_state->present_queue_index,
+    };
+
+    vkCreateCommandPool(gfx_state->device, &command_pool_ci, 0, &frame->command_pool);
+
+    VkCommandBufferAllocateInfo command_buffer_alloc_info = {
+      .sType               =  VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool         =  frame->command_pool,
+      .level               =  VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount  =  1,
+    };
+
+    vkAllocateCommandBuffers(gfx_state->device, &command_buffer_alloc_info, &frame->command_buffer);
+
+    //- kti: Buffers
+    frame->instance_buffer      = gfx_vk_create_mapped_buffer(sizeof(GFX_Rect_Instance) * MAX_RECTANGLE_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    frame->mesh_instance_buffer = gfx_vk_create_mapped_buffer(sizeof(GFX_Mesh_Instance) * MAX_MESH_INSTANCE_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
   }
 
-  vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
+  // NOTE(kti): We keep spare frame resources when the swapchain shrinks.
+  vkw->per_frame_count = Max(vkw->per_frame_count, image_count);
+  vkw->image_count = image_count;
+
+  result = vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
+  Assert(result == VK_SUCCESS);
 
   for (L1 i = 0; i < vkw->image_count; i += 1)
   {
@@ -1750,48 +1780,6 @@ Internal GFX_Window *gfx_window_equip(OS_Window *window)
 
   gfx_vk_recreate_swapchain(window, vkw);
 
-  ////////////////////////////////
-  //~ kti: Per Frame Data
-
-  vkw->per_frame = push_array(gfx_state->arena, GFX_Per_Frame, vkw->image_count);
-
-  for (L1 i = 0; i < vkw->image_count; i += 1)
-  {
-    GFX_Per_Frame *frame = &vkw->per_frame[i];
-
-    //- kti: Fence
-
-    VkFenceCreateInfo fence_ci = {
-      .sType  =  VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      .flags  =  VK_FENCE_CREATE_SIGNALED_BIT,
-    };
-
-    vkCreateFence(gfx_state->device, &fence_ci, 0, &frame->queue_submit_fence);
-
-    //- kti: Command Buffer
-
-    VkCommandPoolCreateInfo command_pool_ci = {
-      .sType             =  VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .flags             =  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-      .queueFamilyIndex  =  gfx_state->present_queue_index,
-    };
-
-    vkCreateCommandPool(gfx_state->device, &command_pool_ci, 0, &frame->command_pool);
-
-    VkCommandBufferAllocateInfo command_buffer_alloc_info = {
-      .sType               =  VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool         =  frame->command_pool,
-      .level               =  VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-      .commandBufferCount  =  1,
-    };
-
-    vkAllocateCommandBuffers(gfx_state->device, &command_buffer_alloc_info, &frame->command_buffer);
-
-    //- kti: Buffers
-    frame->instance_buffer       =  gfx_vk_create_mapped_buffer(sizeof(GFX_Rect_Instance) * MAX_RECTANGLE_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    frame->mesh_instance_buffer  =  gfx_vk_create_mapped_buffer(sizeof(GFX_Mesh_Instance) * MAX_MESH_INSTANCE_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-  }
-
   return vkw;
 }
 
@@ -1804,7 +1792,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw)
   vkQueueWaitIdle(gfx_state->queue);
 
   //- kti: Free per frame resources.
-  for (L1 i = 0; i < vkw->image_count; i += 1)
+  for (L1 i = 0; i < vkw->per_frame_count; i += 1)
   {
     GFX_Per_Frame *frame = &vkw->per_frame[i];
 
@@ -1818,8 +1806,6 @@ Internal void gfx_window_unequip(GFX_Window *vkw)
       vkDestroyCommandPool(gfx_state->device, frame->command_pool, 0);
     }
 
-    vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
-
     //- kti: Free instance buffers.
     gfx_vk_destroy_buffer(frame->instance_buffer);
     gfx_vk_destroy_buffer(frame->mesh_instance_buffer);
@@ -1831,6 +1817,11 @@ Internal void gfx_window_unequip(GFX_Window *vkw)
 
   ////////////////////////////////
   //~ kti: Destroy Per Window Resources
+
+  for (L1 i = 0; i < vkw->image_count; i += 1)
+  {
+    vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
+  }
 
   gfx_vk_destroy_image(vkw->depth);
   vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);

@@ -3,6 +3,8 @@ VK_CORE_FUNCTIONS
 VK_EXTENSION_FUNCTIONS
 #undef X
 
+#define GFX_MAX_SWAPCHAIN_IMAGES 8
+
 Global GFX_State                      *gfx_state                 =  0;
 Global PFN_vkCmdPushDescriptorSetKHR  vkCmdPushDescriptorSetKHR  =  0;
 
@@ -1588,8 +1590,13 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
 
   if (surface_resolution.width == I1_MAX)
   {
-    surface_resolution.width  = (I1)(os_window->width * os_window->pixel_ratio);
-    surface_resolution.height = (I1)(os_window->height * os_window->pixel_ratio);
+    VkExtent2D min    = surface_capabilities.minImageExtent;
+    VkExtent2D max    = surface_capabilities.maxImageExtent;
+    I1         width  = (I1)(os_window->width * os_window->pixel_ratio);
+    I1         height = (I1)(os_window->height * os_window->pixel_ratio);
+
+    surface_resolution.width  = Clamp(min.width, width, max.width);
+    surface_resolution.height = Clamp(min.height, height, max.height);
   }
 
   VkSurfaceTransformFlagBitsKHR pre_transform = surface_capabilities.currentTransform;
@@ -1850,40 +1857,51 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw)
   ////////////////////////////////
   //~ kti: Acquire image
 
-  //- kti: Check for window resize.
-  I1  framebuffer_width   =  (I1)(os_window->width * os_window->pixel_ratio);
-  I1  framebuffer_height  =  (I1)(os_window->height * os_window->pixel_ratio);
+  I1 can_begin = 1;
 
-  if (framebuffer_width != vkw->swapchain_extent.width || framebuffer_height != vkw->swapchain_extent.height)
+  //- kti: Check for window resize.
+  I1 framebuffer_width  = (I1)(os_window->width * os_window->pixel_ratio);
+  I1 framebuffer_height = (I1)(os_window->height * os_window->pixel_ratio);
+
+  if (framebuffer_width * framebuffer_height == 0)
+  {
+    can_begin = 0;
+  }
+  else if (framebuffer_width != vkw->swapchain_extent.width || framebuffer_height != vkw->swapchain_extent.height)
   {
     gfx_vk_recreate_swapchain(os_window, vkw);
   }
 
-  //- kti: Grab a sempahore.
+  //- kti: Grab the next image.
+  I1 image_idx = 0;
+
   VkSemaphore acquire_semaphore = gfx_vk_take_semaphore();
 
-  //- kti: Grab the next image.
-  I1        image_idx           =  0;
-  VkResult  img_acquire_result  =  VK_RESULT_MAX_ENUM;
-
-  ProfBegin("Acquire swapchain image");
-  for (L1 try = 0; try < 2; try += 1)
+  if (can_begin)
   {
-    img_acquire_result = vkAcquireNextImageKHR(gfx_state->device, vkw->swapchain, L1_MAX, acquire_semaphore, VK_NULL_HANDLE, &image_idx);
+    for (L1 try = 0; try < 2; try += 1)
+    {
+      VkResult img_acquire_result = vkAcquireNextImageKHR(gfx_state->device,
+          vkw->swapchain,
+          L1_MAX,
+          acquire_semaphore,
+          VK_NULL_HANDLE,
+          &image_idx);
 
-    if (img_acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
-    {
-      gfx_vk_recreate_swapchain(os_window, vkw);
-    }
-    else
-    {
-      break;
+      if (img_acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
+      {
+        gfx_vk_recreate_swapchain(os_window, vkw);
+      }
+      else
+      {
+        can_begin = img_acquire_result == VK_SUCCESS;
+        break;
+      }
     }
   }
-  ProfEnd();
 
   //- kti: If grabbing image failed we return early.
-  if (img_acquire_result != VK_SUCCESS)
+  if (!can_begin)
   {
     // - kti: Recycle the semaphore we never used.
     gfx_vk_recycle_semaphore(acquire_semaphore);

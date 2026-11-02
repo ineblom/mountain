@@ -336,7 +336,7 @@ Internal void rt_trace_scene(RT_Scene scene, Image output, Range pixel_range)
 
   F4 *pixels = (F4 *)output.pixels;
 
-  for (L1 i = pixel_range.min; i < Min(output.width * output.height, pixel_range.max); i += 1)
+  for (L1 i = pixel_range.min; i < Min((L1)output.width * (L1)output.height, pixel_range.max); i += 1)
   {
     L1  x  =  i % output.width;
     L1  y  =  i / output.width;

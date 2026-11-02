@@ -319,7 +319,7 @@ Internal SW4 fc_atlas_region_alloc(Arena *arena, FC_Atlas *atlas, SW2 needed_siz
     }
   }
 
-  if (node != 0 && node_corner != I1_MAX)
+  if (node != 0)
   {
     //- kti: Mark this region as taken.
     node->flags |= FC_ATLAS_REGION_NODE_FLAG__TAKEN;
@@ -421,22 +421,15 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
       }
     }
 
-    for (L1 i = 0; i <= string.len;)
+    for (L1 i = 0; i < string.len;)
     {
       //- kti: Get the piece substring indices.
-      B1 byte = (i < string.len ? string.str[i] : 0);
+      B1 byte = string.str[i];
 
-      if (byte == 0)
-      {
-        i += 1;
-      }
-      else
-      {
-        Unicode_Decode decode = utf8_decode(string.str + i, string.len - i);
+      Unicode_Decode decode = utf8_decode(string.str + i, string.len - i);
 
-        i                        +=  decode.inc;
-        piece_substring_end_idx  +=  decode.inc;
-      }
+      i                        +=  decode.inc;
+      piece_substring_end_idx  +=  decode.inc;
 
       //- kti: Do we need to parse another byte?
       if (piece_substring_begin_idx == piece_substring_end_idx)

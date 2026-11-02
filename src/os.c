@@ -2,12 +2,12 @@ Global OS_GFX_State *os_gfx_state = 0;
 
 Internal String8 os_read_entire_file(Arena *arena, String8 filename)
 {
-  String8     result         =  {0};
   Temp_Arena  scratch        =  scratch_begin(&arena, 1);
   String8     cstr_filename  =  push_str8_copy(scratch.arena, filename);
-  I1          file           =  open((CString)cstr_filename.str, O_RDONLY);
+  SI1         file           =  open((CString)cstr_filename.str, O_RDONLY);
+  String8     result         =  {0};
 
-  if (GtSI1(file, 0))
+  if (file >= 0)
   {
     result.len = lseek(file, 0, SEEK_END);
 

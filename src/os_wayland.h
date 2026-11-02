@@ -62,6 +62,7 @@ struct OS_GFX_State
   D1            mouse_y;
 
   struct wl_display          *display;
+  struct wl_registry         *registry;
   struct wl_compositor       *compositor;
   struct wl_shm              *shm;
   struct xdg_wm_base         *xdg_wm_base;

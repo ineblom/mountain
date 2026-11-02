@@ -268,6 +268,8 @@ Internal void async_worker(void *)
             rt_trace_scene(req.scene, hdr, range);
 
             atomic_add_L1(&req.render_progress->pixels_completed, range.max - range.min);
+
+            os_send_wakeup_event();
           }
 
           worker_sync();
@@ -1153,6 +1155,7 @@ Internal void window_close(Window *window)
     ui_state_release(window->ui);
     gfx_window_unequip(window->gfx);
     os_window_close(window->os);
+    arena_release(window->arena);
   }
 }
 
@@ -1764,8 +1767,8 @@ Internal void editor_main(void *user_data)
     ////////////////////////////////
     //~ kti: OS Events
 
-    UI_Cmd_List    ui_cmds  =  {0};
-    OS_Event_List  events   =  {0};
+    UI_Cmd_List   ui_cmds = {0};
+    OS_Event_List events  = {0};
 
     events = os_poll_events(scratch.arena, state->frames_requested == 0 ? -1 : 0);
 
@@ -1894,12 +1897,18 @@ Internal void editor_main(void *user_data)
 
         case ASYNC_EVENT_KIND__RENDER_COMPLETE:
         {
-          if (e.request_id == state->render_request_id)
+          if (e.request_id != state->render_request_id)
+          {
+            //- kti: Drop unknown renders.
+            arena_release(e.arena);
+          }
+          else
           {
             state->render_request_id = 0;
 
             if (atomic_load_I1(&state->render_progress.cancel_requested) || image_is_nil(e.image))
             {
+              //- kti: Drop canceled or empty renders.
               arena_release(e.arena);
             }
             else
@@ -2159,11 +2168,20 @@ Internal void editor_main(void *user_data)
 
     for (Window *w = state->first_window; w != 0; w = w->next)
     {
+      OS_Event_List w_events = {0};
+      for (OS_Event *e = events.first; e; e = e->next)
+      {
+        if (e->window == 0 || e->window == w->os)
+        {
+          os_event_list_push(scratch.arena, &w_events, e[0]);
+        }
+      }
+
       F4                    root_plane_rect  =  {{0, 0, w->os->width, w->os->height}};
       Panel_Drop_Zone_List  drop_zones       =  panel_drop_zones(scratch.arena, &w->root_panel, root_plane_rect);
 
       ui_state_equip(w->ui);
-      ui_begin_build(w->os, events, ui_cmds, &default_theme, animation_dt);
+      ui_begin_build(w->os, w_events, ui_cmds, &default_theme, animation_dt);
       ui_push_font(prop_fnt);
       ui_set_next_fixed_rect(root_plane_rect);
 
@@ -3413,7 +3431,7 @@ Internal void editor_main(void *user_data)
       max_frame_time    =  0;
     }
 
-    if (events.count != 0 || state->animation_active || state->user_code_dirty || state->render_request_id != 0)
+    if (events.count != 0 || state->animation_active || state->user_code_dirty)
     {
       editor_request_frame();
     }

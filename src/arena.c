@@ -1,12 +1,13 @@
+
 Internal Arena *arena_alloc(L1 max_size)
 {
-  void   *base   =  os_reserve(max_size);
-  Arena  *arena  =  (Arena *)base;
+  void  *base  = os_reserve(max_size);
+  Arena *arena = (Arena *)base;
 
   os_commit(base, max_size);
 
-  arena->pos       =  sizeof(Arena);
-  arena->reserved  =  max_size;
+  arena->pos      = sizeof(Arena);
+  arena->reserved = max_size;
 
   return arena;
 }
@@ -58,14 +59,23 @@ Inline void arena_clear(Arena *arena)
 
 Internal void *arena_push(Arena *arena, L1 size, L1 align, I1 zero)
 {
-  L1 aligned_pos = AlignPow2(arena->pos, align);
+  void *result      = 0;
 
-  void *result  =  (void *)((B1 *)arena + aligned_pos);
-  arena->pos    =  aligned_pos + size;
-
-  if (zero != 0)
+  if (arena)
   {
-    memset(result, 0, size);
+    L1 aligned_pos = AlignPow2(arena->pos, align);
+    L1 next_pos    = aligned_pos + size;
+
+    if (aligned_pos <= arena->reserved && size <= arena->reserved - aligned_pos)
+    {
+      result     = (void *)((B1 *)arena + aligned_pos);
+      arena->pos = next_pos;
+
+      if (zero != 0)
+      {
+        MemoryZero(result, size);
+      }
+    }
   }
 
   return result;

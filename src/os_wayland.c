@@ -159,7 +159,10 @@ Internal I1 os_key_from_wl_key(I1 wl_key)
     key_table[194]  =  OS_KEY__F24;
   }
 
-  result = key_table[wl_key];
+  if (wl_key < ArrayCount(key_table))
+  {
+    result = key_table[wl_key];
+  }
 
   return result;
 }
@@ -190,13 +193,16 @@ Internal void os_event_list_push(Arena *arena, OS_Event_List *list, OS_Event eve
 {
   OS_Event *new_event = push_array(arena, OS_Event, 1);
 
-  memmove(new_event, &event, sizeof(OS_Event));
+  if (new_event)
+  {
+    memmove(new_event, &event, sizeof(OS_Event));
 
-  new_event->modifiers = os_get_modifiers();
+    new_event->modifiers = os_get_modifiers();
 
-  DLLPushBack(list->first, list->last, new_event);
+    DLLPushBack(list->first, list->last, new_event);
 
-  list->count += 1;
+    list->count += 1;
+  }
 }
 
 Internal void os_push_event(OS_Event event)
@@ -856,19 +862,21 @@ Internal void keyboard_key_handler(void *data, struct wl_keyboard *keyboard, I1 
 {
   OS_Window *window = os_gfx_state->focused_window;
 
+  //- kti: xkb needs to see every key event, even ones we don't map,
+  //        or its depressed-key state desyncs and garbles later text.
+  if (os_gfx_state->xkb_state != 0)
+  {
+    xkb_state_update_key(os_gfx_state->xkb_state,
+                         os_xkb_keycode_from_wl_key(key),
+                         (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? XKB_KEY_DOWN : XKB_KEY_UP);
+  }
+
   I1 os_key = os_key_from_wl_key(key);
 
   if (os_key != OS_KEY__NULL)
   {
     L1  kind          =  (state == WL_KEYBOARD_KEY_STATE_PRESSED) ? OS_EVENT_KIND__PRESS : OS_EVENT_KIND__RELEASE;
     L1  timestamp_ns  =  (L1)time * 1000000LLU;
-
-    if (os_gfx_state->xkb_state != 0)
-    {
-      xkb_state_update_key(os_gfx_state->xkb_state,
-                           os_xkb_keycode_from_wl_key(key),
-                           (kind == OS_EVENT_KIND__PRESS) ? XKB_KEY_DOWN : XKB_KEY_UP);
-    }
 
     OS_Event event = {
       .window        =  window,
@@ -931,16 +939,16 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height)
     os_gfx_state->wakeup_fd  =  eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     os_gfx_state->display    =  wl_display_connect(0);
 
-    struct wl_registry *registry = wl_display_get_registry(os_gfx_state->display);
+    os_gfx_state->registry = wl_display_get_registry(os_gfx_state->display);
 
     Assert(os_gfx_state->wakeup_fd >= 0);
     Assert(os_gfx_state->display != 0);
-    Assert(registry != 0);
+    Assert(os_gfx_state->registry != 0);
 
     os_gfx_state->registry_listener.global         =  registry_global_handler;
     os_gfx_state->registry_listener.global_remove  =  registry_global_remove_handler;
 
-    wl_registry_add_listener(registry, &os_gfx_state->registry_listener, 0);
+    wl_registry_add_listener(os_gfx_state->registry, &os_gfx_state->registry_listener, 0);
     wl_display_roundtrip(os_gfx_state->display);
     Assert(os_gfx_state->compositor != 0);
     Assert(os_gfx_state->xdg_wm_base != 0);
@@ -1060,11 +1068,11 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
 {
   Assert(os_gfx_state->first_window != 0);
 
-  os_gfx_state->event_arena       =  arena;
-  os_gfx_state->events.first      =  0;
-  os_gfx_state->events.last       =  0;
-  os_gfx_state->events.count      =  0;
-  os_gfx_state->redraw_requested  =  0;
+  os_gfx_state->event_arena      = arena;
+  os_gfx_state->events.first     = 0;
+  os_gfx_state->events.last      = 0;
+  os_gfx_state->events.count     = 0;
+  os_gfx_state->redraw_requested = 0;
 
   I1 display_ok = 1;
 
@@ -1149,10 +1157,10 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
     if (!display_ok)
       break;
 
-    // In idle mode, ignore compositor bookkeeping such as Vulkan buffer
-    // releases and continue sleeping. Input, configuration, and key-repeat
-    // deadlines return control to the editor for a redraw.
-    if (timeout_ms >= 0 || waiting_for_repeat || wakeup_received || os_gfx_state->events.count != 0 ||
+    if (timeout_ms >= 0 ||
+        waiting_for_repeat ||
+        wakeup_received ||
+        os_gfx_state->events.count != 0 ||
         os_gfx_state->redraw_requested)
     {
       break;
@@ -1214,7 +1222,25 @@ Internal void os_window_close(OS_Window *window)
   xdg_surface_destroy(window->xdg_surface);
   wl_surface_destroy(window->surface);
 
-  if (os_gfx_state->first_window == window && window->next == 0)
+  //- kti: Unlink.
+  if (window->prev != 0)
+  {
+    window->prev->next = window->next;
+  }
+
+  if (window->next != 0)
+  {
+    window->next->prev = window->prev;
+  }
+
+  if (window == os_gfx_state->first_window)
+  {
+    os_gfx_state->first_window = window->next;
+  }
+
+  //- kti: That was the last window. Tear down the whole connection so that
+  //        os_window_open can re-initialize cleanly.
+  if (os_gfx_state->first_window == 0)
   {
     if (os_gfx_state->cursor_surface)
       wl_surface_destroy(os_gfx_state->cursor_surface);
@@ -1232,26 +1258,32 @@ Internal void os_window_close(OS_Window *window)
       xkb_context_unref(os_gfx_state->xkb_context);
     if (os_gfx_state->seat)
       wl_seat_destroy(os_gfx_state->seat);
+
+    while (os_gfx_state->first_output != 0)
+    {
+      OS_Wayland_Output *output = os_gfx_state->first_output;
+
+      SLLStackPop(os_gfx_state->first_output);
+      os_wayland_output_destroy(output);
+    }
+
     if (os_gfx_state->shm)
       wl_shm_destroy(os_gfx_state->shm);
+    if (os_gfx_state->compositor)
+      wl_compositor_destroy(os_gfx_state->compositor);
+    if (os_gfx_state->registry)
+      wl_registry_destroy(os_gfx_state->registry);
 
     xdg_wm_base_destroy(os_gfx_state->xdg_wm_base);
     wl_display_disconnect(os_gfx_state->display);
-  }
 
-  if (window->prev != 0)
-  {
-    window->prev->next = window->next;
-  }
+    close(os_gfx_state->wakeup_fd);
 
-  if (window->next != 0)
-  {
-    window->next->prev = window->prev;
-  }
+    //- kti: Release the state so a future os_window_open re-initializes.
+    Arena *arena  =  os_gfx_state->arena;
+    os_gfx_state  =  0;
 
-  if (window == os_gfx_state->first_window)
-  {
-    os_gfx_state->first_window = window->next;
+    arena_release(arena);
   }
 }
 

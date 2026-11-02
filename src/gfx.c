@@ -1554,7 +1554,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
 
   VkFormat color_format = VK_FORMAT_UNDEFINED;
 
-  if (vkw->surface_format_count == 1 || vkw->surface_formats[0].format == VK_FORMAT_UNDEFINED)
+  if (vkw->surface_format_count == 1 && vkw->surface_formats[0].format == VK_FORMAT_UNDEFINED)
   {
     color_format = VK_FORMAT_B8G8R8A8_SRGB;
   }
@@ -1588,8 +1588,8 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
 
   if (surface_resolution.width == I1_MAX)
   {
-    surface_resolution.width   =  (I1)(os_window->width * os_window->pixel_ratio);
-    surface_resolution.height  =  (I1)(os_window->height * os_window->pixel_ratio);
+    surface_resolution.width  = (I1)(os_window->width * os_window->pixel_ratio);
+    surface_resolution.height = (I1)(os_window->height * os_window->pixel_ratio);
   }
 
   VkSurfaceTransformFlagBitsKHR pre_transform = surface_capabilities.currentTransform;
@@ -1634,8 +1634,8 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
 
   if (prev_image_count == 0)
   {
-    vkw->swapchain_images       =  push_array(gfx_state->arena, VkImage, vkw->image_count);
-    vkw->swapchain_image_views  =  push_array(gfx_state->arena, VkImageView, vkw->image_count);
+    vkw->swapchain_images      = push_array(gfx_state->arena, VkImage, vkw->image_count);
+    vkw->swapchain_image_views = push_array(gfx_state->arena, VkImageView, vkw->image_count);
   }
   else if (prev_image_count != vkw->image_count)
   {
@@ -1866,13 +1866,12 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw)
   I1        image_idx           =  0;
   VkResult  img_acquire_result  =  VK_RESULT_MAX_ENUM;
 
+  ProfBegin("Acquire swapchain image");
   for (L1 try = 0; try < 2; try += 1)
   {
-    ProfBegin("Acquire swapchain image");
     img_acquire_result = vkAcquireNextImageKHR(gfx_state->device, vkw->swapchain, L1_MAX, acquire_semaphore, VK_NULL_HANDLE, &image_idx);
-    ProfEnd();
 
-    if (img_acquire_result == VK_SUBOPTIMAL_KHR || img_acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
+    if (img_acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
     {
       gfx_vk_recreate_swapchain(os_window, vkw);
     }
@@ -1881,6 +1880,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw)
       break;
     }
   }
+  ProfEnd();
 
   //- kti: If grabbing image failed we return early.
   if (img_acquire_result != VK_SUCCESS)

@@ -2919,7 +2919,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
   }
 
   //- kti: Focus cursor.
-  if (is_focus_active && !focus_cleared_this_frame && box->rect.x > 0)
+  if (is_focus_active && !focus_cleared_this_frame && box->rect.z > 0)
   {
     F1  cursor_margin     =  Min(ui_top_font_size() * 2.0f, box->rect.z * 0.5f);
     F2  cursor_range_px   =  {{cursor_x_offset - cursor_margin, cursor_x_offset + cursor_margin}};

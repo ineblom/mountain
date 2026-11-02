@@ -1532,180 +1532,191 @@ Internal void gfx_init()
 
 Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
 {
-  vkDeviceWaitIdle(gfx_state->device);
+  I1 framebuffer_width  = (I1)(os_window->width * os_window->pixel_ratio);
+  I1 framebuffer_height = (I1)(os_window->height * os_window->pixel_ratio);
 
-  //- kti: Destroy old resources (if they exist).
-  if (vkw->swapchain != VK_NULL_HANDLE)
-  {
-    vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
-
-    vkw->swapchain = VK_NULL_HANDLE;
-  }
-
-  for (L1 i = 0; i < vkw->image_count; i += 1)
-  {
-    vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
-  }
-
-  gfx_vk_destroy_image(vkw->depth);
-  MemoryZeroStruct(&vkw->depth);
-
-  //- kti: Our pipeline uses BGRA_SRGB so we force it. Not optimal.
-
-  VkFormat color_format = VK_FORMAT_UNDEFINED;
-
-  if (vkw->surface_format_count == 1 && vkw->surface_formats[0].format == VK_FORMAT_UNDEFINED)
-  {
-    color_format = VK_FORMAT_B8G8R8A8_SRGB;
-  }
-  else
-  {
-    for (L1 i = 0; i < vkw->surface_format_count; i += 1)
-    {
-      if (vkw->surface_formats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
-      {
-        color_format = VK_FORMAT_B8G8R8A8_SRGB;
-        break;
-      }
-    }
-  }
-
-  Assert(color_format == VK_FORMAT_B8G8R8A8_SRGB);
-
-  VkColorSpaceKHR           color_space           =  vkw->surface_formats[0].colorSpace;
-  VkSurfaceCapabilitiesKHR  surface_capabilities  =  {0};
-
+  VkSurfaceCapabilitiesKHR surface_capabilities = {0};
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gfx_state->physical_device, vkw->surface, &surface_capabilities);
-
-  I1 desired_image_count = Max(3, surface_capabilities.minImageCount + 1);
-
-  if (surface_capabilities.maxImageCount != 0 && desired_image_count > surface_capabilities.maxImageCount)
-  {
-    desired_image_count = surface_capabilities.maxImageCount;
-  }
 
   VkExtent2D surface_resolution = surface_capabilities.currentExtent;
 
   if (surface_resolution.width == I1_MAX)
   {
-    VkExtent2D min    = surface_capabilities.minImageExtent;
-    VkExtent2D max    = surface_capabilities.maxImageExtent;
-    I1         width  = (I1)(os_window->width * os_window->pixel_ratio);
-    I1         height = (I1)(os_window->height * os_window->pixel_ratio);
+    VkExtent2D min = surface_capabilities.minImageExtent;
+    VkExtent2D max = surface_capabilities.maxImageExtent;
 
-    surface_resolution.width  = Clamp(min.width, width, max.width);
-    surface_resolution.height = Clamp(min.height, height, max.height);
+    surface_resolution.width  = Clamp(min.width, framebuffer_width, max.width);
+    surface_resolution.height = Clamp(min.height, framebuffer_height, max.height);
   }
 
-  VkSurfaceTransformFlagBitsKHR pre_transform = surface_capabilities.currentTransform;
-
-  if (surface_capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+  if (framebuffer_width > 0 && framebuffer_height > 0 &&
+      surface_resolution.width > 0 && surface_resolution.height > 0 &&
+      surface_capabilities.maxImageExtent.width > 0 && surface_capabilities.maxImageExtent.height > 0)
   {
-    pre_transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-  }
+    I1 desired_image_count = Max(3, surface_capabilities.minImageCount + 1);
 
-  // FIFO is guaranteed, synchronized to the compositor, and avoids rendering
-  // frames which will only be replaced in the mailbox.
-  VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+    if (surface_capabilities.maxImageCount != 0 && desired_image_count > surface_capabilities.maxImageCount)
+    {
+      desired_image_count = surface_capabilities.maxImageCount;
+    }
 
-  VkSwapchainCreateInfoKHR swpachain_ci = {
-    .sType             =  VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-    .surface           =  vkw->surface,
-    .minImageCount     =  desired_image_count,
-    .imageFormat       =  color_format,
-    .imageColorSpace   =  color_space,
-    .imageExtent       =  surface_resolution,
-    .imageArrayLayers  =  1,
-    .imageUsage        =  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-    .imageSharingMode  =  VK_SHARING_MODE_EXCLUSIVE,
-    .preTransform      =  pre_transform,
-    .compositeAlpha    =  VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-    .presentMode       =  present_mode,
-    .clipped           =  VK_TRUE,
-  };
+    vkDeviceWaitIdle(gfx_state->device);
 
-  VkResult result = vkCreateSwapchainKHR(gfx_state->device, &swpachain_ci, 0, &vkw->swapchain);
+    //- kti: Destroy old resources (if they exist).
+    for (L1 i = 0; i < vkw->image_count; i += 1)
+    {
+      vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
+    }
 
-  Assert(result == VK_SUCCESS);
+    if (vkw->swapchain != VK_NULL_HANDLE)
+    {
+      vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
 
-  vkw->swapchain_extent = surface_resolution;
+      vkw->swapchain = VK_NULL_HANDLE;
+    }
 
-  ////////////////////////////////
-  //~ kti: Per Frame
+    gfx_vk_destroy_image(vkw->depth);
+    MemoryZeroStruct(&vkw->depth);
 
-  I1 image_count = 0;
-  result = vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &image_count, 0);
-  Assert(result == VK_SUCCESS && image_count <= GFX_MAX_SWAPCHAIN_IMAGES);
+    //- kti: Our pipeline uses BGRA_SRGB so we force it. Not optimal.
 
-  for (L1 i = vkw->per_frame_count; i < image_count; i += 1)
-  {
-    GFX_Per_Frame *frame = &vkw->per_frame[i];
+    VkFormat color_format = VK_FORMAT_UNDEFINED;
 
-    //- kti: Fence
+    if (vkw->surface_format_count == 1 && vkw->surface_formats[0].format == VK_FORMAT_UNDEFINED)
+    {
+      color_format = VK_FORMAT_B8G8R8A8_SRGB;
+    }
+    else
+    {
+      for (L1 i = 0; i < vkw->surface_format_count; i += 1)
+      {
+        if (vkw->surface_formats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
+        {
+          color_format = VK_FORMAT_B8G8R8A8_SRGB;
+          break;
+        }
+      }
+    }
 
-    VkFenceCreateInfo fence_ci = {
-      .sType  =  VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      .flags  =  VK_FENCE_CREATE_SIGNALED_BIT,
+    Assert(color_format == VK_FORMAT_B8G8R8A8_SRGB);
+
+    VkColorSpaceKHR color_space = vkw->surface_formats[0].colorSpace;
+
+    VkSurfaceTransformFlagBitsKHR pre_transform = surface_capabilities.currentTransform;
+
+    if (surface_capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+    {
+      pre_transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    }
+
+    // FIFO is guaranteed, synchronized to the compositor, and avoids rendering
+    // frames which will only be replaced in the mailbox.
+    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+    VkSwapchainCreateInfoKHR swpachain_ci = {
+      .sType             =  VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .surface           =  vkw->surface,
+      .minImageCount     =  desired_image_count,
+      .imageFormat       =  color_format,
+      .imageColorSpace   =  color_space,
+      .imageExtent       =  surface_resolution,
+      .imageArrayLayers  =  1,
+      .imageUsage        =  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .imageSharingMode  =  VK_SHARING_MODE_EXCLUSIVE,
+      .preTransform      =  pre_transform,
+      .compositeAlpha    =  VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      .presentMode       =  present_mode,
+      .clipped           =  VK_TRUE,
     };
 
-    vkCreateFence(gfx_state->device, &fence_ci, 0, &frame->queue_submit_fence);
+    VkResult result = vkCreateSwapchainKHR(gfx_state->device, &swpachain_ci, 0, &vkw->swapchain);
 
-    //- kti: Command Buffer
+    Assert(result == VK_SUCCESS);
 
-    VkCommandPoolCreateInfo command_pool_ci = {
-      .sType             =  VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .flags             =  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-      .queueFamilyIndex  =  gfx_state->present_queue_index,
+    vkw->swapchain_extent = surface_resolution;
+
+    ////////////////////////////////
+    //~ kti: Per Frame
+
+    I1 image_count = 0;
+    result = vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &image_count, 0);
+    Assert(result == VK_SUCCESS && image_count <= GFX_MAX_SWAPCHAIN_IMAGES);
+
+    for (L1 i = vkw->per_frame_count; i < image_count; i += 1)
+    {
+      GFX_Per_Frame *frame = &vkw->per_frame[i];
+
+      //- kti: Fence
+
+      VkFenceCreateInfo fence_ci = {
+        .sType  =  VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags  =  VK_FENCE_CREATE_SIGNALED_BIT,
+      };
+
+      vkCreateFence(gfx_state->device, &fence_ci, 0, &frame->queue_submit_fence);
+
+      //- kti: Command Buffer
+
+      VkCommandPoolCreateInfo command_pool_ci = {
+        .sType             =  VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags             =  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        .queueFamilyIndex  =  gfx_state->present_queue_index,
+      };
+
+      vkCreateCommandPool(gfx_state->device, &command_pool_ci, 0, &frame->command_pool);
+
+      VkCommandBufferAllocateInfo command_buffer_alloc_info = {
+        .sType               =  VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool         =  frame->command_pool,
+        .level               =  VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount  =  1,
+      };
+
+      vkAllocateCommandBuffers(gfx_state->device, &command_buffer_alloc_info, &frame->command_buffer);
+
+      //- kti: Buffers
+      frame->instance_buffer      = gfx_vk_create_mapped_buffer(sizeof(GFX_Rect_Instance) * MAX_RECTANGLE_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+      frame->mesh_instance_buffer = gfx_vk_create_mapped_buffer(sizeof(GFX_Mesh_Instance) * MAX_MESH_INSTANCE_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    }
+
+    // NOTE(kti): We keep spare frame resources when the swapchain shrinks.
+    vkw->per_frame_count = Max(vkw->per_frame_count, image_count);
+    vkw->image_count = image_count;
+
+    result = vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
+    Assert(result == VK_SUCCESS);
+
+    for (L1 i = 0; i < vkw->image_count; i += 1)
+    {
+      vkw->swapchain_image_views[i] = gfx_vk_create_image_view(vkw->swapchain_images[i], color_format, VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+
+    ////////////////////////////////
+    //~ kti: Depth Buffer
+
+    VkImageCreateInfo depth_image_ci = {
+      .sType          =  VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType      =  VK_IMAGE_TYPE_2D,
+      .format         =  VK_FORMAT_D32_SFLOAT_S8_UINT,
+      .extent         =  {surface_resolution.width, surface_resolution.height, 1},
+      .mipLevels      =  1,
+      .arrayLayers    =  1,
+      .samples        =  VK_SAMPLE_COUNT_1_BIT,
+      .tiling         =  VK_IMAGE_TILING_OPTIMAL,
+      .usage          =  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+      .sharingMode    =  VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout  =  VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
-    vkCreateCommandPool(gfx_state->device, &command_pool_ci, 0, &frame->command_pool);
-
-    VkCommandBufferAllocateInfo command_buffer_alloc_info = {
-      .sType               =  VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool         =  frame->command_pool,
-      .level               =  VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-      .commandBufferCount  =  1,
-    };
-
-    vkAllocateCommandBuffers(gfx_state->device, &command_buffer_alloc_info, &frame->command_buffer);
-
-    //- kti: Buffers
-    frame->instance_buffer      = gfx_vk_create_mapped_buffer(sizeof(GFX_Rect_Instance) * MAX_RECTANGLE_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    frame->mesh_instance_buffer = gfx_vk_create_mapped_buffer(sizeof(GFX_Mesh_Instance) * MAX_MESH_INSTANCE_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    vkw->depth = gfx_vk_create_image(&depth_image_ci,
+                                     VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   }
-
-  // NOTE(kti): We keep spare frame resources when the swapchain shrinks.
-  vkw->per_frame_count = Max(vkw->per_frame_count, image_count);
-  vkw->image_count = image_count;
-
-  result = vkGetSwapchainImagesKHR(gfx_state->device, vkw->swapchain, &vkw->image_count, vkw->swapchain_images);
-  Assert(result == VK_SUCCESS);
-
-  for (L1 i = 0; i < vkw->image_count; i += 1)
+  else
   {
-    vkw->swapchain_image_views[i] = gfx_vk_create_image_view(vkw->swapchain_images[i], color_format, VK_IMAGE_ASPECT_COLOR_BIT);
+    // Keep existing resources and retry recreation when the surface is drawable.
+    vkw->swapchain_extent = (VkExtent2D){0};
   }
-
-  ////////////////////////////////
-  //~ kti: Depth Buffer
-
-  VkImageCreateInfo depth_image_ci = {
-    .sType          =  VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-    .imageType      =  VK_IMAGE_TYPE_2D,
-    .format         =  VK_FORMAT_D32_SFLOAT_S8_UINT,
-    .extent         =  {surface_resolution.width, surface_resolution.height, 1},
-    .mipLevels      =  1,
-    .arrayLayers    =  1,
-    .samples        =  VK_SAMPLE_COUNT_1_BIT,
-    .tiling         =  VK_IMAGE_TILING_OPTIMAL,
-    .usage          =  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-    .sharingMode    =  VK_SHARING_MODE_EXCLUSIVE,
-    .initialLayout  =  VK_IMAGE_LAYOUT_UNDEFINED,
-  };
-
-  vkw->depth = gfx_vk_create_image(&depth_image_ci,
-                                   VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
 Internal GFX_Window *gfx_window_equip(OS_Window *window)
@@ -1848,57 +1859,56 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw)
   ////////////////////////////////
   //~ kti: Acquire image
 
-  I1 can_begin = 1;
-
-  //- kti: Check for window resize.
   I1 framebuffer_width  = (I1)(os_window->width * os_window->pixel_ratio);
   I1 framebuffer_height = (I1)(os_window->height * os_window->pixel_ratio);
+  I1 image_idx = I1_MAX;
+  VkSemaphore acquire_semaphore = VK_NULL_HANDLE;
 
-  if (framebuffer_width * framebuffer_height == 0)
+  if (framebuffer_width > 0 && framebuffer_height > 0)
   {
-    can_begin = 0;
-  }
-  else if (framebuffer_width != vkw->swapchain_extent.width || framebuffer_height != vkw->swapchain_extent.height)
-  {
-    gfx_vk_recreate_swapchain(os_window, vkw);
-  }
-
-  //- kti: Grab the next image.
-  I1 image_idx = 0;
-
-  VkSemaphore acquire_semaphore = gfx_vk_take_semaphore();
-
-  if (can_begin)
-  {
-    for (L1 try = 0; try < 2; try += 1)
+    if (vkw->swapchain == VK_NULL_HANDLE ||
+        framebuffer_width != vkw->swapchain_extent.width ||
+        framebuffer_height != vkw->swapchain_extent.height)
     {
-      VkResult img_acquire_result = vkAcquireNextImageKHR(gfx_state->device,
-          vkw->swapchain,
-          L1_MAX,
-          acquire_semaphore,
-          VK_NULL_HANDLE,
-          &image_idx);
+      gfx_vk_recreate_swapchain(os_window, vkw);
+    }
 
-      if (img_acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
+    if (vkw->swapchain_extent.width > 0 && vkw->swapchain_extent.height > 0)
+    {
+      acquire_semaphore = gfx_vk_take_semaphore();
+
+      for (L1 try = 0; try < 2 && vkw->swapchain_extent.width > 0 && vkw->swapchain_extent.height > 0; try += 1)
       {
-        gfx_vk_recreate_swapchain(os_window, vkw);
-      }
-      else
-      {
-        can_begin = img_acquire_result == VK_SUCCESS;
-        break;
+        VkResult img_acquire_result = vkAcquireNextImageKHR(gfx_state->device,
+            vkw->swapchain,
+            L1_MAX,
+            acquire_semaphore,
+            VK_NULL_HANDLE,
+            &image_idx);
+
+        // SUBOPTIMAL still acquires an image and signals the semaphore.
+        if (img_acquire_result == VK_SUCCESS || img_acquire_result == VK_SUBOPTIMAL_KHR)
+        {
+          break;
+        }
+
+        image_idx = I1_MAX;
+
+        if (img_acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
+        {
+          gfx_vk_recreate_swapchain(os_window, vkw);
+        }
+        else
+        {
+          break;
+        }
       }
     }
   }
 
-  //- kti: If grabbing image failed we return early.
-  if (!can_begin)
+  if (image_idx == I1_MAX)
   {
-    // - kti: Recycle the semaphore we never used.
     gfx_vk_recycle_semaphore(acquire_semaphore);
-    vkQueueWaitIdle(gfx_state->queue);
-
-    image_idx = I1_MAX;
   }
   else
   {

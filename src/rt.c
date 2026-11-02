@@ -95,77 +95,79 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
   for (L1 ray_index = 0; ray_index < scene.max_num_bounces; ray_index += 1)
   {
+    Simd_F1  best_t      = splat_Simd_F1(F1_MAX);
+    Simd_SI1 best_kind   = splat_Simd_SI1(SHAPE_KIND_COUNT);
+    Simd_SI1 best_packet = splat_Simd_SI1(0);
+
+    Simd_SI1 lane_indices = {0};
+    for (L1 i = 0; i < SIMD_WIDTH; i += 1)
+      lane_indices[i] = (SI1)i;
+
+    Simd_F1 min_t = splat_Simd_F1(min_hit_distance);
+
+    //- kti: Spheres
+    L1 packet_count = (scene.sphere_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
+    for (L1 p = 0; p < packet_count; p += 1)
+    {
+      Simd_F1 distances = ray_simd_sphere_intersect(ray, scene.spheres[p]);
+
+      L1 lane_count = Min(scene.sphere_count - p * SIMD_WIDTH, SIMD_WIDTH);
+
+      Simd_Mask active = lane_indices < splat_Simd_SI1((SI1)lane_count);
+      Simd_Mask closer = active & (distances > min_t) & (distances < best_t);
+
+      best_t      = select(closer, distances, best_t);
+      best_kind   = select(closer, splat_Simd_SI1(SHAPE_KIND__SPHERE), best_kind);
+      best_packet = select(closer, splat_Simd_SI1((SI1)p), best_packet);
+    }
+
+    //- kti: Boxes
+    packet_count = (scene.box_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
+    for (L1 p = 0; p < packet_count; p += 1)
+    {
+      Simd_F1 distances = ray_simd_box_intersect(ray, scene.boxes[p]);
+
+      L1 lane_count = Min(scene.box_count - p * SIMD_WIDTH, SIMD_WIDTH);
+
+      Simd_Mask active = lane_indices < splat_Simd_SI1((SI1)lane_count);
+      Simd_Mask closer = active & (distances > min_t) & (distances < best_t);
+
+      best_t      = select(closer, distances, best_t);
+      best_kind   = select(closer, splat_Simd_SI1(SHAPE_KIND__BOX), best_kind);
+      best_packet = select(closer, splat_Simd_SI1((SI1)p), best_packet);
+    }
+
+    //- kti: Planes
+    packet_count = (scene.plane_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
+    for (L1 p = 0; p < packet_count; p += 1)
+    {
+      Simd_F1 distances = ray_simd_plane_intersect(ray, scene.planes[p]);
+
+      L1 lane_count = Min(scene.plane_count - p * SIMD_WIDTH, SIMD_WIDTH);
+
+      Simd_Mask active = lane_indices < splat_Simd_SI1((SI1)lane_count);
+      Simd_Mask closer = active & (distances > min_t) & (distances < best_t);
+
+      best_t      = select(closer, distances, best_t);
+      best_kind   = select(closer, splat_Simd_SI1(SHAPE_KIND__PLANE), best_kind);
+      best_packet = select(closer, splat_Simd_SI1((SI1)p), best_packet);
+    }
+
+    //- kti: Scalar selection.
+
     F1         hit_distance     = F1_MAX;
     Shape_Kind hit_kind         = SHAPE_KIND_COUNT;
     L1         hit_packet_index = 0;
     L1         hit_lane         = 0;
 
-    //- kti: Spheres
-    L1 sphere_packet_count = (scene.sphere_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
-    for (L1 sphere_packet_index = 0; sphere_packet_index < sphere_packet_count; sphere_packet_index += 1)
+    for (L1 lane = 0; lane < SIMD_WIDTH; lane += 1)
     {
-      Simd_Sphere spheres = scene.spheres[sphere_packet_index];
-
-      Simd_F1 distances = ray_simd_sphere_intersect(ray, spheres);
-
-      L1 lane_count = Min(scene.sphere_count - sphere_packet_index * SIMD_WIDTH, SIMD_WIDTH);
-      for (L1 i = 0; i < lane_count; i += 1)
+      if (best_t[lane] < hit_distance)
       {
-        F1 t = distances[i];
-        
-        if (t > min_hit_distance && t < hit_distance)
-        {
-          hit_distance     = t;
-          hit_kind         = SHAPE_KIND__SPHERE;
-          hit_packet_index = sphere_packet_index;
-          hit_lane         = i;
-        }
-      }
-    }
-
-    //- kti: Boxes
-    L1 box_packet_count = (scene.box_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
-    for (L1 box_packet_index = 0; box_packet_index < box_packet_count; box_packet_index += 1)
-    {
-      Simd_Box boxes = scene.boxes[box_packet_index];
-
-      Simd_F1 distances = ray_simd_box_intersect(ray, boxes);
-
-      L1 lane_count = Min(scene.box_count - box_packet_index * SIMD_WIDTH, SIMD_WIDTH);
-      for (L1 i = 0; i < lane_count; i += 1)
-      {
-        F1 t = distances[i];
-        
-        if (t > min_hit_distance && t < hit_distance)
-        {
-          hit_distance     = t;
-          hit_kind         = SHAPE_KIND__BOX;
-          hit_packet_index = box_packet_index;
-          hit_lane         = i;
-        }
-      }
-    }
-
-    //- kti: Planes
-    L1 plane_packet_count = (scene.plane_count + SIMD_WIDTH - 1) / SIMD_WIDTH;
-    for (L1 plane_packet_index = 0; plane_packet_index < plane_packet_count; plane_packet_index += 1)
-    {
-      Simd_Plane planes = scene.planes[plane_packet_index];
-
-      Simd_F1 distances = ray_simd_plane_intersect(ray, planes);
-
-      L1 lane_count = Min(scene.plane_count - plane_packet_index * SIMD_WIDTH, SIMD_WIDTH);
-      for (L1 i = 0; i < lane_count; i += 1)
-      {
-        F1 t = distances[i];
-
-        if (t > min_hit_distance && t < hit_distance)
-        {
-          hit_distance     = t;
-          hit_kind         = SHAPE_KIND__PLANE;
-          hit_packet_index = plane_packet_index;
-          hit_lane         = i;
-        }
+        hit_distance     = best_t[lane];
+        hit_kind         = best_kind[lane];
+        hit_packet_index = (L1)best_packet[lane];
+        hit_lane         = lane;
       }
     }
 

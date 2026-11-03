@@ -77,13 +77,9 @@ Inline F3 sample_GGX_half(Random_State *rng, F3 n, float alpha)
   return normalize(add_scaled(local_xy, z, n));
 }
 
-Inline F1 pdf_GGX(F3 n, F3 h, F3 v, F1 alpha)
+Inline F1 pdf_GGX(F1 D, F1 NoH, F1 VoH)
 {
-  F1  NoH     =  clamp01(dot(n, h));
-  F1  VoH     =  clamp01(dot(v, h));
-  F1  D       =  D_GGX(NoH, alpha);
   F1  result  =  D * NoH / (4.0f * VoH);
-
   return result;
 }
 
@@ -226,43 +222,46 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
 
       result = add(result, mul(attenuation, material.emissive));
 
-      F1  roughness     =  Max(0.05f, clamp01(material.roughness));
-      F1  alpha         =  roughness * roughness;
-      F1  metallic      =  clamp01(material.metallic);
-      F4  f0            =  lerp(((F4){{0.04f, 0.04f, 0.04f}}), metallic, material.base_color);
-      F1 specular_prob  =  0.5f; // keep constant; MIS handles weighting
+      if (ray_index + 1 > scene.max_num_bounces)
+        break;
+
+      F1 roughness     = Max(0.05f, clamp01(material.roughness));
+      F1 alpha         = roughness * roughness;
+      F1 metallic      = clamp01(material.metallic);
+      F4 f0            = lerp(((F4){{0.04f, 0.04f, 0.04f}}), metallic, material.base_color);
+      F1 specular_prob = 0.5f; // keep constant; MIS handles weighting
 
       if (random_unilateral(rng) < specular_prob)
       {
-        F3  v  =  neg(ray.dir);
-        F3  h  =  sample_GGX_half(rng, next_normal, alpha);
-        F3  l  =  reflect(neg(v), h);
+        F3 v = neg(ray.dir);
+        F3 h = sample_GGX_half(rng, next_normal, alpha);
+        F3 l = reflect(neg(v), h);
 
-        F1  NoL  =  clamp01(dot(next_normal, l));
-        F1  NoV  =  clamp01(dot(next_normal, v));
-        F1  NoH  =  clamp01(dot(next_normal, h));
-        F1  VoH  =  clamp01(dot(v, h));
+        F1 NoL = clamp01(dot(next_normal, l));
+        F1 NoV = clamp01(dot(next_normal, v));
+        F1 NoH = clamp01(dot(next_normal, h));
+        F1 VoH = clamp01(dot(v, h));
 
         if (NoL > 0.0f)
         {
-          F1  D  =  D_GGX(NoH, alpha);
-          F1  G  =  G_Smith(NoV, NoL, alpha);
-          F4  F  =  fresnel_schlick(VoH, f0);
+          F1 D = D_GGX(NoH, alpha);
+          F1 G = G_Smith(NoV, NoL, alpha);
+          F4 F = fresnel_schlick(VoH, f0);
 
-          F1  denom   =  Max(4.0f * NoV * NoL, 1e-6f);
-          F4  f_spec  =  scale(F, (D * G) / denom);
+          F1 denom  = Max(4.0f * NoV * NoL, 1e-6f);
+          F4 f_spec = scale(F, (D * G) / denom);
 
           // Fresnel-weighted diffuse with metallic energy conservation
-          F4  kd_color  =  scale(sub(((F4){{1, 1, 1}}), F), 1.0f - metallic);
-          F4  f_diff    =  scale(mul(kd_color, material.base_color), 1.0f / PI);
+          F4 kd_color = scale(sub(((F4){{1, 1, 1}}), F), 1.0f - metallic);
+          F4 f_diff   = scale(mul(kd_color, material.base_color), 1.0f / PI);
 
-          F1  pdf_spec   =  pdf_GGX(next_normal, h, v, alpha);
-          F1  pdf_diff   =  NoL / PI;
-          F1  pdf_total  =  specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
-          F1  inv_pdf    =  1.0f / Max(pdf_total, 1e-6f);
+          F1 pdf_spec  = pdf_GGX(D, NoH, VoH);
+          F1 pdf_diff  = NoL / PI;
+          F1 pdf_total = specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
+          F1 inv_pdf   = 1.0f / Max(pdf_total, 1e-6f);
 
-          attenuation  =  mul(attenuation, scale(add(f_spec, f_diff), NoL * inv_pdf));
-          ray.dir      =   l;
+          attenuation = mul(attenuation, scale(add(f_spec, f_diff), NoL * inv_pdf));
+          ray.dir     =  l;
         }
         else
         {
@@ -292,7 +291,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
           F4  kd_color  =  scale(sub(((F4){{1, 1, 1}}), F), 1.0f - metallic);
           F4  f_diff    =  scale(mul(kd_color, material.base_color), 1.0f / PI);
 
-          F1  pdf_spec   =  pdf_GGX(next_normal, h, v, alpha);
+          F1  pdf_spec   =  pdf_GGX(D, NoH, VoH);
           F1  pdf_diff   =  NoL / PI;
           F1  pdf_total  =  specular_prob * pdf_spec + (1.0f - specular_prob) * pdf_diff;
           F1  inv_pdf    =  1.0f / Max(pdf_total, 1e-6f);

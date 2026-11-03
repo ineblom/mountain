@@ -1,6 +1,5 @@
 ////////////////////////////////
 //~ kti: TODO
-
 //- kti: CODE DRIVEN EDITOR
 
 //- kti: SIMD.

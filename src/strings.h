@@ -61,4 +61,6 @@ struct Unicode_Decode
 #define str8_serial_push_array(arena, srl, ptr, count) str8_serial_push_data(arena, srl, ptr, sizeof(*(ptr)) * (count))
 #define str8_serial_push_struct(arena, srl, ptr) str8_serial_push_array(arena, srl, ptr, 1)
 
+#define str8_varg(x) (int)(x).len, (x).str
+
 #endif

@@ -39,6 +39,7 @@
 #include "rt.h"
 #include "editor.h"
 #include "lister.h"
+#include "notes.h"
 
 #endif
 
@@ -72,10 +73,11 @@ NoInline void WrmBas(void)
 #include "meta.c"
 #else
 
-#include "ui.c"
-#include "rt.c"
-#include "editor.c"
-#include "lister.c"
+// #include "ui.c"
+// #include "rt.c"
+// #include "editor.c"
+// #include "lister.c"
+#include "notes.c"
 
 #endif
 

@@ -675,7 +675,7 @@ Internal GFX_Texture *gfx_tex2d_from_image(Image_RGBA8 image, GFX_Texture_Usage 
   return texture;
 }
 
-Internal void gfx_fill_tex2d_region(GFX_Texture *tex, SI4 region, void *pixels)
+Internal void gfx_fill_tex2d_region(GFX_Texture *tex, I4 region, void *pixels)
 {
   if (tex         !=  0
       && region.x  <   tex->width

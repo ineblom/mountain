@@ -1,6 +1,6 @@
 #!/bin/sh
 
-WARN="-Wall -Wno-unused-function -Wno-unused-variable"
+WARN="-Wall -Wtype-limits -Wno-unused-function -Wno-unused-variable"
 DEFS="-DDEV=1"
 OPT="-O0"
 
@@ -25,6 +25,17 @@ if [ "$NATIVE" -eq 1 ]; then
   OPT="$OPT -march=native"
 fi
 
+# Wider SIMD lanes need the matching instruction set on x86, otherwise the
+# compiler falls back to scalar emulation of the vector types.
+SIMD_FLAGS=""
+case "$(uname -m)" in x86_64|amd64)
+  case "$SIMD_WIDTH" in
+    8)  SIMD_FLAGS="-mavx2 -mfma" ;;
+    16) SIMD_FLAGS="-mavx512f -mavx512dq -mavx512vl" ;;
+  esac
+  ;;
+esac
+
 case "$(uname -s)" in Darwin)
     COMPILER="${CC:-clang}"
     LANGUAGE="-x objective-c"
@@ -45,6 +56,7 @@ case "$(uname -s)" in Darwin)
     OPT="$OPT -maes -mssse3"
     ;;
 esac
+OPT="$OPT $SIMD_FLAGS"
 
 ./deps/freetype/build.sh || exit $?
 LIB="../deps/freetype/build/libfreetype.a $LIB"

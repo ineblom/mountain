@@ -171,14 +171,14 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
     {
       L1 primitive_index = hit_packet_index * SIMD_WIDTH + hit_lane;
 
-      L1 material_base_index = hit_kind   == SHAPE_KIND__SPHERE ? 0
-                               : hit_kind == SHAPE_KIND__BOX    ? scene.sphere_count
-                               : scene.sphere_count + scene.box_count;
+      L1 material_base_index = hit_kind == SHAPE_KIND__SPHERE ? 0
+                             : hit_kind == SHAPE_KIND__BOX    ? scene.sphere_count
+                             : scene.sphere_count + scene.box_count;
 
       RT_Material  material     =  scene.materials[material_base_index + primitive_index];
 
-      F3 next_origin = add_scaled(ray.pos, hit_distance, ray.dir);
-      F3 next_normal = {0};
+      F3 origin = add_scaled(ray.pos, hit_distance, ray.dir);
+      F3 normal = {0};
 
       switch (hit_kind)
       {
@@ -187,15 +187,15 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
           Simd_Sphere spheres = scene.spheres[hit_packet_index];
           F3 pos = extract_lane_F3(spheres.pos, hit_lane);
 
-          next_normal = normalize(sub(next_origin, pos));
+          normal = normalize(sub(origin, pos));
         } break;
 
         case SHAPE_KIND__PLANE:
         {
           Simd_Plane planes = scene.planes[hit_packet_index];
-          F3 normal = extract_lane_F3(planes.normal, hit_lane);
+          F3 plane_normal = extract_lane_F3(planes.normal, hit_lane);
 
-          next_normal = dot(normal, ray.dir) < 0.0f ? normal : neg(normal);
+          normal = dot(plane_normal, ray.dir) < 0.0f ? plane_normal : neg(plane_normal);
         } break;
 
         case SHAPE_KIND__BOX:
@@ -205,16 +205,16 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
           F3 max = extract_lane_F3(boxes.max, hit_lane);
 
           F3  center     =  scale(add(min, max), 0.5f);
-          F3  local_hit  =  sub(next_origin, center);
+          F3  local_hit  =  sub(origin, center);
           F3  box_size   =  sub(max, min);
           F3  d          =  div(abs(local_hit), scale(box_size, 0.5f));
 
           if (d.x > d.y && d.x > d.z)
-            next_normal = scale(f3(1, 0, 0), sign(local_hit.x));
+            normal = scale(f3(1, 0, 0), sign(local_hit.x));
           else if (d.y > d.z)
-            next_normal = scale(f3(0, 1, 0), sign(local_hit.y));
+            normal = scale(f3(0, 1, 0), sign(local_hit.y));
           else
-            next_normal = scale(f3(0, 0, 1), sign(local_hit.z));
+            normal = scale(f3(0, 0, 1), sign(local_hit.z));
         } break;
 
         default: break;
@@ -234,12 +234,12 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
       if (random_unilateral(rng) < specular_prob)
       {
         F3 v = neg(ray.dir);
-        F3 h = sample_GGX_half(rng, next_normal, alpha);
+        F3 h = sample_GGX_half(rng, normal, alpha);
         F3 l = reflect(neg(v), h);
 
-        F1 NoL = clamp01(dot(next_normal, l));
-        F1 NoV = clamp01(dot(next_normal, v));
-        F1 NoH = clamp01(dot(next_normal, h));
+        F1 NoL = clamp01(dot(normal, l));
+        F1 NoV = clamp01(dot(normal, v));
+        F1 NoH = clamp01(dot(normal, h));
         F1 VoH = clamp01(dot(v, h));
 
         if (NoL > 0.0f)
@@ -271,14 +271,14 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
       else
       {
         F3  v    =  neg(ray.dir);
-        F3  l    =  sample_cosine_hemisphere(rng, next_normal);
-        F1  NoL  =  clamp01(dot(next_normal, l));
+        F3  l    =  sample_cosine_hemisphere(rng, normal);
+        F1  NoL  =  clamp01(dot(normal, l));
 
         if (NoL > 0.0f)
         {
           F3  h    =  normalize(add(v, l));
-          F1  NoV  =  clamp01(dot(next_normal, v));
-          F1  NoH  =  clamp01(dot(next_normal, h));
+          F1  NoV  =  clamp01(dot(normal, v));
+          F1  NoH  =  clamp01(dot(normal, h));
           F1  VoH  =  clamp01(dot(v, h));
 
           F1  D  =  D_GGX(NoH, alpha);
@@ -306,7 +306,7 @@ Internal F4 ray_cast(RT_Scene scene, Random_State *rng, Ray ray)
       }
 
       ray.inv_dir  =  safe_inv_dir_F3(ray.dir);
-      ray.pos      =  add_scaled(next_origin, min_hit_distance, next_normal);
+      ray.pos      =  add_scaled(origin, min_hit_distance, normal);
     }
     else
     {

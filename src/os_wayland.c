@@ -1124,7 +1124,7 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
       }
     }
 
-    I1 poll_result = 0;
+    SI1 poll_result = 0;
     do
     {
       poll_result = poll(poll_fds, ArrayCount(poll_fds), poll_timeout_ms);

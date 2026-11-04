@@ -550,7 +550,7 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
 
         if (chosen_atlas != 0)
         {
-          SI4 subregion = {
+          I4 subregion = {
             {chosen_atlas_region.x + 1,
             chosen_atlas_region.y + 1,
             raster.atlas_dim.x,

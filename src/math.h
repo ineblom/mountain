@@ -51,6 +51,13 @@ union SI4
   SI1 v[4];
 };
 
+typedef union I4 I4;
+union I4
+{
+  struct { I1 x, y, z, w; };
+  I1 v[4];
+};
+
 typedef union W2 W2;
 union W2
 {
@@ -111,10 +118,10 @@ typedef enum Side
 typedef I1 Axis;
 enum
 {
-  AXIS__INVALID = -1,
-  AXIS__X,
+  AXIS__X = 0,
   AXIS__Y,
   AXIS__Z,
+  AXIS__INVALID = 0xFFFFFFFF,
 
   AXIS2_COUNT  =  2,
   AXIS3_COUNT  =  3,

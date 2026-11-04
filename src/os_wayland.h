@@ -56,7 +56,7 @@ struct OS_GFX_State
   Arena        *event_arena;
   OS_Event_List events;
   I1            redraw_requested;
-  I1            wakeup_fd;
+  SI1           wakeup_fd;
   B1            key_states[OS_KEY_COUNT];
   D1            mouse_x;
   D1            mouse_y;

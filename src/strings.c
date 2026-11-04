@@ -484,7 +484,7 @@ Internal I1 utf8_byte_is_continuation(B1 byte)
 
 Internal L1 utf8_boundary_left_from_column(String8 string, L1 column)
 {
-  L1 result = Clamp(0, column, string.len);
+  L1 result = Min(column, string.len);
 
   if (result > 0)
   {
@@ -533,7 +533,7 @@ Internal Unicode_Decode utf8_decode(B1 *str, L1 cap)
 
 Internal L1 utf8_boundary_right_from_column(String8 string, L1 column)
 {
-  L1 result = Clamp(0, column, string.len);
+  L1 result = Min(column, string.len);
 
   if (result < string.len)
   {

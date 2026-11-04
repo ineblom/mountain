@@ -248,7 +248,7 @@ enum
 #define OS_MOUSE_BUTTON_COUNT 3
 
 Internal void *os_reserve(L1);
-Internal void  os_commit(void *, L1);
+Internal I1    os_commit(void *, L1);
 Internal void  os_memory_release(void *, L1);
 Internal L1    os_clock(void);
 Internal void  os_sleep_until(L1 deadline);

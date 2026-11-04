@@ -1,13 +1,21 @@
 
+#define ARENA_COMMIT_SIZE KiB(64)
+
 Internal Arena *arena_alloc(L1 max_size)
 {
-  void  *base  = os_reserve(max_size);
-  Arena *arena = (Arena *)base;
+  L1     reserve_size = AlignPow2(Max(max_size, sizeof(Arena)), ARENA_COMMIT_SIZE);
+  void  *base         = os_reserve(reserve_size);
+  Arena *arena        = (Arena *)base;
+  I1     committed    = 0;
 
-  os_commit(base, max_size);
+  Assert(base != 0);
 
-  arena->pos      = sizeof(Arena);
-  arena->reserved = max_size;
+  committed = os_commit(base, ARENA_COMMIT_SIZE);
+  Assert(committed);
+
+  arena->pos       = sizeof(Arena);
+  arena->committed = ARENA_COMMIT_SIZE;
+  arena->reserved  = reserve_size;
 
   return arena;
 }
@@ -34,22 +42,20 @@ Inline L1 arena_pos(Arena *arena)
 
 Inline void arena_pop_to(Arena *arena, L1 pos)
 {
-  L1 clamped_pos = Max(sizeof(Arena), pos);
-
-  arena->pos = clamped_pos;
+  if (arena)
+  {
+    arena->pos = Clamp(sizeof(Arena), pos, arena->pos);
+  }
 }
 
 Inline void arena_pop(Arena *arena, L1 amount)
 {
-  L1 old_pos = arena->pos;
-  L1 new_pos = old_pos;
-
-  if (amount < old_pos)
+  if (amount <= arena->pos)
   {
-    new_pos = old_pos - amount;
-  }
+    L1 new_pos = arena->pos - amount;
 
-  arena_pop_to(arena, new_pos);
+    arena_pop_to(arena, new_pos);
+  }
 }
 
 Inline void arena_clear(Arena *arena)
@@ -59,7 +65,9 @@ Inline void arena_clear(Arena *arena)
 
 Internal void *arena_push(Arena *arena, L1 size, L1 align, I1 zero)
 {
-  void *result      = 0;
+  void *result = 0;
+
+  Assert(align != 0 && (align & (align - 1)) == 0);
 
   if (arena)
   {
@@ -68,12 +76,29 @@ Internal void *arena_push(Arena *arena, L1 size, L1 align, I1 zero)
 
     if (aligned_pos <= arena->reserved && size <= arena->reserved - aligned_pos)
     {
-      result     = (void *)((B1 *)arena + aligned_pos);
-      arena->pos = next_pos;
+      I1 committed = 1;
 
-      if (zero != 0)
+      if (next_pos > arena->committed)
       {
-        MemoryZero(result, size);
+        L1 new_committed = Min(AlignPow2(next_pos, ARENA_COMMIT_SIZE), arena->reserved);
+
+        committed = os_commit((B1 *)arena + arena->committed, new_committed - arena->committed);
+
+        if (committed)
+        {
+          arena->committed = new_committed;
+        }
+      }
+
+      if (committed)
+      {
+        result     = (void *)((B1 *)arena + aligned_pos);
+        arena->pos = next_pos;
+
+        if (zero != 0)
+        {
+          MemoryZero(result, size);
+        }
       }
     }
   }

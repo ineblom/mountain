@@ -5,6 +5,7 @@ typedef struct Arena Arena;
 struct Arena
 {
   L1 pos;
+  L1 committed;
   L1 reserved;
 };
 

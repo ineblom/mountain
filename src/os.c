@@ -50,9 +50,9 @@ Internal void *os_reserve(L1 size)
   return result == MAP_FAILED ? 0 : result;
 }
 
-Internal void os_commit(void *ptr, L1 size)
+Internal I1 os_commit(void *ptr, L1 size)
 {
-  mprotect(ptr, size, PROT_READ | PROT_WRITE);
+  return mprotect(ptr, size, PROT_READ | PROT_WRITE) == 0;
 }
 
 Internal void os_decommit(void *ptr, L1 size)

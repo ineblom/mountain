@@ -230,15 +230,7 @@ void notes_main(void *)
 
     scratch_end(scratch);
 
-    if (events.count != 0 || ui_state->animation_active)
-    {
-      frames_requested = 4;
-    }
-
-    if (frames_requested > 0)
-    {
-      frames_requested -= 1;
-    }
+    frames_requested = ui_state->animation_active ? 1 : 0;
   }
 
   gfx_window_unequip(gfx_window);

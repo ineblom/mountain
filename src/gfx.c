@@ -1553,7 +1553,7 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
       surface_resolution.width > 0 && surface_resolution.height > 0 &&
       surface_capabilities.maxImageExtent.width > 0 && surface_capabilities.maxImageExtent.height > 0)
   {
-    I1 desired_image_count = Max(3, surface_capabilities.minImageCount + 1);
+    I1 desired_image_count = Max(2, surface_capabilities.minImageCount);
 
     if (surface_capabilities.maxImageCount != 0 && desired_image_count > surface_capabilities.maxImageCount)
     {

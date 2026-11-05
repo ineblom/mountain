@@ -23,12 +23,19 @@ void notes_main(void *)
   UI_Theme_Pattern theme_patterns[] = {
     UI_ThemeColor(0.01f, 0.01f, 0.01f, 1.0f,  str8("background")),
     UI_ThemeColor(0.10f, 0.10f, 0.10f, 1.0f,  str8("border")),
-    UI_ThemeColor(1.00f, 1.00f, 1.00f, 1.0f,  str8("header"), str8("text")),
-    UI_ThemeColor(0.60f, 0.60f, 0.60f, 1.0f,  str8("button"), str8("text")),
-    UI_ThemeColor(0.60f, 0.60f, 0.60f, 1.0f,  str8("textedit"), str8("text")),
-    UI_ThemeColor(0.10f, 0.30f, 0.90f, 1.0f,  str8("textedit"), str8("focused"), str8("border")),
     UI_ThemeColor(0.60f, 0.00f, 0.00f, 1.0f,  str8("text")),
     UI_ThemeColor(0.60f, 0.60f, 0.60f, 1.0f,  str8("cursor")),
+
+    //- kti: Header
+    UI_ThemeColor(1.00f, 1.00f, 1.00f, 1.0f,  str8("header"), str8("text")),
+
+    //- kti: Button
+    UI_ThemeColor(0.60f, 0.60f, 0.60f, 1.0f,  str8("button"), str8("text")),
+
+    //- kti: Textedit
+    UI_ThemeColor(0.10f, 0.30f, 0.90f, 0.2f,  str8("selection")),
+    UI_ThemeColor(0.60f, 0.60f, 0.60f, 1.0f,  str8("textedit"), str8("text")),
+    UI_ThemeColor(0.10f, 0.30f, 0.90f, 1.0f,  str8("textedit"), str8("focused"), str8("border")),
   };
 
   UI_Theme theme = {

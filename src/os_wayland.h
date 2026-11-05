@@ -42,6 +42,9 @@ struct OS_Window
   struct wl_surface_listener   surface_listener;
   struct xdg_surface_listener  xdg_surface_listener;
   struct xdg_toplevel_listener xdg_toplevel_listener;
+  struct wl_callback          *frame_callback;
+  struct wl_callback_listener  frame_callback_listener;
+  L1                           frame_callback_requested_ns;
   I1                           has_preferred_buffer_scale;
   I1                           configured;
 };

@@ -928,6 +928,71 @@ Internal void keyboard_repeat_info_handler(void *data, struct wl_keyboard *keybo
   }
 }
 
+//~ kti: Frame pacing
+
+#define OS_WAYLAND_FRAME_CALLBACK_TIMEOUT_NS (100 * 1000000LLU)
+
+Internal void surface_frame_done_handler(void *data, struct wl_callback *callback, I1 time)
+{
+  OS_Window *window = (OS_Window *)data;
+
+  if (window->frame_callback == callback)
+  {
+    window->frame_callback = 0;
+  }
+
+  wl_callback_destroy(callback);
+}
+
+// NOTE(kti): Must be called before the commit that presents the frame (vkQueuePresentKHR).
+Internal void os_wayland_window_request_frame(OS_Window *window)
+{
+  if (window->frame_callback != 0)
+  {
+    wl_callback_destroy(window->frame_callback);
+  }
+
+  window->frame_callback               =  wl_surface_frame(window->surface);
+  window->frame_callback_requested_ns  =  os_clock();
+
+  wl_callback_add_listener(window->frame_callback, &window->frame_callback_listener, window);
+}
+
+// NOTE(kti): Milliseconds until every pending frame callback is done or timed out, -1 if none are pending.
+// The timeout covers hidden windows, which get no frame callbacks.
+Internal SI1 os_wayland_frame_wait_timeout_ms(void)
+{
+  SI1 result = -1;
+  L1  now    = os_clock();
+
+  for (OS_Window *window = os_gfx_state->first_window; window != 0; window = window->next)
+  {
+    if (window->frame_callback == 0)
+    {
+      continue;
+    }
+
+    L1 deadline = window->frame_callback_requested_ns + OS_WAYLAND_FRAME_CALLBACK_TIMEOUT_NS;
+
+    if (now >= deadline)
+    {
+      wl_callback_destroy(window->frame_callback);
+      window->frame_callback = 0;
+    }
+    else
+    {
+      SI1 remaining_ms = (SI1)((deadline - now + 999999LLU) / 1000000LLU);
+
+      if (result < 0 || remaining_ms < result)
+      {
+        result = remaining_ms;
+      }
+    }
+  }
+
+  return result;
+}
+
 Internal OS_Window *os_window_open(String8 title, I1 width, I1 height)
 {
   if (os_gfx_state == 0)
@@ -1020,6 +1085,8 @@ Internal OS_Window *os_window_open(String8 title, I1 width, I1 height)
 #endif
   wl_surface_add_listener(result->surface, &result->surface_listener, result);
 
+  result->frame_callback_listener.done = surface_frame_done_handler;
+
   result->xdg_surface                     =  xdg_wm_base_get_xdg_surface(os_gfx_state->xdg_wm_base, result->surface);
   result->xdg_surface_listener.configure  =  xdg_surface_configure_handler;
 
@@ -1074,7 +1141,8 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
   os_gfx_state->events.count     = 0;
   os_gfx_state->redraw_requested = 0;
 
-  I1 display_ok = 1;
+  I1 display_ok       = 1;
+  I1 wakeup_received  = 0;
 
   for (;;)
   {
@@ -1086,9 +1154,13 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
     if (!display_ok)
       break;
 
+    // Hold queued input until the compositor has taken the previous frame, so
+    // the frame built from it is presented without waiting behind another one.
+    SI1 frame_wait_ms = os_wayland_frame_wait_timeout_ms();
+
     // prepare_read succeeded, so cancel it before returning queued input or a
     // configure/scale redraw discovered while dispatching pending callbacks.
-    if (os_gfx_state->events.count != 0 || os_gfx_state->redraw_requested)
+    if (frame_wait_ms < 0 && (os_gfx_state->events.count != 0 || os_gfx_state->redraw_requested))
     {
       wl_display_cancel_read(os_gfx_state->display);
       break;
@@ -1110,7 +1182,12 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
     SI1  poll_timeout_ms     =  timeout_ms;
     I1   waiting_for_repeat  =  0;
 
-    if (os_gfx_state->repeat_key != OS_KEY__NULL && os_gfx_state->key_repeat_rate > 0 &&
+    // Repeats due during the wait are emitted after the loop.
+    if (frame_wait_ms >= 0)
+    {
+      poll_timeout_ms = frame_wait_ms;
+    }
+    else if (os_gfx_state->repeat_key != OS_KEY__NULL && os_gfx_state->key_repeat_rate > 0 &&
         os_gfx_state->key_states[os_gfx_state->repeat_key])
     {
       L1   now                =  os_clock();
@@ -1130,10 +1207,10 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
       poll_result = poll(poll_fds, ArrayCount(poll_fds), poll_timeout_ms);
     } while (poll_result < 0 && errno == EINTR);
 
-    I1 wakeup_received = poll_result > 0 && (poll_fds[1].revents & POLLIN);
-
-    if (wakeup_received)
+    if (poll_result > 0 && (poll_fds[1].revents & POLLIN))
     {
+      wakeup_received = 1;
+
       eventfd_t value;
       eventfd_read(os_gfx_state->wakeup_fd, &value);
     }
@@ -1156,6 +1233,9 @@ Internal OS_Event_List os_poll_events(Arena *arena, SI1 timeout_ms)
 
     if (!display_ok)
       break;
+
+    if (os_wayland_frame_wait_timeout_ms() >= 0)
+      continue;
 
     if (timeout_ms >= 0 ||
         waiting_for_repeat ||
@@ -1216,6 +1296,12 @@ Internal void os_window_close(OS_Window *window)
 
     MemoryZeroArray(os_gfx_state->key_states);
     os_key_repeat_clear();
+  }
+
+  if (window->frame_callback != 0)
+  {
+    wl_callback_destroy(window->frame_callback);
+    window->frame_callback = 0;
   }
 
   xdg_toplevel_destroy(window->xdg_toplevel);

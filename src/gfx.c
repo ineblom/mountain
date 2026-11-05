@@ -2403,6 +2403,10 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw)
       .pImageIndices       =  &image_idx,
     };
 
+#if !defined(__APPLE__)
+    os_wayland_window_request_frame(os_window);
+#endif
+
     VkResult result = vkQueuePresentKHR(gfx_state->queue, &present_info);
 
     if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)

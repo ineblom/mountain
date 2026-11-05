@@ -1,145 +1,264 @@
-
-#include <termios.h>
-#include <sys/ioctl.h>
-#include <signal.h>
-
 typedef struct N_Block N_Block;
 struct N_Block
 {
   N_Block *next;
   N_Block *prev;
-
   String8 contents;
 };
 
-typedef enum Style
+void notes_main(void *)
 {
-  STYLE__RESET,
-  STYLE__NOTE,
-  STYLE__INPUT,
-} Style;
+  Arena *arena = worker_arena();
 
-Global I1 needs_redraw = 1;
+  //- kti: Init.
 
-static void handle_resize(int)
-{
-  atomic_swap_I1(&needs_redraw, 1);
-}
+  gfx_init();
+  fp_init();
+  fc_init();
 
-void style(Style style)
-{
-  CString str = "\033[0m";
+  OS_Window  *os_window  = os_window_open(str8("Notes"), 1280, 720);
+  GFX_Window *gfx_window = gfx_window_equip(os_window);
+  UI_State   *ui_state   = ui_state_alloc();
 
-  switch (style)
+  UI_Theme_Pattern theme_patterns[] = {
+    UI_ThemeColor(0.01f, 0.01f, 0.01f, 1.0f,  str8("background")),
+    UI_ThemeColor(0.10f, 0.10f, 0.10f, 1.0f,  str8("border")),
+    UI_ThemeColor(1.00f, 1.00f, 1.00f, 1.0f,  str8("header"), str8("text")),
+    UI_ThemeColor(0.60f, 0.60f, 0.60f, 1.0f,  str8("button"), str8("text")),
+    UI_ThemeColor(0.60f, 0.60f, 0.60f, 1.0f,  str8("textedit"), str8("text")),
+    UI_ThemeColor(0.10f, 0.30f, 0.90f, 1.0f,  str8("textedit"), str8("focused"), str8("border")),
+    UI_ThemeColor(0.60f, 0.00f, 0.00f, 1.0f,  str8("text")),
+    UI_ThemeColor(0.60f, 0.60f, 0.60f, 1.0f,  str8("cursor")),
+  };
+
+  UI_Theme theme = {
+    .patterns = theme_patterns,
+    .pattern_count = ArrayCount(theme_patterns),
+  };
+
+  L1 frames_requested = 2;
+  Txt_Pt cursor = {0};
+  Txt_Pt mark = {0};
+  B1 input_buffer[1024] = {0};
+  L1 input_buffer_len = 0;
+
+  L1 running = 1;
+
+  while (running)
   {
-    case STYLE__RESET: break;
-    case STYLE__NOTE: str = "\033[37m"; break;
-    case STYLE__INPUT: str = "\033[48;2;41;41;41m\033[37m"; break;
+    F1 animation_dt = 1.0f / 60.0f;
+
+    Temp_Arena scratch = scratch_begin(0, 0);
+
+    UI_Cmd_List ui_cmds = {0};
+
+    OS_Event_List events = os_poll_events(scratch.arena, frames_requested == 0 ? -1 : 0);
+
+    for (OS_Event *e = events.first; e != 0; e = e->next)
+    {
+      if (e->kind == OS_EVENT_KIND__WINDOW_CLOSE)
+      {
+        running = 0;
+      }
+
+      //- kti: Text.
+      if (e->kind == OS_EVENT_KIND__TEXT)
+      {
+        UI_Cmd cmd = {
+          .kind = UI_CMD_KIND__TEXT,
+          .string = {e->text, e->text_len},
+          .timestamp_ns = e->timestamp_ns,
+        };
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
+      }
+
+      //- kti: Left & Right
+      if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__LEFT || e->key == OS_KEY__RIGHT))
+      {
+        UI_Cmd_Delta_Unit delta_unit = UI_CMD_DELTA_UNIT__CHAR;
+        UI_Cmd_Flags      flags      = UI_CMD_FLAG__CAP_AT_LINE;
+
+        if (e->modifiers & OS_MODIFIER_FLAG__CTRL)
+        {
+          delta_unit = UI_CMD_DELTA_UNIT__WORD;
+        }
+
+        if (e->modifiers & OS_MODIFIER_FLAG__SHIFT)
+        {
+          flags |= UI_CMD_FLAG__KEEP_MARK;
+        }
+        else
+        {
+          flags |= UI_CMD_FLAG__PICK_SELECT_SIDE;
+        }
+
+        UI_Cmd cmd = {
+          .kind         = UI_CMD_KIND__NAVIGATE,
+          .delta_unit   = delta_unit,
+          .flags        = flags,
+          .delta_si2    = {{(e->key == OS_KEY__LEFT) ? -1 : 1, 0}},
+          .timestamp_ns = e->timestamp_ns,
+        };
+
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
+      }
+
+      //- kti: Home & End
+      if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__HOME || e->key == OS_KEY__END))
+      {
+        UI_Cmd_Flags flags = UI_CMD_FLAG__CAP_AT_LINE;
+
+        if (e->modifiers & OS_MODIFIER_FLAG__SHIFT)
+        {
+          flags |= UI_CMD_FLAG__KEEP_MARK;
+        }
+
+        UI_Cmd cmd = {
+          .kind         = UI_CMD_KIND__NAVIGATE,
+          .delta_unit   = UI_CMD_DELTA_UNIT__LINE,
+          .flags        = flags,
+          .delta_si2    = {{(e->key == OS_KEY__HOME) ? -1 : 1, 0}},
+          .timestamp_ns = e->timestamp_ns,
+        };
+
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
+      }
+
+      //- kti: Backspace & Delete
+      if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__BACKSPACE || e->key == OS_KEY__DELETE))
+      {
+        UI_Cmd_Delta_Unit delta_unit = UI_CMD_DELTA_UNIT__CHAR;
+
+        if (e->modifiers & OS_MODIFIER_FLAG__CTRL)
+        {
+          delta_unit = UI_CMD_DELTA_UNIT__WORD;
+        }
+
+        UI_Cmd cmd = {
+          .kind         = UI_CMD_KIND__EDIT,
+          .delta_unit   = delta_unit,
+          .flags        = UI_CMD_FLAG__CAP_AT_LINE | UI_CMD_FLAG__ZERO_DELTA_ON_SELECT | UI_CMD_FLAG__DELETE,
+          .delta_si2    = {{(e->key == OS_KEY__BACKSPACE) ? -1 : 1, 0}},
+          .timestamp_ns = e->timestamp_ns,
+        };
+
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
+      }
+    }
+
+    ////////////////////////////////
+    //~ kti: Build UI
+
+    fc_frame();
+
+    CString user_home = getenv("HOME");
+    String8 prop_font_path  = str8f(scratch.arena, "%s/.local/share/fonts/Bloomberg-PropU_N.ttf", user_home);
+    String8 fixed_font_path = str8f(scratch.arena, "%s/.local/share/fonts/Bloomberg-FixedU_N.ttf", user_home);
+
+    FC_Tag prop_font  = fc_tag_from_path(prop_font_path);
+    FC_Tag fixed_font = fc_tag_from_path(fixed_font_path);
+
+    ui_state_equip(ui_state);
+    ui_begin_build(os_window, events, ui_cmds, &theme, animation_dt);
+    ui_push_font(prop_font);
+
+    ui_spacer(ui_pct(0.5f, 0.0f));
+
+    UI_Box *main_box = 0;
+
+    UI_Focus(UI_FOCUS_KIND__ON)
+    {
+      ui_set_next_pref_width(ui_pct(0.90f, 1.0f));
+      ui_set_next_pref_height(ui_pct(1.0f, 1.0f));
+      ui_set_next_child_layout_axis(AXIS__Y);
+      main_box = ui_build_box_from_string(UI_BOX_FLAG__DEFAULT_FOCUS_NAV, str8("main_section"));
+    }
+
+    UI_Parent(main_box)
+    UI_Pref_Width(ui_pct(1.0f, 1.0f))
+    {
+      UI_Font_Size(18.0f)
+      UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+      UI_Pref_Height(ui_text_dim(20.0f, 1.0f))
+      UI_Tag(str8("header"))
+      ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT|UI_BOX_FLAG__DRAW_SIDE_BOTTOM, str8("Notes App"));
+
+      ui_spacer(ui_px(25.0f, 1.0f));
+
+      String8 welcome = str8("Welcome to the notes app. This is an example of a block!");
+      ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, welcome);
+
+      UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+      UI_Pref_Height(ui_text_dim(10.0f, 1.0f))
+      UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+      UI_Corner_Radius(2.5f)
+      {
+        if (ui_button(str8("Press me")).flags & UI_SIGNAL_FLAG__PRESSED)
+        {
+        }
+      }
+      
+      ui_spacer(ui_px(10.0f, 1.0f));
+
+      UI_Pref_Height(ui_em(2.5f, 1.0f))
+      UI_Text_Padding(8.0f)
+      ui_textedit(&cursor, &mark,
+                  input_buffer, sizeof(input_buffer),
+                  &input_buffer_len,
+                  (String8){input_buffer, input_buffer_len},
+                  str8("##notes_input"));
+    }
+
+    ui_spacer(ui_pct(0.5f, 0.0f));
+
+    ui_end_build();
+
+    ////////////////////////////////
+    //~ kti: Draw
+
+    dr_begin_frame();
+    gfx_window_begin_frame(os_window, gfx_window);
+
+    DR_Bucket *bucket = dr_bucket_make();
+    dr_push_bucket(bucket);
+
+    ui_draw();
+
+    dr_submit_bucket(os_window, gfx_window, bucket);
+    dr_pop_bucket();
+    gfx_window_end_frame(os_window, gfx_window);
+
+    scratch_end(scratch);
+
+    if (events.count != 0 || ui_state->animation_active)
+    {
+      frames_requested = 4;
+    }
+
+    if (frames_requested > 0)
+    {
+      frames_requested -= 1;
+    }
   }
 
-  printf(str);
+  gfx_window_unequip(gfx_window);
+  os_window_close(os_window);
+
 }
 
 int main(void)
 {
-  Arena *arena = arena_alloc(GiB(1));
+  Worker_Group_Params main_group_params = {
+    .count = 1,
+    .proc = notes_main,
 
-  //- kti: Sigaction
+    .arena_size = GiB(1),
+    .scratch_size = MiB(64),
 
-  struct sigaction action = {0};
-  action.sa_handler = handle_resize;
-  sigemptyset(&action.sa_mask);
-  action.sa_flags = 0;
+    .worker_zero_on_caller = 1,
+  };
 
-  sigaction(SIGWINCH, &action, 0);
-
-  //- kti: Store original terminal state.
-  struct termios original = {0};
-  tcgetattr(STDIN_FILENO, &original);
-
-  //- kti: Custom terminal state.
-  struct termios custom = original;
-  custom.c_lflag &= ~(ECHO | ICANON); // Disable eacho and canonical mode.
-  custom.c_cc[VMIN] = 0;
-  custom.c_cc[VTIME] = 1;
-  
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &custom);
-
-  //- kti: Blocks
-
-  N_Block *first_block = 0;
-  N_Block *last_block  = 0;
-
-  N_Block *test_block = push_array(arena, N_Block, 1);
-  test_block->contents = str8("This is a test block.");
-  DLLPushBack(first_block, last_block, test_block);
-
-  //- kti: Input.
-
-  B1 input_buffer[1024] = {0};
-  L1 input_len = 0;
-
-  I1 running = 1;
-  while (running)
-  {
-    B1 bytes = 0;
-    ssize_t byte_count = read(STDIN_FILENO, &bytes, 1);
-
-    if (byte_count != 0)
-    {
-      I1 is_input = char_is_alpha(bytes) || bytes == ' ';
-      if (is_input && input_len < ArrayCount(input_buffer))
-      {
-        input_buffer[input_len] = bytes;
-        input_len += 1;
-        atomic_swap_I1(&needs_redraw, 1);
-      }
-    }
-
-    if (needs_redraw)
-    {
-      needs_redraw = 0;
-
-      struct winsize size = {0};
-      ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
-      L1 rows = size.ws_row;
-      L1 cols = size.ws_col;
-
-      printf("\033[2J\033[H");
-
-      printf("\n");
-
-      for (N_Block *node = first_block; node != 0; node = node->next)
-      {
-        printf(" ");
-        style(STYLE__NOTE);
-        printf("%.*s\n", str8_varg(node->contents));
-        style(STYLE__RESET);
-      }
-
-      printf("\n");
-
-      style(STYLE__INPUT);
-
-      for (L1 col = 0; col < cols; col += 1) printf(" ");
-
-      printf(">");
-      printf(" ");
-      printf("%.*s", (int)input_len, input_buffer);
-      for (L1 col = 2+input_len; col < cols; col += 1) printf(" ");
-
-      for (L1 col = 0; col < cols; col += 1) printf(" ");
-
-      printf("\033[1A\r\033[2C");
-
-      style(STYLE__RESET);
-
-      fflush(stdout);
-    }
-  } 
-
-  //- kti: Restore original terminal state.
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &original);
+  worker_group_launch(main_group_params);
 
   return 0;
 }

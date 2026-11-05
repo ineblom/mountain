@@ -459,6 +459,10 @@ Internal F4 ui_color_from_tags_key_extras(UI_Key key, String8_Array extras)
         if (node != 0)
         {
           SLLStackPop_N(ui_state->theme_pattern_cache_node_free, slot_next);
+
+          // NOTE(kti): Recycled nodes hold the previous key's colors. Zero so that
+          // a lookup with no matching pattern resolves to transparent, not stale.
+          MemoryZeroStruct(node);
         }
         else
         {
@@ -753,7 +757,7 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key)
   }
 
   // NOTE(kti): Transient  =  box lasts for 1 build only.
-  I1  box_is_transient           =  ui_key_match(key, ui_key_zero());
+  I1  box_is_transient = ui_key_match(key, ui_key_zero());
 
   //- kti: Allocate box if needed.
   if (box_first_frame)
@@ -782,7 +786,6 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key)
   MemoryZeroArray(box->pref_size);
 
   //- kti: Add to persistent table.
-
   if (box_first_frame && !box_is_transient)
   {
     UI_Box_HT_Slot *slot = &ui_state->box_table[hash_index_L1(key.l1[0], ui_state->box_table_size)];
@@ -880,16 +883,16 @@ Internal UI_Box *ui_build_box_from_key(UI_Box_Flags flags, UI_Key key)
     box->flags |= UI_BOX_FLAG__FOCUS_ACTIVE_DISABLED;
   }
 
-  box->child_layout_axis  =  ui_top_child_layout_axis();
-  box->tab_size           =  ui_top_tab_size();
-  box->text_align         =  ui_top_text_align();
-  box->text_padding       =  ui_top_text_padding();
-  box->font               =  ui_top_font();
-  box->font_size          =  ui_top_font_size();
-  box->corner_radii.x    =  ui_top_tl_corner_radius();
-  box->corner_radii.y    =  ui_top_tr_corner_radius();
-  box->corner_radii.z    =  ui_top_bl_corner_radius();
-  box->corner_radii.w    =  ui_top_br_corner_radius();
+  box->child_layout_axis = ui_top_child_layout_axis();
+  box->tab_size          = ui_top_tab_size();
+  box->text_align        = ui_top_text_align();
+  box->text_padding      = ui_top_text_padding();
+  box->font              = ui_top_font();
+  box->font_size         = ui_top_font_size();
+  box->corner_radii.x    = ui_top_tl_corner_radius();
+  box->corner_radii.y    = ui_top_tr_corner_radius();
+  box->corner_radii.z    = ui_top_bl_corner_radius();
+  box->corner_radii.w    = ui_top_br_corner_radius();
 
   if (box->flags & UI_BOX_FLAG__DRAW_BACKGROUND)
   {
@@ -2426,8 +2429,12 @@ Internal UI_Signal ui_row_end(void)
 
 Internal UI_Signal ui_button(String8 string)
 {
-  UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE | UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DRAW_BORDER |
-                                         UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_HOT_EFFECTS |
+  ui_set_next_tag(str8("button"));
+  UI_Box *box = ui_build_box_from_string(UI_BOX_FLAG__CLICKABLE |
+                                         UI_BOX_FLAG__DRAW_TEXT |
+                                         UI_BOX_FLAG__DRAW_BORDER |
+                                         UI_BOX_FLAG__DRAW_BACKGROUND |
+                                         UI_BOX_FLAG__DRAW_HOT_EFFECTS |
                                          UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS,
                                          string);
   UI_Signal signal = ui_signal_from_box(box);
@@ -2573,8 +2580,8 @@ Internal L1 ui_scanned_column_from_column(String8 string, L1 start_column, Side 
 
 Internal String8 ui_push_string_replace_range(Arena *arena, String8 string, L1 min, L1 max, String8 replace)
 {
-  min = Clamp(0, min, string.len);
-  max = Clamp(0, max, string.len);
+  min = Min(min, string.len);
+  max = Min(max, string.len);
 
   if (max < min)
   {
@@ -2674,7 +2681,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 
   if (cmd->flags & UI_CMD_FLAG__CAP_AT_LINE)
   {
-    next_cursor.column = Clamp(0, next_cursor.column, string.len);
+    next_cursor.column = Min(next_cursor.column, string.len);
   }
 
   if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__PICK_SELECT_SIDE)
@@ -2735,8 +2742,8 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
     flags |= UI_TXT_OP_FLAG__INVALID;
   }
 
-  next_cursor.column  =  Clamp(0, next_cursor.column, string.len + replace.len);
-  next_mark.column    =  Clamp(0, next_mark.column, string.len + replace.len);
+  next_cursor.column  =  Min(next_cursor.column, string.len + replace.len);
+  next_mark.column    =  Min(next_mark.column, string.len + replace.len);
 
   UI_Txt_Op op = {0};
 
@@ -2758,6 +2765,8 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
                                String8 pre_edit_value,
                                String8 string)
 {
+  ui_push_tag(str8("textedit"));
+
   edit_string_size_out[0]  =  Min(edit_string_size_out[0], edit_buffer_size);
   cursor->column           =  Min(cursor->column, edit_string_size_out[0]);
   mark->column             =  Min(mark->column, edit_string_size_out[0]);
@@ -2776,9 +2785,14 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
   I1  is_focus_hot_disabled     =  (!is_focus_hot && ui_top_focus_hot() == UI_FOCUS_KIND__ON);
   I1  is_focus_active_disabled  =  (!is_focus_active && ui_top_focus_active() == UI_FOCUS_KIND__ON);
 
-  //- kti: Build top level box.
+  //- kti: Build top level box. Tagged "focused" while being edited.
+  if (is_focus_active)
+  {
+    ui_set_next_tag(str8("focused"));
+  }
+
   UI_Box *box = ui_build_box_from_key(
-    UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_BORDER | UI_BOX_FLAG__INSET_FOCUS_BORDER |
+    UI_BOX_FLAG__DRAW_BACKGROUND | UI_BOX_FLAG__DRAW_SIDE_BOTTOM | UI_BOX_FLAG__DISABLE_FOCUS_BORDER |
     UI_BOX_FLAG__MOUSE_CLICKABLE | UI_BOX_FLAG__CLICK_TO_FOCUS | UI_BOX_FLAG__CLIP |
     ((is_auto_focus_hot || is_auto_focus_active) * UI_BOX_FLAG__KEYBOARD_CLICKABLE) | UI_BOX_FLAG__DRAW_HOT_EFFECTS |
     (is_focus_active || is_focus_active_disabled) * (UI_BOX_FLAG__ALLOW_OVERFLOW_X | UI_BOX_FLAG__VIEW_CLAMP),
@@ -2942,6 +2956,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
 
   ui_pop_focus_hot();
   ui_pop_focus_active();
+  ui_pop_tag();
 
   return signal;
 }
@@ -2963,7 +2978,7 @@ Internal void ui_draw(void)
     I1  hot_by_group         =  (!ui_key_match(box->group_key, ui_key_zero())
                                  && !ui_box_is_nil(hot_box)
                                  && ui_key_match(box->group_key, hot_box->group_key));
-    I1  active_by_group      =  (!ui_key_match(box->group_key, ui_key_zero()) 
+    I1  active_by_group      =  (!ui_key_match(box->group_key, ui_key_zero())
                                  && !ui_box_is_nil(active_box)
                                  && ui_key_match(box->group_key, active_box->group_key));
     I1  draw_active_effect   =  (box->flags & UI_BOX_FLAG__DRAW_ACTIVE_EFFECTS && (active_by_key || active_by_group));

@@ -463,4 +463,13 @@ struct UI_State
 #define UI_Tag(v) DeferLoop(ui_push_tag((v)), ui_pop_tag())
 #define UI_TagF(...) DeferLoop(ui_push_tagf(__VA_ARGS__), ui_pop_tag())
 
+#define UI_ThemeColor(r, g, b, a, ...)                          \
+  {                                                             \
+    .tags = {                                                   \
+        .v      =  (String8[]){__VA_ARGS__},                    \
+        .count  =  ArrayCount(((String8[]){__VA_ARGS__})),      \
+      },                                                        \
+    .linear = (F4){{(r), (g), (b), (a)}},                       \
+  }
+
 #endif

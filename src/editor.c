@@ -30,37 +30,29 @@ Global State        *state  =  0;
 Global Async_State  async   =  {0};
 Global I1           async_workers_completed;
 
-#define UI_THEME_COLOR(r, g, b, a, ...)                              \
-  {                                                                  \
-    .tags = {                                                        \
-        .v      =  (String8[]){__VA_ARGS__},                         \
-        .count  =  ArrayCount(((String8[]){__VA_ARGS__})),           \
-      },                                                             \
-    .linear = (F4){{(r), (g), (b), (a)}},                            \
-  }
 
 Global UI_Theme_Pattern default_theme_patterns[] = {
-  UI_THEME_COLOR(0.0f, 0.0f, 0.0f, 1.0f, str8("background")),
-  UI_THEME_COLOR(0.125f, 0.125f, 0.125f, 1.0f, str8("border")),
-  UI_THEME_COLOR(0.729f, 0.729f, 0.729f, 1.0f, str8("text")),
-  UI_THEME_COLOR(0.0f, 0.0f, 0.0f, 0.25f, str8("drop_shadow")),
-  UI_THEME_COLOR(1.058446053f, -0.025667136f, -0.017405831f, 0.02f, str8("focus"), str8("overlay")),
-  UI_THEME_COLOR(0.321444194f, 0.645543671f, 1.175802262f, 1.0f, str8("focus"), str8("border")),
-  UI_THEME_COLOR(0.521444194f, 0.845543671f, 1.0f, 1.0f, str8("cursor")),
-  UI_THEME_COLOR(1.113309022f, -0.230441843f, 0.096778714f, 0.05f, str8("selection")),
+  UI_ThemeColor(0.0f, 0.0f, 0.0f, 1.0f, str8("background")),
+  UI_ThemeColor(0.125f, 0.125f, 0.125f, 1.0f, str8("border")),
+  UI_ThemeColor(0.729f, 0.729f, 0.729f, 1.0f, str8("text")),
+  UI_ThemeColor(0.0f, 0.0f, 0.0f, 0.25f, str8("drop_shadow")),
+  UI_ThemeColor(1.058446053f, -0.025667136f, -0.017405831f, 0.02f, str8("focus"), str8("overlay")),
+  UI_ThemeColor(0.321444194f, 0.645543671f, 1.175802262f, 1.0f, str8("focus"), str8("border")),
+  UI_ThemeColor(0.521444194f, 0.845543671f, 1.0f, 1.0f, str8("cursor")),
+  UI_ThemeColor(1.113309022f, -0.230441843f, 0.096778714f, 0.05f, str8("selection")),
 
-  UI_THEME_COLOR(0.008f, 0.008f, 0.008f, 1.0f, str8("subtle"), str8("background")),
-  UI_THEME_COLOR(0.035227284f, 0.329110300f, 1.016848732f, 1.0f, str8("accent"), str8("text")),
-  UI_THEME_COLOR(1.0f, 1.0f, 1.0f, 1.0f, str8("header"), str8("text")),
-  UI_THEME_COLOR(0.008101465f, 0.017500665f, 0.023206312f, 1.0f, str8("field"), str8("background")),
-  UI_THEME_COLOR(0.008402845f, 0.044952845f, 0.123825366f, 1.0f, str8("selected"), str8("background")),
-  UI_THEME_COLOR(0.038710978f, -0.002232542f, -0.000659834f, 1.0f, str8("command"), str8("background")),
-  UI_THEME_COLOR(0.037265774f, 0.381785296f, 0.004780161f, 1.0f, str8("progress"), str8("background")),
-  UI_THEME_COLOR(0.0f, 0.0f, 0.0f, 1.0f, str8("viewport"), str8("background")),
+  UI_ThemeColor(0.008f, 0.008f, 0.008f, 1.0f, str8("subtle"), str8("background")),
+  UI_ThemeColor(0.035227284f, 0.329110300f, 1.016848732f, 1.0f, str8("accent"), str8("text")),
+  UI_ThemeColor(1.0f, 1.0f, 1.0f, 1.0f, str8("header"), str8("text")),
+  UI_ThemeColor(0.008101465f, 0.017500665f, 0.023206312f, 1.0f, str8("field"), str8("background")),
+  UI_ThemeColor(0.008402845f, 0.044952845f, 0.123825366f, 1.0f, str8("selected"), str8("background")),
+  UI_ThemeColor(0.038710978f, -0.002232542f, -0.000659834f, 1.0f, str8("command"), str8("background")),
+  UI_ThemeColor(0.037265774f, 0.381785296f, 0.004780161f, 1.0f, str8("progress"), str8("background")),
+  UI_ThemeColor(0.0f, 0.0f, 0.0f, 1.0f, str8("viewport"), str8("background")),
 
-  UI_THEME_COLOR(0.036278413f, -0.002480615f, 0.001241720f, 1.0f, str8("checkbox"), str8("background")),
-  UI_THEME_COLOR(0.125f, 0.125f, 0.125f, 1.0f, str8("checkbox"), str8("border")),
-  UI_THEME_COLOR(0.343f, 0.343f, 0.343f, 1.0f, str8("checkbox"), str8("check"), str8("background")),
+  UI_ThemeColor(0.036278413f, -0.002480615f, 0.001241720f, 1.0f, str8("checkbox"), str8("background")),
+  UI_ThemeColor(0.125f, 0.125f, 0.125f, 1.0f, str8("checkbox"), str8("border")),
+  UI_ThemeColor(0.343f, 0.343f, 0.343f, 1.0f, str8("checkbox"), str8("check"), str8("background")),
 };
 
 Global UI_Theme default_theme = {
@@ -361,7 +353,7 @@ Internal void async_worker(void *)
           Image_Bloom_Work work = async.active_request.bloom_work;
 
           //- kti: Fill level 0
-        
+
           ProfBegin("Fill Level 0");
 
           Range range = worker_range(req.hdr.height);
@@ -1111,7 +1103,7 @@ Internal void panel_insert_view(Panel *panel, L1 idx, View view)
   idx = Min(idx, panel->view_count);
 
   memmove(&panel->views[idx + 1], &panel->views[idx], (panel->view_count - idx) * sizeof(View));
-  
+
   panel->views[idx]         =   view;
   panel->view_count         +=  1;
   panel->selected_view_idx  =   idx;
@@ -1795,7 +1787,7 @@ Internal void editor_main(void *user_data)
       {
         UI_Cmd cmd = {
           .kind = UI_CMD_KIND__TEXT,
-          .string = {e->text, e->text_len}, 
+          .string = {e->text, e->text_len},
           .timestamp_ns = e->timestamp_ns
         };
         ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
@@ -1806,7 +1798,7 @@ Internal void editor_main(void *user_data)
       {
         UI_Cmd_Delta_Unit  delta_unit  =  UI_CMD_DELTA_UNIT__CHAR;
         UI_Cmd_Flags       flags       =  UI_CMD_FLAG__CAP_AT_LINE;
-        
+
         if (e->modifiers & OS_MODIFIER_FLAG__CTRL)
         {
           delta_unit = UI_CMD_DELTA_UNIT__WORD;
@@ -1864,7 +1856,7 @@ Internal void editor_main(void *user_data)
 
         if (e->modifiers & OS_MODIFIER_FLAG__CTRL)
         {
-          delta_unit = UI_CMD_DELTA_UNIT__WORD ;
+          delta_unit = UI_CMD_DELTA_UNIT__WORD;
         }
 
         UI_Cmd cmd = {
@@ -2153,7 +2145,7 @@ Internal void editor_main(void *user_data)
     fc_frame();
 
     CString user_home = getenv("HOME");
-    
+
 #if defined(__APPLE__)
     String8  prop_fnt_path   =  str8f(scratch.arena, "%s/Library/Fonts/Bloomberg-PropU_N.ttf", user_home);
     String8  fixed_fnt_path  =  str8f(scratch.arena, "%s/Library/Fonts/Bloomberg-FixedU_N.ttf", user_home);

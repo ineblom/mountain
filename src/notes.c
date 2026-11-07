@@ -247,7 +247,10 @@ void notes_main(void *)
 
     scratch_end(scratch);
 
-    frames_requested = ui_state->animation_active ? 1 : 0;
+    if (ui_state->animation_active || events.count > 0)
+    {
+      frames_requested = 2;
+    }
   }
 
   gfx_window_unequip(gfx_window);

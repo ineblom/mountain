@@ -68,6 +68,16 @@ void notes_main(void *)
         running = 0;
       }
 
+      //- kti: Escape
+      if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ESC)
+      {
+        UI_Cmd cmd = {
+          .kind = UI_CMD_KIND__CANCEL,
+          .timestamp_ns = e->timestamp_ns,
+        };
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
+      }
+
       //- kti: Text.
       if (e->kind == OS_EVENT_KIND__TEXT)
       {

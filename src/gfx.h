@@ -138,6 +138,17 @@ struct GFX_Per_Frame
 
 #define GFX_MAX_SWAPCHAIN_IMAGES 32
 
+// NOTE(kti): All drawing happens in linear light into a float scene target.
+// A final present pass encodes to sRGB and dithers into a UNORM swapchain.
+#define GFX_SCENE_COLOR_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
+
+typedef enum GFX_Present_Format
+{
+  GFX_PRESENT_FORMAT__BGRA8,
+  GFX_PRESENT_FORMAT__RGBA8,
+  GFX_PRESENT_FORMAT__COUNT,
+} GFX_Present_Format;
+
 typedef struct GFX_Window GFX_Window;
 struct GFX_Window
 {
@@ -157,6 +168,9 @@ struct GFX_Window
   VkImage     swapchain_images[GFX_MAX_SWAPCHAIN_IMAGES];
   VkImageView swapchain_image_views[GFX_MAX_SWAPCHAIN_IMAGES];
 
+  GFX_Present_Format present_format;
+
+  GFX_VK_Image scene;
   GFX_VK_Image depth;
 
   GFX_Per_Frame per_frame[GFX_MAX_SWAPCHAIN_IMAGES];
@@ -358,6 +372,8 @@ struct GFX_State
   VkPipeline                 mesh_pipeline;
   VkPipeline                 mesh_outline_mask_pipeline;
   VkPipeline                 mesh_outline_pipeline;
+  VkPipelineLayout           present_pipeline_layout;
+  VkPipeline                 present_pipelines[GFX_PRESENT_FORMAT__COUNT];
 
   L1          recycle_semaphores_count;
   VkSemaphore recycle_semaphores[16];

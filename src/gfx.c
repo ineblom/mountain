@@ -591,13 +591,19 @@ Internal GFX_Texture *gfx_tex2d_alloc(GFX_Texture_Usage usage, I1 width, I1 heig
     {
       //- kti: Upload to staging buffer. Empty dynamic textures must start
       // transparent because atlas filtering samples their unused texels.
+      // Transparent white rather than black, so filtering at the edges of
+      // straight-alpha content doesn't darken the color.
       if (pixels != 0)
       {
         memmove(staging.ptr, pixels, image_size);
       }
       else
       {
-        MemoryZero(staging.ptr, image_size);
+        I1 *texels = (I1 *)staging.ptr;
+        for (L1 i = 0; i < image_size / 4; i += 1)
+        {
+          texels[i] = 0x00FFFFFF;
+        }
       }
 
       //- kti: Upload via command buffer.
@@ -762,6 +768,11 @@ Internal void gfx_tex2d_free(GFX_Texture *tex)
     SLLStackPush(gfx_state->first_texture_pending_free, tex);
   }
 }
+
+Global VkFormat gfx_vk_present_formats[GFX_PRESENT_FORMAT__COUNT] = {
+  [GFX_PRESENT_FORMAT__BGRA8]  =  VK_FORMAT_B8G8R8A8_UNORM,
+  [GFX_PRESENT_FORMAT__RGBA8]  =  VK_FORMAT_R8G8B8A8_UNORM,
+};
 
 Internal void gfx_init()
 {
@@ -1240,7 +1251,7 @@ Internal void gfx_init()
   VkPipelineShaderStageCreateInfo shader_stages[2];
   gfx_vk_create_shader_stages(arena, shader_paths, shader_modules, shader_stages);
 
-  VkFormat  color_format                                        =  VK_FORMAT_B8G8R8A8_SRGB;
+  VkFormat  color_format                                        =  GFX_SCENE_COLOR_FORMAT;
   VkPipelineRenderingCreateInfo pipeline_rendering  =  {
     .sType                    =  VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
     .colorAttachmentCount     =  1,
@@ -1484,6 +1495,86 @@ Internal void gfx_init()
   gfx_vk_destroy_shader_modules(mesh_outline_shader_modules);
 
   ////////////////////////////////
+  //~ kti: Present Pipelines
+  //
+  // Fullscreen pass from the linear scene target to the UNORM swapchain. One
+  // pipeline per swapchain format we accept; nothing else depends on it.
+
+  VkPipelineLayoutCreateInfo present_layout_ci = {
+    .sType           =  VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    .setLayoutCount  =  1,
+    .pSetLayouts     =  &gfx_state->descriptor_set_layout,
+  };
+
+  result = vkCreatePipelineLayout(gfx_state->device, &present_layout_ci, 0, &gfx_state->present_pipeline_layout);
+
+  Assert(result == VK_SUCCESS);
+
+  VkPipelineVertexInputStateCreateInfo present_vertex_input = {
+    .sType  =  VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+  };
+
+  VkPipelineColorBlendAttachmentState present_blend_attachment = {
+    .blendEnable     =  VK_FALSE,
+    .colorWriteMask  =  VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+  };
+
+  VkPipelineColorBlendStateCreateInfo present_blend = {
+    .sType            =  VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+    .attachmentCount  =  1,
+    .pAttachments     =  &present_blend_attachment,
+  };
+
+  String8 present_shader_paths[] = {
+    str8("./shaders/present.vert.spv"),
+    str8("./shaders/present.frag.spv"),
+  };
+
+  VkShaderModule                  present_shader_modules[2];
+  VkPipelineShaderStageCreateInfo present_shader_stages[2];
+
+  gfx_vk_create_shader_stages(arena, present_shader_paths, present_shader_modules, present_shader_stages);
+
+  for (I1 format_idx = 0; format_idx < GFX_PRESENT_FORMAT__COUNT; format_idx += 1)
+  {
+    VkFormat present_color_format = gfx_vk_present_formats[format_idx];
+
+    VkPipelineRenderingCreateInfo present_rendering = {
+      .sType                    =  VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+      .colorAttachmentCount     =  1,
+      .pColorAttachmentFormats  =  &present_color_format,
+    };
+
+    VkGraphicsPipelineCreateInfo present_pipeline_ci = {
+      .sType                =  VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .pNext                =  &present_rendering,
+      .stageCount           =  ArrayCount(present_shader_stages),
+      .pStages              =  present_shader_stages,
+      .pVertexInputState    =  &present_vertex_input,
+      .pInputAssemblyState  =  &input_assembly,
+      .pViewportState       =  &viewport,
+      .pRasterizationState  =  &raster,
+      .pMultisampleState    =  &multisample,
+      .pColorBlendState     =  &present_blend,
+      .pDynamicState        =  &dynamic_state_ci,
+      .layout               =  gfx_state->present_pipeline_layout,
+      .renderPass           =  VK_NULL_HANDLE,
+      .subpass              =  0,
+    };
+
+    result = vkCreateGraphicsPipelines(gfx_state->device,
+                                       VK_NULL_HANDLE,
+                                       1,
+                                       &present_pipeline_ci,
+                                       0,
+                                       &gfx_state->present_pipelines[format_idx]);
+
+    Assert(result == VK_SUCCESS && gfx_state->present_pipelines[format_idx] != VK_NULL_HANDLE);
+  }
+
+  gfx_vk_destroy_shader_modules(present_shader_modules);
+
+  ////////////////////////////////
   //~ kti: Sampler
 
   VkFilter vk_filters[GFX_TEXTURE_FILTER__COUNT] = {
@@ -1578,29 +1669,40 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
     gfx_vk_destroy_image(vkw->depth);
     MemoryZeroStruct(&vkw->depth);
 
-    //- kti: Our pipeline uses BGRA_SRGB so we force it. Not optimal.
+    gfx_vk_destroy_image(vkw->scene);
+    MemoryZeroStruct(&vkw->scene);
 
-    VkFormat color_format = VK_FORMAT_UNDEFINED;
+    //- kti: The swapchain is UNORM: present.frag does the sRGB encoding itself
+    // so it can dither in encoded space. The color space still has to be sRGB,
+    // since that's how the compositor interprets the bytes.
+    VkColorSpaceKHR  color_space       =  VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    I1               found_format      =  0;
 
     if (vkw->surface_format_count == 1 && vkw->surface_formats[0].format == VK_FORMAT_UNDEFINED)
     {
-      color_format = VK_FORMAT_B8G8R8A8_SRGB;
+      vkw->present_format  =  GFX_PRESENT_FORMAT__BGRA8;
+      found_format         =  1;
     }
     else
     {
-      for (L1 i = 0; i < vkw->surface_format_count; i += 1)
+      for (I1 format_idx = 0; format_idx < GFX_PRESENT_FORMAT__COUNT && !found_format; format_idx += 1)
       {
-        if (vkw->surface_formats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
+        for (L1 i = 0; i < vkw->surface_format_count; i += 1)
         {
-          color_format = VK_FORMAT_B8G8R8A8_SRGB;
-          break;
+          if (   vkw->surface_formats[i].format     == gfx_vk_present_formats[format_idx]
+              && vkw->surface_formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+          {
+            vkw->present_format  =  (GFX_Present_Format)format_idx;
+            found_format         =  1;
+            break;
+          }
         }
       }
     }
 
-    Assert(color_format == VK_FORMAT_B8G8R8A8_SRGB);
+    Assert(found_format);
 
-    VkColorSpaceKHR color_space = vkw->surface_formats[0].colorSpace;
+    VkFormat color_format = gfx_vk_present_formats[vkw->present_format];
 
     VkSurfaceTransformFlagBitsKHR pre_transform = surface_capabilities.currentTransform;
 
@@ -1711,6 +1813,25 @@ Internal void gfx_vk_recreate_swapchain(OS_Window *os_window, GFX_Window *vkw)
     vkw->depth = gfx_vk_create_image(&depth_image_ci,
                                      VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
                                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    ////////////////////////////////
+    //~ kti: Scene Color Target
+
+    VkImageCreateInfo scene_image_ci = {
+      .sType          =  VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType      =  VK_IMAGE_TYPE_2D,
+      .format         =  GFX_SCENE_COLOR_FORMAT,
+      .extent         =  {surface_resolution.width, surface_resolution.height, 1},
+      .mipLevels      =  1,
+      .arrayLayers    =  1,
+      .samples        =  VK_SAMPLE_COUNT_1_BIT,
+      .tiling         =  VK_IMAGE_TILING_OPTIMAL,
+      .usage          =  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+      .sharingMode    =  VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout  =  VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+
+    vkw->scene = gfx_vk_create_image(&scene_image_ci, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   }
   else
   {
@@ -1834,6 +1955,7 @@ Internal void gfx_window_unequip(GFX_Window *vkw)
     vkDestroyImageView(gfx_state->device, vkw->swapchain_image_views[i], 0);
   }
 
+  gfx_vk_destroy_image(vkw->scene);
   gfx_vk_destroy_image(vkw->depth);
   vkDestroySwapchainKHR(gfx_state->device, vkw->swapchain, 0);
   vkDestroySurfaceKHR(gfx_state->instance, vkw->surface, 0);
@@ -1939,18 +2061,22 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw)
 
     vkBeginCommandBuffer(cmd, &begin_info);
 
+    //- kti: The scene and depth targets are shared by all frames in flight, so
+    // wait for the previous frame's use of them (the present pass sampling the
+    // scene, and depth/stencil writes) before overwriting them.
     gfx_vk_transition_image_layout(cmd,
-                                   vkw->swapchain_images[image_idx],
+                                   vkw->scene.image,
                                    VK_IMAGE_LAYOUT_UNDEFINED,
                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                   0,
                                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                   VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                                   VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                   VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     VkImageMemoryBarrier2 depth_barrier = {
       .sType                =  VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-      .srcStageMask         =  VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+      .srcStageMask         =  VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+      .srcAccessMask        =  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
       .dstStageMask         =  VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
       .dstAccessMask        =  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
       .oldLayout            =  VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1979,7 +2105,7 @@ Internal void gfx_window_begin_frame(OS_Window *os_window, GFX_Window *vkw)
     VkClearValue              depth_clear_value  =  {.depthStencil = {1.0f, 0}};
     VkRenderingAttachmentInfo color_attachment   =  {
       .sType        =  VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView    =  vkw->swapchain_image_views[image_idx],
+      .imageView    =  vkw->scene.view,
       .imageLayout  =  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       .loadOp       =  VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp      =  VK_ATTACHMENT_STORE_OP_STORE,
@@ -2357,6 +2483,83 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw)
 
     vkCmdEndRendering(cmd);
 
+    ////////////////////////////////
+    //~ kti: Present Pass
+    //
+    // Linear scene -> sRGB-encoded, dithered swapchain image.
+
+    gfx_vk_transition_image_layout(cmd,
+                                   vkw->scene.image,
+                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                   VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                   VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                                   VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                   VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
+
+    //- kti: Source stage matches the acquire semaphore's wait stage, so this
+    // layout transition happens after the image is actually available.
+    gfx_vk_transition_image_layout(cmd,
+                                   vkw->swapchain_images[image_idx],
+                                   VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                   0,
+                                   VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                   VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                   VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+    VkRenderingAttachmentInfo present_attachment = {
+      .sType        =  VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView    =  vkw->swapchain_image_views[image_idx],
+      .imageLayout  =  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .loadOp       =  VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .storeOp      =  VK_ATTACHMENT_STORE_OP_STORE,
+    };
+
+    VkRect2D present_area = {
+      .offset  =  {0, 0},
+      .extent  =  vkw->swapchain_extent,
+    };
+
+    VkRenderingInfo present_rendering_info = {
+      .sType                 =  VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
+      .renderArea            =  present_area,
+      .layerCount            =  1,
+      .colorAttachmentCount  =  1,
+      .pColorAttachments     =  &present_attachment,
+    };
+
+    VkViewport present_viewport = {
+      .width     =  vkw->swapchain_extent.width,
+      .height    =  vkw->swapchain_extent.height,
+      .minDepth  =  0.0f,
+      .maxDepth  =  1.0f,
+    };
+
+    VkDescriptorImageInfo scene_image_info = {
+      .sampler      =  gfx_state->texture_samplers[GFX_TEXTURE_FILTER__NEAREST],
+      .imageView    =  vkw->scene.view,
+      .imageLayout  =  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    VkWriteDescriptorSet scene_write = {
+      .sType            =  VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstBinding       =  0,
+      .descriptorCount  =  1,
+      .descriptorType   =  VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .pImageInfo       =  &scene_image_info,
+    };
+
+    vkCmdBeginRendering(cmd, &present_rendering_info);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->present_pipelines[vkw->present_format]);
+    vkCmdSetViewport(cmd, 0, 1, &present_viewport);
+    vkCmdSetScissor(cmd, 0, 1, &present_area);
+    vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
+    vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
+    vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_state->present_pipeline_layout, 0, 1, &scene_write);
+    vkCmdDraw(cmd, 3, 1, 0, 0);
+    vkCmdEndRendering(cmd);
+
     gfx_vk_transition_image_layout(cmd,
                                    vkw->swapchain_images[image_idx],
                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -2373,7 +2576,9 @@ Internal void gfx_window_end_frame(OS_Window *os_window, GFX_Window *vkw)
       vkw->per_frame[image_idx].swapchain_release_semaphore = gfx_vk_take_semaphore();
     }
 
-    VkPipelineStageFlags  wait_stage   =  {VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT};
+    //- kti: Only the present pass touches the swapchain image, so the scene can
+    // render before the presentation engine has released it.
+    VkPipelineStageFlags  wait_stage   =  {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     VkSubmitInfo          submit_info  =  {
       .sType                 =  VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .waitSemaphoreCount    =  1,

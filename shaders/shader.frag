@@ -29,18 +29,6 @@ float sdf_coverage(float distance, float softness) {
     return 1.0 - smoothstep(-0.5 * width, 0.5 * width, distance);
 }
 
-float bayer4x4(vec2 pos) {
-    int x = int(mod(pos.x, 4.0));
-    int y = int(mod(pos.y, 4.0));
-    const float bayer[16] = float[](
-        0.0/16.0,  8.0/16.0,  2.0/16.0, 10.0/16.0,
-        12.0/16.0, 4.0/16.0, 14.0/16.0,  6.0/16.0,
-        3.0/16.0, 11.0/16.0,  1.0/16.0,  9.0/16.0,
-        15.0/16.0, 7.0/16.0, 13.0/16.0,  5.0/16.0
-    );
-    return bayer[y * 4 + x] / 255.0 - 0.5/255.0;
-}
-
 vec4 interpolate_linear_rgba(vec4 tl, vec4 tr, vec4 bl, vec4 br, vec2 pos) {
   vec4 top = mix(tl, tr, pos.x);
   vec4 bottom = mix(bl, br, pos.x);
@@ -87,11 +75,8 @@ void main() {
         inner_coverage = sdf_coverage(inner_sdf, in_softness);
     }
 
-    vec2 pixel_pos = in_rect_pos * in_rect_size;
-    float dither_value = bayer4x4(pixel_pos);
-
+    // Output stays linear; sRGB encoding and dithering happen once in present.frag.
     vec4 base_color = mix(in_border_color, fill_color, inner_coverage);
-    base_color.rgb += vec3(dither_value);
     base_color.a *= outer_coverage;
 
     out_color = base_color;

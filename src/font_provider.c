@@ -205,6 +205,16 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
     SW2  dim            =  {{(SW1)total_width, height}};
     L1   atlas_size     =  dim.x * dim.y * 4;
     B1   *atlas         =  push_array(arena, B1, atlas_size);
+
+    //- kti: Unwritten texels are transparent white, not transparent black, so
+    // bilinear filtering at glyph edges doesn't pull the color toward black.
+    for (L1 off = 0; off < atlas_size; off += 4)
+    {
+      atlas[off + 0]  =  255;
+      atlas[off + 1]  =  255;
+      atlas[off + 2]  =  255;
+      atlas[off + 3]  =  0;
+    }
     SI1  baseline       =  ascent;
     SI1  atlas_write_x  =  0;
 
@@ -244,12 +254,17 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
             }
             else if (bmp->pixel_mode == FT_PIXEL_MODE_BGRA)
             {
-              L1 src = row * bmp->pitch + col * 4;
+              //- kti: FreeType BGRA is premultiplied; our blending is straight alpha.
+              L1  src    =  row * bmp->pitch + col * 4;
+              B1  alpha  =  bmp->buffer[src + 3];
 
-              atlas[off + 0]  =  bmp->buffer[src + 2];
-              atlas[off + 1]  =  bmp->buffer[src + 1];
-              atlas[off + 2]  =  bmp->buffer[src + 0];
-              atlas[off + 3]  =  bmp->buffer[src + 3];
+              if (alpha != 0)
+              {
+                atlas[off + 0]  =  (B1)Min(255, (bmp->buffer[src + 2] * 255 + alpha / 2) / alpha);
+                atlas[off + 1]  =  (B1)Min(255, (bmp->buffer[src + 1] * 255 + alpha / 2) / alpha);
+                atlas[off + 2]  =  (B1)Min(255, (bmp->buffer[src + 0] * 255 + alpha / 2) / alpha);
+              }
+              atlas[off + 3]  =  alpha;
             }
             else
             {

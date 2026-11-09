@@ -3,6 +3,7 @@ struct N_Block
 {
   N_Block *next;
   N_Block *prev;
+
   String8 contents;
 };
 
@@ -44,10 +45,14 @@ void notes_main(void *)
   };
 
   L1 frames_requested = 2;
-  Txt_Pt cursor = {0};
-  Txt_Pt mark = {0};
-  B1 input_buffer[1024] = {0};
-  L1 input_buffer_len = 0;
+  
+  Txt_Pt cursor             = {0};
+  Txt_Pt mark               = {0};
+  B1     input_buffer[1024] = {0};
+  L1     input_buffer_len   = 0;
+
+  N_Block *first_block = 0;
+  N_Block *last_block  = 0;
 
   L1 running = 1;
 
@@ -202,8 +207,11 @@ void notes_main(void *)
 
       ui_spacer(ui_px(25.0f, 1.0f));
 
-      String8 welcome = str8("Welcome to the notes app. This is an example of a block!");
-      ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, welcome);
+      for (N_Block *block = first_block; block != 0; block = block->next)
+      {
+        UI_Pref_Height(ui_em(1.0f, 1.0f))
+        ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, block->contents);
+      }
 
       ui_spacer(ui_px(10.0f, 1.0f));
 
@@ -235,9 +243,15 @@ void notes_main(void *)
           UI_Signal button_signal = ui_button(str8("Push"));
           I1 pressed_push = button_signal.flags & UI_SIGNAL_FLAG__PRESSED;
 
+          //- kti: Push
           if (pressed_push || committed_input)
           {
+            String8 input = {input_buffer, input_buffer_len};
 
+            N_Block *block = push_array(arena, N_Block, 1);
+            block->contents = push_str8_copy(arena, input);
+
+            DLLPushBack(first_block, last_block, block);
 
             //- kti: Clear input.
             MemoryZeroArray(input_buffer);

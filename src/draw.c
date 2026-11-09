@@ -418,6 +418,9 @@ Internal DR_FRun_List dr_fruns_from_fstrs(Arena *arena, F1 tab_size, F1 raster_s
   DR_FRun_List  dst            =  {0};
   F1            base_align_px  =  0;
 
+  dst.ink_ascent   =  -F1_MAX;
+  dst.ink_descent  =  -F1_MAX;
+
   for (DR_FStr_Node *n = src->first; n != 0; n = n->next)
   {
     DR_FRun_Node  *dst_n  =  push_array(arena, DR_FRun_Node, 1);
@@ -435,11 +438,29 @@ Internal DR_FRun_List dr_fruns_from_fstrs(Arena *arena, F1 tab_size, F1 raster_s
 
     SLLQueuePush(dst.first, dst.last, dst_n);
 
-    dst.node_count  +=  1;
-    dst.dim.x      +=  dst_n->value.run.dim.x;
-    dst.dim.y      =   Max(dst.dim.y, dst_n->value.run.dim.y);
-    base_align_px   +=  dst_n->value.run.dim.x;
+    dst.node_count               +=  1;
+    dst.dim.x                    +=  run.dim.x;
+    dst.metrics.ascent           =   Max(dst.metrics.ascent, run.metrics.ascent);
+    dst.metrics.descent          =   Max(dst.metrics.descent, run.metrics.descent);
+    dst.metrics.line_gap         =   Max(dst.metrics.line_gap, run.metrics.line_gap);
+    dst.metrics.capital_height   =   Max(dst.metrics.capital_height, run.metrics.capital_height);
+    dst.metrics.x_height         =   Max(dst.metrics.x_height, run.metrics.x_height);
+    base_align_px                +=  run.dim.x;
+
+    if (run.ink_ascent + run.ink_descent > 0)
+    {
+      dst.ink_ascent   =  Max(dst.ink_ascent, run.ink_ascent);
+      dst.ink_descent  =  Max(dst.ink_descent, run.ink_descent);
+    }
   }
+
+  if (dst.ink_ascent + dst.ink_descent <= 0)
+  {
+    dst.ink_ascent   =  0;
+    dst.ink_descent  =  0;
+  }
+
+  dst.dim.y = dst.metrics.ascent + dst.metrics.descent;
 
   return dst;
 }

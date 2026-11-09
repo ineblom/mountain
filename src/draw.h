@@ -57,6 +57,9 @@ struct DR_FRun_List
   DR_FRun_Node  *last;
   L1            node_count;
   F2            dim;
+  FP_Metrics    metrics;
+  F1            ink_ascent;
+  F1            ink_descent;
 };
 
 typedef struct DR_Clip_Node DR_Clip_Node;

@@ -118,6 +118,7 @@ enum
   UI_SIZE_KIND__TEXT_CONTENT,
   UI_SIZE_KIND__PERCENT_OF_PARENT,
   UI_SIZE_KIND__CHILDREN_SUM,
+  UI_SIZE_KIND__EM,
 };
 
 typedef struct UI_Size UI_Size;
@@ -160,6 +161,15 @@ enum
 {
   UI_BOX_CUSTOM_DRAW_KIND__NONE,
   UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT,
+};
+
+typedef struct UI_Text_Line UI_Text_Line;
+struct UI_Text_Line
+{
+  F1 x;
+  F1 baseline;
+  F1 top;
+  F1 height;
 };
 
 typedef struct UI_Line_Edit_Draw_Data UI_Line_Edit_Draw_Data;

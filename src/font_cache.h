@@ -15,7 +15,9 @@ struct FC_Raster_Info
   W1  atlas_num;
   F1  advance;
   F1  baseline;
-  F1  raster_scale;
+  F1  scale;
+  F1  ink_ascent;
+  F1  ink_descent;
 };
 
 typedef struct FC_Piece FC_Piece;
@@ -41,8 +43,9 @@ struct FC_Run
 {
   FC_Piece_Array pieces;
   F2             dim;
-  F1             ascent;
-  F1             descent;
+  FP_Metrics     metrics;
+  F1             ink_ascent;
+  F1             ink_descent;
 };
 
 //- kti: Piece Chunk List
@@ -134,10 +137,9 @@ struct FC_Style_Raster_HT_Node
 
   L1 style_hash;
 
-  F1 raster_scale;
-  F1 ascent;
-  F1 descent;
-  F1 column_width;
+  F1         raster_scale;
+  FP_Metrics metrics;
+  F1         column_width;
 
   FC_Raster_Info         *utf8_length1_direct_map;         // len        =  256.
   L1                      utf8_length1_direct_map_mask[4]; // 64bit * 4  =  256bit mask.
@@ -155,6 +157,24 @@ struct FC_Style_Raster_HT_Slot
 {
   FC_Style_Raster_HT_Node *first;
   FC_Style_Raster_HT_Node *last;
+};
+
+//- kti: Metrics Hash Table
+
+typedef struct FC_Metrics_HT_Node FC_Metrics_HT_Node;
+struct FC_Metrics_HT_Node
+{
+  FC_Metrics_HT_Node *hash_next;
+  FC_Tag              tag;
+  F1                  size;
+  FP_Metrics          metrics;
+};
+
+typedef struct FC_Metrics_HT_Slot FC_Metrics_HT_Slot;
+struct FC_Metrics_HT_Slot
+{
+  FC_Metrics_HT_Node *first;
+  FC_Metrics_HT_Node *last;
 };
 
 //- kti: Atlas
@@ -200,6 +220,9 @@ struct FC_State
 
   L1                       style_raster_hash_table_size;
   FC_Style_Raster_HT_Slot *style_raster_hash_table;
+
+  L1                  metrics_hash_table_size;
+  FC_Metrics_HT_Slot *metrics_hash_table;
 
   FC_Atlas *first_atlas;
   FC_Atlas *last_atlas;

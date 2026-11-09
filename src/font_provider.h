@@ -2,6 +2,7 @@
 #define FONT_PROVIDER_H
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include FT_TRUETYPE_TABLES_H
 
 typedef struct FP_Handle FP_Handle;
 struct FP_Handle
@@ -16,7 +17,9 @@ struct FP_Raster_Result
   B1 *atlas;
   F1  advance;
   F1  baseline;
-  F1  raster_scale;
+  F1  ink_ascent;
+  F1  ink_descent;
+  F1  strike_scale;
 };
 
 typedef struct FP_Metrics FP_Metrics;

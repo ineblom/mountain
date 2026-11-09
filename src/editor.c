@@ -2278,7 +2278,7 @@ Internal void editor_main(void *user_data)
               panel->tab_bar_box = title_bar;
 
               UI_Parent(title_bar)
-              UI_Font_Size(10.0f)
+              UI_Font_Size(13.0f)
               UI_Text_Align(UI_TEXT_ALIGN__CENTER)
               {
                 for (L1 i = 0; i < panel->view_count; i += 1)

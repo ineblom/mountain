@@ -194,7 +194,7 @@ void notes_main(void *)
     UI_Parent(main_box)
     UI_Pref_Width(ui_pct(1.0f, 1.0f))
     {
-      UI_Font_Size(18.0f)
+      UI_Font_Size(24.0f)
       UI_Text_Align(UI_TEXT_ALIGN__CENTER)
       UI_Pref_Height(ui_text_dim(20.0f, 1.0f))
       UI_Tag(str8("header"))
@@ -217,8 +217,8 @@ void notes_main(void *)
       
       ui_spacer(ui_px(10.0f, 1.0f));
 
-      UI_Pref_Height(ui_em(2.5f, 1.0f))
-      UI_Text_Padding(8.0f)
+      UI_Pref_Height(ui_em(1.8f, 1.0f))
+      UI_Text_Padding(6.0f)
       ui_textedit(&cursor, &mark,
                   input_buffer, sizeof(input_buffer),
                   &input_buffer_len,

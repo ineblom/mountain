@@ -1788,6 +1788,18 @@ Internal UI_Box_Rec ui_box_rec_df(UI_Box *box, UI_Box *root, L1 sib_member_off, 
 #define ui_box_rec_df_pre(box, root) ui_box_rec_df(box, root, OffsetOf(UI_Box, next), OffsetOf(UI_Box, first))
 #define ui_box_rec_df_post(box, root) ui_box_rec_df(box, root, OffsetOf(UI_Box, prev), OffsetOf(UI_Box, last))
 
+Internal FP_Metrics ui_box_font_metrics(UI_Box *box)
+{
+  FP_Metrics result = box->display_fruns.metrics;
+
+  if (box->display_fruns.node_count == 0)
+  {
+    result = fc_metrics_from_tag_size(box->font, box->font_size);
+  }
+
+  return result;
+}
+
 Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, Axis axis)
 {
   for (UI_Box *b = root; !ui_box_is_nil(b); b = ui_box_rec_df_pre(b, root).next)
@@ -1801,10 +1813,22 @@ Internal void ui_calc_sizes_standalone__in_place(UI_Box *root, Axis axis)
         b->fixed_size.v[axis] = b->pref_size[axis].value;
       } break;
 
+      case UI_SIZE_KIND__EM:
+      {
+        b->fixed_size.v[axis] = b->pref_size[axis].value * b->font_size;
+      } break;
+
       case UI_SIZE_KIND__TEXT_CONTENT:
       {
         F1  padding    =  b->pref_size[axis].value;
-        F1  text_size  =  b->display_fruns.dim.v[axis];
+        F1  text_size  =  b->display_fruns.dim.x;
+
+        if (axis == AXIS__Y)
+        {
+          FP_Metrics metrics = ui_box_font_metrics(b);
+
+          text_size = metrics.ascent + metrics.descent;
+        }
 
         b->fixed_size.v[axis] = padding + text_size + b->text_padding * 2;
       } break;
@@ -1828,6 +1852,7 @@ Internal void ui_calc_sizes_upwards_dependent__in_place(UI_Box *root, Axis axis)
         {
           if (p->flags & (UI_BOX_FLAG__FIXED_WIDTH << axis)
               || p->pref_size[axis].kind == UI_SIZE_KIND__PIXELS
+              || p->pref_size[axis].kind == UI_SIZE_KIND__EM
               || p->pref_size[axis].kind == UI_SIZE_KIND__TEXT_CONTENT
               || p->pref_size[axis].kind == UI_SIZE_KIND__PERCENT_OF_PARENT)
           {
@@ -2131,14 +2156,24 @@ Internal void ui_end_build(void)
   arena_clear(ui_build_arena());
 }
 
-Internal F2 ui_box_text_pos(UI_Box *box)
+Internal F1 ui_snap_px(F1 v)
 {
-  F2          result        =  {0};
-  FC_Tag      font          =  box->font;
-  F1          font_size     =  box->font_size;
-  FP_Metrics  font_metrics  =  fc_metrics_from_tag_size(font, font_size);
+  F1 pixel_ratio = Max(1.0f, (F1)ui_state->window->pixel_ratio);
 
-  result.y = floor_F1((box->rect.y + box->rect.w * 0.5f) + font_metrics.ascent * 0.5f - font_metrics.descent * 0.5f);
+  return floor_F1(v * pixel_ratio) / pixel_ratio;
+}
+
+Internal UI_Text_Line ui_box_text_line(UI_Box *box)
+{
+  UI_Text_Line  result   =  {0};
+  FP_Metrics    metrics  =  ui_box_font_metrics(box);
+  F1            height   =  metrics.ascent + metrics.descent;
+  F1            top      =  box->rect.y + (box->rect.w - height) * 0.5f;
+  F1            text_w   =  box->display_fruns.dim.x;
+
+  result.baseline  =  ui_snap_px(top + metrics.ascent);
+  result.top       =  result.baseline - metrics.ascent;
+  result.height    =  height;
 
   switch (box->text_align)
   {
@@ -2150,22 +2185,16 @@ Internal F2 ui_box_text_pos(UI_Box *box)
 
     case UI_TEXT_ALIGN__CENTER:
     {
-      F2 text_dim = box->display_fruns.dim;
-
-      result.x  =  round_F1(box->rect.x + box->rect.z * 0.5f - text_dim.x * 0.5f);
-      result.x  =  Max(result.x, box->rect.x);
+      result.x = Max(box->rect.x + box->rect.z * 0.5f - text_w * 0.5f, box->rect.x);
     } break;
 
     case UI_TEXT_ALIGN__RIGHT:
     {
-      F2 text_dim = box->display_fruns.dim;
-
-      result.x  =  round_F1(box->rect.x + box->rect.z - text_dim.x - box->text_padding);
-      result.x  =  Max(result.x, box->rect.x);
+      result.x = Max(box->rect.x + box->rect.z - text_w - box->text_padding, box->rect.x);
     } break;
   }
 
-  result.x = floor_F1(result.x);
+  result.x = ui_snap_px(result.x);
 
   return result;
 }
@@ -2179,7 +2208,7 @@ Internal L1 ui_box_byte_offset_from_xy(UI_Box *box, F2 mouse_pos)
                                                        0,
                                                        box->tab_size,
                                                        string,
-                                                       mouse_pos.x - ui_box_text_pos(box).x);
+                                                       mouse_pos.x - ui_box_text_line(box).x);
 }
 
 Internal void ui_kill_action(void)
@@ -2360,7 +2389,7 @@ Internal UI_Size ui_size(UI_Size_Kind kind, F1 value, F1 strictness)
 }
 
 #define ui_px(value, strictness) ui_size(UI_SIZE_KIND__PIXELS, value, strictness)
-#define ui_em(value, strictness) ui_size(UI_SIZE_KIND__PIXELS, (value) * ui_top_font_size(), strictness)
+#define ui_em(value, strictness) ui_size(UI_SIZE_KIND__EM, value, strictness)
 #define ui_text_dim(padding, strictness) ui_size(UI_SIZE_KIND__TEXT_CONTENT, padding, strictness)
 #define ui_pct(value, strictness) ui_size(UI_SIZE_KIND__PERCENT_OF_PARENT, value, strictness)
 #define ui_children_sum(strictness) ui_size(UI_SIZE_KIND__CHILDREN_SUM, 0.0f, strictness)
@@ -2520,7 +2549,7 @@ Internal UI_Signal ui_checkbox(String8 str, I1 *value)
 
     ui_spacer(ui_px(size * 0.5f, 1.0f));
 
-    //- kti: Label. Text is vertically centered by ui_box_text_pos.
+    //- kti: Label. Text is vertically centered by ui_box_text_line.
     UI_Pref_Width(ui_text_dim(0.0f, 1.0f))
     {
       ui_set_next_pref_height(ui_pct(1.0f, 0.0f));
@@ -2870,7 +2899,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
                                                         ui_top_tab_size(),
                                                         edit_string).x;
 
-      ui_set_next_pref_width(ui_px(total_text_width + ui_top_font_size() * 5, 1.0f));
+      ui_set_next_pref_width(ui_px(total_text_width + ui_top_font_size() * 3.75f, 1.0f));
 
       UI_Box                  *editstr_box  =  ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, str8("###editstr"));
       UI_Line_Edit_Draw_Data  *draw_data    =  push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
@@ -2935,7 +2964,7 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
   //- kti: Focus cursor.
   if (is_focus_active && !focus_cleared_this_frame && box->rect.z > 0)
   {
-    F1  cursor_margin     =  Min(ui_top_font_size() * 2.0f, box->rect.z * 0.5f);
+    F1  cursor_margin     =  Min(ui_top_font_size() * 1.5f, box->rect.z * 0.5f);
     F2  cursor_range_px   =  {{cursor_x_offset - cursor_margin, cursor_x_offset + cursor_margin}};
     F2  visible_range_px  =  {{box->view_off_target.x, box->view_off_target.x + box->rect.z}};
 
@@ -3052,7 +3081,8 @@ Internal void ui_draw(void)
 
       for (DR_FRun_Node *n = box->display_fruns.first; n != 0; n = n->next)
       {
-        F2  pos    =  ui_box_text_pos(box);
+        UI_Text_Line  line   =  ui_box_text_line(box);
+        F2            pos    =  {{line.x, line.baseline}};
         F4  color  =  box->text_color;
 
         if (draw_active_effect)
@@ -3095,18 +3125,17 @@ Internal void ui_draw(void)
         FC_Tag                  font              =  box->font;
         F1                      font_size         =  box->font_size;
         F1                      tab_size          =  box->tab_size;
-        F2                      text_pos          =  ui_box_text_pos(box);
+        UI_Text_Line            line              =  ui_box_text_line(box);
         String8                 edited_string     =  draw_data->edited_string;
         Txt_Pt                  cursor            =  draw_data->cursor;
         Txt_Pt                  mark              =  draw_data->mark;
         F1                      cursor_x_offset   =  fc_x_offset_from_tag_size_string_byte_offset(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, edited_string, cursor.column);
         F1                      mark_x_offset     =  fc_x_offset_from_tag_size_string_byte_offset(font, font_size, (F1)ui_state->window->pixel_ratio, 0, tab_size, edited_string, mark.column);
-        F1                      cursor_thickness  =  Max(1.0f, floor_F1(font_size / 10.0f));
-        UI_Box                  *edit_box         =  box->parent;
-        F1                      cursor_top        =  edit_box->rect.y + font_size * 0.5f;
-        F1                      cursor_height     =  edit_box->rect.w - font_size;
-        F1                      cursor_x          =  text_pos.x + cursor_x_offset;
-        F1                      mark_x            =  text_pos.x + mark_x_offset - cursor_thickness;
+        F1                      cursor_thickness  =  Max(1.0f, floor_F1(font_size * 0.075f));
+        F1                      cursor_top        =  line.top;
+        F1                      cursor_height     =  line.height;
+        F1                      cursor_x          =  line.x + cursor_x_offset;
+        F1                      mark_x            =  line.x + mark_x_offset - cursor_thickness;
         F4                      cursor_color      =  ui_color_from_tags_key_name(box->tags_key, str8("cursor"));
         F4                      select_color      =  ui_color_from_tags_key_name(box->tags_key, str8("selection"));
 
@@ -3123,7 +3152,7 @@ Internal void ui_draw(void)
           cursor_height,
         }};
 
-        dr_rect(select_rect, select_color, font_size * 0.25f, 1.0f);
+        dr_rect(select_rect, select_color, font_size * 0.1875f, 1.0f);
         dr_rect(cursor_rect, cursor_color, 0.0f, 0.0f);
       } break;
     }

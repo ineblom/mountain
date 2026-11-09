@@ -50,21 +50,24 @@ Internal void fp_font_close(FP_Handle font)
   }
 }
 
-Inline FT_UInt fp_pixel_size_from_font_size(F1 size)
+Inline I1 fp_face_is_bitmap_only(FT_Face face)
 {
-  return (FT_UInt)((96.0f / 72.0f) * size);
+  return !FT_IS_SCALABLE(face) && face->num_fixed_sizes > 0;
 }
 
-Internal void fp_select_size(FT_Face face, FT_UInt pixel_size)
+//- kti: Returns the scale from the selected strike to size. 1 for scalable fonts.
+Internal F1 fp_select_size(FT_Face face, F1 size)
 {
-  if (face->num_fixed_sizes > 0)
+  F1 result = 1.0f;
+
+  if (fp_face_is_bitmap_only(face))
   {
     L1  best_idx   =  0;
-    I1  best_diff  =  I1_MAX;
+    F1  best_diff  =  F1_MAX;
 
-    for (L1 i = 0; i < face->num_fixed_sizes; i += 1)
+    for (L1 i = 0; i < (L1)face->num_fixed_sizes; i += 1)
     {
-      I1 diff = abs((SI1)face->available_sizes[i].height - (SI1)pixel_size);
+      F1 diff = abs_F1((F1)face->available_sizes[i].height - size);
 
       if (diff < best_diff)
       {
@@ -73,85 +76,114 @@ Internal void fp_select_size(FT_Face face, FT_UInt pixel_size)
       }
     }
 
-    FT_Select_Size(face, best_idx);
+    FT_Select_Size(face, (FT_Int)best_idx);
+
+    F1 strike_height = (F1)face->size->metrics.height / 64.0f;
+
+    if (strike_height > 0)
+    {
+      result = size / strike_height;
+    }
   }
   else
   {
-    FT_Set_Pixel_Sizes(face, 0, pixel_size);
+    FT_F26Dot6 char_size = (FT_F26Dot6)(size * 64.0f + 0.5f);
+
+    FT_Set_Char_Size(face, 0, Max(char_size, 1), 72, 72);
   }
+
+  return result;
 }
 
 Internal F1 fp_kerning(FP_Handle font, F1 size, F1 raster_scale, I1 left_codepoint, I1 right_codepoint)
 {
-  FT_Face face = font.face;
+  F1       result  =  0;
+  FT_Face  face    =  font.face;
 
-  if (face == 0 || size <= 0 || !FT_HAS_KERNING(face))
+  if (face != 0 && size > 0 && FT_HAS_KERNING(face))
   {
-    return 0;
+    FT_UInt left_glyph   =  FT_Get_Char_Index(face, left_codepoint);
+    FT_UInt right_glyph  =  FT_Get_Char_Index(face, right_codepoint);
+
+    if (left_glyph != 0 && right_glyph != 0)
+    {
+      raster_scale = Max(1.0f, raster_scale);
+
+      F1         strike_scale  =  fp_select_size(face, size * raster_scale);
+      FT_Vector  kerning       =  {0};
+
+      if (FT_Get_Kerning(face, left_glyph, right_glyph, FT_KERNING_DEFAULT, &kerning) == 0)
+      {
+        result = (F1)kerning.x / 64.0f * strike_scale / raster_scale;
+      }
+    }
   }
 
-  FT_UInt left_glyph  = FT_Get_Char_Index(face, left_codepoint);
-  FT_UInt right_glyph = FT_Get_Char_Index(face, right_codepoint);
-
-  if (left_glyph == 0 || right_glyph == 0)
-  {
-    return 0;
-  }
-
-  raster_scale = Max(1.0f, raster_scale);
-  fp_select_size(face, fp_pixel_size_from_font_size(size * raster_scale));
-
-  FT_Vector kerning = {0};
-  if (FT_Get_Kerning(face, left_glyph, right_glyph, FT_KERNING_DEFAULT, &kerning) != 0)
-  {
-    return 0;
-  }
-
-  return (F1)kerning.x / 64.0f / raster_scale;
+  return result;
 }
 
 Internal FP_Metrics fp_metrics_from_font(FP_Handle font, F1 size)
 {
-  FP_Metrics result = {0};
+  FP_Metrics  result  =  {0};
+  FT_Face     face    =  font.face;
 
-  if (font.face != 0)
+  if (face != 0 && size > 0)
   {
-    FT_Face          face          =  font.face;
-    FT_UInt          pixel_size    =  fp_pixel_size_from_font_size(size);
+    F1 ascent          =  0;
+    F1 descent         =  0;
+    F1 height          =  0;
+    F1 capital_height  =  0;
+    F1 x_height        =  0;
 
-    fp_select_size(face, pixel_size);
-
-    FT_Size_Metrics  *m            =  &face->size->metrics;
-    F1               ascent        =  (F1)(m->ascender >> 6);
-    F1               descent       =  (F1)(-(m->descender >> 6));
-    F1               height        =  (F1)(m->height >> 6);
-    F1               metric_scale  =  1.0f;
-
-    //- kti: Scale bitmap font metrics to match requested pixel size.
-    if (face->num_fixed_sizes > 0 && height > 0)
+    if (FT_IS_SCALABLE(face) && face->units_per_EM > 0)
     {
-      metric_scale  =   (F1)pixel_size / height;
-      ascent        *=  metric_scale;
-      descent       *=  metric_scale;
-      height        =   (F1)pixel_size;
+      F1 units_to_px = size / (F1)face->units_per_EM;
+
+      ascent   =  (F1)face->ascender * units_to_px;
+      descent  =  -(F1)face->descender * units_to_px;
+      height   =  (F1)face->height * units_to_px;
+
+      TT_OS2 *os2 = FT_Get_Sfnt_Table(face, FT_SFNT_OS2);
+
+      if (os2 != 0 && os2->version != 0xFFFF && os2->version >= 2)
+      {
+        capital_height  =  (F1)os2->sCapHeight * units_to_px;
+        x_height        =  (F1)os2->sxHeight * units_to_px;
+      }
+
+      if (capital_height <= 0 && FT_Load_Char(face, 'H', FT_LOAD_NO_SCALE) == 0)
+      {
+        capital_height = (F1)face->glyph->metrics.height * units_to_px;
+      }
+
+      if (x_height <= 0 && FT_Load_Char(face, 'x', FT_LOAD_NO_SCALE) == 0)
+      {
+        x_height = (F1)face->glyph->metrics.height * units_to_px;
+      }
     }
-
-    F1  capital_height  =  0;
-    F1  x_height        =  0;
-
-    if (FT_Load_Char(face, 'H', FT_LOAD_DEFAULT) == 0)
+    else
     {
-      capital_height = (F1)face->glyph->metrics.height / 64.0f * metric_scale;
-    }
+      F1               strike_scale  =  fp_select_size(face, size);
+      FT_Size_Metrics  *m            =  &face->size->metrics;
 
-    if (FT_Load_Char(face, 'x', FT_LOAD_DEFAULT) == 0)
-    {
-      x_height = (F1)face->glyph->metrics.height / 64.0f * metric_scale;
+      ascent   =  (F1)m->ascender / 64.0f * strike_scale;
+      descent  =  -(F1)m->descender / 64.0f * strike_scale;
+      height   =  (F1)m->height / 64.0f * strike_scale;
+
+      if (FT_Load_Char(face, 'H', FT_LOAD_DEFAULT) == 0)
+      {
+        capital_height = (F1)face->glyph->metrics.height / 64.0f * strike_scale;
+      }
+
+      if (FT_Load_Char(face, 'x', FT_LOAD_DEFAULT) == 0)
+      {
+        x_height = (F1)face->glyph->metrics.height / 64.0f * strike_scale;
+      }
     }
 
     result.ascent          =  ascent;
     result.descent         =  descent;
-    result.line_gap        =  height - ascent - descent;
+    result.line_gap        =  Max(0.0f, height - ascent - descent);
     result.capital_height  =  capital_height > 0 ? capital_height : ascent;
     result.x_height        =  x_height > 0 ? x_height : result.capital_height;
   }
@@ -174,13 +206,9 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
 
     raster_scale = Max(1.0f, raster_scale);
 
-    FT_UInt pixel_size = fp_pixel_size_from_font_size(size * raster_scale);
-
-    fp_select_size(face, pixel_size);
-
-    SL1  ascent   =  face->size->metrics.ascender >> 6;
-    SL1  descent  =  abs(face->size->metrics.descender >> 6);
-    SL1  height   =  face->size->metrics.height >> 6;
+    F1  strike_scale  =  fp_select_size(face, size * raster_scale);
+    SI1 ascent        =  (SI1)(face->size->metrics.ascender >> 6);
+    SI1 descent       =  (SI1)abs(face->size->metrics.descender >> 6);
 
     //- kti: Unpack string
     String32 string32 = str32_from_str8(scratch.arena, string);
@@ -193,16 +221,39 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
       load_flags |= FT_LOAD_COLOR;
     }
 
-    SI1 total_width = 0;
+    SI1  total_width  =  0;
+    F1   ink_ascent   =  -F1_MAX;
+    F1   ink_descent  =  -F1_MAX;
 
     for (L1 i = 0; i < string32.len; i += 1)
     {
-      FT_Load_Char(face, string32.str[i], load_flags);
-      total_width += face->glyph->advance.x >> 6;
+      if (FT_Load_Char(face, string32.str[i], load_flags) != 0)
+      {
+        continue;
+      }
+
+      FT_GlyphSlot glyph = face->glyph;
+
+      if (glyph->bitmap.rows > 0 && glyph->bitmap.width > 0)
+      {
+        ink_ascent   =  Max(ink_ascent, (F1)glyph->bitmap_top);
+        ink_descent  =  Max(ink_descent, (F1)glyph->bitmap.rows - (F1)glyph->bitmap_top);
+      }
+
+      total_width += glyph->advance.x >> 6;
     }
 
+    if (ink_ascent + ink_descent <= 0)
+    {
+      ink_ascent   =  0;
+      ink_descent  =  0;
+    }
+
+    SI1 above = Max(ascent, (SI1)ink_ascent);
+    SI1 below = Max(descent, (SI1)ink_descent);
+
     //- kti: Allocate & fill atlas w/rasterization
-    SW2  dim            =  {{(SW1)total_width, height}};
+    SW2  dim            =  {{(SW1)total_width, (SW1)(above + below)}};
     L1   atlas_size     =  dim.x * dim.y * 4;
     B1   *atlas         =  push_array(arena, B1, atlas_size);
 
@@ -215,7 +266,7 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
       atlas[off + 2]  =  255;
       atlas[off + 3]  =  0;
     }
-    SI1  baseline       =  ascent;
+    SI1  baseline       =  above;
     SI1  atlas_write_x  =  0;
 
     for (L1 i = 0; i < string32.len; i += 1)
@@ -286,7 +337,9 @@ Internal FP_Raster_Result fp_raster(Arena *arena, FP_Handle font, F1 size, F1 ra
     result.atlas         =  atlas;
     result.advance       =  (F1)total_width;
     result.baseline      =  (F1)baseline;
-    result.raster_scale  =  raster_scale;
+    result.ink_ascent    =  ink_ascent;
+    result.ink_descent   =  ink_descent;
+    result.strike_scale  =  strike_scale;
 
     scratch_end(scratch);
   }

@@ -13,6 +13,8 @@ Internal void fc_reset(void)
   fc_state->last_atlas                    =  0;
   fc_state->style_raster_hash_table_size  =  1024;
   fc_state->style_raster_hash_table       =  push_array(fc_state->raster_arena, FC_Style_Raster_HT_Slot, fc_state->style_raster_hash_table_size);
+  fc_state->metrics_hash_table_size       =  256;
+  fc_state->metrics_hash_table            =  push_array(fc_state->raster_arena, FC_Metrics_HT_Slot, fc_state->metrics_hash_table_size);
 }
 
 Internal void fc_init(void)
@@ -130,29 +132,61 @@ Internal FC_Tag fc_tag_from_path(String8 path)
   return result;
 }
 
-Internal FP_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size)
+Internal FP_Handle fc_handle_from_tag(FC_Tag tag)
 {
-  L1 slot_idx = hash_index_L1(tag.l1[1], fc_state->font_hash_table_size);
-
-  FC_Font_HT_Node *existing_node = 0;
+  FP_Handle  result    =  {0};
+  L1         slot_idx  =  hash_index_L1(tag.l1[1], fc_state->font_hash_table_size);
 
   for (FC_Font_HT_Node *n = fc_state->font_hash_table[slot_idx].first; n != 0; n = n->hash_next)
   {
     if (memcmp(&tag, &n->tag, sizeof(FC_Tag)) == 0)
     {
-      existing_node = n;
+      result = n->handle;
       break;
     }
   }
 
-  FP_Metrics result = {0};
+  return result;
+}
 
-  if (existing_node != 0)
+Internal FP_Metrics fc_metrics_from_tag_size(FC_Tag tag, F1 size)
+{
+  D1  size_d1    =  (D1)size;
+  L1  size_bits  =  0;
+
+  memcpy(&size_bits, &size_d1, sizeof(size_bits));
+
+  L1 buffer[] = {
+    tag.l1[0],
+    tag.l1[1],
+    size_bits,
+  };
+
+  Hash128             hash      =  hash128(buffer, sizeof(buffer));
+  L1                  slot_idx  =  hash_index_L1(hash.l1[0], fc_state->metrics_hash_table_size);
+  FC_Metrics_HT_Slot  *slot     =  &fc_state->metrics_hash_table[slot_idx];
+  FC_Metrics_HT_Node  *node     =  0;
+
+  for (FC_Metrics_HT_Node *n = slot->first; n != 0; n = n->hash_next)
   {
-    result = fp_metrics_from_font(existing_node->handle, size);
+    if (n->size == size && memcmp(&n->tag, &tag, sizeof(FC_Tag)) == 0)
+    {
+      node = n;
+      break;
+    }
   }
 
-  return result;
+  if (node == 0)
+  {
+    node           =  push_array(fc_state->raster_arena, FC_Metrics_HT_Node, 1);
+    node->tag      =  tag;
+    node->size     =  size;
+    node->metrics  =  fp_metrics_from_font(fc_handle_from_tag(tag), size);
+
+    SLLQueuePush_N(slot->first, slot->last, node, hash_next);
+  }
+
+  return node->metrics;
 }
 
 Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 size, F1 raster_scale)
@@ -198,8 +232,7 @@ Internal FC_Style_Raster_HT_Node *fc_style_raster_from_tag_size(FC_Tag tag, F1 s
     style_raster_node                               =  push_array(fc_state->raster_arena, FC_Style_Raster_HT_Node, 1);
     style_raster_node->style_hash                   =  style_hash;
     style_raster_node->raster_scale                 =  raster_scale;
-    style_raster_node->ascent                       =  metrics.ascent;
-    style_raster_node->descent                      =  metrics.descent;
+    style_raster_node->metrics                      =  metrics;
     style_raster_node->utf8_length1_direct_map      =  push_array(fc_state->raster_arena, FC_Raster_Info, 256);
     style_raster_node->raster_info_hash_table_size  =  1024;
     style_raster_node->raster_info_hash_table       =  push_array(fc_state->raster_arena, FC_Raster_Info_HT_Slot, style_raster_node->raster_info_hash_table_size);
@@ -406,20 +439,12 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
 
     F2                   dim                        =  {0};
     FC_Piece_Chunk_List  piece_chunks               =  {0};
-    FP_Handle            font_handle                =  {0};
+    FP_Handle            font_handle                =  fc_handle_from_tag(tag);
+    F1                   ink_ascent                 =  -F1_MAX;
+    F1                   ink_descent                =  -F1_MAX;
     I1                   previous_codepoint         =  0;
     L1                   piece_substring_begin_idx  =  0;
     L1                   piece_substring_end_idx    =  0;
-
-    L1 font_slot_idx = hash_index_L1(tag.l1[1], fc_state->font_hash_table_size);
-    for (FC_Font_HT_Node *n = fc_state->font_hash_table[font_slot_idx].first; n != 0; n = n->hash_next)
-    {
-      if (memcmp(&n->tag, &tag, sizeof(FC_Tag)) == 0)
-      {
-        font_handle = n->handle;
-        break;
-      }
-    }
 
     for (L1 i = 0; i < string.len;)
     {
@@ -584,9 +609,11 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
           info->subrect.y     +=  1;
           info->atlas_num     =   chosen_atlas_num;
           info->raster_dim    =   raster.atlas_dim;
-          info->advance       =   raster.advance;
-          info->baseline      =   raster.baseline;
-          info->raster_scale  =   raster.raster_scale;
+          info->scale         =   raster.strike_scale / style_raster_node->raster_scale;
+          info->advance       =   raster.advance * info->scale;
+          info->baseline      =   raster.baseline * info->scale;
+          info->ink_ascent    =   raster.ink_ascent * info->scale;
+          info->ink_descent   =   raster.ink_descent * info->scale;
         }
 
         scratch_end(scratch);
@@ -631,35 +658,23 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
         }
 
         //- kti: Create piece.
-        FC_Piece  *piece      =  fc_piece_chunk_list_push_new(fc_state->frame_arena, &piece_chunks, string.len);
-        F1        pixel_size  =  (96.0f / 72.0f) * size;
+        FC_Piece *piece = fc_piece_chunk_list_push_new(fc_state->frame_arena, &piece_chunks, string.len);
 
         piece->texture      =  atlas ? atlas->texture : 0;
         piece->subrect      =  (SW4){{info->subrect.x, info->subrect.y, info->raster_dim.x, info->raster_dim.y}};
         piece->decode_size  =  piece_substring.len;
+        piece->scale        =  info->scale;
+        piece->advance      =  advance;
+        piece->offset       =  (F2){{0, -info->baseline}};
 
-        if (info->raster_scale > 1.0f)
+        if (info->ink_ascent + info->ink_descent > 0)
         {
-          piece->scale    =  1.0f / info->raster_scale;
-          piece->advance  =  is_tab ? advance : info->advance * piece->scale;
-          piece->offset   =  (F2){{0, -info->baseline * piece->scale}};
-        }
-        else if (info->raster_dim.y > 0 && (F1)info->raster_dim.y > pixel_size * 1.5f)
-        {
-          piece->scale    =  pixel_size / (F1)info->raster_dim.y;
-          piece->advance  =  info->advance * piece->scale;
-          piece->offset   =  (F2){{0, -(pixel_size + style_raster_node->ascent - style_raster_node->descent) * 0.5f}};
-        }
-        else
-        {
-          piece->scale    =  1.0f;
-          piece->advance  =  advance;
-          piece->offset   =  (F2){{0, -info->baseline}};
+          ink_ascent   =  Max(ink_ascent, info->ink_ascent);
+          ink_descent  =  Max(ink_descent, info->ink_descent);
         }
 
         base_align_px       +=  piece->advance;
         dim.x               +=  piece->advance;
-        dim.y               =   Max(dim.y, (SW1)(info->raster_dim.y * piece->scale));
         previous_codepoint  =   codepoint;
       }
     }
@@ -674,9 +689,19 @@ Internal FC_Run fc_run_from_string(FC_Tag tag, F1 size, F1 raster_scale, F1 base
       run.pieces = fc_piece_array_from_chunk_list(fc_state->frame_arena, &piece_chunks);
     }
 
-    run.dim      =  dim;
-    run.ascent   =  style_raster_node->ascent;
-    run.descent  =  style_raster_node->descent;
+    FP_Metrics metrics = style_raster_node->metrics;
+
+    if (ink_ascent + ink_descent <= 0)
+    {
+      ink_ascent   =  0;
+      ink_descent  =  0;
+    }
+
+    dim.y            =  metrics.ascent + metrics.descent;
+    run.dim          =  dim;
+    run.metrics      =  metrics;
+    run.ink_ascent   =  ink_ascent;
+    run.ink_descent  =  ink_descent;
   }
 
   //- kti: Build cache node for cacheable runs.

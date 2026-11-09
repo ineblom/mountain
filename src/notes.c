@@ -205,25 +205,45 @@ void notes_main(void *)
       String8 welcome = str8("Welcome to the notes app. This is an example of a block!");
       ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, welcome);
 
-      UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-      UI_Pref_Height(ui_text_dim(10.0f, 1.0f))
-      UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-      UI_Corner_Radius(2.5f)
-      {
-        if (ui_button(str8("Press me")).flags & UI_SIGNAL_FLAG__PRESSED)
-        {
-        }
-      }
-      
       ui_spacer(ui_px(10.0f, 1.0f));
 
+      UI_Row()
       UI_Pref_Height(ui_em(1.8f, 1.0f))
-      UI_Text_Padding(6.0f)
-      ui_textedit(&cursor, &mark,
-                  input_buffer, sizeof(input_buffer),
-                  &input_buffer_len,
-                  (String8){input_buffer, input_buffer_len},
-                  str8("##notes_input"));
+      {
+        //- kti: Input
+        I1 committed_input = 0;
+
+        UI_Pref_Width(ui_pct(1.0f, 0.0f))
+        UI_Text_Padding(6.0f)
+        {
+          UI_Signal input_signal = ui_textedit(&cursor, &mark,
+                                               input_buffer, sizeof(input_buffer),
+                                               &input_buffer_len,
+                                               (String8){input_buffer, input_buffer_len},
+                                               str8("##notes_input"));
+          committed_input = input_signal.flags & UI_SIGNAL_FLAG__COMMIT;
+        }
+
+        ui_spacer(ui_px(10.0f, 1.0f));
+
+        //- kti: Push button.
+        UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
+        UI_Text_Align(UI_TEXT_ALIGN__CENTER)
+        UI_Corner_Radius(2.5f)
+        {
+          UI_Signal button_signal = ui_button(str8("Push"));
+          I1 pressed_push = button_signal.flags & UI_SIGNAL_FLAG__PRESSED;
+
+          if (pressed_push || committed_input)
+          {
+
+
+            //- kti: Clear input.
+            MemoryZeroArray(input_buffer);
+            input_buffer_len = 0;
+          }
+        }
+      }
     }
 
     ui_spacer(ui_pct(0.5f, 0.0f));

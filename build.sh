@@ -2,7 +2,7 @@
 
 WARN="-Wall -Wtype-limits -Wno-unused-function -Wno-unused-variable"
 DEFS="-DDEV=1"
-OPT="-O0"
+OPT="-O2"
 
 META=0
 NATIVE=0

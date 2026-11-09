@@ -282,9 +282,14 @@ void notes_main(void *)
 
     scratch_end(scratch);
 
+    if (frames_requested > 0)
+    {
+      frames_requested -= 1;
+    }
+
     if (ui_state->animation_active || events.count > 0)
     {
-      frames_requested = 2;
+      frames_requested = 1;
     }
   }
 

@@ -416,6 +416,14 @@ struct UI_Signal
   UI_Signal_Flags   flags;
 };
 
+typedef I1 UI_Textedit_Flags;
+
+enum
+{
+  UI_TEXTEDIT_FLAG__KEEP_FOCUS_ON_COMMIT  =  (1 << 0),
+  UI_TEXTEDIT_FLAG__FOCUS_ON_PRESS        =  (1 << 1),
+};
+
 #include "ui.meta.h"
 
 typedef struct UI_State UI_State;

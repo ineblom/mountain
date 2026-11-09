@@ -216,7 +216,8 @@ void notes_main(void *)
         UI_Pref_Width(ui_pct(1.0f, 0.0f))
         UI_Text_Padding(6.0f)
         {
-          UI_Signal input_signal = ui_textedit(&cursor, &mark,
+          UI_Signal input_signal = ui_textedit(UI_TEXTEDIT_FLAG__KEEP_FOCUS_ON_COMMIT | UI_TEXTEDIT_FLAG__FOCUS_ON_PRESS,
+                                               &cursor, &mark,
                                                input_buffer, sizeof(input_buffer),
                                                &input_buffer_len,
                                                (String8){input_buffer, input_buffer_len},

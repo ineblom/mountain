@@ -523,7 +523,8 @@ Internal void lister_ui(void)
 
         UI_Text_Padding(10.0f)
         {
-          UI_Signal signal = ui_textedit(&lister_state.textedit_cursor,
+          UI_Signal signal = ui_textedit(0,
+                                         &lister_state.textedit_cursor,
                                          &lister_state.textedit_mark,
                                          lister_state.textedit_buffer,
                                          sizeof(lister_state.textedit_buffer),

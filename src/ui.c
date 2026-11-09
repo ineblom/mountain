@@ -2786,7 +2786,8 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
   return op;
 }
 
-Internal UI_Signal ui_textedit(Txt_Pt *cursor,
+Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
+                               Txt_Pt *cursor,
                                Txt_Pt *mark,
                                B1     *edit_buffer,
                                L1      edit_buffer_size,
@@ -2926,7 +2927,11 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
   UI_Signal  signal                    =  ui_signal_from_box(box);
   I1         focus_cleared_this_frame  =  0;
 
-  if (!is_focus_active && signal.flags & (UI_SIGNAL_FLAG__LEFT_CLICKED | UI_SIGNAL_FLAG__KEYBOARD_PRESSED))
+  UI_Signal_Flags focus_signal_flags = (flags & UI_TEXTEDIT_FLAG__FOCUS_ON_PRESS)
+    ? UI_SIGNAL_FLAG__PRESSED
+    : UI_SIGNAL_FLAG__CLICKED;
+
+  if (!is_focus_active && signal.flags & focus_signal_flags)
   {
     String8 edit_string = pre_edit_value;
 
@@ -2945,10 +2950,13 @@ Internal UI_Signal ui_textedit(Txt_Pt *cursor,
 
   if (is_focus_active && signal.flags & UI_SIGNAL_FLAG__KEYBOARD_PRESSED)
   {
-    ui_set_auto_focus_active_key(ui_key_zero());
+    signal.flags |= UI_SIGNAL_FLAG__COMMIT;
 
-    signal.flags              |=  UI_SIGNAL_FLAG__COMMIT;
-    focus_cleared_this_frame  =   1;
+    if (!(flags & UI_TEXTEDIT_FLAG__KEEP_FOCUS_ON_COMMIT))
+    {
+      ui_set_auto_focus_active_key(ui_key_zero());
+      focus_cleared_this_frame = 1;
+    }
   }
 
   if (is_focus_active && signal.flags & UI_SIGNAL_FLAG__DRAGGING)

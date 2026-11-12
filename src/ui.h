@@ -76,6 +76,20 @@ struct Txt_Range
   Txt_Pt max;
 };
 
+typedef struct UI_Txt_Line UI_Txt_Line;
+struct UI_Txt_Line
+{
+  L1 min;
+  L1 max;
+};
+
+typedef struct UI_Txt_Line_Array UI_Txt_Line_Array;
+struct UI_Txt_Line_Array
+{
+  UI_Txt_Line *v;
+  L1           count;
+};
+
 typedef I1 UI_Txt_Op_Flags;
 enum
 {
@@ -178,6 +192,8 @@ struct UI_Line_Edit_Draw_Data
   String8 edited_string;
   Txt_Pt  cursor;
   Txt_Pt  mark;
+  I1      hide_cursor;
+  I1      select_line_end;
 };
 
 typedef L1 UI_Box_Flags;
@@ -422,6 +438,10 @@ enum
 {
   UI_TEXTEDIT_FLAG__KEEP_FOCUS_ON_COMMIT  =  (1 << 0),
   UI_TEXTEDIT_FLAG__FOCUS_ON_PRESS        =  (1 << 1),
+
+  UI_TEXTEDIT_FLAG__MULTILINE             =  (1 << 2),
+
+  UI_TEXTEDIT_FLAG__CURSOR_AT_MOUSE       =  (1 << 3),
 };
 
 #include "ui.meta.h"
@@ -474,6 +494,8 @@ struct UI_State
   UI_Key        press_key_history[OS_MOUSE_BUTTON_COUNT][3];
   L1            press_timestamp_history[OS_MOUSE_BUTTON_COUNT][3];
   F2            press_pos_history[OS_MOUSE_BUTTON_COUNT][3];
+
+  F1 textedit_preferred_x;
 
   UIStacks;
 };

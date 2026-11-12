@@ -1210,10 +1210,10 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
         && !evt_mouse_in_bounds
         && ui_key_match(ui_state->active_box_key[evt_mouse_idx], box->key))
     {
-      ui_state->hot_box_key                    =   ui_key_zero();
-      ui_state->active_box_key[evt_mouse_idx]  =   ui_key_zero();
-      signal.flags                             |=  UI_SIGNAL_FLAG__LEFT_RELEASED << evt_mouse_idx;
-      taken                                    =   1;
+      ui_state->hot_box_key                   =  ui_key_zero();
+      ui_state->active_box_key[evt_mouse_idx] =  ui_key_zero();
+      signal.flags                            |= UI_SIGNAL_FLAG__LEFT_RELEASED << evt_mouse_idx;
+      taken                                   =  1;
     }
 
     //- kti: focus is hot & keyboard click -> mark signal
@@ -1221,7 +1221,8 @@ Internal UI_Signal ui_signal_from_box(UI_Box *box)
     if (   box->flags & UI_BOX_FLAG__KEYBOARD_CLICKABLE
         && is_focus_hot
         && e->kind == OS_EVENT_KIND__PRESS
-        && e->key == OS_KEY__ENTER)
+        && e->key == OS_KEY__ENTER
+        && e->modifiers == 0)
     {
       signal.flags |= UI_SIGNAL_FLAG__KEYBOARD_PRESSED;
       taken = 1;
@@ -2634,7 +2635,63 @@ Internal String8 ui_push_string_replace_range(Arena *arena, String8 string, L1 m
   return result;
 }
 
-Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, String8 string, Txt_Pt cursor, Txt_Pt mark)
+Internal UI_Txt_Line_Array ui_txt_lines_from_string(Arena *arena, String8 string, I1 multiline)
+{
+  L1 count = 1;
+
+  if (multiline)
+  {
+    for (L1 idx = 0; idx < string.len; idx += 1)
+    {
+      count += (string.str[idx] == '\n');
+    }
+  }
+
+  UI_Txt_Line_Array  lines     =  {push_array(arena, UI_Txt_Line, count), count};
+  L1                 line_idx  =  0;
+  L1                 line_min  =  0;
+
+  if (multiline)
+  {
+    for (L1 idx = 0; idx < string.len; idx += 1)
+    {
+      if (string.str[idx] == '\n')
+      {
+        lines.v[line_idx]  =   (UI_Txt_Line){line_min, idx};
+        line_idx           +=  1;
+        line_min           =   idx + 1;
+      }
+    }
+  }
+
+  lines.v[line_idx] = (UI_Txt_Line){line_min, string.len};
+
+  return lines;
+}
+
+Internal L1 ui_txt_line_idx_from_off(UI_Txt_Line_Array lines, L1 off)
+{
+  L1 min = 0;
+  L1 max = lines.count;
+
+  while (max - min > 1)
+  {
+    L1 mid = min + (max - min) / 2;
+
+    if (lines.v[mid].min <= off)
+    {
+      min = mid;
+    }
+    else
+    {
+      max = mid;
+    }
+  }
+
+  return min;
+}
+
+Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, String8 string, L1 string_off, L1 total_len, Txt_Pt cursor, Txt_Pt mark)
 {
   Txt_Pt           next_cursor     =  cursor;
   Txt_Pt           next_mark       =  mark;
@@ -2644,6 +2701,9 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
   UI_Txt_Op_Flags  flags           =  0;
   SI2              delta           =  cmd->delta_si2;
   SI2              original_delta  =  delta;
+  L1               line_min        =  string_off;
+  L1               line_max        =  string_off + string.len;
+  L1               column          =  Clamp(line_min, cursor.column, line_max) - line_min;
 
   switch (cmd->delta_unit)
   {
@@ -2651,7 +2711,7 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 
     case UI_CMD_DELTA_UNIT__CHAR:
     {
-      L1 new_column = cursor.column;
+      L1 new_column = column;
 
       if (delta.x < 0)
       {
@@ -2668,12 +2728,12 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
         }
       }
 
-      delta.x = (SL1)new_column - (SL1)cursor.column;
+      delta.x = (SL1)new_column - (SL1)column;
     } break;
 
     case UI_CMD_DELTA_UNIT__WORD:
     {
-      delta.x = (SL1)ui_scanned_column_from_column(string, cursor.column, delta.x > 0 ? SIDE__MAX : SIDE__MIN) - (SL1)cursor.column;
+      delta.x = (SL1)ui_scanned_column_from_column(string, column, delta.x > 0 ? SIDE__MAX : SIDE__MIN) - (SL1)column;
     } break;
     case UI_CMD_DELTA_UNIT__LINE:
     case UI_CMD_DELTA_UNIT__WHOLE:
@@ -2690,9 +2750,9 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
         }
       }
 
-      L1 home_dest_column = (cursor.column == first_nonwhitespace_column) ? 0 : first_nonwhitespace_column;
+      L1 home_dest_column = (column == first_nonwhitespace_column) ? 0 : first_nonwhitespace_column;
 
-      delta.x = (SL1)((delta.x > 0) ? string.len : home_dest_column) - (SL1)cursor.column;
+      delta.x = (SL1)((delta.x > 0) ? string.len : home_dest_column) - (SL1)column;
     } break;
   }
 
@@ -2705,12 +2765,12 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
   {
     SL1 next_column = (SL1)next_cursor.column + delta.x;
 
-    next_cursor.column = (L1)Max(0, next_column);
+    next_cursor.column = (L1)Max((SL1)line_min, next_column);
   }
 
   if (cmd->flags & UI_CMD_FLAG__CAP_AT_LINE)
   {
-    next_cursor.column = Min(next_cursor.column, string.len);
+    next_cursor.column = Min(next_cursor.column, line_max);
   }
 
   if (!txt_pt_match(cursor, mark) && cmd->flags & UI_CMD_FLAG__PICK_SELECT_SIDE)
@@ -2727,9 +2787,11 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
 
   if (cmd->flags & UI_CMD_FLAG__COPY)
   {
-    if (cursor.line == mark.line)
+    Txt_Range copy_range = txt_range(cursor, mark);
+
+    if (cursor.line == mark.line && line_min <= copy_range.min.column && copy_range.max.column <= line_max)
     {
-      copy   =   str8_substr(string, cursor.column, mark.column);
+      copy   =   str8_substr(string, copy_range.min.column - line_min, copy_range.max.column - line_min);
       flags  |=  UI_TXT_OP_FLAG__COPY;
     }
     else
@@ -2766,13 +2828,13 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
     next_cursor  =  next_mark = (Txt_Pt){range.min.line, range.min.column + cmd->string.len};
   }
 
-  if (next_cursor.column > string.len || cmd->delta_si2.y != 0)
+  if (next_cursor.column > line_max || cmd->delta_si2.y != 0)
   {
     flags |= UI_TXT_OP_FLAG__INVALID;
   }
 
-  next_cursor.column  =  Min(next_cursor.column, string.len + replace.len);
-  next_mark.column    =  Min(next_mark.column, string.len + replace.len);
+  next_cursor.column  =  Min(next_cursor.column, total_len + replace.len);
+  next_mark.column    =  Min(next_mark.column, total_len + replace.len);
 
   UI_Txt_Op op = {0};
 
@@ -2786,6 +2848,72 @@ Internal UI_Txt_Op ui_single_line_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, Str
   return op;
 }
 
+Internal UI_Txt_Op ui_txt_op_from_cmd(Arena *arena, UI_Cmd *cmd, String8 string, UI_Txt_Line_Array lines, Txt_Pt cursor, Txt_Pt mark)
+{
+  L1           line_idx     =  ui_txt_line_idx_from_off(lines, cursor.column);
+  UI_Txt_Line  line         =  lines.v[line_idx];
+  String8      line_string  =  str8_substr(string, line.min, line.max);
+  UI_Txt_Op    op           =  ui_single_line_txt_op_from_cmd(arena, cmd, line_string, line.min, string.len, cursor, mark);
+
+  I1  has_selection  =  !txt_pt_match(cursor, mark);
+  I1  moves          =  !has_selection || !(cmd->flags & (UI_CMD_FLAG__ZERO_DELTA_ON_SELECT | UI_CMD_FLAG__PICK_SELECT_SIDE));
+  I1  unit_wraps     =  (cmd->delta_unit == UI_CMD_DELTA_UNIT__CHAR || cmd->delta_unit == UI_CMD_DELTA_UNIT__WORD);
+
+  if (moves && unit_wraps && cmd->string.len == 0 && !(cmd->flags & UI_CMD_FLAG__PASTE))
+  {
+    Txt_Pt wrapped = cursor;
+
+    if (cmd->delta_si2.x > 0 && cursor.column == line.max && line_idx + 1 < lines.count)
+    {
+      wrapped.column = lines.v[line_idx + 1].min;
+    }
+
+    if (cmd->delta_si2.x < 0 && cursor.column == line.min && line_idx > 0)
+    {
+      wrapped.column = lines.v[line_idx - 1].max;
+    }
+
+    if (!txt_pt_match(wrapped, cursor))
+    {
+      op.flags &= ~UI_TXT_OP_FLAG__INVALID;
+
+      if (cmd->flags & UI_CMD_FLAG__DELETE)
+      {
+        op.range    =  txt_range(mark, wrapped);
+        op.replace  =  str8("");
+        op.cursor   =  op.mark = op.range.min;
+      }
+      else
+      {
+        op.cursor  =  wrapped;
+        op.mark    =  (cmd->flags & UI_CMD_FLAG__KEEP_MARK) ? mark : wrapped;
+      }
+    }
+  }
+
+  return op;
+}
+
+Internal F1 ui_textedit_x_offset_from_off(String8 string, I1 multiline, L1 off)
+{
+  Temp_Arena scratch = scratch_begin(0, 0);
+
+  UI_Txt_Line_Array  lines  =  ui_txt_lines_from_string(scratch.arena, string, multiline);
+  UI_Txt_Line        line   =  lines.v[ui_txt_line_idx_from_off(lines, off)];
+
+  F1 result = fc_x_offset_from_tag_size_string_byte_offset(ui_top_font(),
+                                                           ui_top_font_size(),
+                                                           (F1)ui_state->window->pixel_ratio,
+                                                           0,
+                                                           ui_top_tab_size(),
+                                                           str8_substr(string, line.min, line.max),
+                                                           Clamp(line.min, off, line.max) - line.min);
+
+  scratch_end(scratch);
+
+  return result;
+}
+
 Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
                                Txt_Pt *cursor,
                                Txt_Pt *mark,
@@ -2795,11 +2923,13 @@ Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
                                String8 pre_edit_value,
                                String8 string)
 {
+  Temp_Arena scratch = scratch_begin(0, 0);
+
   ui_push_tag(str8("textedit"));
 
-  edit_string_size_out[0]  =  Min(edit_string_size_out[0], edit_buffer_size);
-  cursor->column           =  Min(cursor->column, edit_string_size_out[0]);
-  mark->column             =  Min(mark->column, edit_string_size_out[0]);
+  I1 multiline = !!(flags & UI_TEXTEDIT_FLAG__MULTILINE);
+
+  edit_string_size_out[0] = Min(edit_string_size_out[0], edit_buffer_size);
 
   UI_Key key = ui_key_from_string(ui_active_seed_key(), string);
 
@@ -2815,10 +2945,26 @@ Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
   I1  is_focus_hot_disabled     =  (!is_focus_hot && ui_top_focus_hot() == UI_FOCUS_KIND__ON);
   I1  is_focus_active_disabled  =  (!is_focus_active && ui_top_focus_active() == UI_FOCUS_KIND__ON);
 
+  //- kti: Clamp cursor & mark.
+  if (is_focus_active)
+  {
+    cursor->column  =  Min(cursor->column, edit_string_size_out[0]);
+    mark->column    =  Min(mark->column, edit_string_size_out[0]);
+  }
+
   //- kti: Build top level box. Tagged "focused" while being edited.
   if (is_focus_active)
   {
     ui_set_next_tag(str8("focused"));
+  }
+
+  //- kti: Multiline layout.
+  UI_Size line_height = ui_top_pref_height();
+
+  if (multiline)
+  {
+    ui_set_next_pref_height(ui_children_sum(1.0f));
+    ui_set_next_child_layout_axis(AXIS__Y);
   }
 
   UI_Box *box = ui_build_box_from_key(
@@ -2831,8 +2977,6 @@ Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
   //- kti: handle text manipulation.
   if (is_focus_active)
   {
-    Temp_Arena scratch = scratch_begin(0, 0);
-
     for (UI_Cmd *cmd = ui_state->cmds.first, *next; cmd != 0; cmd = next)
     {
       next = cmd->next;
@@ -2842,85 +2986,166 @@ Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
       cursor->column  =  Min(cursor->column, edit_string.len);
       mark->column    =  Min(mark->column, edit_string.len);
 
-      //- kti: Skip non single-line operations.
-      if ((cmd->kind != UI_CMD_KIND__EDIT && cmd->kind != UI_CMD_KIND__NAVIGATE && cmd->kind != UI_CMD_KIND__TEXT)
-          || cmd->delta_si2.y != 0)
+      if (cmd->kind != UI_CMD_KIND__EDIT && cmd->kind != UI_CMD_KIND__NAVIGATE && cmd->kind != UI_CMD_KIND__TEXT)
       {
         continue;
       }
 
-      UI_Txt_Op op = ui_single_line_txt_op_from_cmd(scratch.arena, cmd, edit_string, cursor[0], mark[0]);
+      UI_Txt_Line_Array  lines        =  ui_txt_lines_from_string(scratch.arena, edit_string, multiline);
+      I1                 is_vertical  =  (cmd->delta_si2.y != 0);
 
-      if (!txt_pt_match(op.range.min, op.range.max) || op.replace.len != 0)
+      if (is_vertical)
       {
-        String8 new_string = ui_push_string_replace_range(scratch.arena, edit_string, op.range.min.column, op.range.max.column, op.replace);
+        //- kti: Vertical movement.
+        L1   line_idx         =  ui_txt_line_idx_from_off(lines, cursor->column);
+        SL1  target_line_idx  =  (SL1)line_idx + (cmd->delta_si2.y > 0 ? 1 : -1);
 
-        new_string.len = Min(edit_buffer_size, new_string.len);
+        if (   cmd->kind != UI_CMD_KIND__NAVIGATE
+            || cmd->delta_unit != UI_CMD_DELTA_UNIT__CHAR
+            || target_line_idx < 0
+            || target_line_idx >= (SL1)lines.count)
+        {
+          continue;
+        }
 
-        memmove(edit_buffer, new_string.str, new_string.len);
+        UI_Txt_Line target_line = lines.v[target_line_idx];
 
-        edit_string_size_out[0] = new_string.len;
+        cursor->column = target_line.min + fc_byte_offset_from_tag_size_string_x_offset(ui_top_font(),
+                                                                                        ui_top_font_size(),
+                                                                                        (F1)ui_state->window->pixel_ratio,
+                                                                                        0,
+                                                                                        ui_top_tab_size(),
+                                                                                        str8_substr(edit_string, target_line.min, target_line.max),
+                                                                                        ui_state->textedit_preferred_x);
+
+        if (!(cmd->flags & UI_CMD_FLAG__KEEP_MARK))
+        {
+          mark[0] = cursor[0];
+        }
       }
-
-      if (op.flags & UI_TXT_OP_FLAG__COPY)
+      else
       {
-        // TODO: Copy
-      }
+        UI_Txt_Op op = ui_txt_op_from_cmd(scratch.arena, cmd, edit_string, lines, cursor[0], mark[0]);
 
-      cursor[0]       =  op.cursor;
-      mark[0]         =  op.mark;
-      cursor->column  =  Min(cursor->column, edit_string_size_out[0]);
-      mark->column    =  Min(mark->column, edit_string_size_out[0]);
+        if (!txt_pt_match(op.range.min, op.range.max) || op.replace.len != 0)
+        {
+          String8 new_string = ui_push_string_replace_range(scratch.arena, edit_string, op.range.min.column, op.range.max.column, op.replace);
+
+          new_string.len = Min(edit_buffer_size, new_string.len);
+
+          memmove(edit_buffer, new_string.str, new_string.len);
+
+          edit_string_size_out[0] = new_string.len;
+        }
+
+        if (op.flags & UI_TXT_OP_FLAG__COPY)
+        {
+          // TODO: Copy
+        }
+
+        cursor[0]       =  op.cursor;
+        mark[0]         =  op.mark;
+        cursor->column  =  Min(cursor->column, edit_string_size_out[0]);
+        mark->column    =  Min(mark->column, edit_string_size_out[0]);
+
+        ui_state->textedit_preferred_x = ui_textedit_x_offset_from_off((String8){edit_buffer, edit_string_size_out[0]}, multiline, cursor->column);
+      }
 
       ui_eat_cmd(cmd);
     }
-
-    scratch_end(scratch);
   }
 
-  //- kti: build contents
-  Txt_Pt  mouse_pt    =  {0};
-  F1      cursor_x_offset  =  0;
+  //- kti: Build contents.
+  String8            shown_string     =  is_focus_active ? (String8){edit_buffer, edit_string_size_out[0]} : pre_edit_value;
+  UI_Txt_Line_Array  lines            =  ui_txt_lines_from_string(scratch.arena, shown_string, multiline);
+  UI_Box             **line_boxes     =  push_array(scratch.arena, UI_Box *, lines.count);
+  L1                 cursor_line_idx  =  ui_txt_line_idx_from_off(lines, cursor->column);
+  L1                 select_min       =  Min(cursor->column, mark->column);
+  L1                 select_max       =  Max(cursor->column, mark->column);
+  F1                 cursor_x_offset  =  0;
 
   UI_Parent(box)
+  UI_Pref_Height(line_height)
   {
-    String8 edit_string = (String8){.str = edit_buffer, edit_string_size_out[0]};
-
-    if (!is_focus_active || is_focus_active_disabled)
+    for (L1 line_idx = 0; line_idx < lines.count; line_idx += 1)
     {
-      ui_set_next_pref_width(ui_text_dim(0.0f, 0.0f));
-      ui_label(pre_edit_value);
-    }
-    else
-    {
-      F1 total_text_width = fc_dim_from_tag_size_string(ui_top_font(),
-                                                        ui_top_font_size(),
-                                                        (F1)ui_state->window->pixel_ratio,
-                                                        0,
-                                                        ui_top_tab_size(),
-                                                        edit_string).x;
+      UI_Txt_Line   line         =  lines.v[line_idx];
+      String8       line_string  =  str8_substr(shown_string, line.min, line.max);
+      UI_Box_Flags  line_flags   =  UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_ID_STRING;
 
-      ui_set_next_pref_width(ui_px(total_text_width + ui_top_font_size() * 3.75f, 1.0f));
+      if (is_focus_active)
+      {
+        F1 line_text_width = fc_dim_from_tag_size_string(ui_top_font(),
+                                                         ui_top_font_size(),
+                                                         (F1)ui_state->window->pixel_ratio,
+                                                         0,
+                                                         ui_top_tab_size(),
+                                                         line_string).x;
 
-      UI_Box                  *editstr_box  =  ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT | UI_BOX_FLAG__DISABLE_TEXT_TRUNC, str8("###editstr"));
-      UI_Line_Edit_Draw_Data  *draw_data    =  push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
+        ui_set_next_pref_width(ui_px(line_text_width + ui_top_font_size() * 3.75f, 1.0f));
 
-      draw_data->edited_string  =  push_str8_copy(ui_build_arena(), edit_string);
-      draw_data->cursor         =  cursor[0];
-      draw_data->mark           =  mark[0];
+        line_flags |= UI_BOX_FLAG__DISABLE_TEXT_TRUNC;
+      }
+      else
+      {
+        ui_set_next_pref_width(ui_text_dim(0.0f, 0.0f));
+      }
 
-      ui_box_equip_display_string(editstr_box, edit_string);
-      ui_box_equip_custom_draw(editstr_box, UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT, draw_data);
+      UI_Key  line_key   =  ui_key_from_string(ui_active_seed_key(), str8f(scratch.arena, "editstr_%llu", line_idx));
+      UI_Box  *line_box  =  ui_build_box_from_key(line_flags, line_key);
 
-      mouse_pt         =  (Txt_Pt){0, ui_box_byte_offset_from_xy(editstr_box, ui_mouse())};
-      cursor_x_offset  =  fc_x_offset_from_tag_size_string_byte_offset(ui_top_font(),
+      ui_box_equip_display_string(line_box, line_string);
+
+      line_boxes[line_idx] = line_box;
+
+      //- kti: Cursor & selection.
+      I1  has_cursor     =  (line_idx == cursor_line_idx);
+      I1  has_selection  =  (select_min < select_max && select_min <= line.max && select_max > line.min);
+
+      if (is_focus_active && (has_cursor || has_selection))
+      {
+        UI_Line_Edit_Draw_Data *draw_data = push_array(ui_build_arena(), UI_Line_Edit_Draw_Data, 1);
+
+        draw_data->edited_string    =  push_str8_copy(ui_build_arena(), line_string);
+        draw_data->cursor           =  (Txt_Pt){0, Clamp(line.min, cursor->column, line.max) - line.min};
+        draw_data->mark             =  (Txt_Pt){0, Clamp(line.min, mark->column, line.max) - line.min};
+        draw_data->hide_cursor      =  !has_cursor;
+        draw_data->select_line_end  =  (select_min <= line.max && select_max > line.max);
+
+        ui_box_equip_custom_draw(line_box, UI_BOX_CUSTOM_DRAW_KIND__LINE_EDIT, draw_data);
+      }
+
+      if (is_focus_active && has_cursor)
+      {
+        cursor_x_offset = fc_x_offset_from_tag_size_string_byte_offset(ui_top_font(),
                                                                        ui_top_font_size(),
                                                                        (F1)ui_state->window->pixel_ratio,
                                                                        0,
                                                                        ui_top_tab_size(),
-                                                                       edit_string,
-                                                                       cursor->column);
+                                                                       line_string,
+                                                                       cursor->column - line.min);
+      }
     }
+  }
+
+  //- kti: Text position under mouse.
+  Txt_Pt mouse_pt = {0};
+
+  {
+    L1 mouse_line_idx = lines.count - 1;
+
+    for (L1 line_idx = 0; line_idx < lines.count; line_idx += 1)
+    {
+      if (ui_mouse().y < line_boxes[line_idx]->rect.y + line_boxes[line_idx]->rect.w)
+      {
+        mouse_line_idx = line_idx;
+        break;
+      }
+    }
+
+    UI_Txt_Line mouse_line = lines.v[mouse_line_idx];
+
+    mouse_pt.column = mouse_line.min + Min(ui_box_byte_offset_from_xy(line_boxes[mouse_line_idx], ui_mouse()), mouse_line.max - mouse_line.min);
   }
 
   //- kti: interact
@@ -2942,10 +3167,23 @@ Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
     edit_string_size_out[0] = edit_string.len;
 
     ui_set_auto_focus_active_key(key);
-    ui_kill_action();
 
-    cursor[0]  =  (Txt_Pt){0, edit_string.len};
-    mark[0]    =  (Txt_Pt){0, 0};
+    if (flags & UI_TEXTEDIT_FLAG__CURSOR_AT_MOUSE && !(signal.flags & UI_SIGNAL_FLAG__KEYBOARD_PRESSED))
+    {
+      //- kti: Cursor at mouse.
+      cursor[0]       =  mouse_pt;
+      cursor->column  =  Min(cursor->column, edit_string.len);
+      mark[0]         =  cursor[0];
+
+      ui_state->textedit_preferred_x = ui_textedit_x_offset_from_off(edit_string, multiline, cursor->column);
+    }
+    else
+    {
+      ui_kill_action();
+
+      cursor[0]  =  (Txt_Pt){0, edit_string.len};
+      mark[0]    =  (Txt_Pt){0, 0};
+    }
   }
 
   if (is_focus_active && signal.flags & UI_SIGNAL_FLAG__KEYBOARD_PRESSED)
@@ -2966,7 +3204,12 @@ Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
       mark[0] = mouse_pt;
     }
 
-    cursor[0] = mouse_pt;
+    if (!txt_pt_match(cursor[0], mouse_pt))
+    {
+      cursor[0] = mouse_pt;
+
+      ui_state->textedit_preferred_x = ui_textedit_x_offset_from_off(shown_string, multiline, cursor->column);
+    }
   }
 
   //- kti: Focus cursor.
@@ -2994,6 +3237,8 @@ Internal UI_Signal ui_textedit(UI_Textedit_Flags flags,
   ui_pop_focus_hot();
   ui_pop_focus_active();
   ui_pop_tag();
+
+  scratch_end(scratch);
 
   return signal;
 }
@@ -3160,8 +3405,18 @@ Internal void ui_draw(void)
           cursor_height,
         }};
 
+        //- kti: Selected line break.
+        if (draw_data->select_line_end)
+        {
+          select_rect.z += font_size * 0.3f;
+        }
+
         dr_rect(select_rect, select_color, font_size * 0.1875f, 1.0f);
-        dr_rect(cursor_rect, cursor_color, 0.0f, 0.0f);
+
+        if (!draw_data->hide_cursor)
+        {
+          dr_rect(cursor_rect, cursor_color, 0.0f, 0.0f);
+        }
       } break;
     }
 

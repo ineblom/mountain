@@ -4,8 +4,115 @@ struct N_Block
   N_Block *next;
   N_Block *prev;
 
-  String8 contents;
+  B1 *buffer;
+  L1  length;
+  L1  capacity;
 };
+
+typedef struct N_State N_State;
+struct N_State
+{
+  Arena *arena;
+
+  N_Block *first_block;
+  N_Block *last_block;
+  N_Block *free_block;
+
+  Txt_Pt cursor;
+  Txt_Pt mark;
+};
+
+//- kti: Block ops
+typedef I1 N_Op_Kind;
+enum
+{
+  N_OP_KIND__NONE,
+  N_OP_KIND__SPLIT,
+  N_OP_KIND__MERGE_PREV,
+  N_OP_KIND__MERGE_NEXT,
+  N_OP_KIND__MOVE_PREV,
+  N_OP_KIND__MOVE_NEXT,
+};
+
+typedef struct N_Op N_Op;
+struct N_Op
+{
+  N_Op_Kind kind;
+  N_Block  *block;
+
+  I1 is_vertical;
+};
+
+////////////////////////////////
+//~ kti: Blocks
+
+Internal N_Block *n_block_alloc(N_State *state)
+{
+  N_Block *block = state->free_block;
+
+  if (block != 0)
+  {
+    state->free_block = block->next;
+  }
+  else
+  {
+    block            =  push_array(state->arena, N_Block, 1);
+    block->capacity  =  KiB(4);
+    block->buffer    =  push_array(state->arena, B1, block->capacity);
+  }
+
+  block->next    =  0;
+  block->prev    =  0;
+  block->length  =  0;
+
+  return block;
+}
+
+Internal void n_block_release(N_State *state, N_Block *block)
+{
+  DLLRemove(state->first_block, state->last_block, block);
+
+  block->prev        =  0;
+  block->next        =  state->free_block;
+  state->free_block  =  block;
+}
+
+Internal N_Block *n_block_split(N_State *state, N_Block *block, L1 min, L1 max)
+{
+  max  =  Min(max, block->length);
+  min  =  Min(min, max);
+
+  N_Block *new_block = n_block_alloc(state);
+
+  new_block->length = Min(block->length - max, new_block->capacity);
+
+  memmove(new_block->buffer, block->buffer + max, new_block->length);
+
+  block->length = min;
+
+  DLLInsert(state->first_block, state->last_block, block, new_block);
+
+  return new_block;
+}
+
+Internal L1 n_block_merge(N_State *state, N_Block *dst, N_Block *src)
+{
+  L1 at       = dst->length;
+  L1 copy_len = Min(src->length, dst->capacity - dst->length);
+
+  memmove(dst->buffer + dst->length, src->buffer, copy_len);
+
+  dst->length += copy_len;
+
+  n_block_release(state, src);
+
+  return at;
+}
+
+Internal String8 n_key_string_from_block(Arena *arena, N_Block *block)
+{
+  return str8f(arena, "##block%p", block);
+}
 
 void notes_main(void *)
 {
@@ -46,13 +153,16 @@ void notes_main(void *)
 
   L1 frames_requested = 2;
   
-  Txt_Pt cursor             = {0};
-  Txt_Pt mark               = {0};
-  B1     input_buffer[1024] = {0};
-  L1     input_buffer_len   = 0;
+  N_State state = {.arena = arena};
 
-  N_Block *first_block = 0;
-  N_Block *last_block  = 0;
+  //- kti: First block.
+  {
+    N_Block *block = n_block_alloc(&state);
+
+    DLLPushBack(state.first_block, state.last_block, block);
+  }
+
+  N_Block *focus_block = state.first_block;
 
   L1 running = 1;
 
@@ -91,6 +201,38 @@ void notes_main(void *)
           .string = {e->text, e->text_len},
           .timestamp_ns = e->timestamp_ns,
         };
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
+      }
+
+      //- kti: Shift + Enter -> line break.
+      if (e->kind == OS_EVENT_KIND__PRESS && e->key == OS_KEY__ENTER && e->modifiers == OS_MODIFIER_FLAG__SHIFT)
+      {
+        UI_Cmd cmd = {
+          .kind = UI_CMD_KIND__TEXT,
+          .string = str8("\n"),
+          .timestamp_ns = e->timestamp_ns,
+        };
+        ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
+      }
+
+      //- kti: Up & Down
+      if (e->kind == OS_EVENT_KIND__PRESS && (e->key == OS_KEY__UP || e->key == OS_KEY__DOWN))
+      {
+        UI_Cmd_Flags flags = 0;
+
+        if (e->modifiers & OS_MODIFIER_FLAG__SHIFT)
+        {
+          flags |= UI_CMD_FLAG__KEEP_MARK;
+        }
+
+        UI_Cmd cmd = {
+          .kind         = UI_CMD_KIND__NAVIGATE,
+          .delta_unit   = UI_CMD_DELTA_UNIT__CHAR,
+          .flags        = flags,
+          .delta_si2    = {{0, (e->key == OS_KEY__UP) ? -1 : 1}},
+          .timestamp_ns = e->timestamp_ns,
+        };
+
         ui_cmd_list_push(scratch.arena, &ui_cmds, cmd);
       }
 
@@ -188,6 +330,11 @@ void notes_main(void *)
 
     UI_Box *main_box = 0;
 
+    N_Op    op              =  {0};
+    FC_Tag  text_font       =  {0};
+    F1      text_font_size  =  0;
+    F1      text_tab_size   =  0;
+
     UI_Focus(UI_FOCUS_KIND__ON)
     {
       ui_set_next_pref_width(ui_pct(0.90f, 1.0f));
@@ -207,55 +354,108 @@ void notes_main(void *)
 
       ui_spacer(ui_px(25.0f, 1.0f));
 
-      for (N_Block *block = first_block; block != 0; block = block->next)
+      text_font       =  ui_top_font();
+      text_font_size  =  ui_top_font_size();
+      text_tab_size   =  ui_top_tab_size();
+
+      for (N_Block *block = state.first_block; block != 0; block = block->next)
       {
-        UI_Pref_Height(ui_em(1.0f, 1.0f))
-        ui_build_box_from_string(UI_BOX_FLAG__DRAW_TEXT, block->contents);
-      }
+        String8  key_string  =  n_key_string_from_block(scratch.arena, block);
+        UI_Key   key         =  ui_key_from_string(ui_active_seed_key(), key_string);
+        I1       is_focused  =  ui_is_key_auto_focus_active(key);
 
-      ui_spacer(ui_px(10.0f, 1.0f));
-
-      UI_Row()
-      UI_Pref_Height(ui_em(1.8f, 1.0f))
-      {
-        //- kti: Input
-        I1 committed_input = 0;
-
-        UI_Pref_Width(ui_pct(1.0f, 0.0f))
-        UI_Text_Padding(6.0f)
+        //- kti: Edits & moves leaving the block.
+        if (is_focused && op.kind == N_OP_KIND__NONE)
         {
-          UI_Signal input_signal = ui_textedit(UI_TEXTEDIT_FLAG__KEEP_FOCUS_ON_COMMIT | UI_TEXTEDIT_FLAG__FOCUS_ON_PRESS,
-                                               &cursor, &mark,
-                                               input_buffer, sizeof(input_buffer),
-                                               &input_buffer_len,
-                                               (String8){input_buffer, input_buffer_len},
-                                               str8("##notes_input"));
-          committed_input = input_signal.flags & UI_SIGNAL_FLAG__COMMIT;
+          UI_Cmd *cmd = ui_state->cmds.first;
+
+          for (; cmd != 0; cmd = cmd->next)
+          {
+            if (cmd->kind == UI_CMD_KIND__EDIT || cmd->kind == UI_CMD_KIND__NAVIGATE || cmd->kind == UI_CMD_KIND__TEXT)
+            {
+              break;
+            }
+          }
+
+          if (cmd != 0 && cmd->delta_si2.y == 0 && txt_pt_match(state.cursor, state.mark))
+          {
+            I1  at_start   =  (state.cursor.column == 0);
+            I1  at_end     =  (state.cursor.column >= block->length);
+            I1  is_delete  =  (cmd->kind == UI_CMD_KIND__EDIT && cmd->flags & UI_CMD_FLAG__DELETE);
+            I1  is_move    =  (cmd->kind == UI_CMD_KIND__NAVIGATE
+                               && !(cmd->flags & UI_CMD_FLAG__KEEP_MARK)
+                               && (cmd->delta_unit == UI_CMD_DELTA_UNIT__CHAR || cmd->delta_unit == UI_CMD_DELTA_UNIT__WORD));
+
+            if (cmd->delta_si2.x < 0 && at_start && block->prev != 0)
+            {
+              if (is_delete) { op = (N_Op){N_OP_KIND__MERGE_PREV, block}; }
+              if (is_move)   { op = (N_Op){N_OP_KIND__MOVE_PREV, block}; }
+            }
+
+            if (cmd->delta_si2.x > 0 && at_end && block->next != 0)
+            {
+              if (is_delete) { op = (N_Op){N_OP_KIND__MERGE_NEXT, block}; }
+              if (is_move)   { op = (N_Op){N_OP_KIND__MOVE_NEXT, block}; }
+            }
+
+            if (op.kind != N_OP_KIND__NONE)
+            {
+              ui_eat_cmd(cmd);
+            }
+          }
         }
 
-        ui_spacer(ui_px(10.0f, 1.0f));
+        UI_Signal signal = {0};
 
-        //- kti: Push button.
-        UI_Pref_Width(ui_text_dim(20.0f, 1.0f))
-        UI_Text_Align(UI_TEXT_ALIGN__CENTER)
-        UI_Corner_Radius(2.5f)
+        UI_Pref_Height(ui_em(1.8f, 1.0f))
+        UI_Text_Padding(6.0f)
         {
-          UI_Signal button_signal = ui_button(str8("Push"));
-          I1 pressed_push = button_signal.flags & UI_SIGNAL_FLAG__PRESSED;
+          signal = ui_textedit(UI_TEXTEDIT_FLAG__FOCUS_ON_PRESS | UI_TEXTEDIT_FLAG__KEEP_FOCUS_ON_COMMIT |
+                               UI_TEXTEDIT_FLAG__MULTILINE | UI_TEXTEDIT_FLAG__CURSOR_AT_MOUSE,
+                               &state.cursor, &state.mark,
+                               block->buffer, block->capacity,
+                               &block->length,
+                               (String8){block->buffer, block->length},
+                               key_string);
+        }
 
-          //- kti: Push
-          if (pressed_push || committed_input)
+        if (is_focused && op.kind == N_OP_KIND__NONE)
+        {
+          //- kti: Enter -> split.
+          if (signal.flags & UI_SIGNAL_FLAG__COMMIT)
           {
-            String8 input = {input_buffer, input_buffer_len};
+            op = (N_Op){N_OP_KIND__SPLIT, block};
+          }
 
-            N_Block *block = push_array(arena, N_Block, 1);
-            block->contents = push_str8_copy(arena, input);
+          //- kti: Up & down leaving the block.
+          for (UI_Cmd *cmd = ui_state->cmds.first; cmd != 0 && op.kind == N_OP_KIND__NONE; cmd = cmd->next)
+          {
+            if (cmd->kind != UI_CMD_KIND__NAVIGATE || cmd->delta_si2.y == 0)
+            {
+              continue;
+            }
 
-            DLLPushBack(first_block, last_block, block);
+            I1       is_up      =  (cmd->delta_si2.y < 0);
+            N_Block  *neighbor  =  is_up ? block->prev : block->next;
+            L1       edge       =  is_up ? 0 : block->length;
 
-            //- kti: Clear input.
-            MemoryZeroArray(input_buffer);
-            input_buffer_len = 0;
+            if (cmd->flags & UI_CMD_FLAG__KEEP_MARK)
+            {
+              //- kti: Selections stay inside the block.
+              state.cursor.column = edge;
+            }
+            else if (neighbor != 0)
+            {
+              op = (N_Op){is_up ? N_OP_KIND__MOVE_PREV : N_OP_KIND__MOVE_NEXT, block, .is_vertical = 1};
+            }
+            else
+            {
+              state.cursor.column  =  edge;
+              state.mark           =  state.cursor;
+            }
+
+            ui_eat_cmd(cmd);
+            break;
           }
         }
       }
@@ -264,6 +464,94 @@ void notes_main(void *)
     ui_spacer(ui_pct(0.5f, 0.0f));
 
     ui_end_build();
+
+    ////////////////////////////////
+    //~ kti: Apply block edits
+
+    if (op.kind != N_OP_KIND__NONE)
+    {
+      N_Block  *block      =  op.block;
+      N_Block  *cursor_in  =  block;
+      L1       cursor_at   =  state.cursor.column;
+      I1       keep_x      =  0;
+
+      switch (op.kind)
+      {
+        default: {} break;
+
+        case N_OP_KIND__SPLIT:
+        {
+          cursor_in  =  n_block_split(&state, block, Min(state.cursor.column, state.mark.column), Max(state.cursor.column, state.mark.column));
+          cursor_at  =  0;
+        } break;
+
+        case N_OP_KIND__MERGE_PREV:
+        {
+          cursor_in  =  block->prev;
+          cursor_at  =  n_block_merge(&state, block->prev, block);
+        } break;
+
+        case N_OP_KIND__MERGE_NEXT:
+        {
+          cursor_at = n_block_merge(&state, block, block->next);
+        } break;
+
+        case N_OP_KIND__MOVE_PREV:
+        case N_OP_KIND__MOVE_NEXT:
+        {
+          I1 is_prev = (op.kind == N_OP_KIND__MOVE_PREV);
+
+          cursor_in  =  is_prev ? block->prev : block->next;
+          cursor_at  =  is_prev ? cursor_in->length : 0;
+
+          if (op.is_vertical)
+          {
+            String8            text   =  {cursor_in->buffer, cursor_in->length};
+            UI_Txt_Line_Array  lines  =  ui_txt_lines_from_string(scratch.arena, text, 1);
+            UI_Txt_Line        line   =  lines.v[is_prev ? lines.count - 1 : 0];
+
+            cursor_at = line.min + fc_byte_offset_from_tag_size_string_x_offset(text_font,
+                                                                                text_font_size,
+                                                                                (F1)os_window->pixel_ratio,
+                                                                                0,
+                                                                                text_tab_size,
+                                                                                str8_substr(text, line.min, line.max),
+                                                                                ui_state->textedit_preferred_x);
+            keep_x = 1;
+          }
+        } break;
+      }
+
+      state.cursor  =  (Txt_Pt){0, cursor_at};
+      state.mark    =  state.cursor;
+      focus_block   =  cursor_in;
+
+      if (!keep_x)
+      {
+        String8            text   =  {cursor_in->buffer, cursor_in->length};
+        UI_Txt_Line_Array  lines  =  ui_txt_lines_from_string(scratch.arena, text, 1);
+        UI_Txt_Line        line   =  lines.v[ui_txt_line_idx_from_off(lines, cursor_at)];
+
+        ui_state->textedit_preferred_x = fc_x_offset_from_tag_size_string_byte_offset(text_font,
+                                                                                      text_font_size,
+                                                                                      (F1)os_window->pixel_ratio,
+                                                                                      0,
+                                                                                      text_tab_size,
+                                                                                      str8_substr(text, line.min, line.max),
+                                                                                      cursor_at - line.min);
+      }
+    }
+
+    //- kti: Hand over focus.
+    if (focus_block != 0)
+    {
+      UI_Key key = ui_key_from_string(main_box->key, n_key_string_from_block(scratch.arena, focus_block));
+
+      main_box->default_nav_focus_next_hot_key     =  key;
+      main_box->default_nav_focus_next_active_key  =  key;
+
+      focus_block = 0;
+    }
 
     ////////////////////////////////
     //~ kti: Draw
